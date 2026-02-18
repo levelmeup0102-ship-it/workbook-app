@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """
 영어 워크북 자동 생성 파이프라인
-- 지문 txt 입력 → Claude API로 레벨별 콘텐츠 생성 → 템플릿 → PDF
-- 단계별 JSON 저장 (실패 시 해당 단계만 재시도)
-- 20개 지문 순차 처리 (동시 호출 없음)
 """
-import json, os, sys, time, random, re
+import json, os, sys, time, random, re, io
 from pathlib import Path
+
+# UTF-8 강제 설정 (Railway 서버 호환)
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if sys.stderr.encoding != 'utf-8':
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
+
 from anthropic import Anthropic
 
 # ============================================================

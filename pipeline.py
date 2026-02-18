@@ -1,18 +1,37 @@
 #!/usr/bin/env python3
-"""
-영어 워크북 자동 생성 파이프라인
-"""
-import json, os, sys, time, random, re, io
+"""영어 워크북 자동 생성 파이프라인"""
+import json, os, sys, time, random, re, io, locale
+
+# ============================================================
+# UTF-8 강제 설정 (Railway 서버 호환 - 반드시 최상단에서!)
+# ============================================================
+os.environ['PYTHONUTF8'] = '1'
+os.environ['PYTHONIOENCODING'] = 'utf-8'
+os.environ['LANG'] = 'C.UTF-8'
+os.environ['LC_ALL'] = 'C.UTF-8'
+try:
+    locale.setlocale(locale.LC_ALL, 'C.UTF-8')
+except:
+    try:
+        locale.setlocale(locale.LC_ALL, '')
+    except:
+        pass
+try:
+    if hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    if hasattr(sys.stderr, 'buffer'):
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+except:
+    pass
+
 from pathlib import Path
-
-# UTF-8 강제 설정 (Railway 서버 호환)
-if sys.stdout.encoding != 'utf-8':
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-if sys.stderr.encoding != 'utf-8':
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
-os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
-
 from anthropic import Anthropic
+
+# httpx 디버그 로깅 억제 (인코딩 문제 방지)
+import logging
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("anthropic").setLevel(logging.WARNING)
 
 # ============================================================
 # 설정
@@ -33,10 +52,22 @@ def get_client():
     global client
     if client is None:
         if not API_KEY:
-            print("❌ ANTHROPIC_API_KEY 환경변수를 설정하세요")
+            _safe_print("ERROR: Set ANTHROPIC_API_KEY")
             sys.exit(1)
         client = Anthropic(api_key=API_KEY)
     return client
+
+# ============================================================
+# 안전한 출력 (인코딩 에러 방지)
+# ============================================================
+def _safe_print(msg):
+    try:
+        print(msg)
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        try:
+            print(msg.encode('utf-8', errors='replace').decode('ascii', errors='replace'))
+        except:
+            pass
 
 # ============================================================
 # Claude API 호출 (재시도 포함)
@@ -55,8 +86,14 @@ def call_claude(system_prompt: str, user_prompt: str, max_retries=2, max_tokens=
             )
             text = resp.content[0].text.strip()
             return text
+        except UnicodeEncodeError as e:
+            _safe_print(f"  [WARN] Encoding error attempt {attempt+1}: {str(e)[:100]}")
+            if attempt < max_retries:
+                time.sleep(3 * (attempt + 1))
+            else:
+                raise
         except Exception as e:
-            print(f"  ⚠️ 시도 {attempt+1} 실패: {e}")
+            _safe_print(f"  [WARN] API attempt {attempt+1} failed: {str(e)[:100]}")
             if attempt < max_retries:
                 time.sleep(3 * (attempt + 1))
             else:
@@ -72,7 +109,7 @@ def call_claude_json(system_prompt: str, user_prompt: str, max_retries=3, max_to
         except (json.JSONDecodeError, ValueError) as e:
             last_error = e
             try:
-                print(f"  [WARN] JSON parse fail (try {attempt+1}/{max_retries+1}): {str(e)[:80]}")
+                _safe_print(f"  [WARN] JSON parse fail (try {attempt+1}/{max_retries+1}): {str(e)[:80]}")
             except Exception:
                 pass
             if attempt < max_retries:
@@ -157,7 +194,7 @@ def save_step(passage_dir: Path, step_name: str, data: dict):
     path = passage_dir / f"{step_name}.json"
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    print(f"  💾 저장: {step_name}.json")
+    _safe_print(f"  💾 저장: {step_name}.json")
 
 def load_step(passage_dir: Path, step_name: str) -> dict | None:
     path = passage_dir / f"{step_name}.json"
@@ -183,13 +220,13 @@ SYS_JSON_KR = """당신은 한국 고등학생을 위한 영어 시험 콘텐츠
 def step1_basic_analysis(passage: str, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step1_basic")
     if cached:
-        print("  ✅ step1 캐시 사용")
+        _safe_print("  ✅ step1 캐시 사용")
         return cached
 
     sentences_regex = [s.strip() for s in re.split(r'(?<=[.!?])\s+', passage) if s.strip()]
     sent_count = len(sentences_regex)
 
-    print("  🔄 step1: 기본 분석 (어휘/번역/핵심문장)...")
+    _safe_print("  🔄 step1: 기본 분석 (어휘/번역/핵심문장)...")
     prompt = f"""다음 영어 지문을 분석하여 JSON을 생성하세요.
 
 [지문 - 총 {sent_count}개 문장]
@@ -223,7 +260,7 @@ JSON 형식:
     
     # 🔒 검증: API 문장 분리 대신 항상 regex 사용 (AI가 문장을 합치거나 쪼개는 것 방지)
     data["sentences"] = sentences_regex
-    print(f"  📝 문장 수: {sent_count}개")
+    _safe_print(f"  📝 문장 수: {sent_count}개")
     
     save_step(passage_dir, "step1_basic", data)
     return data
@@ -299,10 +336,10 @@ def _generate_order_choices(data):
 def step2_order(passage: str, sentences: list, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step2_order")
     if cached:
-        print("  ✅ step2 캐시 사용")
+        _safe_print("  ✅ step2 캐시 사용")
         return cached
 
-    print("  🔄 step2: Lv.5 순서/삽입 생성...")
+    _safe_print("  🔄 step2: Lv.5 순서/삽입 생성...")
     prompt = f"""다음 영어 지문으로 순서 배열 + 문장 삽입 문제를 생성하세요.
 
 [지문]
@@ -350,7 +387,7 @@ JSON 형식:
     block_count = len(data.get("full_order_blocks", []))
     sentence_count = len(sentences)
     if block_count != sentence_count:
-        print(f"  ⚠️ 문장 수 불일치! 원문 {sentence_count}개 vs 생성 {block_count}개 → 재생성...")
+        _safe_print(f"  ⚠️ 문장 수 불일치! 원문 {sentence_count}개 vs 생성 {block_count}개 → 재생성...")
         # 캐시 삭제 후 재시도 (1회)
         cache_path = passage_dir / "step2_order.json"
         if cache_path.exists():
@@ -362,7 +399,7 @@ JSON 형식:
             data["full_order_blocks"] = [[b["label"], b["text"]] for b in data["full_order_blocks"]]
         block_count2 = len(data.get("full_order_blocks", []))
         if block_count2 != sentence_count:
-            print(f"  ⚠️ 재시도 후에도 불일치 ({block_count2} vs {sentence_count}) → 원문 문장으로 대체")
+            _safe_print(f"  ⚠️ 재시도 후에도 불일치 ({block_count2} vs {sentence_count}) → 원문 문장으로 대체")
             data["full_order_blocks"] = [[chr(65+i), s] for i, s in enumerate(sentences)]
 
     save_step(passage_dir, "step2_order", data)
@@ -374,10 +411,10 @@ JSON 형식:
 def step3_blank(passage: str, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step3_blank")
     if cached:
-        print("  ✅ step3 캐시 사용")
+        _safe_print("  ✅ step3 캐시 사용")
         return cached
 
-    print("  🔄 step3: Lv.6 빈칸 추론 생성...")
+    _safe_print("  🔄 step3: Lv.6 빈칸 추론 생성...")
     prompt = f"""다음 영어 지문으로 빈칸 추론 문제를 생성하세요.
 
 [지문]
@@ -412,10 +449,10 @@ def step3_blank(passage: str, passage_dir: Path) -> dict:
 def step4_topic(passage: str, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step4_topic")
     if cached:
-        print("  ✅ step4 캐시 사용")
+        _safe_print("  ✅ step4 캐시 사용")
         return cached
 
-    print("  🔄 step4: Lv.7 주제 찾기 생성...")
+    _safe_print("  🔄 step4: Lv.7 주제 찾기 생성...")
     prompt = f"""다음 영어 지문으로 주제 찾기 문제를 생성하세요.
 
 [지문]
@@ -448,7 +485,7 @@ def step4_topic(passage: str, passage_dir: Path) -> dict:
 def step5_grammar(passage: str, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step5_grammar")
     if cached:
-        print("  ✅ step5 캐시 사용")
+        _safe_print("  ✅ step5 캐시 사용")
         return cached
 
     sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', passage) if s.strip()]
@@ -456,7 +493,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     error_count = min(8, sent_count)  # 문장 수보다 많은 오류 불가
     bracket_count = min(13, sent_count * 2)  # 문장당 최대 2개 괄호
     
-    print("  🔄 step5: Lv.8 어법 생성...")
+    _safe_print("  🔄 step5: Lv.8 어법 생성...")
     prompt = f"""다음 영어 지문으로 어법 문제 2종류를 생성하세요.
 
 [원문 - 총 {sent_count}개 문장]
@@ -498,7 +535,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
         gen_text = data.get(key, '')
         gen_sents = len([s for s in re.split(r'(?<=[.!?])\s+', gen_text) if s.strip()])
         if gen_sents > sent_count + 1:
-            print(f"  ⚠️ {key}: {gen_sents}문장 (원문 {sent_count}) → 재생성...")
+            _safe_print(f"  ⚠️ {key}: {gen_sents}문장 (원문 {sent_count}) → 재생성...")
             cache_path = passage_dir / "step5_grammar.json"
             if cache_path.exists():
                 cache_path.unlink()
@@ -514,10 +551,10 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step6_vocab_content")
     if cached:
-        print("  ✅ step6 캐시 사용")
+        _safe_print("  ✅ step6 캐시 사용")
         return cached
 
-    print("  🔄 step6: Lv.9 어휘심화 + 내용일치 생성...")
+    _safe_print("  🔄 step6: Lv.9 어휘심화 + 내용일치 생성...")
     prompt = f"""다음 영어 지문으로 어휘 심화 + 내용 일치 문제를 생성하세요.
 
 [지문]
@@ -559,10 +596,10 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
 def step7_writing(sentences: list, translation: str, passage_dir: Path, sentence_translations: list = None) -> dict:
     cached = load_step(passage_dir, "step7_writing")
     if cached:
-        print("  ✅ step7 캐시 사용")
+        _safe_print("  ✅ step7 캐시 사용")
         return cached
 
-    print("  🔄 step7: Lv.10 영작 생성 (로컬 처리)...")
+    _safe_print("  🔄 step7: Lv.10 영작 생성 (로컬 처리)...")
     # 한국어 문장: sentence_translations 우선, 없으면 translation 분리
     if sentence_translations and len(sentence_translations) >= len(sentences):
         kr_sentences = sentence_translations
@@ -606,10 +643,10 @@ def step7_writing(sentences: list, translation: str, passage_dir: Path, sentence
 def step8_answers(all_data: dict, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step8_answers")
     if cached:
-        print("  ✅ step8 캐시 사용")
+        _safe_print("  ✅ step8 캐시 사용")
         return cached
 
-    print("  🔄 step8: 정답 페이지 생성...")
+    _safe_print("  🔄 step8: 정답 페이지 생성...")
     # 정답 HTML 생성
     lines = []
 
@@ -769,13 +806,13 @@ def render_pdf(template_data: dict, output_path: Path, levels=None):
     try:
         from weasyprint import HTML
         HTML(string=html).write_pdf(str(output_path))
-        print(f"  📄 PDF 생성: {output_path.name}")
+        _safe_print(f"  📄 PDF 생성: {output_path.name}")
     except (ImportError, OSError):
         html_path = output_path.with_suffix('.html')
         with open(html_path, 'w', encoding='utf-8') as f:
             f.write(html)
-        print(f"  📄 HTML 생성: {html_path.name}")
-        print(f"  ℹ️  크롬에서 열고 Ctrl+P → PDF로 저장하세요")
+        _safe_print(f"  📄 HTML 생성: {html_path.name}")
+        _safe_print(f"  ℹ️  크롬에서 열고 Ctrl+P → PDF로 저장하세요")
 
 # ============================================================
 # 메인: 단일 지문 처리
@@ -788,9 +825,9 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
         if passage_dir.exists():
             shutil.rmtree(passage_dir)
 
-    print(f"\n{'='*50}")
-    print(f"📝 지문 처리: {passage_id} ({meta.get('challenge_title','')})")
-    print(f"{'='*50}")
+    _safe_print(f"\n{'='*50}")
+    _safe_print(f"📝 지문 처리: {passage_id} ({meta.get('challenge_title','')})")
+    _safe_print(f"{'='*50}")
 
     sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', passage) if s.strip()]
     all_steps = {}
@@ -837,16 +874,16 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
     if len(gep) > 1200:
         warnings.append(f"grammar_error_passage 길이 {len(gep)} (권장 1200 이내)")
     if warnings:
-        print(f"  ⚠️ 콘텐츠 길이 경고 (페이지 밀림 가능):")
+        _safe_print(f"  ⚠️ 콘텐츠 길이 경고 (페이지 밀림 가능):")
         for w in warnings:
-            print(f"     - {w}")
+            _safe_print(f"     - {w}")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     base_name = f"{meta.get('lesson_num','')}과_{meta.get('challenge_title','워크북')}_워크북"
     pdf_path = _unique_path(OUTPUT_DIR, base_name, ".pdf")
     render_pdf(template_data, pdf_path, levels=levels)
 
-    print(f"✅ 완료: {pdf_path.name}")
+    _safe_print(f"✅ 완료: {pdf_path.name}")
     return pdf_path
 
 # ============================================================
@@ -859,25 +896,25 @@ def process_batch(passages: list[dict], levels=None):
     results = []
     total = len(passages)
     for i, item in enumerate(passages):
-        print(f"\n🔵 [{i+1}/{total}] 처리 시작...")
+        _safe_print(f"\n🔵 [{i+1}/{total}] 처리 시작...")
         try:
             pdf = process_passage(item["passage"], item["meta"], item["id"], levels=levels)
             results.append({"id": item["id"], "status": "done", "pdf": str(pdf)})
         except Exception as e:
-            print(f"❌ 실패: {item['id']} - {e}")
+            _safe_print(f"❌ 실패: {item['id']} - {e}")
             results.append({"id": item["id"], "status": "error", "error": str(e)})
 
     # 결과 요약
-    print(f"\n{'='*50}")
-    print("📊 결과 요약")
+    _safe_print(f"\n{'='*50}")
+    _safe_print(" Results summary")
     done = sum(1 for r in results if r["status"] == "done")
     err = sum(1 for r in results if r["status"] == "error")
-    print(f"  ✅ 성공: {done}/{total}")
+    _safe_print(f"  ✅ 성공: {done}/{total}")
     if err:
-        print(f"  ❌ 실패: {err}/{total}")
+        _safe_print(f"  ❌ 실패: {err}/{total}")
         for r in results:
             if r["status"] == "error":
-                print(f"     - {r['id']}: {r['error']}")
+                _safe_print(f"     - {r['id']}: {r['error']}")
     return results
 
 
@@ -923,12 +960,12 @@ def split_and_run(filepath: str, lesson_num: str = "5", levels=None):
             })
     
     if not passages:
-        print("❌ 지문을 찾을 수 없습니다. ###제목### 형식으로 구분했는지 확인하세요.")
+        _safe_print("ERROR: No passages found. Check ### format.")
         return
     
-    print(f"📚 총 {len(passages)}개 지문 발견!")
+    _safe_print(f"📚 총 {len(passages)}개 지문 발견!")
     for p in passages:
-        print(f"  - {p['meta']['challenge_title']}")
+        _safe_print(f"  - {p['meta']['challenge_title']}")
     print()
     
     process_batch(passages, levels=levels)
@@ -949,7 +986,7 @@ def merge_html_files(output_dir=None):
     if len(html_files) < 2:
         return
     
-    print(f"\n📎 HTML 합치기: {len(html_files)}개 파일...")
+    _safe_print(f"\n📎 HTML 합치기: {len(html_files)}개 파일...")
     
     # 파일명에서 제목 추출하여 합본명 생성
     import re as _re
@@ -997,8 +1034,8 @@ def merge_html_files(output_dir=None):
 </html>"""
     
     merged_path.write_text(merged, encoding='utf-8')
-    print(f"  ✅ 합본 생성: {merged_path.name}")
-    print(f"  ℹ️  크롬에서 열고 Ctrl+P → PDF로 저장하세요 (한번에 전부!)")
+    _safe_print(f"  ✅ 합본 생성: {merged_path.name}")
+    _safe_print(f"  ℹ️  크롬에서 열고 Ctrl+P → PDF로 저장하세요 (한번에 전부!)")
 if __name__ == "__main__":
     # --level 파싱 (어디서든 사용 가능)
     levels = None
@@ -1014,19 +1051,19 @@ if __name__ == "__main__":
 
     if len(sys.argv) < 2:
         print("사용법:")
-        print("  여러 지문: py pipeline.py --all all.txt")
-        print("  레벨 선택: py pipeline.py --all all.txt --level 1,2,5,8")
-        print("  1개 지문:  py pipeline.py 지문.txt 5 \"05강 01번\"")
-        print("  HTML 합치기: py pipeline.py --merge")
+        _safe_print("  여러 지문: py pipeline.py --all all.txt")
+        _safe_print("  레벨 선택: py pipeline.py --all all.txt --level 1,2,5,8")
+        _safe_print("  1개 지문:  py pipeline.py 지문.txt 5 \"05강 01번\"")
+        _safe_print("  HTML 합치기: py pipeline.py --merge")
         print()
-        print("  --level 옵션: 원하는 레벨만 출력 (0=표지+정답)")
-        print("    예) --level 1,2,3,4    → Lv.1~4만")
-        print("    예) --level 5,6,7,8    → Lv.5~8만")
-        print("    예) --level 0,1,2      → 표지+Lv.1+Lv.2")
+        _safe_print("  --level 옵션: 원하는 레벨만 출력 (0=표지+정답)")
+        _safe_print("    예) --level 1,2,3,4    → Lv.1~4만")
+        _safe_print("    예) --level 5,6,7,8    → Lv.5~8만")
+        _safe_print("    예) --level 0,1,2      → 표지+Lv.1+Lv.2")
         sys.exit(1)
 
     if levels:
-        print(f"📋 레벨 필터: Lv.{','.join(str(l) for l in levels)}")
+        _safe_print(f"📋 레벨 필터: Lv.{','.join(str(l) for l in levels)}")
 
     if sys.argv[1] == "--merge":
         merge_html_files()

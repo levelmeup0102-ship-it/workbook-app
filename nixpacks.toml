@@ -1,0 +1,12 @@
+[variables]
+PYTHONUTF8 = '1'
+PYTHONIOENCODING = 'utf-8'
+LANG = 'C.UTF-8'
+LC_ALL = 'C.UTF-8'
+
+[phases.setup]
+aptPkgs = ['locales']
+cmds = ['locale-gen C.UTF-8']
+
+[start]
+cmd = 'uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}'

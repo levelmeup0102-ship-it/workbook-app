@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""영어 워크북 자동 생성 파이프라인"""
+"""Workbook generation pipeline"""
 import json, os, sys, time, random, re
+import urllib.request
 from pathlib import Path
-import requests  # requests는 UTF-8 100% 보장
 
 # ============================================================
 # 설정
@@ -12,7 +12,7 @@ MODEL = "claude-sonnet-4-20250514"
 TEMPLATE_DIR = Path(__file__).parent
 DATA_DIR = TEMPLATE_DIR / "data"
 
-# 날짜 기반 출력 폴더: output/2월18일/
+# date-based output folder
 from datetime import datetime
 try:
     TODAY = datetime.now().strftime("%-m월%-d일") if os.name != 'nt' else datetime.now().strftime("%#m월%#d일")
@@ -21,7 +21,7 @@ except:
 OUTPUT_DIR = TEMPLATE_DIR / "output" / TODAY
 
 # ============================================================
-# 안전한 출력 (인코딩 에러 방지)
+# Safe print (encoding-safe)
 # ============================================================
 def _safe_print(msg):
     try:
@@ -30,19 +30,15 @@ def _safe_print(msg):
         pass
 
 # ============================================================
-# Claude API 호출 (requests 직접 사용 - httpx 인코딩 문제 해결)
+# Claude API call (urllib, pure stdlib)
 # ============================================================
 API_URL = "https://api.anthropic.com/v1/messages"
 
 def call_claude(system_prompt: str, user_prompt: str, max_retries=2, max_tokens=4096) -> str:
-    """Claude API 직접 호출 (requests) + 재시도"""
+    """Claude API via urllib (pure stdlib, zero encoding issues)"""
     if not API_KEY:
         raise ValueError("ANTHROPIC_API_KEY not set")
     
-    headers = {
-        "x-api-key": API_KEY,
-        "anthropic-version": "2023-06-01",
-    }
     body = {
         "model": MODEL,
         "max_tokens": max_tokens,
@@ -50,20 +46,25 @@ def call_claude(system_prompt: str, user_prompt: str, max_retries=2, max_tokens=
         "system": system_prompt,
         "messages": [{"role": "user", "content": user_prompt}]
     }
+    # json.dumps default: ensure_ascii=True -> Korean becomes \uXXXX -> pure ASCII
+    body_bytes = json.dumps(body).encode("ascii")
     
     for attempt in range(max_retries + 1):
         try:
-            resp = requests.post(
+            req = urllib.request.Request(
                 API_URL,
-                headers=headers,
-                json=body,
-                timeout=120
+                data=body_bytes,
+                headers={
+                    "X-Api-Key": API_KEY,
+                    "Anthropic-Version": "2023-06-01",
+                    "Content-Type": "application/json",
+                },
+                method="POST"
             )
-            if resp.status_code != 200:
-                raise Exception(f"API error {resp.status_code}: {resp.text[:200]}")
-            result = resp.json()
-            text = result["content"][0]["text"].strip()
-            return text
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                raw = resp.read()
+                result = json.loads(raw.decode("utf-8"))
+                return result["content"][0]["text"].strip()
         except Exception as e:
             _safe_print(f"  [WARN] API attempt {attempt+1} failed: {str(e)[:100]}")
             if attempt < max_retries:
@@ -72,7 +73,7 @@ def call_claude(system_prompt: str, user_prompt: str, max_retries=2, max_tokens=
                 raise
 
 def call_claude_json(system_prompt: str, user_prompt: str, max_retries=3, max_tokens=4096) -> dict:
-    """Claude API 호출 → JSON 파싱 (강화된 재시도 포함)"""
+    """Claude API call -> JSON parse with retry"""
     last_error = None
     for attempt in range(max_retries + 1):
         try:
@@ -166,7 +167,7 @@ def save_step(passage_dir: Path, step_name: str, data: dict):
     path = passage_dir / f"{step_name}.json"
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    _safe_print(f"  💾 저장: {step_name}.json")
+    _safe_print(f"  Saved: {step_name}.json")
 
 def load_step(passage_dir: Path, step_name: str) -> dict | None:
     path = passage_dir / f"{step_name}.json"
@@ -192,13 +193,13 @@ SYS_JSON_KR = """당신은 한국 고등학생을 위한 영어 시험 콘텐츠
 def step1_basic_analysis(passage: str, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step1_basic")
     if cached:
-        _safe_print("  ✅ step1 캐시 사용")
+        _safe_print("  step1: using cache")
         return cached
 
     sentences_regex = [s.strip() for s in re.split(r'(?<=[.!?])\s+', passage) if s.strip()]
     sent_count = len(sentences_regex)
 
-    _safe_print("  🔄 step1: 기본 분석 (어휘/번역/핵심문장)...")
+    _safe_print("  step1: basic analysis...")
     prompt = f"""다음 영어 지문을 분석하여 JSON을 생성하세요.
 
 [지문 - 총 {sent_count}개 문장]
@@ -232,7 +233,7 @@ JSON 형식:
     
     # 🔒 검증: API 문장 분리 대신 항상 regex 사용 (AI가 문장을 합치거나 쪼개는 것 방지)
     data["sentences"] = sentences_regex
-    _safe_print(f"  📝 문장 수: {sent_count}개")
+    _safe_print(f"  Sentence count: {sent_count}")
     
     save_step(passage_dir, "step1_basic", data)
     return data
@@ -308,10 +309,10 @@ def _generate_order_choices(data):
 def step2_order(passage: str, sentences: list, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step2_order")
     if cached:
-        _safe_print("  ✅ step2 캐시 사용")
+        _safe_print("  step2: using cache")
         return cached
 
-    _safe_print("  🔄 step2: Lv.5 순서/삽입 생성...")
+    _safe_print("  step2: generating Lv.5 order...")
     prompt = f"""다음 영어 지문으로 순서 배열 + 문장 삽입 문제를 생성하세요.
 
 [지문]
@@ -359,7 +360,7 @@ JSON 형식:
     block_count = len(data.get("full_order_blocks", []))
     sentence_count = len(sentences)
     if block_count != sentence_count:
-        _safe_print(f"  ⚠️ 문장 수 불일치! 원문 {sentence_count}개 vs 생성 {block_count}개 → 재생성...")
+        _safe_print(f"  WARNING: sentence mismatch! original {sentence_count} vs generated {block_count}, retrying...")
         # 캐시 삭제 후 재시도 (1회)
         cache_path = passage_dir / "step2_order.json"
         if cache_path.exists():
@@ -371,7 +372,7 @@ JSON 형식:
             data["full_order_blocks"] = [[b["label"], b["text"]] for b in data["full_order_blocks"]]
         block_count2 = len(data.get("full_order_blocks", []))
         if block_count2 != sentence_count:
-            _safe_print(f"  ⚠️ 재시도 후에도 불일치 ({block_count2} vs {sentence_count}) → 원문 문장으로 대체")
+            _safe_print(f"  WARNING: still mismatch ({block_count2} vs {sentence_count}), using original")
             data["full_order_blocks"] = [[chr(65+i), s] for i, s in enumerate(sentences)]
 
     save_step(passage_dir, "step2_order", data)
@@ -383,10 +384,10 @@ JSON 형식:
 def step3_blank(passage: str, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step3_blank")
     if cached:
-        _safe_print("  ✅ step3 캐시 사용")
+        _safe_print("  step3: using cache")
         return cached
 
-    _safe_print("  🔄 step3: Lv.6 빈칸 추론 생성...")
+    _safe_print("  step3: generating Lv.6 blanks...")
     prompt = f"""다음 영어 지문으로 빈칸 추론 문제를 생성하세요.
 
 [지문]
@@ -421,10 +422,10 @@ def step3_blank(passage: str, passage_dir: Path) -> dict:
 def step4_topic(passage: str, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step4_topic")
     if cached:
-        _safe_print("  ✅ step4 캐시 사용")
+        _safe_print("  step4: using cache")
         return cached
 
-    _safe_print("  🔄 step4: Lv.7 주제 찾기 생성...")
+    _safe_print("  step4: generating Lv.7 topic...")
     prompt = f"""다음 영어 지문으로 주제 찾기 문제를 생성하세요.
 
 [지문]
@@ -457,7 +458,7 @@ def step4_topic(passage: str, passage_dir: Path) -> dict:
 def step5_grammar(passage: str, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step5_grammar")
     if cached:
-        _safe_print("  ✅ step5 캐시 사용")
+        _safe_print("  step5: using cache")
         return cached
 
     sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', passage) if s.strip()]
@@ -465,7 +466,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     error_count = min(8, sent_count)  # 문장 수보다 많은 오류 불가
     bracket_count = min(13, sent_count * 2)  # 문장당 최대 2개 괄호
     
-    _safe_print("  🔄 step5: Lv.8 어법 생성...")
+    _safe_print("  step5: generating Lv.8 grammar...")
     prompt = f"""다음 영어 지문으로 어법 문제 2종류를 생성하세요.
 
 [원문 - 총 {sent_count}개 문장]
@@ -507,7 +508,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
         gen_text = data.get(key, '')
         gen_sents = len([s for s in re.split(r'(?<=[.!?])\s+', gen_text) if s.strip()])
         if gen_sents > sent_count + 1:
-            _safe_print(f"  ⚠️ {key}: {gen_sents}문장 (원문 {sent_count}) → 재생성...")
+            _safe_print(f"  WARNING: {key}: {gen_sents} sentences (original {sent_count}), retrying...")
             cache_path = passage_dir / "step5_grammar.json"
             if cache_path.exists():
                 cache_path.unlink()
@@ -523,10 +524,10 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step6_vocab_content")
     if cached:
-        _safe_print("  ✅ step6 캐시 사용")
+        _safe_print("  step6: using cache")
         return cached
 
-    _safe_print("  🔄 step6: Lv.9 어휘심화 + 내용일치 생성...")
+    _safe_print("  step6: generating Lv.9 vocab...")
     prompt = f"""다음 영어 지문으로 어휘 심화 + 내용 일치 문제를 생성하세요.
 
 [지문]
@@ -568,10 +569,10 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
 def step7_writing(sentences: list, translation: str, passage_dir: Path, sentence_translations: list = None) -> dict:
     cached = load_step(passage_dir, "step7_writing")
     if cached:
-        _safe_print("  ✅ step7 캐시 사용")
+        _safe_print("  step7: using cache")
         return cached
 
-    _safe_print("  🔄 step7: Lv.10 영작 생성 (로컬 처리)...")
+    _safe_print("  step7: generating Lv.10 writing...")
     # 한국어 문장: sentence_translations 우선, 없으면 translation 분리
     if sentence_translations and len(sentence_translations) >= len(sentences):
         kr_sentences = sentence_translations
@@ -615,10 +616,10 @@ def step7_writing(sentences: list, translation: str, passage_dir: Path, sentence
 def step8_answers(all_data: dict, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step8_answers")
     if cached:
-        _safe_print("  ✅ step8 캐시 사용")
+        _safe_print("  step8: using cache")
         return cached
 
-    _safe_print("  🔄 step8: 정답 페이지 생성...")
+    _safe_print("  step8: generating answer page...")
     # 정답 HTML 생성
     lines = []
 
@@ -778,13 +779,13 @@ def render_pdf(template_data: dict, output_path: Path, levels=None):
     try:
         from weasyprint import HTML
         HTML(string=html).write_pdf(str(output_path))
-        _safe_print(f"  📄 PDF 생성: {output_path.name}")
+        _safe_print(f"  PDF created: {output_path.name}")
     except (ImportError, OSError):
         html_path = output_path.with_suffix('.html')
         with open(html_path, 'w', encoding='utf-8') as f:
             f.write(html)
-        _safe_print(f"  📄 HTML 생성: {html_path.name}")
-        _safe_print(f"  ℹ️  크롬에서 열고 Ctrl+P → PDF로 저장하세요")
+        _safe_print(f"  HTML created: {html_path.name}")
+        _safe_print(f"  Open in Chrome -> Ctrl+P -> Save as PDF")
 
 # ============================================================
 # 메인: 단일 지문 처리
@@ -798,7 +799,7 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
             shutil.rmtree(passage_dir)
 
     _safe_print(f"\n{'='*50}")
-    _safe_print(f"📝 지문 처리: {passage_id} ({meta.get('challenge_title','')})")
+    _safe_print(f"Processing: {passage_id} ({meta.get('challenge_title','')})")
     _safe_print(f"{'='*50}")
 
     sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', passage) if s.strip()]
@@ -846,7 +847,7 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
     if len(gep) > 1200:
         warnings.append(f"grammar_error_passage 길이 {len(gep)} (권장 1200 이내)")
     if warnings:
-        _safe_print(f"  ⚠️ 콘텐츠 길이 경고 (페이지 밀림 가능):")
+        _safe_print(f"  WARNING: content length warning:")
         for w in warnings:
             _safe_print(f"     - {w}")
 
@@ -855,7 +856,7 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
     pdf_path = _unique_path(OUTPUT_DIR, base_name, ".pdf")
     render_pdf(template_data, pdf_path, levels=levels)
 
-    _safe_print(f"✅ 완료: {pdf_path.name}")
+    _safe_print(f"Done: {pdf_path.name}")
     return pdf_path
 
 # ============================================================
@@ -868,12 +869,12 @@ def process_batch(passages: list[dict], levels=None):
     results = []
     total = len(passages)
     for i, item in enumerate(passages):
-        _safe_print(f"\n🔵 [{i+1}/{total}] 처리 시작...")
+        _safe_print(f"\n[{i+1}/{total}] Processing...")
         try:
             pdf = process_passage(item["passage"], item["meta"], item["id"], levels=levels)
             results.append({"id": item["id"], "status": "done", "pdf": str(pdf)})
         except Exception as e:
-            _safe_print(f"❌ 실패: {item['id']} - {e}")
+            _safe_print(f"FAILED: {item['id']} - {e}")
             results.append({"id": item["id"], "status": "error", "error": str(e)})
 
     # 결과 요약
@@ -881,9 +882,9 @@ def process_batch(passages: list[dict], levels=None):
     _safe_print(" Results summary")
     done = sum(1 for r in results if r["status"] == "done")
     err = sum(1 for r in results if r["status"] == "error")
-    _safe_print(f"  ✅ 성공: {done}/{total}")
+    _safe_print(f"  Success: {done}/{total}")
     if err:
-        _safe_print(f"  ❌ 실패: {err}/{total}")
+        _safe_print(f"  Failed: {err}/{total}")
         for r in results:
             if r["status"] == "error":
                 _safe_print(f"     - {r['id']}: {r['error']}")
@@ -935,7 +936,7 @@ def split_and_run(filepath: str, lesson_num: str = "5", levels=None):
         _safe_print("ERROR: No passages found. Check ### format.")
         return
     
-    _safe_print(f"📚 총 {len(passages)}개 지문 발견!")
+    _safe_print(f"Found {len(passages)} passages")
     for p in passages:
         _safe_print(f"  - {p['meta']['challenge_title']}")
     print()
@@ -958,7 +959,7 @@ def merge_html_files(output_dir=None):
     if len(html_files) < 2:
         return
     
-    _safe_print(f"\n📎 HTML 합치기: {len(html_files)}개 파일...")
+    _safe_print(f"\nMerging {len(html_files)} HTML files...")
     
     # 파일명에서 제목 추출하여 합본명 생성
     import re as _re
@@ -1006,8 +1007,8 @@ def merge_html_files(output_dir=None):
 </html>"""
     
     merged_path.write_text(merged, encoding='utf-8')
-    _safe_print(f"  ✅ 합본 생성: {merged_path.name}")
-    _safe_print(f"  ℹ️  크롬에서 열고 Ctrl+P → PDF로 저장하세요 (한번에 전부!)")
+    _safe_print(f"  Merged: {merged_path.name}")
+    _safe_print(f"  Open in Chrome -> Ctrl+P -> Save as PDF")
 if __name__ == "__main__":
     # --level 파싱 (어디서든 사용 가능)
     levels = None
@@ -1022,20 +1023,20 @@ if __name__ == "__main__":
     sys.argv = filtered_args
 
     if len(sys.argv) < 2:
-        print("사용법:")
-        _safe_print("  여러 지문: py pipeline.py --all all.txt")
-        _safe_print("  레벨 선택: py pipeline.py --all all.txt --level 1,2,5,8")
-        _safe_print("  1개 지문:  py pipeline.py 지문.txt 5 \"05강 01번\"")
-        _safe_print("  HTML 합치기: py pipeline.py --merge")
+        print("Usage:")
+        _safe_print("  Multiple: py pipeline.py --all all.txt")
+        _safe_print("  Levels: py pipeline.py --all all.txt --level 1,2,5,8")
+        _safe_print("  Single: py pipeline.py passage.txt 5 \"05-01\"")
+        _safe_print("  Merge: py pipeline.py --merge")
         print()
-        _safe_print("  --level 옵션: 원하는 레벨만 출력 (0=표지+정답)")
-        _safe_print("    예) --level 1,2,3,4    → Lv.1~4만")
-        _safe_print("    예) --level 5,6,7,8    → Lv.5~8만")
-        _safe_print("    예) --level 0,1,2      → 표지+Lv.1+Lv.2")
+        _safe_print("  --level option: select levels (0=cover+answers)")
+        _safe_print("    e.g.) --level 1,2,3,4")
+        _safe_print("    e.g.) --level 5,6,7,8")
+        _safe_print("    e.g.) --level 0,1,2")
         sys.exit(1)
 
     if levels:
-        _safe_print(f"📋 레벨 필터: Lv.{','.join(str(l) for l in levels)}")
+        _safe_print(f"Level filter: Lv.{','.join(str(l) for l in levels)}")
 
     if sys.argv[1] == "--merge":
         merge_html_files()

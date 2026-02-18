@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Workbook generation pipeline"""
+PIPELINE_VERSION = "v6-urllib"
 import json, os, sys, time, random, re
 import urllib.request
 from pathlib import Path

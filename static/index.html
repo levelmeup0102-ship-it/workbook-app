@@ -279,11 +279,34 @@ async function showMain() {
 }
 
 async function loadPassages() {
+  // 현재 선택 상태 저장
+  const prevBook = document.getElementById('sel-book').value;
+  const prevUnit = document.getElementById('sel-unit').value;
+  const prevSelected = new Set(selectedPassages);
   try {
     const res = await fetch(API + '/api/passages', { headers: headers() });
     if (res.status === 401) { doLogout(); return; }
     PASSAGES_DATA = await res.json();
     updateBookSelect();
+    // 이전 선택 복원
+    if (prevBook) {
+      document.getElementById('sel-book').value = prevBook;
+      onBookChange();
+      if (prevUnit) {
+        document.getElementById('sel-unit').value = prevUnit;
+        onUnitChange();
+        // 체크박스 선택 복원
+        prevSelected.forEach(id => {
+          const cb = document.querySelector(`.passage-item input[data-id="${id}"]`);
+          if (cb) {
+            selectedPassages.add(id);
+            cb.checked = true;
+          }
+        });
+        document.getElementById('sel-count').textContent = `${selectedPassages.size}개 선택`;
+        updateGenerateBtn();
+      }
+    }
     updateStats();
   } catch(e) {
     console.error(e);
@@ -458,7 +481,20 @@ async function doGenerate() {
   progressText.textContent = `완료! ${results.filter(r => r.status === 'success').length}/${passages.length} 성공`;
   resultsSection.classList.remove('hidden');
   
-  resultsList.innerHTML = results.map(r => `
+  // 성공한 결과들의 HTML 모아두기
+  const successResults = results.filter(r => r.status === 'success');
+  
+  let mergeBtn = '';
+  if (successResults.length > 1) {
+    mergeBtn = `<div style="margin-bottom:8px;">
+      <button class="btn btn-orange" style="width:100%;" onclick="downloadMerged()">📦 합본 다운로드 (${successResults.length}개)</button>
+    </div>`;
+  }
+  
+  // 개별 다운로드 + 합본 HTML 저장
+  window._lastResults = successResults;
+  
+  resultsList.innerHTML = mergeBtn + results.map(r => `
     <div class="result-item">
       <span>${r.status === 'success' ? '✅' : '❌'} ${r.id}</span>
       ${r.status === 'success' 
@@ -469,7 +505,8 @@ async function doGenerate() {
   `).join('');
   
   btn.disabled = false;
-  await loadPassages(); // 상태 새로고침
+  // 선택 상태 유지하면서 캐시 상태만 새로고침
+  await loadPassages();
 }
 
 function downloadHtml(encodedHtml, filename) {
@@ -479,6 +516,45 @@ function downloadHtml(encodedHtml, filename) {
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadMerged() {
+  if (!window._lastResults || window._lastResults.length === 0) return;
+  
+  // 첫 파일에서 CSS 추출
+  const firstHtml = window._lastResults[0].html;
+  const styleMatch = firstHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/);
+  const css = styleMatch ? styleMatch[1] : '';
+  
+  // 각 파일에서 body 내용만 추출
+  const bodies = window._lastResults.map(r => {
+    const bodyMatch = r.html.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+    return bodyMatch ? bodyMatch[1] : r.html;
+  });
+  
+  // 합본 생성
+  const unit = document.getElementById('sel-unit').value || '합본';
+  const merged = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>${unit} 합본</title>
+<style>
+${css}
+</style>
+</head>
+<body>
+${bodies.join('\n')}
+</body>
+</html>`;
+  
+  const blob = new Blob([merged], { type: 'text/html; charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${unit}_합본_워크북.html`;
   a.click();
   URL.revokeObjectURL(url);
 }

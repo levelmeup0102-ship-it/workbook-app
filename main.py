@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-APP_VERSION = "v9-curl-final"
+APP_VERSION = "v10-persist"
 
 # Clear bytecode cache on startup (prevent stale .pyc from old deploys)
 import shutil
@@ -17,8 +17,8 @@ for p in Path(".").glob("__pycache__"):
 
 APP_PASSWORD = os.getenv("APP_PASSWORD", "levelmeup2026")
 DATA_DIR = Path("data")
-PASSAGES_FILE = Path("passages.json")
 DATA_DIR.mkdir(exist_ok=True)
+PASSAGES_FILE = DATA_DIR / "passages.json"  # data/ 안에 저장 → 볼륨으로 영속
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -27,8 +27,24 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.get("/api/version")
 async def version():
     key = os.getenv("ANTHROPIC_API_KEY", "NOT_SET")
-    key_preview = f"{key[:12]}...{key[-4:]}" if len(key) > 16 else "TOO_SHORT"
-    return {"version": APP_VERSION, "key_len": len(key), "key_preview": key_preview}
+    pf_exists = PASSAGES_FILE.exists()
+    passage_count = 0
+    if pf_exists:
+        try:
+            db = _load_db()
+            for bk in db.get("books", {}).values():
+                for ud in bk.get("units", {}).values():
+                    passage_count += len(ud.get("passages", {}))
+        except: pass
+    cache_dirs = len(list(DATA_DIR.glob("*_*"))) if DATA_DIR.exists() else 0
+    return {
+        "version": APP_VERSION,
+        "key_ok": len(key) > 50,
+        "passages_file": str(PASSAGES_FILE),
+        "passages_exist": pf_exists,
+        "passage_count": passage_count,
+        "cache_dirs": cache_dirs,
+    }
 
 def _token(pw): return hashlib.sha256(f"{pw}_wb2026".encode()).hexdigest()[:32]
 def _verify(r: Request):
@@ -113,11 +129,28 @@ async def generate(request: Request):
     body = await request.json()
     book, unit, pid = body.get("book"), body.get("unit"), body.get("passage_id")
     levels = body.get("levels")
+    
+    # Debug logging
+    print(f"[generate] book={book}, unit={unit}, pid={pid}")
+    print(f"[generate] passages.json exists: {PASSAGES_FILE.exists()}")
+    
     db = _load_db()
+    
+    # Debug: show what's in the DB
+    books_list = list(db.get("books", {}).keys())
+    print(f"[generate] books in db: {books_list}")
+    if book in db.get("books", {}):
+        units_list = list(db["books"][book].get("units", {}).keys())
+        print(f"[generate] units in '{book}': {units_list}")
+        if unit in db["books"][book].get("units", {}):
+            pids_list = list(db["books"][book]["units"][unit].get("passages", {}).keys())
+            print(f"[generate] passages in '{unit}': {pids_list}")
+    
     try:
         pinfo = db["books"][book]["units"][unit]["passages"][pid]
-    except (KeyError, TypeError):
-        raise HTTPException(404, "passage not found")
+    except (KeyError, TypeError) as e:
+        print(f"[generate] PASSAGE NOT FOUND: {e}")
+        raise HTTPException(404, f"passage not found: book={book}, unit={unit}, pid={pid}")
 
     passage_text = pinfo["text"]
     title = pinfo["title"]

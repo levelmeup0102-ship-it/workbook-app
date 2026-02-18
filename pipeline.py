@@ -180,17 +180,43 @@ def _fix_json_quotes(text: str) -> str:
 # 단계별 저장/로드
 # ============================================================
 def save_step(passage_dir: Path, step_name: str, data: dict):
+    # Save locally
     passage_dir.mkdir(parents=True, exist_ok=True)
     path = passage_dir / f"{step_name}.json"
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     _safe_print(f"  Saved: {step_name}.json")
+    # Save to Supabase
+    try:
+        import supa
+        if supa._enabled():
+            cache_key = passage_dir.name
+            supa.save_step_supa(cache_key, step_name, data)
+            _safe_print(f"  Saved to Supabase: {cache_key}/{step_name}")
+    except Exception as e:
+        _safe_print(f"  [supa] save error: {str(e)[:80]}")
 
 def load_step(passage_dir: Path, step_name: str) -> dict | None:
+    # Try local first
     path = passage_dir / f"{step_name}.json"
     if path.exists():
         with open(path, 'r', encoding='utf-8') as f:
             return json.load(f)
+    # Try Supabase
+    try:
+        import supa
+        if supa._enabled():
+            cache_key = passage_dir.name
+            data = supa.get_step(cache_key, step_name)
+            if data:
+                # Save locally for future use
+                passage_dir.mkdir(parents=True, exist_ok=True)
+                with open(path, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                _safe_print(f"  Loaded from Supabase: {step_name}")
+                return data
+    except Exception as e:
+        _safe_print(f"  [supa] load error: {str(e)[:80]}")
     return None
 
 # ============================================================

@@ -60,7 +60,7 @@ def call_claude(system_prompt: str, user_prompt: str, max_retries=2, max_tokens=
             resp = requests.post(
                 API_URL,
                 headers=headers,
-                data=json.dumps(body, ensure_ascii=False).encode('utf-8'),
+                json=body,
                 timeout=120
             )
             if resp.status_code != 200:

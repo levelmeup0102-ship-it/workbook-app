@@ -26,7 +26,14 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/api/version")
 async def version():
-    return {"version": APP_VERSION, "python": sys.version, "encoding": sys.getdefaultencoding()}
+    key = os.getenv("ANTHROPIC_API_KEY", "NOT_SET")
+    key_preview = f"{key[:10]}...{key[-4:]}" if len(key) > 14 else "TOO_SHORT"
+    return {
+        "version": APP_VERSION,
+        "key_length": len(key),
+        "key_preview": key_preview,
+        "key_starts_with": key[:12],
+        "encoding": sys.getdefaultencoding()
 
 def _token(pw): return hashlib.sha256(f"{pw}_wb2026".encode()).hexdigest()[:32]
 def _verify(r: Request):

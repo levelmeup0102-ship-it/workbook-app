@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Workbook webapp server v6"""
+"""Workbook webapp server v7"""
 import os, json, hashlib, re, sys, io
 from pathlib import Path
 from fastapi import FastAPI, Request, HTTPException
@@ -8,7 +8,12 @@ from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-APP_VERSION = "v6-urllib"
+APP_VERSION = "v7-curl"
+
+# Clear bytecode cache on startup (prevent stale .pyc from old deploys)
+import shutil
+for p in Path(".").glob("__pycache__"):
+    shutil.rmtree(p, ignore_errors=True)
 
 APP_PASSWORD = os.getenv("APP_PASSWORD", "levelmeup2026")
 DATA_DIR = Path("data")

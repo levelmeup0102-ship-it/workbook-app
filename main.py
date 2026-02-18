@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-APP_VERSION = "v7-curl"
+APP_VERSION = "v8-httpclient"
 
 # Clear bytecode cache on startup (prevent stale .pyc from old deploys)
 import shutil

@@ -1,30 +1,8 @@
 #!/usr/bin/env python3
 """영어 워크북 자동 생성 파이프라인"""
-import json, os, sys, time, random, re, io, locale
-
-# ============================================================
-# UTF-8 강제 설정 (Railway 서버 호환 - 반드시 최상단에서!)
-# ============================================================
-os.environ['PYTHONUTF8'] = '1'
-os.environ['PYTHONIOENCODING'] = 'utf-8'
-os.environ['LANG'] = 'C.UTF-8'
-os.environ['LC_ALL'] = 'C.UTF-8'
-try:
-    locale.setlocale(locale.LC_ALL, 'C.UTF-8')
-except:
-    try:
-        locale.setlocale(locale.LC_ALL, '')
-    except:
-        pass
-
+import json, os, sys, time, random, re
 from pathlib import Path
-from anthropic import Anthropic
-
-# httpx 디버그 로깅 억제 (인코딩 문제 방지)
-import logging
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("httpcore").setLevel(logging.WARNING)
-logging.getLogger("anthropic").setLevel(logging.WARNING)
+import requests  # requests는 UTF-8 100% 보장
 
 # ============================================================
 # 설정
@@ -36,19 +14,11 @@ DATA_DIR = TEMPLATE_DIR / "data"
 
 # 날짜 기반 출력 폴더: output/2월18일/
 from datetime import datetime
-TODAY = datetime.now().strftime("%-m월%-d일") if os.name != 'nt' else datetime.now().strftime("%#m월%#d일")
+try:
+    TODAY = datetime.now().strftime("%-m월%-d일") if os.name != 'nt' else datetime.now().strftime("%#m월%#d일")
+except:
+    TODAY = datetime.now().strftime("%m월%d일")
 OUTPUT_DIR = TEMPLATE_DIR / "output" / TODAY
-
-client = None  # lazy init
-
-def get_client():
-    global client
-    if client is None:
-        if not API_KEY:
-            _safe_print("ERROR: Set ANTHROPIC_API_KEY")
-            sys.exit(1)
-        client = Anthropic(api_key=API_KEY)
-    return client
 
 # ============================================================
 # 안전한 출력 (인코딩 에러 방지)
@@ -63,28 +33,41 @@ def _safe_print(msg):
             pass
 
 # ============================================================
-# Claude API 호출 (재시도 포함)
+# Claude API 호출 (requests 직접 사용 - httpx 인코딩 문제 해결)
 # ============================================================
+API_URL = "https://api.anthropic.com/v1/messages"
+
 def call_claude(system_prompt: str, user_prompt: str, max_retries=2, max_tokens=4096) -> str:
-    """Claude API 호출 + 재시도"""
-    c = get_client()
+    """Claude API 직접 호출 (requests) + 재시도"""
+    if not API_KEY:
+        raise ValueError("ANTHROPIC_API_KEY not set")
+    
+    headers = {
+        "x-api-key": API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
+    body = {
+        "model": MODEL,
+        "max_tokens": max_tokens,
+        "temperature": 0.3,
+        "system": system_prompt,
+        "messages": [{"role": "user", "content": user_prompt}]
+    }
+    
     for attempt in range(max_retries + 1):
         try:
-            resp = c.messages.create(
-                model=MODEL,
-                max_tokens=max_tokens,
-                temperature=0.3,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}]
+            resp = requests.post(
+                API_URL,
+                headers=headers,
+                data=json.dumps(body, ensure_ascii=False).encode('utf-8'),
+                timeout=120
             )
-            text = resp.content[0].text.strip()
+            if resp.status_code != 200:
+                raise Exception(f"API error {resp.status_code}: {resp.text[:200]}")
+            data = resp.json()
+            text = data["content"][0]["text"].strip()
             return text
-        except UnicodeEncodeError as e:
-            _safe_print(f"  [WARN] Encoding error attempt {attempt+1}: {str(e)[:100]}")
-            if attempt < max_retries:
-                time.sleep(3 * (attempt + 1))
-            else:
-                raise
         except Exception as e:
             _safe_print(f"  [WARN] API attempt {attempt+1} failed: {str(e)[:100]}")
             if attempt < max_retries:

@@ -1,5 +1,5 @@
 fastapi
 uvicorn
-anthropic
+requests
 jinja2
 python-multipart

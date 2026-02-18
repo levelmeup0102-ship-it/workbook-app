@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-APP_VERSION = "v11-supabase"
+APP_VERSION = "v11b-supa-fix"
 
 # Clear bytecode cache on startup (prevent stale .pyc from old deploys)
 import shutil
@@ -29,13 +29,26 @@ async def version():
     key = os.getenv("ANTHROPIC_API_KEY", "NOT_SET")
     pf_exists = PASSAGES_FILE.exists()
     passage_count = 0
-    if pf_exists:
-        try:
-            db = _load_db()
-            for bk in db.get("books", {}).values():
-                for ud in bk.get("units", {}).values():
-                    passage_count += len(ud.get("passages", {}))
-        except: pass
+    supa_count = 0
+    supa_ok = False
+    
+    # Count from _load_db (Supabase or local)
+    try:
+        db = _load_db()
+        for bk in db.get("books", {}).values():
+            for ud in bk.get("units", {}).values():
+                passage_count += len(ud.get("passages", {}))
+    except: pass
+    
+    # Check Supabase directly
+    try:
+        import supa
+        if supa._enabled():
+            rows = supa.get_all_passages()
+            supa_count = len(rows)
+            supa_ok = True
+    except: pass
+    
     cache_dirs = len(list(DATA_DIR.glob("*_*"))) if DATA_DIR.exists() else 0
     return {
         "version": APP_VERSION,
@@ -43,6 +56,8 @@ async def version():
         "passages_file": str(PASSAGES_FILE),
         "passages_exist": pf_exists,
         "passage_count": passage_count,
+        "supa_ok": supa_ok,
+        "supa_count": supa_count,
         "cache_dirs": cache_dirs,
     }
 
@@ -80,7 +95,17 @@ def _load_db():
 
 def _save_db(d):
     """Save passages - local + Supabase"""
+    # Count total passages
+    total = sum(
+        len(ud.get("passages", {}))
+        for bk, bd in d.get("books", {}).items()
+        for unit, ud in bd.get("units", {}).items()
+    )
+    print(f"[save_db] saving {total} passages...")
+    
     PASSAGES_FILE.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"[save_db] local file written OK")
+    
     # Also save to Supabase
     try:
         import supa
@@ -95,8 +120,10 @@ def _save_db(d):
                             "passage_text": pi.get("text", "")
                         })
             if rows:
+                print(f"[save_db] sending {len(rows)} rows to Supabase...")
                 supa.upsert_passages_bulk(rows)
-                print(f"[supa] saved {len(rows)} passages")
+        else:
+            print("[save_db] Supabase not enabled")
     except Exception as e:
         print(f"[supa] save error: {e}")
 

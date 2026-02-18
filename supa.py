@@ -13,14 +13,23 @@ def _curl(method, endpoint, body=None, extra_headers=None):
     if not _enabled():
         return None
     url = f"{SUPABASE_URL}/rest/v1/{endpoint}"
-    cmd = ['curl', '-s', '-X', method, url,
-           '-H', f'apikey: {SUPABASE_KEY}',
-           '-H', f'Authorization: Bearer {SUPABASE_KEY}',
-           '-H', 'Content-Type: application/json',
-           '-H', 'Prefer: return=representation']
+    
+    # Build headers - extra_headers can override defaults
+    headers = {
+        'apikey': SUPABASE_KEY,
+        'Authorization': f'Bearer {SUPABASE_KEY}',
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+    }
     if extra_headers:
         for h in extra_headers:
-            cmd.extend(['-H', h])
+            if ':' in h:
+                k, v = h.split(':', 1)
+                headers[k.strip()] = v.strip()
+    
+    cmd = ['curl', '-s', '-X', method, url]
+    for k, v in headers.items():
+        cmd.extend(['-H', f'{k}: {v}'])
     
     tmp_path = None
     if body is not None:
@@ -34,10 +43,19 @@ def _curl(method, endpoint, body=None, extra_headers=None):
         if tmp_path:
             os.unlink(tmp_path)
         raw = result.stdout.decode('utf-8').strip()
+        stderr = result.stderr.decode('utf-8').strip()
+        if stderr:
+            print(f"[supa] curl stderr: {stderr[:200]}")
         if not raw:
+            print(f"[supa] curl empty response for {method} {endpoint}")
             return None
-        return json.loads(raw)
+        parsed = json.loads(raw)
+        # Check for Supabase error
+        if isinstance(parsed, dict) and "message" in parsed:
+            print(f"[supa] API error: {parsed.get('message','')[:200]}")
+        return parsed
     except Exception as e:
+        print(f"[supa] curl exception: {str(e)[:200]}")
         if tmp_path:
             try: os.unlink(tmp_path)
             except: pass
@@ -61,15 +79,21 @@ def upsert_passage(book, unit, pid, title, text):
     body = {"book": book, "unit": unit, "pid": pid, "title": title, "passage_text": text}
     return _curl("POST", "passages",
                  body=body,
-                 extra_headers=["Prefer: resolution=merge-duplicates,return=representation"])
+                 extra_headers=["Prefer: resolution=merge-duplicates, return=representation"])
 
 def upsert_passages_bulk(rows):
     """Bulk upsert: [{book, unit, pid, title, passage_text}, ...]"""
     if not rows:
         return None
-    return _curl("POST", "passages",
+    print(f"[supa] upserting {len(rows)} passages...")
+    result = _curl("POST", "passages",
                  body=rows,
-                 extra_headers=["Prefer: resolution=merge-duplicates,return=representation"])
+                 extra_headers=["Prefer: resolution=merge-duplicates, return=representation"])
+    if isinstance(result, list):
+        print(f"[supa] upsert success: {len(result)} rows")
+    else:
+        print(f"[supa] upsert result: {str(result)[:200]}")
+    return result
 
 # ========================
 # Step Cache
@@ -85,7 +109,7 @@ def save_step_supa(cache_key, step_name, data):
     body = {"cache_key": cache_key, "step_name": step_name, "data": data}
     return _curl("POST", "step_cache",
                  body=body,
-                 extra_headers=["Prefer: resolution=merge-duplicates,return=representation"])
+                 extra_headers=["Prefer: resolution=merge-duplicates, return=representation"])
 
 def count_steps(cache_key):
     q = f"step_cache?cache_key=eq.{quote(cache_key, safe='')}&select=step_name"

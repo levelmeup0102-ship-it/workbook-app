@@ -204,10 +204,8 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       <div class="section">
         <div class="section-title"><span class="icon">📤</span> 지문 업로드</div>
         <p style="font-size:13px;color:#666;margin-bottom:8px;">###강 번호### 형식으로 입력하세요</p>
-        <select id="upload-book" style="margin-bottom:8px;">
-          <option>26 수특 영어</option>
-          <option>26 수완 영어</option>
-        </select>
+        <input type="text" id="upload-book" list="book-list" placeholder="교재명 입력 (예: 26 수특 영어)" style="margin-bottom:8px;width:100%;padding:10px 12px;border:2px solid #e5e7eb;border-radius:8px;font-size:14px;">
+        <datalist id="book-list"></datalist>
         <textarea id="upload-text" placeholder="###05강 01번###
 Many crises today, such as the Great Recession...
 
@@ -587,6 +585,7 @@ async function doUpload() {
   const book = document.getElementById('upload-book').value;
   const text = document.getElementById('upload-text').value;
   
+  if (!book.trim()) { toast('교재명을 입력하세요'); return; }
   if (!text.trim()) { toast('지문 텍스트를 입력하세요'); return; }
   
   try {
@@ -614,6 +613,10 @@ function updateStats() {
     books[p.book].total++;
     if (p.cache_status === 'ready') books[p.book].ready++;
   });
+  
+  // 교재 입력 자동완성 업데이트
+  const dl = document.getElementById('book-list');
+  dl.innerHTML = Object.keys(books).map(b => `<option value="${b}">`).join('');
   
   const el = document.getElementById('stats-list');
   if (Object.keys(books).length === 0) {

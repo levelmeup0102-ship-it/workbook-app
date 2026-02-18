@@ -16,13 +16,6 @@ except:
         locale.setlocale(locale.LC_ALL, '')
     except:
         pass
-try:
-    if hasattr(sys.stdout, 'buffer'):
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    if hasattr(sys.stderr, 'buffer'):
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
-except:
-    pass
 
 from pathlib import Path
 from anthropic import Anthropic

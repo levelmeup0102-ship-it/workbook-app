@@ -11,13 +11,6 @@ import uvicorn
 # UTF-8 강제
 os.environ['PYTHONUTF8'] = '1'
 os.environ['PYTHONIOENCODING'] = 'utf-8'
-try:
-    if hasattr(sys.stdout, 'buffer'):
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    if hasattr(sys.stderr, 'buffer'):
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
-except:
-    pass
 
 APP_PASSWORD = os.getenv("APP_PASSWORD", "levelmeup2026")
 DATA_DIR = Path("data")

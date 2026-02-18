@@ -77,7 +77,7 @@ def get_passage(book, unit, pid):
 
 def upsert_passage(book, unit, pid, title, text):
     body = {"book": book, "unit": unit, "pid": pid, "title": title, "passage_text": text}
-    return _curl("POST", "passages",
+    return _curl("POST", "passages?on_conflict=book,unit,pid",
                  body=body,
                  extra_headers=["Prefer: resolution=merge-duplicates, return=representation"])
 
@@ -86,7 +86,7 @@ def upsert_passages_bulk(rows):
     if not rows:
         return None
     print(f"[supa] upserting {len(rows)} passages...")
-    result = _curl("POST", "passages",
+    result = _curl("POST", "passages?on_conflict=book,unit,pid",
                  body=rows,
                  extra_headers=["Prefer: resolution=merge-duplicates, return=representation"])
     if isinstance(result, list):
@@ -107,7 +107,7 @@ def get_step(cache_key, step_name):
 
 def save_step_supa(cache_key, step_name, data):
     body = {"cache_key": cache_key, "step_name": step_name, "data": data}
-    return _curl("POST", "step_cache",
+    return _curl("POST", "step_cache?on_conflict=cache_key,step_name",
                  body=body,
                  extra_headers=["Prefer: resolution=merge-duplicates, return=representation"])
 

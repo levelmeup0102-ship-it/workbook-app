@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-APP_VERSION = "v10-persist"
+APP_VERSION = "v11-supabase"
 
 # Clear bytecode cache on startup (prevent stale .pyc from old deploys)
 import shutil
@@ -52,11 +52,53 @@ def _verify(r: Request):
         raise HTTPException(401)
 
 def _load_db():
+    """Load passages - Supabase first, local fallback"""
+    try:
+        import supa
+        if supa._enabled():
+            rows = supa.get_all_passages()
+            if rows:
+                db = {"books": {}}
+                for r in rows:
+                    bk = r["book"]
+                    unit = r["unit"]
+                    pid = r["pid"]
+                    if bk not in db["books"]:
+                        db["books"][bk] = {"units": {}}
+                    if unit not in db["books"][bk]["units"]:
+                        db["books"][bk]["units"][unit] = {"passages": {}}
+                    db["books"][bk]["units"][unit]["passages"][pid] = {
+                        "title": r["title"], "text": r["passage_text"]
+                    }
+                return db
+    except Exception as e:
+        print(f"[supa] load error: {e}")
+    # Local fallback
     if PASSAGES_FILE.exists():
         return json.loads(PASSAGES_FILE.read_text(encoding="utf-8"))
     return {"books": {}}
+
 def _save_db(d):
+    """Save passages - local + Supabase"""
     PASSAGES_FILE.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Also save to Supabase
+    try:
+        import supa
+        if supa._enabled():
+            rows = []
+            for bk, bd in d.get("books", {}).items():
+                for unit, ud in bd.get("units", {}).items():
+                    for pid, pi in ud.get("passages", {}).items():
+                        rows.append({
+                            "book": bk, "unit": unit, "pid": pid,
+                            "title": pi.get("title", pid),
+                            "passage_text": pi.get("text", "")
+                        })
+            if rows:
+                supa.upsert_passages_bulk(rows)
+                print(f"[supa] saved {len(rows)} passages")
+    except Exception as e:
+        print(f"[supa] save error: {e}")
 
 def _ck(book, unit, pid):
     """캐시 키: 한국어 → ASCII 해시로 변환"""
@@ -68,9 +110,17 @@ def _ck(book, unit, pid):
     return f"{prefix}_{h}"
 
 def _is_cached(ck):
+    """Check cache - local first, then Supabase"""
     d = DATA_DIR / ck
-    if not d.exists(): return False
-    return sum(1 for f in d.glob("step*.json")) >= 8
+    if d.exists() and sum(1 for f in d.glob("step*.json")) >= 8:
+        return True
+    # Check Supabase
+    try:
+        import supa
+        if supa._enabled() and supa.count_steps(ck) >= 8:
+            return True
+    except: pass
+    return False
 
 @app.get("/", response_class=HTMLResponse)
 async def index():

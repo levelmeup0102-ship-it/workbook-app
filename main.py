@@ -190,7 +190,7 @@ async def upload_passages(request: Request):
         title = parts[i].strip()
         passage = parts[i+1].strip() if i+1 < len(parts) else ""
         if not passage: continue
-        m = re.match(r'(\d+강)\s*(.*)', title)
+        m = re.match(r'(\d+강|SL|L\d+)\s*(.*)', title)
         unit_name = m.group(1) if m else "etc"
         pid = m.group(2) if m and m.group(2) else title
         if unit_name not in db["books"][book]["units"]:

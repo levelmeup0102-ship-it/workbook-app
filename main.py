@@ -1,13 +1,23 @@
-"""
-워크북 웹앱 서버 (FastAPI)
-"""
-import os, json, hashlib, re
+#!/usr/bin/env python3
+"""워크북 웹앱 서버"""
+import os, json, hashlib, re, sys, io
 from pathlib import Path
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+
+# UTF-8 강제
+os.environ['PYTHONUTF8'] = '1'
+os.environ['PYTHONIOENCODING'] = 'utf-8'
+try:
+    if hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    if hasattr(sys.stderr, 'buffer'):
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+except:
+    pass
 
 APP_PASSWORD = os.getenv("APP_PASSWORD", "levelmeup2026")
 DATA_DIR = Path("data")
@@ -31,7 +41,13 @@ def _save_db(d):
     PASSAGES_FILE.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
 
 def _ck(book, unit, pid):
-    return f"{book}_{unit}_{pid}".replace(" ","_").replace("/","_")
+    """캐시 키: 한국어 → ASCII 해시로 변환"""
+    raw = f"{book}_{unit}_{pid}"
+    h = hashlib.md5(raw.encode('utf-8')).hexdigest()[:12]
+    # 숫자만 추출해서 읽기 쉽게
+    nums = re.findall(r'\d+', raw)
+    prefix = "_".join(nums) if nums else "p"
+    return f"{prefix}_{h}"
 
 def _is_cached(ck):
     d = DATA_DIR / ck
@@ -47,7 +63,7 @@ async def auth(request: Request):
     body = await request.json()
     if body.get("password") == APP_PASSWORD:
         return {"ok": True, "token": _token(APP_PASSWORD)}
-    raise HTTPException(401, "비밀번호 오류")
+    raise HTTPException(401, "wrong password")
 
 @app.get("/api/passages")
 async def list_passages(request: Request):
@@ -68,7 +84,7 @@ async def list_passages(request: Request):
 async def upload_passages(request: Request):
     _verify(request)
     body = await request.json()
-    book = body.get("book", "수특 영어")
+    book = body.get("book", "26 suteuk")
     text = body.get("text", "")
     parts = re.split(r'###(.+?)###', text)
     db = _load_db()
@@ -80,7 +96,7 @@ async def upload_passages(request: Request):
         passage = parts[i+1].strip() if i+1 < len(parts) else ""
         if not passage: continue
         m = re.match(r'(\d+강)\s*(.*)', title)
-        unit_name = m.group(1) if m else "기타"
+        unit_name = m.group(1) if m else "etc"
         pid = m.group(2) if m and m.group(2) else title
         if unit_name not in db["books"][book]["units"]:
             db["books"][book]["units"][unit_name] = {"passages": {}}
@@ -99,11 +115,11 @@ async def generate(request: Request):
     try:
         pinfo = db["books"][book]["units"][unit]["passages"][pid]
     except (KeyError, TypeError):
-        raise HTTPException(404, "지문 없음")
+        raise HTTPException(404, "passage not found")
 
     passage_text = pinfo["text"]
     title = pinfo["title"]
-    m = re.match(r'(\d+)강', unit)
+    m = re.match(r'(\d+)', unit)
     lesson_num = m.group(1) if m else "00"
     ck = _ck(book, unit, pid)
 
@@ -121,7 +137,7 @@ async def generate(request: Request):
             hp = result_path.with_suffix('.html') if result_path.suffix != '.html' else result_path
             if hp.exists():
                 return {"ok": True, "html": hp.read_text(encoding="utf-8"), "filename": hp.name}
-        raise HTTPException(500, "생성 실패")
+        raise HTTPException(500, "generation failed")
     except HTTPException: raise
     except Exception as e:
         raise HTTPException(500, str(e))

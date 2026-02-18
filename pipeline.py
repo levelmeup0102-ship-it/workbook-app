@@ -71,10 +71,13 @@ def call_claude_json(system_prompt: str, user_prompt: str, max_retries=3, max_to
             return _parse_json_robust(text)
         except (json.JSONDecodeError, ValueError) as e:
             last_error = e
-            print(f"  ⚠️ JSON 파싱 실패 (시도 {attempt+1}/{max_retries+1}): {str(e)[:80]}")
+            try:
+                print(f"  [WARN] JSON parse fail (try {attempt+1}/{max_retries+1}): {str(e)[:80]}")
+            except Exception:
+                pass
             if attempt < max_retries:
                 time.sleep(2)
-    raise ValueError(f"JSON 파싱 최종 실패: {last_error}")
+    raise ValueError(f"JSON parse final fail: {str(last_error)[:200]}")
 
 def _parse_json_robust(text: str) -> dict:
     """여러 전략으로 JSON 파싱 시도"""

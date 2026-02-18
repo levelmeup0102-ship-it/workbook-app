@@ -25,12 +25,9 @@ OUTPUT_DIR = TEMPLATE_DIR / "output" / TODAY
 # ============================================================
 def _safe_print(msg):
     try:
-        print(msg)
-    except (UnicodeEncodeError, UnicodeDecodeError):
-        try:
-            print(msg.encode('utf-8', errors='replace').decode('ascii', errors='replace'))
-        except:
-            pass
+        print(str(msg))
+    except Exception:
+        pass
 
 # ============================================================
 # Claude API 호출 (requests 직접 사용 - httpx 인코딩 문제 해결)
@@ -45,7 +42,6 @@ def call_claude(system_prompt: str, user_prompt: str, max_retries=2, max_tokens=
     headers = {
         "x-api-key": API_KEY,
         "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
     }
     body = {
         "model": MODEL,
@@ -55,18 +51,17 @@ def call_claude(system_prompt: str, user_prompt: str, max_retries=2, max_tokens=
         "messages": [{"role": "user", "content": user_prompt}]
     }
     
-   for attempt in range(max_retries + 1):
+    for attempt in range(max_retries + 1):
         try:
-            body_bytes = json.dumps(body).encode('ascii')
             resp = requests.post(
                 API_URL,
                 headers=headers,
-                data=body_bytes,
+                json=body,
                 timeout=120
             )
             if resp.status_code != 200:
                 raise Exception(f"API error {resp.status_code}: {resp.text[:200]}")
-            result = json.loads(resp.content.decode('utf-8'))
+            result = resp.json()
             text = result["content"][0]["text"].strip()
             return text
         except Exception as e:

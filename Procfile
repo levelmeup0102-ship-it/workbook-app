@@ -1,1 +1,1 @@
-web: PYTHONUTF8=1 PYTHONIOENCODING=utf-8 LANG=C.UTF-8 LC_ALL=C.UTF-8 uvicorn main:app --host 0.0.0.0 --port $PORT
+web: python -X utf8 -m uvicorn main:app --host 0.0.0.0 --port $PORT

@@ -60,6 +60,11 @@ select:focus { border-color: #4A90D9; outline: none; }
 .passage-item .title { flex: 1; font-size: 14px; }
 .passage-item .status { font-size: 11px; }
 
+/* 단원 헤더 */
+.unit-header { padding: 8px 12px; background: #f0f4f8; font-weight: 700; font-size: 13px; color: #4A90D9; border-bottom: 1px solid #e0e0e0; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+.unit-header:hover { background: #e5edf5; }
+.unit-header .unit-select { font-size: 11px; font-weight: 400; color: #666; }
+
 /* 레벨 선택 */
 .level-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .level-btn { padding: 8px 4px; border: 2px solid #e5e7eb; border-radius: 8px; text-align: center; cursor: pointer; font-size: 12px; transition: all 0.15s; user-select: none; }
@@ -131,12 +136,9 @@ textarea:focus { border-color: #4A90D9; outline: none; }
     <div id="tab-generate">
       <!-- 교재/단원 선택 -->
       <div class="section">
-        <div class="section-title"><span class="icon">📚</span> 교재 / 단원 선택</div>
+        <div class="section-title"><span class="icon">📚</span> 교재 선택</div>
         <select id="sel-book" onchange="onBookChange()">
           <option value="">교재를 선택하세요</option>
-        </select>
-        <select id="sel-unit" onchange="onUnitChange()">
-          <option value="">단원을 선택하세요</option>
         </select>
       </div>
 
@@ -150,8 +152,8 @@ textarea:focus { border-color: #4A90D9; outline: none; }
           <button class="btn btn-sm" onclick="selectAll()" style="background:#eee;color:#333;margin-right:4px;">전체 선택</button>
           <button class="btn btn-sm" onclick="selectNone()" style="background:#eee;color:#333;">선택 해제</button>
         </div>
-        <div class="passage-list" id="passage-list">
-          <div style="padding:20px;text-align:center;color:#999;">교재와 단원을 먼저 선택하세요</div>
+        <div class="passage-list" id="passage-list" style="max-height:400px;">
+          <div style="padding:20px;text-align:center;color:#999;">교재를 먼저 선택하세요</div>
         </div>
       </div>
 
@@ -228,7 +230,7 @@ Consumer surveys indicate that..."></textarea>
 // ============================================================
 let TOKEN = localStorage.getItem('wb_token') || '';
 let PASSAGES_DATA = null;
-let selectedPassages = new Set();
+let selectedPassages = new Map(); // key -> {book, unit, id}
 
 const API = '';  // 같은 서버
 
@@ -279,33 +281,26 @@ async function showMain() {
 }
 
 async function loadPassages() {
-  // 현재 선택 상태 저장
   const prevBook = document.getElementById('sel-book').value;
-  const prevUnit = document.getElementById('sel-unit').value;
-  const prevSelected = new Set(selectedPassages);
+  const prevSelected = new Map(selectedPassages);
   try {
     const res = await fetch(API + '/api/passages', { headers: headers() });
     if (res.status === 401) { doLogout(); return; }
     PASSAGES_DATA = await res.json();
     updateBookSelect();
-    // 이전 선택 복원
     if (prevBook) {
       document.getElementById('sel-book').value = prevBook;
       onBookChange();
-      if (prevUnit) {
-        document.getElementById('sel-unit').value = prevUnit;
-        onUnitChange();
-        // 체크박스 선택 복원
-        prevSelected.forEach(id => {
-          const cb = document.querySelector(`.passage-item input[data-id="${id}"]`);
-          if (cb) {
-            selectedPassages.add(id);
-            cb.checked = true;
-          }
-        });
-        document.getElementById('sel-count').textContent = `${selectedPassages.size}개 선택`;
-        updateGenerateBtn();
-      }
+      // 체크박스 복원
+      prevSelected.forEach((val, key) => {
+        const cb = document.querySelector(`input[data-key="${key}"]`);
+        if (cb) {
+          selectedPassages.set(key, val);
+          cb.checked = true;
+        }
+      });
+      updateSelCount();
+      updateGenerateBtn();
     }
     updateStats();
   } catch(e) {
@@ -319,81 +314,109 @@ async function loadPassages() {
 function updateBookSelect() {
   const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
   const sel = document.getElementById('sel-book');
+  const prev = sel.value;
   sel.innerHTML = '<option value="">교재를 선택하세요</option>';
   books.forEach(b => {
     sel.innerHTML += `<option value="${b}">${b}</option>`;
   });
+  if (prev && books.includes(prev)) sel.value = prev;
 }
 
 function onBookChange() {
   const book = document.getElementById('sel-book').value;
-  const units = [...new Set(PASSAGES_DATA.filter(p => p.book === book).map(p => p.unit))];
-  // 자연 정렬
-  units.sort((a, b) => {
-    const na = parseInt(a) || 0, nb = parseInt(b) || 0;
-    return na - nb;
-  });
-  const sel = document.getElementById('sel-unit');
-  sel.innerHTML = '<option value="">단원을 선택하세요</option>';
-  units.forEach(u => {
-    sel.innerHTML += `<option value="${u}">${u}</option>`;
-  });
-  document.getElementById('passage-list').innerHTML = '<div style="padding:20px;text-align:center;color:#999;">단원을 선택하세요</div>';
-  updateGenerateBtn();
-}
-
-function onUnitChange() {
-  const book = document.getElementById('sel-book').value;
-  const unit = document.getElementById('sel-unit').value;
-  const passages = PASSAGES_DATA.filter(p => p.book === book && p.unit === unit);
   selectedPassages.clear();
-  
   const list = document.getElementById('passage-list');
-  if (passages.length === 0) {
-    list.innerHTML = '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
+  
+  if (!book) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:#999;">교재를 먼저 선택하세요</div>';
+    updateSelCount();
+    updateGenerateBtn();
     return;
   }
   
-  list.innerHTML = passages.map(p => `
-    <div class="passage-item" onclick="togglePassage('${p.id}', this)">
-      <input type="checkbox" data-id="${p.id}" ${p.cache_status === 'ready' ? '' : ''}>
-      <span class="title">${p.title}</span>
-      <span class="badge ${p.cache_status === 'ready' ? 'badge-ready' : 'badge-pending'}">
-        ${p.cache_status === 'ready' ? '✅ 준비됨' : '⏳ 미생성'}
-      </span>
-    </div>
-  `).join('');
+  const passages = PASSAGES_DATA.filter(p => p.book === book);
+  const units = [...new Set(passages.map(p => p.unit))];
+  units.sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0));
+  
+  let html = '';
+  for (const unit of units) {
+    const unitPassages = passages.filter(p => p.unit === unit);
+    html += `<div class="unit-header" onclick="toggleUnit('${book}','${unit}')">
+      📁 ${unit} (${unitPassages.length}개)
+      <span class="unit-select">단원 전체선택</span>
+    </div>`;
+    for (const p of unitPassages) {
+      const key = `${p.book}|${p.unit}|${p.id}`;
+      html += `<div class="passage-item" onclick="togglePassage('${p.book}','${p.unit}','${p.id}', this)">
+        <input type="checkbox" data-key="${key}">
+        <span class="title">${p.title}</span>
+        <span class="badge ${p.cache_status === 'ready' ? 'badge-ready' : 'badge-pending'}">
+          ${p.cache_status === 'ready' ? '✅ 준비됨' : '⏳ 미생성'}
+        </span>
+      </div>`;
+    }
+  }
+  list.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
+  updateSelCount();
   updateGenerateBtn();
 }
 
-function togglePassage(id, el) {
+function togglePassage(book, unit, id, el) {
+  const key = `${book}|${unit}|${id}`;
   const cb = el.querySelector('input[type="checkbox"]');
-  if (selectedPassages.has(id)) {
-    selectedPassages.delete(id);
+  if (selectedPassages.has(key)) {
+    selectedPassages.delete(key);
     cb.checked = false;
   } else {
-    selectedPassages.add(id);
+    selectedPassages.set(key, {book, unit, id});
     cb.checked = true;
   }
-  document.getElementById('sel-count').textContent = `${selectedPassages.size}개 선택`;
+  updateSelCount();
+  updateGenerateBtn();
+}
+
+function toggleUnit(book, unit) {
+  // 해당 단원의 모든 지문 토글
+  const unitPassages = PASSAGES_DATA.filter(p => p.book === book && p.unit === unit);
+  const allSelected = unitPassages.every(p => selectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  
+  unitPassages.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    const cb = document.querySelector(`input[data-key="${key}"]`);
+    if (allSelected) {
+      selectedPassages.delete(key);
+      if (cb) cb.checked = false;
+    } else {
+      selectedPassages.set(key, {book: p.book, unit: p.unit, id: p.id});
+      if (cb) cb.checked = true;
+    }
+  });
+  updateSelCount();
   updateGenerateBtn();
 }
 
 function selectAll() {
-  document.querySelectorAll('.passage-item').forEach(el => {
-    const id = el.querySelector('input').dataset.id;
-    selectedPassages.add(id);
-    el.querySelector('input').checked = true;
+  const book = document.getElementById('sel-book').value;
+  if (!book) return;
+  PASSAGES_DATA.filter(p => p.book === book).forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    selectedPassages.set(key, {book: p.book, unit: p.unit, id: p.id});
+    const cb = document.querySelector(`input[data-key="${key}"]`);
+    if (cb) cb.checked = true;
   });
-  document.getElementById('sel-count').textContent = `${selectedPassages.size}개 선택`;
+  updateSelCount();
   updateGenerateBtn();
 }
 
 function selectNone() {
   selectedPassages.clear();
   document.querySelectorAll('.passage-item input').forEach(cb => cb.checked = false);
-  document.getElementById('sel-count').textContent = '0개 선택';
+  updateSelCount();
   updateGenerateBtn();
+}
+
+function updateSelCount() {
+  document.getElementById('sel-count').textContent = `${selectedPassages.size}개 선택`;
 }
 
 // ============================================================
@@ -433,10 +456,8 @@ function updateGenerateBtn() {
 }
 
 async function doGenerate() {
-  const book = document.getElementById('sel-book').value;
-  const unit = document.getElementById('sel-unit').value;
   const levels = getSelectedLevels();
-  const passages = [...selectedPassages];
+  const passages = [...selectedPassages.values()]; // [{book, unit, id}, ...]
   
   const btn = document.getElementById('btn-generate');
   const progress = document.getElementById('progress');
@@ -453,25 +474,25 @@ async function doGenerate() {
   let completed = 0;
   const results = [];
   
-  for (const passageId of passages) {
-    progressText.textContent = `생성 중... ${completed + 1}/${passages.length} — ${passageId}`;
+  for (const p of passages) {
+    progressText.textContent = `생성 중... ${completed + 1}/${passages.length} — ${p.unit} ${p.id}`;
     progressFill.style.width = `${(completed / passages.length) * 100}%`;
     
     try {
       const res = await fetch(API + '/api/generate', {
         method: 'POST',
         headers: headers(),
-        body: JSON.stringify({ book, unit, passage_id: passageId, levels: levels.length === 11 ? null : levels })
+        body: JSON.stringify({ book: p.book, unit: p.unit, passage_id: p.id, levels: levels.length === 11 ? null : levels })
       });
       const data = await res.json();
       
       if (data.ok) {
-        results.push({ id: passageId, status: 'success', html: data.html, filename: data.filename });
+        results.push({ id: `${p.unit} ${p.id}`, status: 'success', html: data.html, filename: data.filename });
       } else {
-        results.push({ id: passageId, status: 'error', error: data.detail });
+        results.push({ id: `${p.unit} ${p.id}`, status: 'error', error: data.detail });
       }
     } catch(e) {
-      results.push({ id: passageId, status: 'error', error: e.message });
+      results.push({ id: `${p.unit} ${p.id}`, status: 'error', error: e.message });
     }
     completed++;
     progressFill.style.width = `${(completed / passages.length) * 100}%`;
@@ -535,7 +556,7 @@ function downloadMerged() {
   });
   
   // 합본 생성
-  const unit = document.getElementById('sel-unit').value || '합본';
+  const unit = document.getElementById('sel-book').value || '합본';
   const merged = `<!DOCTYPE html>
 <html lang="ko">
 <head>

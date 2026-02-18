@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Workbook generation pipeline"""
-PIPELINE_VERSION = "v6-urllib"
+PIPELINE_VERSION = "v7-curl"
 import json, os, sys, time, random, re
-import urllib.request
+import subprocess
 from pathlib import Path
 
 # ============================================================
@@ -31,12 +31,13 @@ def _safe_print(msg):
         pass
 
 # ============================================================
-# Claude API call (urllib, pure stdlib)
+# Claude API call (subprocess + curl - bypasses ALL Python encoding)
 # ============================================================
 API_URL = "https://api.anthropic.com/v1/messages"
 
 def call_claude(system_prompt: str, user_prompt: str, max_retries=2, max_tokens=4096) -> str:
-    """Claude API via urllib (pure stdlib, zero encoding issues)"""
+    """Claude API via curl subprocess - zero Python encoding involvement"""
+    import subprocess, tempfile
     if not API_KEY:
         raise ValueError("ANTHROPIC_API_KEY not set")
     
@@ -47,27 +48,47 @@ def call_claude(system_prompt: str, user_prompt: str, max_retries=2, max_tokens=
         "system": system_prompt,
         "messages": [{"role": "user", "content": user_prompt}]
     }
-    # json.dumps default: ensure_ascii=True -> Korean becomes \uXXXX -> pure ASCII
-    body_bytes = json.dumps(body).encode("ascii")
+    # Write JSON body to temp file (UTF-8), let curl read it
+    body_json = json.dumps(body, ensure_ascii=False)
     
     for attempt in range(max_retries + 1):
         try:
-            req = urllib.request.Request(
-                API_URL,
-                data=body_bytes,
-                headers={
-                    "X-Api-Key": API_KEY,
-                    "Anthropic-Version": "2023-06-01",
-                    "Content-Type": "application/json",
-                },
-                method="POST"
+            # Write body to temp file to avoid shell encoding issues
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', encoding='utf-8', delete=False) as tmp:
+                tmp.write(body_json)
+                tmp_path = tmp.name
+            
+            result = subprocess.run(
+                [
+                    'curl', '-s', '-X', 'POST', API_URL,
+                    '-H', f'x-api-key: {API_KEY}',
+                    '-H', 'anthropic-version: 2023-06-01',
+                    '-H', 'content-type: application/json',
+                    '-d', f'@{tmp_path}'
+                ],
+                capture_output=True,
+                timeout=120
             )
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                raw = resp.read()
-                result = json.loads(raw.decode("utf-8"))
-                return result["content"][0]["text"].strip()
+            
+            # Clean up temp file
+            try:
+                os.unlink(tmp_path)
+            except:
+                pass
+            
+            if result.returncode != 0:
+                raise Exception(f"curl failed: {result.stderr[:200]}")
+            
+            data = json.loads(result.stdout.decode('utf-8'))
+            if 'error' in data:
+                raise Exception(f"API error: {data['error']}")
+            return data["content"][0]["text"].strip()
         except Exception as e:
             _safe_print(f"  [WARN] API attempt {attempt+1} failed: {str(e)[:100]}")
+            try:
+                os.unlink(tmp_path)
+            except:
+                pass
             if attempt < max_retries:
                 time.sleep(3 * (attempt + 1))
             else:

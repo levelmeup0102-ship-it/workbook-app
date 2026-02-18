@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>레벨미업 워크북</title>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#4A90D9">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f5f7fa; color: #1a1a1a; min-height: 100vh; }
+
+/* 공통 */
+.container { max-width: 600px; margin: 0 auto; padding: 16px; }
+.hidden { display: none !important; }
+.btn { padding: 12px 24px; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.btn-primary { background: #4A90D9; color: white; }
+.btn-primary:hover { background: #3a7bc8; }
+.btn-primary:disabled { background: #a0c4e8; cursor: not-allowed; }
+.btn-orange { background: #E8833A; color: white; }
+.btn-orange:hover { background: #d6732a; }
+.btn-sm { padding: 8px 16px; font-size: 13px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge-blue { background: #EBF4FB; color: #4A90D9; }
+.badge-green { background: #E8F5E9; color: #2E9E5A; }
+.badge-orange { background: #FFF8F0; color: #E8833A; }
+.badge-ready { background: #E8F5E9; color: #2E9E5A; }
+.badge-pending { background: #FFF8F0; color: #E8833A; }
+
+/* 헤더 */
+.header { background: linear-gradient(135deg, #4A90D9 0%, #357ABD 100%); color: white; padding: 16px 20px; text-align: center; position: sticky; top: 0; z-index: 100; }
+.header h1 { font-size: 20px; margin-bottom: 2px; }
+.header .sub { font-size: 12px; opacity: 0.8; }
+.header .logout { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.2); border: none; color: white; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+
+/* 로그인 화면 */
+#login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #4A90D9 0%, #357ABD 100%); }
+.login-box { background: white; border-radius: 16px; padding: 40px 32px; width: 90%; max-width: 380px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.15); }
+.login-box h1 { font-size: 24px; color: #4A90D9; margin-bottom: 4px; }
+.login-box .sub { color: #666; font-size: 13px; margin-bottom: 24px; }
+.login-box input { width: 100%; padding: 14px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px; text-align: center; margin-bottom: 12px; outline: none; }
+.login-box input:focus { border-color: #4A90D9; }
+.login-error { color: #dc2626; font-size: 13px; margin-bottom: 8px; }
+
+/* 메인 화면 */
+.section { background: white; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.section-title { font-size: 14px; font-weight: 700; color: #333; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+.section-title .icon { font-size: 18px; }
+
+/* 교재/단원 선택 */
+select { width: 100%; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; background: white; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; cursor: pointer; margin-bottom: 8px; }
+select:focus { border-color: #4A90D9; outline: none; }
+
+/* 지문 목록 */
+.passage-list { max-height: 240px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px; }
+.passage-item { display: flex; align-items: center; padding: 10px 12px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.15s; }
+.passage-item:hover { background: #f5f7fa; }
+.passage-item:last-child { border-bottom: none; }
+.passage-item input[type="checkbox"] { width: 18px; height: 18px; margin-right: 10px; accent-color: #4A90D9; }
+.passage-item .title { flex: 1; font-size: 14px; }
+.passage-item .status { font-size: 11px; }
+
+/* 레벨 선택 */
+.level-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.level-btn { padding: 8px 4px; border: 2px solid #e5e7eb; border-radius: 8px; text-align: center; cursor: pointer; font-size: 12px; transition: all 0.15s; user-select: none; }
+.level-btn.selected { border-color: #4A90D9; background: #EBF4FB; color: #4A90D9; font-weight: 600; }
+.level-btn.green.selected { border-color: #2E9E5A; background: #E8F5E9; color: #2E9E5A; }
+.level-btn.orange.selected { border-color: #E8833A; background: #FFF8F0; color: #E8833A; }
+.preset-row { display: flex; gap: 6px; margin-bottom: 8px; }
+.preset-btn { flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 6px; background: white; font-size: 11px; cursor: pointer; text-align: center; }
+.preset-btn:hover { background: #f5f7fa; }
+
+/* 생성 버튼 */
+.generate-area { text-align: center; padding: 8px 0; }
+.generate-area .btn { width: 100%; padding: 14px; font-size: 16px; }
+
+/* 진행 상태 */
+.progress { margin-top: 12px; }
+.progress-bar { height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, #4A90D9, #2E9E5A); border-radius: 3px; transition: width 0.3s; }
+.progress-text { font-size: 12px; color: #666; text-align: center; margin-top: 6px; }
+
+/* 결과 */
+.result-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 6px; }
+
+/* 업로드 */
+.upload-area { border: 2px dashed #ccc; border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; transition: border-color 0.2s; }
+.upload-area:hover { border-color: #4A90D9; }
+textarea { width: 100%; min-height: 120px; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 13px; font-family: monospace; resize: vertical; }
+textarea:focus { border-color: #4A90D9; outline: none; }
+
+/* 탭 */
+.tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+.tab { flex: 1; padding: 10px; text-align: center; border: 2px solid #e5e7eb; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s; }
+.tab.active { border-color: #4A90D9; background: #EBF4FB; color: #4A90D9; }
+
+/* 토스트 */
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 8px; font-size: 14px; z-index: 1000; animation: fadeIn 0.3s; }
+@keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(10px); } }
+</style>
+</head>
+<body>
+
+<!-- ==================== 로그인 화면 ==================== -->
+<div id="login-screen">
+  <div class="login-box">
+    <h1>📘 레벨미업</h1>
+    <p class="sub">워크북 자동 생성 시스템</p>
+    <div id="login-error" class="login-error hidden"></div>
+    <input type="password" id="pw-input" placeholder="비밀번호를 입력하세요" autocomplete="off">
+    <button class="btn btn-primary" style="width:100%;" onclick="doLogin()">로그인</button>
+  </div>
+</div>
+
+<!-- ==================== 메인 화면 ==================== -->
+<div id="main-screen" class="hidden">
+  <div class="header">
+    <h1>📘 레벨미업 워크북</h1>
+    <p class="sub">워크북 자동 생성 시스템</p>
+    <button class="logout" onclick="doLogout()">로그아웃</button>
+  </div>
+
+  <div class="container">
+    <!-- 탭 -->
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('generate')">📄 워크북 생성</div>
+      <div class="tab" onclick="switchTab('upload')">📤 지문 관리</div>
+    </div>
+
+    <!-- ==================== 생성 탭 ==================== -->
+    <div id="tab-generate">
+      <!-- 교재/단원 선택 -->
+      <div class="section">
+        <div class="section-title"><span class="icon">📚</span> 교재 / 단원 선택</div>
+        <select id="sel-book" onchange="onBookChange()">
+          <option value="">교재를 선택하세요</option>
+        </select>
+        <select id="sel-unit" onchange="onUnitChange()">
+          <option value="">단원을 선택하세요</option>
+        </select>
+      </div>
+
+      <!-- 지문 선택 -->
+      <div class="section">
+        <div class="section-title">
+          <span class="icon">📄</span> 지문 선택
+          <span style="margin-left:auto;font-size:12px;color:#666;" id="sel-count">0개 선택</span>
+        </div>
+        <div style="margin-bottom:6px;">
+          <button class="btn btn-sm" onclick="selectAll()" style="background:#eee;color:#333;margin-right:4px;">전체 선택</button>
+          <button class="btn btn-sm" onclick="selectNone()" style="background:#eee;color:#333;">선택 해제</button>
+        </div>
+        <div class="passage-list" id="passage-list">
+          <div style="padding:20px;text-align:center;color:#999;">교재와 단원을 먼저 선택하세요</div>
+        </div>
+      </div>
+
+      <!-- 레벨 선택 -->
+      <div class="section">
+        <div class="section-title"><span class="icon">🎯</span> 레벨 선택</div>
+        <div class="preset-row">
+          <div class="preset-btn" onclick="presetLevels([1,2,3,4])">수업 전+중</div>
+          <div class="preset-btn" onclick="presetLevels([5,6,7,8,9,10])">수업 후</div>
+          <div class="preset-btn" onclick="presetLevels([0,1,2,3,4,5,6,7,8,9,10])">전체</div>
+          <div class="preset-btn" onclick="presetLevels([])">해제</div>
+        </div>
+        <div class="level-grid">
+          <div class="level-btn selected" data-level="0" onclick="toggleLevel(this)">표지+정답</div>
+          <div class="level-btn selected" data-level="1" onclick="toggleLevel(this)">Lv.1 어휘</div>
+          <div class="level-btn selected" data-level="2" onclick="toggleLevel(this)">Lv.2 해석</div>
+          <div class="level-btn green selected" data-level="3" onclick="toggleLevel(this)">Lv.3 분석</div>
+          <div class="level-btn green selected" data-level="4" onclick="toggleLevel(this)">Lv.4 구조</div>
+          <div class="level-btn orange selected" data-level="5" onclick="toggleLevel(this)">Lv.5 순서</div>
+          <div class="level-btn orange selected" data-level="6" onclick="toggleLevel(this)">Lv.6 빈칸</div>
+          <div class="level-btn orange selected" data-level="7" onclick="toggleLevel(this)">Lv.7 주제</div>
+          <div class="level-btn orange selected" data-level="8" onclick="toggleLevel(this)">Lv.8 어법</div>
+          <div class="level-btn orange selected" data-level="9" onclick="toggleLevel(this)">Lv.9 어휘</div>
+          <div class="level-btn orange selected" data-level="10" onclick="toggleLevel(this)">Lv.10 영작</div>
+        </div>
+      </div>
+
+      <!-- 생성 버튼 -->
+      <div class="generate-area">
+        <button class="btn btn-primary" id="btn-generate" onclick="doGenerate()" disabled>
+          워크북 생성하기
+        </button>
+        <div class="progress hidden" id="progress">
+          <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+          <div class="progress-text" id="progress-text">준비 중...</div>
+        </div>
+      </div>
+
+      <!-- 결과 -->
+      <div class="section hidden" id="results-section">
+        <div class="section-title"><span class="icon">✅</span> 생성 완료</div>
+        <div id="results-list"></div>
+      </div>
+    </div>
+
+    <!-- ==================== 업로드 탭 ==================== -->
+    <div id="tab-upload" class="hidden">
+      <div class="section">
+        <div class="section-title"><span class="icon">📤</span> 지문 업로드</div>
+        <p style="font-size:13px;color:#666;margin-bottom:8px;">###강 번호### 형식으로 입력하세요</p>
+        <select id="upload-book" style="margin-bottom:8px;">
+          <option>26 수특 영어</option>
+          <option>26 수완 영어</option>
+        </select>
+        <textarea id="upload-text" placeholder="###05강 01번###
+Many crises today, such as the Great Recession...
+
+###05강 02번###
+Consumer surveys indicate that..."></textarea>
+        <button class="btn btn-orange" style="width:100%;margin-top:8px;" onclick="doUpload()">업로드</button>
+      </div>
+
+      <div class="section">
+        <div class="section-title"><span class="icon">📊</span> 현재 등록된 지문</div>
+        <div id="stats-list" style="font-size:13px;color:#666;">로딩 중...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+let TOKEN = localStorage.getItem('wb_token') || '';
+let PASSAGES_DATA = null;
+let selectedPassages = new Set();
+
+const API = '';  // 같은 서버
+
+// ============================================================
+// Auth
+// ============================================================
+async function doLogin() {
+  const pw = document.getElementById('pw-input').value;
+  try {
+    const res = await fetch(API + '/api/auth', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({password: pw})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      TOKEN = data.token;
+      localStorage.setItem('wb_token', TOKEN);
+      showMain();
+    } else {
+      throw new Error();
+    }
+  } catch(e) {
+    document.getElementById('login-error').textContent = '비밀번호가 틀렸습니다';
+    document.getElementById('login-error').classList.remove('hidden');
+  }
+}
+
+function doLogout() {
+  TOKEN = '';
+  localStorage.removeItem('wb_token');
+  document.getElementById('main-screen').classList.add('hidden');
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('pw-input').value = '';
+}
+
+function headers() {
+  return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN };
+}
+
+// ============================================================
+// Init
+// ============================================================
+async function showMain() {
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('main-screen').classList.remove('hidden');
+  await loadPassages();
+}
+
+async function loadPassages() {
+  // 현재 선택 상태 저장
+  const prevBook = document.getElementById('sel-book').value;
+  const prevUnit = document.getElementById('sel-unit').value;
+  const prevSelected = new Set(selectedPassages);
+  try {
+    const res = await fetch(API + '/api/passages', { headers: headers() });
+    if (res.status === 401) { doLogout(); return; }
+    PASSAGES_DATA = await res.json();
+    updateBookSelect();
+    // 이전 선택 복원
+    if (prevBook) {
+      document.getElementById('sel-book').value = prevBook;
+      onBookChange();
+      if (prevUnit) {
+        document.getElementById('sel-unit').value = prevUnit;
+        onUnitChange();
+        // 체크박스 선택 복원
+        prevSelected.forEach(id => {
+          const cb = document.querySelector(`.passage-item input[data-id="${id}"]`);
+          if (cb) {
+            selectedPassages.add(id);
+            cb.checked = true;
+          }
+        });
+        document.getElementById('sel-count').textContent = `${selectedPassages.size}개 선택`;
+        updateGenerateBtn();
+      }
+    }
+    updateStats();
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+// ============================================================
+// Selects
+// ============================================================
+function updateBookSelect() {
+  const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
+  const sel = document.getElementById('sel-book');
+  sel.innerHTML = '<option value="">교재를 선택하세요</option>';
+  books.forEach(b => {
+    sel.innerHTML += `<option value="${b}">${b}</option>`;
+  });
+}
+
+function onBookChange() {
+  const book = document.getElementById('sel-book').value;
+  const units = [...new Set(PASSAGES_DATA.filter(p => p.book === book).map(p => p.unit))];
+  // 자연 정렬
+  units.sort((a, b) => {
+    const na = parseInt(a) || 0, nb = parseInt(b) || 0;
+    return na - nb;
+  });
+  const sel = document.getElementById('sel-unit');
+  sel.innerHTML = '<option value="">단원을 선택하세요</option>';
+  units.forEach(u => {
+    sel.innerHTML += `<option value="${u}">${u}</option>`;
+  });
+  document.getElementById('passage-list').innerHTML = '<div style="padding:20px;text-align:center;color:#999;">단원을 선택하세요</div>';
+  updateGenerateBtn();
+}
+
+function onUnitChange() {
+  const book = document.getElementById('sel-book').value;
+  const unit = document.getElementById('sel-unit').value;
+  const passages = PASSAGES_DATA.filter(p => p.book === book && p.unit === unit);
+  selectedPassages.clear();
+  
+  const list = document.getElementById('passage-list');
+  if (passages.length === 0) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
+    return;
+  }
+  
+  list.innerHTML = passages.map(p => `
+    <div class="passage-item" onclick="togglePassage('${p.id}', this)">
+      <input type="checkbox" data-id="${p.id}" ${p.cache_status === 'ready' ? '' : ''}>
+      <span class="title">${p.title}</span>
+      <span class="badge ${p.cache_status === 'ready' ? 'badge-ready' : 'badge-pending'}">
+        ${p.cache_status === 'ready' ? '✅ 준비됨' : '⏳ 미생성'}
+      </span>
+    </div>
+  `).join('');
+  updateGenerateBtn();
+}
+
+function togglePassage(id, el) {
+  const cb = el.querySelector('input[type="checkbox"]');
+  if (selectedPassages.has(id)) {
+    selectedPassages.delete(id);
+    cb.checked = false;
+  } else {
+    selectedPassages.add(id);
+    cb.checked = true;
+  }
+  document.getElementById('sel-count').textContent = `${selectedPassages.size}개 선택`;
+  updateGenerateBtn();
+}
+
+function selectAll() {
+  document.querySelectorAll('.passage-item').forEach(el => {
+    const id = el.querySelector('input').dataset.id;
+    selectedPassages.add(id);
+    el.querySelector('input').checked = true;
+  });
+  document.getElementById('sel-count').textContent = `${selectedPassages.size}개 선택`;
+  updateGenerateBtn();
+}
+
+function selectNone() {
+  selectedPassages.clear();
+  document.querySelectorAll('.passage-item input').forEach(cb => cb.checked = false);
+  document.getElementById('sel-count').textContent = '0개 선택';
+  updateGenerateBtn();
+}
+
+// ============================================================
+// Levels
+// ============================================================
+function toggleLevel(el) {
+  el.classList.toggle('selected');
+  updateGenerateBtn();
+}
+
+function presetLevels(levels) {
+  document.querySelectorAll('.level-btn').forEach(el => {
+    const lv = parseInt(el.dataset.level);
+    if (levels.includes(lv)) {
+      el.classList.add('selected');
+    } else {
+      el.classList.remove('selected');
+    }
+  });
+  updateGenerateBtn();
+}
+
+function getSelectedLevels() {
+  return [...document.querySelectorAll('.level-btn.selected')].map(el => parseInt(el.dataset.level));
+}
+
+// ============================================================
+// Generate
+// ============================================================
+function updateGenerateBtn() {
+  const btn = document.getElementById('btn-generate');
+  const levels = getSelectedLevels();
+  btn.disabled = selectedPassages.size === 0 || levels.length === 0;
+  btn.textContent = selectedPassages.size > 0 
+    ? `워크북 생성하기 (${selectedPassages.size}개 지문)` 
+    : '워크북 생성하기';
+}
+
+async function doGenerate() {
+  const book = document.getElementById('sel-book').value;
+  const unit = document.getElementById('sel-unit').value;
+  const levels = getSelectedLevels();
+  const passages = [...selectedPassages];
+  
+  const btn = document.getElementById('btn-generate');
+  const progress = document.getElementById('progress');
+  const progressFill = document.getElementById('progress-fill');
+  const progressText = document.getElementById('progress-text');
+  const resultsSection = document.getElementById('results-section');
+  const resultsList = document.getElementById('results-list');
+  
+  btn.disabled = true;
+  progress.classList.remove('hidden');
+  resultsSection.classList.add('hidden');
+  resultsList.innerHTML = '';
+  
+  let completed = 0;
+  const results = [];
+  
+  for (const passageId of passages) {
+    progressText.textContent = `생성 중... ${completed + 1}/${passages.length} — ${passageId}`;
+    progressFill.style.width = `${(completed / passages.length) * 100}%`;
+    
+    try {
+      const res = await fetch(API + '/api/generate', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ book, unit, passage_id: passageId, levels: levels.length === 11 ? null : levels })
+      });
+      const data = await res.json();
+      
+      if (data.ok) {
+        results.push({ id: passageId, status: 'success', html: data.html, filename: data.filename });
+      } else {
+        results.push({ id: passageId, status: 'error', error: data.detail });
+      }
+    } catch(e) {
+      results.push({ id: passageId, status: 'error', error: e.message });
+    }
+    completed++;
+    progressFill.style.width = `${(completed / passages.length) * 100}%`;
+  }
+  
+  // 결과 표시
+  progressText.textContent = `완료! ${results.filter(r => r.status === 'success').length}/${passages.length} 성공`;
+  resultsSection.classList.remove('hidden');
+  
+  // 성공한 결과들의 HTML 모아두기
+  const successResults = results.filter(r => r.status === 'success');
+  
+  let mergeBtn = '';
+  if (successResults.length > 1) {
+    mergeBtn = `<div style="margin-bottom:8px;">
+      <button class="btn btn-orange" style="width:100%;" onclick="downloadMerged()">📦 합본 다운로드 (${successResults.length}개)</button>
+    </div>`;
+  }
+  
+  // 개별 다운로드 + 합본 HTML 저장
+  window._lastResults = successResults;
+  
+  resultsList.innerHTML = mergeBtn + results.map(r => `
+    <div class="result-item">
+      <span>${r.status === 'success' ? '✅' : '❌'} ${r.id}</span>
+      ${r.status === 'success' 
+        ? `<button class="btn btn-sm btn-primary" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`, '${r.filename}')">📥 다운로드</button>`
+        : `<span style="color:#dc2626;font-size:12px;">${r.error}</span>`
+      }
+    </div>
+  `).join('');
+  
+  btn.disabled = false;
+  // 선택 상태 유지하면서 캐시 상태만 새로고침
+  await loadPassages();
+}
+
+function downloadHtml(encodedHtml, filename) {
+  const html = decodeURIComponent(encodedHtml);
+  const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadMerged() {
+  if (!window._lastResults || window._lastResults.length === 0) return;
+  
+  // 첫 파일에서 CSS 추출
+  const firstHtml = window._lastResults[0].html;
+  const styleMatch = firstHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/);
+  const css = styleMatch ? styleMatch[1] : '';
+  
+  // 각 파일에서 body 내용만 추출
+  const bodies = window._lastResults.map(r => {
+    const bodyMatch = r.html.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+    return bodyMatch ? bodyMatch[1] : r.html;
+  });
+  
+  // 합본 생성
+  const unit = document.getElementById('sel-unit').value || '합본';
+  const merged = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>${unit} 합본</title>
+<style>
+${css}
+</style>
+</head>
+<body>
+${bodies.join('\n')}
+</body>
+</html>`;
+  
+  const blob = new Blob([merged], { type: 'text/html; charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${unit}_합본_워크북.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ============================================================
+// Upload
+// ============================================================
+async function doUpload() {
+  const book = document.getElementById('upload-book').value;
+  const text = document.getElementById('upload-text').value;
+  
+  if (!text.trim()) { toast('지문 텍스트를 입력하세요'); return; }
+  
+  try {
+    const res = await fetch(API + '/api/passages/upload', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ book, text })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast(`✅ ${data.count}개 지문 업로드 완료!`);
+      document.getElementById('upload-text').value = '';
+      await loadPassages();
+    }
+  } catch(e) {
+    toast('업로드 실패: ' + e.message);
+  }
+}
+
+function updateStats() {
+  if (!PASSAGES_DATA) return;
+  const books = {};
+  PASSAGES_DATA.forEach(p => {
+    if (!books[p.book]) books[p.book] = { total: 0, ready: 0 };
+    books[p.book].total++;
+    if (p.cache_status === 'ready') books[p.book].ready++;
+  });
+  
+  const el = document.getElementById('stats-list');
+  if (Object.keys(books).length === 0) {
+    el.innerHTML = '<p>등록된 지문이 없습니다. 위에서 업로드하세요!</p>';
+    return;
+  }
+  el.innerHTML = Object.entries(books).map(([name, info]) => 
+    `<p style="margin-bottom:4px;"><strong>${name}</strong>: ${info.total}개 지문 (${info.ready}개 생성완료)</p>`
+  ).join('');
+}
+
+// ============================================================
+// Tabs
+// ============================================================
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-generate').classList.toggle('hidden', tab !== 'generate');
+  document.getElementById('tab-upload').classList.toggle('hidden', tab !== 'upload');
+}
+
+// ============================================================
+// Utils
+// ============================================================
+function toast(msg) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+// Enter 키로 로그인
+document.getElementById('pw-input').addEventListener('keypress', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+// 자동 로그인 체크
+(async () => {
+  if (TOKEN) {
+    try {
+      const res = await fetch(API + '/api/passages', { headers: headers() });
+      if (res.ok) { showMain(); return; }
+    } catch(e) {}
+  }
+  document.getElementById('login-screen').classList.remove('hidden');
+})();
+</script>
+</body>
+</html>

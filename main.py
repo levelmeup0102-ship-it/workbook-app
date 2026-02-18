@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""워크북 웹앱 서버"""
+"""Workbook webapp server v6"""
 import os, json, hashlib, re, sys, io
 from pathlib import Path
 from fastapi import FastAPI, Request, HTTPException
@@ -8,9 +8,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-# UTF-8 강제
-os.environ['PYTHONUTF8'] = '1'
-os.environ['PYTHONIOENCODING'] = 'utf-8'
+APP_VERSION = "v6-urllib"
 
 APP_PASSWORD = os.getenv("APP_PASSWORD", "levelmeup2026")
 DATA_DIR = Path("data")
@@ -20,6 +18,10 @@ DATA_DIR.mkdir(exist_ok=True)
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/api/version")
+async def version():
+    return {"version": APP_VERSION, "python": sys.version, "encoding": sys.getdefaultencoding()}
 
 def _token(pw): return hashlib.sha256(f"{pw}_wb2026".encode()).hexdigest()[:32]
 def _verify(r: Request):

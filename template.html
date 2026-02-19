@@ -379,7 +379,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       {% else %}<td></td>{% endif %}
     </tr>{% endfor %}
   </table>
-  <p class="mt8 tc b" style="font-size:10pt;">( &nbsp;&nbsp; ) - ( &nbsp;&nbsp; ) - ( &nbsp;&nbsp; ) - ( &nbsp;&nbsp; ) - ( &nbsp;&nbsp; ) - ( &nbsp;&nbsp; ) - ( &nbsp;&nbsp; ) - ( &nbsp;&nbsp; ) - ( &nbsp;&nbsp; )</p>
+  <p class="mt8 tc b" style="font-size:10pt;">{% for _ in full_order_blocks %}( &nbsp;&nbsp; ){% if not loop.last %} - {% endif %}{% endfor %}</p>
   <p style="font-size:8.5pt;color:var(--accent);margin-top:6px;">순서를 틀렸다면 → <span style="color:var(--primary);font-weight:bold;">아래 오답정리를 반드시 작성한 뒤</span>, Lv.4로 돌아가 체크리스트를 따라 재학습하시오.</p>
   <p class="b mt8 mb4" style="font-size:10pt;color:var(--accent);">오답 정리 — 정답 순서대로 한 줄 요약</p>
   <p style="font-size:8pt;color:var(--text-muted);margin-bottom:4px;">틀린 경우, 정답 순서의 기호를 왼쪽에 적고 → 오른쪽에 그 문장 내용을 한국말로 한 줄 요약하세요.</p>

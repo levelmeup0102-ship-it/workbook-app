@@ -785,6 +785,7 @@ def merge_to_template_data(passage: str, meta: dict, all_steps: dict) -> dict:
         "grammar_error_count": s5.get("grammar_error_count", 8),
         # Lv.9
         "vocab_advanced_passage": s6.get("vocab_advanced_passage", ""),
+        "vocab_parta_answers": s6.get("vocab_parta_answers", []),
         "vocab_partb": s6.get("vocab_partb", []),
         "content_match_kr": s6.get("content_match_kr", []),
         "content_match_en": s6.get("content_match_en", []),

@@ -555,8 +555,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <p class="b mb4" style="font-size:10pt;">Part A. 수능 수준 - 괄호 속 올바른 어휘 고르기</p>
   <div class="psg" style="font-size:9.5pt;line-height:1.6;">{{ vocab_advanced_passage }}</div>
   <table style="width:100%;border-collapse:collapse;font-size:9pt;margin:6px 0;">
-    <tr>{% for n in range(1,6) %}<td style="width:20%;padding:2px 4px;">({{ n }})<span class="il" style="min-width:60px;"></span></td>{% endfor %}</tr>
-    <tr>{% for n in range(6,10) %}<td style="width:20%;padding:2px 4px;">({{ n }})<span class="il" style="min-width:60px;"></span></td>{% endfor %}<td></td></tr>
+  <tr>{% for n in range(1, vocab_parta_answers|length + 1) %}{% if n == 6 %}</tr><tr>{% endif %}<td style="width:20%;padding:2px 4px;">({{ n }})<span class="il" style="min-width:60px;"></span></td>{% endfor %}</tr>
   </table>
   <div style="border-top:2px solid var(--accent);margin-top:6px;padding-top:4px;">
     <p class="b" style="font-size:9pt;color:var(--accent);">Part A 오답 - 틀린 단어 다시 정리</p>

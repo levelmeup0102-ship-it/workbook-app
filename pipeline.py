@@ -593,9 +593,9 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
 [JSON 형식]
 {{
   "vocab_advanced_passage": "괄호 포함 지문",
-  "vocab_parta_answers": [{{"num":1, "answer":"tend", "wrong":"intend"}}, ...],
-  "vocab_partb": [{{"word":"tend to", "choices":"be inclined to / intend to / be prone to / pretend to / be apt to"}}, ...],
-  "vocab_partb_answers": [{{"num":1, "correct":["be inclined to", "be prone to", "be apt to"]}}, ...],
+  "vocab_parta_answers": [{{"num":1, "answer":"regarded", "wrong":"overlooked", "reason":"~로 여겨지다 vs 간과하다"}}, ...],
+  "vocab_partb": [{{"word":"regarded", "choices":"considered / perceived / overlooked / neglected / dismissed"}}, ...],
+  "vocab_partb_answers": [{{"num":1, "correct":["considered", "perceived"], "wrong":["overlooked", "neglected", "dismissed"]}}, ...],
   "content_match_kr": ["① 평소 극장에서 혼자 영화를 본다.", ...],
   "content_match_kr_answer": ["②", "③", ...],
   "content_match_en": ["① The writer normally watches movies alone.", ...],

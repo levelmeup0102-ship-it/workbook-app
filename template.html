@@ -265,7 +265,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 {% endif %}
 {% if not levels or 3 in levels %}
 {# ==================== PAGE 4: Lv.3 ==================== #}
-<div class="page" style="font-size:10pt;">
+<div style="font-size:10pt;">
   <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
   <div class="phase" style="color:var(--green);">수업 중</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==3 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
@@ -280,9 +280,9 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <p class="slbl">STEP 1</p>
   <p style="font-size:9pt;margin-bottom:8px;">문장의 기본 구성요소(S/V/O/C)를 표시한 후, 수업을 들으며 중요한 표현을 필기하시오.</p>
   {% for sent in sentences %}
-  <p style="margin-bottom:28px;font-size:10pt;"><strong>{{ loop.index }}.</strong> {{ sent }}</p>
+  <p style="margin-bottom:28px;font-size:10pt;break-inside:avoid;"><strong>{{ loop.index }}.</strong> {{ sent }}</p>
   {% endfor %}
-  <div style="border:1px solid var(--border-light);border-radius:4px;padding:10px 14px;margin-top:12px;min-height:140px;">
+  <div style="border:1px solid var(--border-light);border-radius:4px;padding:10px 14px;margin-top:12px;min-height:140px;break-inside:avoid;">
     <p style="font-size:10pt;font-weight:bold;color:var(--primary);margin-bottom:8px;">시험 출제 가능 주요 문법 표현 정리</p>
     <div style="border-bottom:1px dashed var(--border-dotted);height:22px;margin-bottom:0;"></div>
     <div style="border-bottom:1px dashed var(--border-dotted);height:22px;margin-bottom:0;"></div>

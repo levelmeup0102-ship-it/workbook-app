@@ -82,7 +82,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 .apage p { break-inside:avoid; }
 
 /* Cover */
-.cv-c { text-align:center; }
+.cv-c { text-align:center; display:flex; flex-direction:column; min-height:calc(273mm - 25mm); }
 .cv-l { font-size:28pt; font-weight:bold; margin-top:40px; }
 .cv-ch { font-size:18pt; font-weight:bold; color:var(--primary); margin-top:8px; }
 
@@ -99,8 +99,8 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 {# ==================== PAGE 1: COVER ==================== #}
 <div class="page">
   <div class="cv-c">
-    <p style="font-size:9pt;color:var(--text-muted);margin-top:4px;">레벨미업학원 &nbsp;&nbsp;&nbsp; {{ subject }} / {{ publisher }}</p>
-    <div class="cv-l">{{ lesson_num }}과 Lesson {{ lesson_n }}</div>
+    <p style="font-size:9pt;color:var(--text-muted);margin-top:4px;margin-left: 10px;text-align:left;">레벨미업학원 &nbsp;&nbsp;&nbsp;</p>
+    <div class="cv-l">{{ subject }}</div>
     <div style="font-size:18pt;font-weight:bold;color:var(--green);margin-top:8px;">{{ challenge_title }}</div>
     <p style="font-size:10pt;color:var(--text-secondary);margin-top:20px;">이 교재의 학습 흐름</p>
     <table style="width:80%;margin:16px auto;border-collapse:separate;border-spacing:8px;">
@@ -113,22 +113,22 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
         <td style="width:33%;border:1.5px solid var(--green);border-radius:8px;padding:12px 8px;text-align:center;vertical-align:top;">
           <p style="font-size:11pt;font-weight:bold;color:var(--green);margin-bottom:4px;">수업 중</p>
           <p style="font-size:9pt;"><span style="font-weight:bold;color:var(--green);">Lv.3</span> 문장별 분석<br><span style="font-weight:bold;color:var(--green);">Lv.4</span> 구조 정리</p>
-          <p style="font-size:8pt;color:var(--text-muted);margin-top:3px;">문법/흐름/주장 정리</p>
+          <p style="font-size:8pt;color:var(--text-muted);margin-top:3px;">문법/주장 정리</p>
         </td>
         <td style="width:33%;border:1.5px solid var(--accent);border-radius:8px;padding:12px 8px;text-align:center;vertical-align:top;">
           <p style="font-size:11pt;font-weight:bold;color:var(--accent);margin-bottom:4px;">수업 후</p>
-          <p style="font-size:9pt;"><span style="font-weight:bold;color:var(--accent);">Lv.5~10</span> 복습 문제<br>순서/빈칸/주제/어법</p>
+          <p style="font-size:9pt;"><span style="font-weight:bold;color:var(--accent);">Lv.5~10</span> 복습 문제<br>순서/빈칸/주제/어법/<br>어휘/내용 일치/영작</p>
           <p style="font-size:8pt;color:var(--text-muted);margin-top:3px;">오답정리 → 강사 피드백</p>
         </td>
       </tr>
     </table>
-    <table style="width:70%;margin:16px auto;border-collapse:separate;border-spacing:4px;">
+    <table style="width:70%;margin:16px auto;border-collapse:separate;border-spacing:4px;table-layout:fixed;">
       <tr>
-        <td style="border:1px solid var(--primary);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--primary);"><span class="b">Lv.1</span><br>어휘</td>
-        <td style="border:1px solid var(--primary);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--primary);"><span class="b">Lv.2</span><br>해석</td>
-        <td style="border:1px solid var(--green);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--green);"><span class="b">Lv.3</span><br>분석</td>
-        <td style="border:1px solid var(--green);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--green);"><span class="b">Lv.4</span><br>정리</td>
-        <td style="border:1px solid var(--accent);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--accent);"><span class="b">Lv.5</span><br>흐름</td>
+        <td style="width:20%;border:1px solid var(--primary);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--primary);"><span class="b">Lv.1</span><br>어휘</td>
+        <td style="width:20%;border:1px solid var(--primary);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--primary);"><span class="b">Lv.2</span><br>해석</td>
+        <td style="width:20%;border:1px solid var(--green);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--green);"><span class="b">Lv.3</span><br>분석</td>
+        <td style="width:20%;border:1px solid var(--green);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--green);"><span class="b">Lv.4</span><br>정리</td>
+        <td style="width:20%;border:1px solid var(--accent);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--accent);"><span class="b">Lv.5</span><br>흐름</td>
       </tr>
       <tr>
         <td style="border:1px solid var(--accent);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--accent);"><span class="b">Lv.6</span><br>빈칸</td>
@@ -138,12 +138,16 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
         <td style="border:1px solid var(--accent);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--accent);"><span class="b">Lv.10</span><br>영작</td>
       </tr>
     </table>
-    <div class="dashbox" style="max-width:82%;margin:20px auto;">
+    <div class="dashbox" style="max-width:82%;margin: auto auto 20px;">
       <p class="b" style="font-size:10pt;">[오답 정리 → 강사 피드백 안내]</p>
       <p style="font-size:9pt;margin-top:3px;">각 문제에는 <strong>오답 정리 칸</strong>이 있습니다. 풀고 채점한 후 반드시 오답 정리를 작성하세요.<br>작성 후 사진을 찍어 앱으로 강사에게 전송해 주세요. 개인별 피드백을 보내드립니다.</p>
-    </div>
-    <div style="max-width:82%;margin:20px auto;">
-      <p style="font-size:10pt;">학생 이름: <span class="il" style="min-width:200px;"></span> &nbsp;&nbsp;&nbsp; 날짜: <span class="il" style="min-width:200px;"></span></p>
+      <div style="max-width:82%;margin:0 auto;">
+        <p style="font-size:10pt;">학생 이름: <span class="il" style="min-width:200px;"></span> &nbsp;&nbsp;&nbsp; 
+        </p>
+        <p>
+          날짜: <span class="il" style="min-width:200px;"></span>
+        </p>
+      </div>
     </div>
   </div>
   <div class="pn">1</div>

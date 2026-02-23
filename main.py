@@ -242,7 +242,7 @@ async def generate(request: Request):
         pl.OUTPUT_DIR = Path("output")
         pl.OUTPUT_DIR.mkdir(exist_ok=True)
 
-        meta = {"lesson_num": lesson_num, "challenge_title": title}
+        meta = {"lesson_num": lesson_num, "lesson_n": lesson_num, "challenge_title": title, "subject": book}
         result_path = pl.process_passage(passage=passage_text, meta=meta, passage_id=ck, levels=levels)
 
         if result_path:

@@ -265,7 +265,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 {% endif %}
 {% if not levels or 3 in levels %}
 {# ==================== PAGE 4: Lv.3 ==================== #}
-<div style="font-size:10pt;">
+<div style="font-size:10pt;page-break-after:always;">
   <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
   <div class="phase" style="color:var(--green);">수업 중</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==3 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>

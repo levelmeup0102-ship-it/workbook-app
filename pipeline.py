@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Workbook generation pipeline"""
 PIPELINE_VERSION = "v9-curl-final"
-import json, os, sys, time, random, re
+import asyncio, json, os, sys, time, random, re
 from pathlib import Path
 
 # ============================================================
@@ -179,6 +179,20 @@ def _fix_json_quotes(text: str) -> str:
 # ============================================================
 # 단계별 저장/로드
 # ============================================================
+def _run_async(coro):
+    """Run an async coroutine from sync context (pipeline runs in a thread)."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop and loop.is_running():
+        # We're inside an async event loop (FastAPI thread) – schedule as a task
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, coro).result()
+    else:
+        return asyncio.run(coro)
+
 def save_step(passage_dir: Path, step_name: str, data: dict):
     # Save locally
     passage_dir.mkdir(parents=True, exist_ok=True)
@@ -191,7 +205,7 @@ def save_step(passage_dir: Path, step_name: str, data: dict):
         import supa
         if supa._enabled():
             cache_key = passage_dir.name
-            supa.save_step_supa(cache_key, step_name, data)
+            _run_async(supa.save_step_supa(cache_key, step_name, data))
             _safe_print(f"  Saved to Supabase: {cache_key}/{step_name}")
     except Exception as e:
         _safe_print(f"  [supa] save error: {str(e)[:80]}")
@@ -207,7 +221,7 @@ def load_step(passage_dir: Path, step_name: str) -> dict | None:
         import supa
         if supa._enabled():
             cache_key = passage_dir.name
-            data = supa.get_step(cache_key, step_name)
+            data = _run_async(supa.get_step(cache_key, step_name))
             if data:
                 # Save locally for future use
                 passage_dir.mkdir(parents=True, exist_ok=True)

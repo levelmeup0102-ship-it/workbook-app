@@ -34,17 +34,17 @@ async def version():
     
     # Count from _load_db (Supabase or local)
     try:
-        db = _load_db()
+        db = await _load_db()
         for bk in db.get("books", {}).values():
             for ud in bk.get("units", {}).values():
                 passage_count += len(ud.get("passages", {}))
     except: pass
-    
+
     # Check Supabase directly
     try:
         import supa
         if supa._enabled():
-            rows = supa.get_all_passages()
+            rows = await supa.get_all_passages()
             supa_count = len(rows)
             supa_ok = True
     except: pass
@@ -66,12 +66,12 @@ def _verify(r: Request):
     if r.headers.get("Authorization","").replace("Bearer ","") != _token(APP_PASSWORD):
         raise HTTPException(401)
 
-def _load_db():
+async def _load_db():
     """Load passages - Supabase first, local fallback"""
     try:
         import supa
         if supa._enabled():
-            rows = supa.get_all_passages()
+            rows = await supa.get_all_passages()
             if rows:
                 db = {"books": {}}
                 for r in rows:
@@ -93,7 +93,7 @@ def _load_db():
         return json.loads(PASSAGES_FILE.read_text(encoding="utf-8"))
     return {"books": {}}
 
-def _save_db(d):
+async def _save_db(d):
     """Save passages - local + Supabase"""
     # Count total passages
     total = sum(
@@ -102,10 +102,10 @@ def _save_db(d):
         for unit, ud in bd.get("units", {}).items()
     )
     print(f"[save_db] saving {total} passages...")
-    
+
     PASSAGES_FILE.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"[save_db] local file written OK")
-    
+
     # Also save to Supabase
     try:
         import supa
@@ -121,7 +121,7 @@ def _save_db(d):
                         })
             if rows:
                 print(f"[save_db] sending {len(rows)} rows to Supabase...")
-                supa.upsert_passages_bulk(rows)
+                await supa.upsert_passages_bulk(rows)
         else:
             print("[save_db] Supabase not enabled")
     except Exception as e:
@@ -136,7 +136,7 @@ def _ck(book, unit, pid):
     prefix = "_".join(nums) if nums else "p"
     return f"{prefix}_{h}"
 
-def _is_cached(ck):
+async def _is_cached(ck):
     """Check cache - local first, then Supabase"""
     d = DATA_DIR / ck
     if d.exists() and sum(1 for f in d.glob("step*.json")) >= 8:
@@ -144,7 +144,7 @@ def _is_cached(ck):
     # Check Supabase
     try:
         import supa
-        if supa._enabled() and supa.count_steps(ck) >= 8:
+        if supa._enabled() and await supa.count_steps(ck) >= 8:
             return True
     except: pass
     return False
@@ -163,7 +163,7 @@ async def auth(request: Request):
 @app.get("/api/passages")
 async def list_passages(request: Request):
     _verify(request)
-    db = _load_db()
+    db = await _load_db()
     result = []
     for bk, bd in db.get("books",{}).items():
         for unit, ud in bd.get("units",{}).items():
@@ -171,7 +171,7 @@ async def list_passages(request: Request):
                 result.append({
                     "book": bk, "unit": unit, "id": pid,
                     "title": pi.get("title", pid),
-                    "cache_status": "ready" if _is_cached(_ck(bk,unit,pid)) else "not_ready"
+                    "cache_status": "ready" if await _is_cached(_ck(bk,unit,pid)) else "not_ready"
                 })
     return result
 
@@ -182,7 +182,7 @@ async def upload_passages(request: Request):
     book = body.get("book", "26 suteuk")
     text = body.get("text", "")
     parts = re.split(r'###(.+?)###', text)
-    db = _load_db()
+    db = await _load_db()
     if book not in db["books"]:
         db["books"][book] = {"units": {}}
     count = 0
@@ -197,7 +197,7 @@ async def upload_passages(request: Request):
             db["books"][book]["units"][unit_name] = {"passages": {}}
         db["books"][book]["units"][unit_name]["passages"][pid] = {"title": title, "text": passage}
         count += 1
-    _save_db(db)
+    await _save_db(db)
     return {"ok": True, "count": count}
 
 @app.post("/api/generate")
@@ -210,8 +210,8 @@ async def generate(request: Request):
     # Debug logging
     print(f"[generate] book={book}, unit={unit}, pid={pid}")
     print(f"[generate] passages.json exists: {PASSAGES_FILE.exists()}")
-    
-    db = _load_db()
+
+    db = await _load_db()
     
     # Debug: show what's in the DB
     books_list = list(db.get("books", {}).keys())

@@ -253,6 +253,14 @@ async def delete_passage_api(request: Request):
 
     await _save_db(db)
 
+    # 캐시도 삭제
+    ck = _ck(book, unit, pid)
+    cache_dir = DATA_DIR / ck
+    if cache_dir.exists():
+        import shutil
+        shutil.rmtree(cache_dir, ignore_errors=True)
+        print(f"[cache] deleted cache dir for {ck}")
+
     # Supabase에서도 삭제
     try:
         import supa
@@ -275,6 +283,18 @@ async def delete_book_api(request: Request):
     db = await _load_db()
     if book not in db.get("books", {}):
         raise HTTPException(404, "book not found")
+
+    db_copy_units = db["books"][book].get("units", {})
+
+    # 캐시도 삭제
+    import shutil
+    for u, ud in db_copy_units.items():
+        for p in ud.get("passages", {}).keys():
+            ck = _ck(book, u, p)
+            cache_dir = DATA_DIR / ck
+            if cache_dir.exists():
+                shutil.rmtree(cache_dir, ignore_errors=True)
+    print(f"[cache] deleted all cache for book '{book}'")
 
     del db["books"][book]
     await _save_db(db)

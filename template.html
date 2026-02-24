@@ -35,7 +35,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 .lnav { display:flex; gap:4px; justify-content:center; margin:4px 0 8px; }
 .lb { width:20px; height:20px; border-radius:50%; border:1px solid #ccc; text-align:center; line-height:20px; font-size:8pt; color:var(--text-muted); display:inline-flex; align-items:center; justify-content:center; }
 .lb.on { background:var(--primary); color:#fff; border-color:var(--primary); }
-.pn { text-align:center; color:var(--primary); font-size:8.5pt; position:absolute; bottom:2px; left:0; right:0; }
 
 /* Section title */
 .stitle { font-size:16pt; font-weight:bold; color:var(--primary); border-bottom:3px solid var(--accent); padding-bottom:3px; display:inline-block; margin-bottom:8px; }
@@ -80,6 +79,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 .apage { columns:2; column-gap:18px; font-size:8pt; line-height:1.4; }
 .apage .ast { font-weight:bold; color:var(--primary); font-size:9pt; margin-top:6px; margin-bottom:2px; break-after:avoid; }
 .apage p { break-inside:avoid; }
+.ablock { break-inside:avoid; }
 
 /* Cover */
 .cv-c { text-align:center; display:flex; flex-direction:column; min-height:calc(273mm - 25mm); }
@@ -150,7 +150,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       날짜: <span class="il" style="min-width:200px;"></span>
     </p>
   </div>
-  <div class="pn">1</div>
 </div>
 
 {% endif %}
@@ -220,7 +219,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     </tr>
     {% endfor %}
   </table>
-  <div class="pn">2</div>
 </div>
 
 {% endif %}
@@ -263,7 +261,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <p style="padding: 5px;"></p>
   <p class="b mt6" style="font-size:10pt;">▼ 해석 확인 (스스로 해석 후 비교)</p>
   <p style="font-size:8.5pt;line-height:1.5;margin-top:3px;color:var(--text-secondary);">{{ translation }}</p>
-  <div class="pn">3</div>
 </div>
 
 {% endif %}
@@ -295,7 +292,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <div style="border-bottom:1px dashed var(--border-dotted);height:22px;margin-bottom:0;"></div>
     <div style="border-bottom:1px dashed var(--border-dotted);height:22px;margin-bottom:0;"></div>
   </div>
-  <div class="pn">4</div>
 </div>
 
 {% endif %}
@@ -331,7 +327,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <div style="border:1px solid var(--border-light);border-radius:4px;padding:10px 14px;min-height:200px;">
     <p style="font-size:9pt;color:var(--text-muted);">자유롭게 글의 흐름을 나만의 방식으로 정리하세요. (그림, 화살표, 마인드맵, 메모 등 자유 형식)</p>
   </div>
-  <div class="pn">5</div>
 </div>
 
 {% endif %}
@@ -377,7 +372,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <p class="warnt" style="font-size:10pt;">!! WARNING - YOU DIED</p>
     <p style="font-size:8pt;margin-top:2px;">순서/삽입을 틀렸다면, <span class="b">Lv.4 구조 정리</span>가 아직 완전하지 않다는 뜻입니다. <strong>Lv.4로 돌아가세요.</strong></p>
   </div>
-  <div class="pn">6</div>
 </div>
 
 {# ==================== PAGE 7: Lv.5 심화 ==================== #}
@@ -415,7 +409,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <div style="border-bottom:1px dashed var(--border-dotted);height:22px;margin-bottom:0;"></div>
     <div style="border-bottom:1px dashed var(--border-dotted);height:22px;margin-bottom:0;"></div>
   </div>
-  <div class="pn">7</div>
 </div>
 
 {% endif %}
@@ -452,7 +445,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <p><span style="color:var(--accent);font-weight:bold;">Step 3.</span> 틀린 선지 <u>단어 정리</u> <strong>꼭</strong> 할 것.</p>
     <p style="margin-top:2px;">• 원문 단어: <span class="il" style="min-width:100px;"></span> (형광 체크) / 선지의 같은 의미 표현: 같은 형광펜으로 체크!</p>
   </div>
-  <div class="pn">8</div>
 </div>
 
 {% endif %}
@@ -488,7 +480,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <p><span style="color:var(--accent);font-weight:bold;">Step 2.</span> 그 내용과 가장 유사한 <span class="b">비유적/문맥적 내용</span> 찾기</p>
     <p style="color:var(--red);margin-top:2px;">⚠ 주제문 선지에서 <span class="b">추론적 사고 금지!</span> 글에서 <span class="b">언급되지 않은 내용은 오답</span></p>
   </div>
-  <div class="pn">9</div>
 </div>
 
 {% endif %}
@@ -528,7 +519,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <p class="b" style="font-size:9pt;">⚡ 어법 유형 솔루션</p>
     <p style="font-size:8pt;">문법적 이해 없이 단순 암기로 푸는 건 변형 시 <span class="b">반드시 틀립니다.</span> 모르겠으면 <span class="b" style="color:var(--red);">제발 물어보세요.</span></p>
   </div>
-  <div class="pn">10</div>
 </div>
 
 {# ==================== PAGE 11: Lv.8-2 ==================== #}
@@ -567,7 +557,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <p class="b">⚡ 어법 유형 솔루션</p>
     <p style="font-size:9pt;">문법적 이해 없이 단순 암기로 푸는 건 변형 시 <span class="b">반드시 틀립니다.</span><br>1회독 때 문법을 정리하지 않으면 시험 전 정리할 시간은 <span class="b">절대 없습니다.</span><br>모르겠으면 <span class="b" style="color:var(--red);">제발 물어보세요.</span> 모르는 채로 넘어가는 게 가장 위험합니다.</p>
   </div>
-  <div class="pn">11</div>
 </div>
 
 {# ==================== PAGE 12: Lv.8-3 ==================== #}
@@ -584,7 +573,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <p class="b">⚡ 어법 유형 솔루션</p>
     <p style="font-size:9.5pt;">문법적 이해 없이 단순 암기로 푸는 건 변형 시 <span class="b">반드시 틀립니다.</span><br>1회독 때 문법을 정리하지 않으면 시험 전 정리할 시간은 <span class="b">절대 없습니다.</span><br>모르겠으면 <span class="b" style="color:var(--red);">제발 물어보세요.</span> 모르는 채로 넘어가는 게 가장 위험합니다.</p>
   </div>
-  <div class="pn">12</div>
 </div>
 
 {% endif %}
@@ -626,7 +614,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       <p style="font-size:9.5pt;">• step1: 원문에 쓰인 단어 <strong>확인</strong>.</span><br>• step2: 원뭔과 변형되어 출제되었는지 <strong>확인</strong>.</p>
     </div>
   </div>
-  <div class="pn">13</div>
 </div>
 
 {# ==================== PAGE 14: Lv.9-2 ==================== #}
@@ -679,7 +666,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <p class="b" style="font-size:8pt;">[내용일치 솔루션]</p>
     <p style="font-size:7.5pt;"><span class="b">우리말 오답</span> = 해석 문제 → Lv.1~4로. <span class="b">영어 오답</span> = 어휘 문제 → 단어 정리 필수.</p>
   </div>
-  <div class="pn">14</div>
 </div>
 
 {% endif %}
@@ -713,7 +699,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <p class="b" style="font-size:8.5pt;">[영작 솔루션]</p>
     <p style="font-size:8pt;">(1) 우리말 구조 분석(S/V/O) → (2) 영어 어순으로 써보기 → (3) 반복! <span class="b" style="color:var(--red);">써봐라. 지금 당장.</span></p>
   </div>
-  <div class="pn">15</div>
 </div>
 
 {% endif %}
@@ -723,7 +708,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <div class="hdr"><span class="hdr-left">레벨미업학원</span><span>정답 및 해설</span></div>
   <div style="text-align:center;font-size:15pt;font-weight:bold;margin:6px 0;padding-bottom:6px;border-bottom:2px solid var(--primary);">정답 및 해설</div>
   <div class="apage">{{ answers_html }}</div>
-  <div class="pn">16</div>
 </div>
 
 {% endif %}

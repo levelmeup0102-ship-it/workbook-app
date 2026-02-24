@@ -694,72 +694,81 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
         return cached
 
     _safe_print("  step8: generating answer page...")
-    # 정답 HTML 생성
-    lines = []
+    # 정답 HTML 생성 (레벨별 블록화)
+    blocks = []
 
     # Lv.1
-    lines.append('<p class="ast">Lv.1 어휘 테스트</p>')
-    lines.append('<p>A. (어휘 테스트 정답은 학생이 직접 확인)</p>')
+    blocks.append('<div class="ablock"><p class="ast">Lv.1 어휘 테스트</p>'
+                   '<p>A. (어휘 테스트 정답은 학생이 직접 확인)</p></div>')
 
     # Lv.5
     s2 = all_data.get("step2", {})
-    lines.append('<p class="ast">Lv.5 순서 배열</p>')
-    lines.append(f'<p>정답: {s2.get("order_answer","")}</p>')
-    lines.append(f'<p>삽입 정답: {s2.get("insert_answer","")}</p>')
-    lines.append(f'<p>전체 배열: {s2.get("full_order_answer","")}</p>')
+    blocks.append(f'<div class="ablock"><p class="ast">Lv.5 순서 배열</p>'
+                   f'<p>정답: {s2.get("order_answer","")}</p>'
+                   f'<p>삽입 정답: {s2.get("insert_answer","")}</p>'
+                   f'<p>전체 배열: {s2.get("full_order_answer","")}</p></div>')
 
     # Lv.6
     s3 = all_data.get("step3", {})
     correct = ', '.join(s3.get("blank_correct", []))
-    lines.append('<p class="ast">Lv.6 빈칸 추론</p>')
-    lines.append(f'<p>정답: {correct}</p>')
+    blocks.append(f'<div class="ablock"><p class="ast">Lv.6 빈칸 추론</p>'
+                   f'<p>정답: {correct}</p></div>')
 
     # Lv.7
     s4 = all_data.get("step4", {})
     correct = ', '.join(s4.get("topic_correct", []))
-    lines.append('<p class="ast">Lv.7 주제 찾기</p>')
-    lines.append(f'<p>정답: {correct}</p>')
+    blocks.append(f'<div class="ablock"><p class="ast">Lv.7 주제 찾기</p>'
+                   f'<p>정답: {correct}</p></div>')
 
     # Lv.8 괄호
     s5 = all_data.get("step5", {})
-    lines.append('<p class="ast">Lv.8 어법 (괄호)</p>')
+    lv8_bracket = ['<div class="ablock"><p class="ast">Lv.8 어법 (괄호)</p>']
     for a in s5.get("grammar_bracket_answers", []):
         if isinstance(a, dict):
-            lines.append(f'<p>({a.get("num","")}) {a.get("answer","")}</p>')
+            lv8_bracket.append(f'<p>({a.get("num","")}) {a.get("answer","")}</p>')
+    lv8_bracket.append('</div>')
+    blocks.append(''.join(lv8_bracket))
 
     # Lv.8 서술형
-    lines.append('<p class="ast">Lv.8 서술형</p>')
+    lv8_error = ['<div class="ablock"><p class="ast">Lv.8 서술형</p>']
     for a in s5.get("grammar_error_answers", []):
         if isinstance(a, dict):
-            lines.append(f'<p>{a.get("error","")}->{a.get("original","")}({a.get("reason","")})</p>')
+            lv8_error.append(f'<p>{a.get("error","")}->{a.get("original","")}({a.get("reason","")})</p>')
+    lv8_error.append('</div>')
+    blocks.append(''.join(lv8_error))
 
-    # Lv.9-1
+    # Lv.9-1 Part A
     s6 = all_data.get("step6", {})
-    lines.append('<p class="ast">Lv.9-1 어휘 Part A</p>')
+    lv9a = ['<div class="ablock"><p class="ast">Lv.9-1 어휘 Part A</p>']
     for a in s6.get("vocab_parta_answers", []):
         if isinstance(a, dict):
-            lines.append(f'<p>({a.get("num","")}) {a.get("answer","")}</p>')
+            lv9a.append(f'<p>({a.get("num","")}) {a.get("answer","")}</p>')
+    lv9a.append('</div>')
+    blocks.append(''.join(lv9a))
 
-    lines.append('<p class="ast">Lv.9-1 어휘 Part B</p>')
+    # Lv.9-1 Part B + Lv.9-2
+    lv9b = ['<div class="ablock"><p class="ast">Lv.9-1 어휘 Part B</p>']
     for a in s6.get("vocab_partb_answers", []):
         if isinstance(a, dict):
             correct_list = ', '.join(a.get("correct", []))
-            lines.append(f'<p>{a.get("num","")}: {correct_list}</p>')
-
-    # Lv.9-2
+            lv9b.append(f'<p>{a.get("num","")}: {correct_list}</p>')
     kr_ans = ', '.join(s6.get("content_match_kr_answer", []))
     en_ans = ', '.join(s6.get("content_match_en_answer", []))
-    lines.append('<p class="ast">Lv.9-2 내용일치</p>')
-    lines.append(f'<p>한국어: {kr_ans}</p>')
-    lines.append(f'<p>영어: {en_ans}</p>')
+    lv9b.append(f'<p class="ast">Lv.9-2 내용일치</p>')
+    lv9b.append(f'<p>한국어: {kr_ans}</p>')
+    lv9b.append(f'<p>영어: {en_ans}</p>')
+    lv9b.append('</div>')
+    blocks.append(''.join(lv9b))
 
     # Lv.10
     s7 = all_data.get("step7", {})
-    lines.append('<p class="ast">Lv.10 영작</p>')
-    for item in s7.get("writing_items", []):
-        lines.append(f'<p>{item.get("answer","")}</p>')
+    lv10 = ['<div class="ablock"><p class="ast">Lv.10 영작</p>']
+    for idx, item in enumerate(s7.get("writing_items", []), start=1):
+        lv10.append(f'<p>{idx}. {item.get("answer","")}</p>')
+    lv10.append('</div>')
+    blocks.append(''.join(lv10))
 
-    answers_html = '\n'.join(lines)
+    answers_html = '\n'.join(blocks)
     data = {"answers_html": answers_html}
     save_step(passage_dir, "step8_answers", data)
     return data

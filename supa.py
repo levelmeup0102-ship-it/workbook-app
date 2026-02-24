@@ -107,3 +107,16 @@ async def count_steps(cache_key):
     if isinstance(result, list):
         return len(result)
     return 0
+
+# ========================
+# Delete
+# ========================
+async def delete_passage(book, unit, pid):
+    """Delete a single passage"""
+    q = f"passages?book=eq.{quote(book, safe='')}&unit=eq.{quote(unit, safe='')}&pid=eq.{quote(pid, safe='')}"
+    return await _request("DELETE", q)
+
+async def delete_book(book):
+    """Delete all passages of a book"""
+    q = f"passages?book=eq.{quote(book, safe='')}"
+    return await _request("DELETE", q)

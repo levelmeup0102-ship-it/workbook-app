@@ -137,9 +137,12 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       <!-- 교재/단원 선택 -->
       <div class="section">
         <div class="section-title"><span class="icon">📚</span> 교재 선택</div>
-        <select id="sel-book" onchange="onBookChange()">
-          <option value="">교재를 선택하세요</option>
-        </select>
+        <div style="display:flex;gap:6px;">
+          <select id="sel-book" onchange="onBookChange()" style="flex:1;margin-bottom:0;">
+            <option value="">교재를 선택하세요</option>
+          </select>
+          <button class="btn btn-sm" onclick="deleteBook()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;white-space:nowrap;" title="선택한 교재 삭제">🗑️</button>
+        </div>
       </div>
 
       <!-- 지문 선택 -->
@@ -345,12 +348,15 @@ function onBookChange() {
     </div>`;
     for (const p of unitPassages) {
       const key = `${p.book}|${p.unit}|${p.id}`;
-      html += `<div class="passage-item" onclick="togglePassage('${p.book}','${p.unit}','${p.id}', this)">
-        <input type="checkbox" data-key="${key}">
-        <span class="title">${p.title}</span>
-        <span class="badge ${p.cache_status === 'ready' ? 'badge-ready' : 'badge-pending'}">
-          ${p.cache_status === 'ready' ? '✅ 준비됨' : '⏳ 미생성'}
-        </span>
+      html += `<div class="passage-item" style="position:relative;">
+        <div style="flex:1;display:flex;align-items:center;" onclick="togglePassage('${p.book}','${p.unit}','${p.id}', this.parentElement)">
+          <input type="checkbox" data-key="${key}">
+          <span class="title">${p.title}</span>
+          <span class="badge ${p.cache_status === 'ready' ? 'badge-ready' : 'badge-pending'}">
+            ${p.cache_status === 'ready' ? '✅ 준비됨' : '⏳ 미생성'}
+          </span>
+        </div>
+        <button onclick="event.stopPropagation();deletePassage('${p.book}','${p.unit}','${p.id}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px;padding:4px 6px;opacity:0.5;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.5" title="지문 삭제">✕</button>
       </div>`;
     }
   }
@@ -576,6 +582,57 @@ ${bodies.join('\n')}
   a.download = `${unit}_합본_워크북.html`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// ============================================================
+// Delete
+// ============================================================
+async function deleteBook() {
+  const book = document.getElementById('sel-book').value;
+  if (!book) { toast('삭제할 교재를 선택하세요'); return; }
+  if (!confirm(`"${book}" 교재의 모든 지문을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+
+  try {
+    const res = await fetch(API + '/api/books', {
+      method: 'DELETE',
+      headers: headers(),
+      body: JSON.stringify({ book })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast(`✅ "${book}" 교재 삭제 완료`);
+      selectedPassages.clear();
+      await loadPassages();
+      document.getElementById('sel-book').value = '';
+      onBookChange();
+    }
+  } catch(e) {
+    toast('삭제 실패: ' + e.message);
+  }
+}
+
+async function deletePassage(book, unit, pid) {
+  if (!confirm(`"${pid}" 지문을 삭제하시겠습니까?`)) return;
+
+  try {
+    const res = await fetch(API + '/api/passages', {
+      method: 'DELETE',
+      headers: headers(),
+      body: JSON.stringify({ book, unit, pid })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast('✅ 지문 삭제 완료');
+      const key = `${book}|${unit}|${pid}`;
+      selectedPassages.delete(key);
+      await loadPassages();
+      // 현재 교재 다시 선택
+      const sel = document.getElementById('sel-book');
+      if (sel.value) onBookChange();
+    }
+  } catch(e) {
+    toast('삭제 실패: ' + e.message);
+  }
 }
 
 // ============================================================

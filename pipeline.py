@@ -471,7 +471,7 @@ JSON 형식:
     return data
 
 # ============================================================
-# STEP 3: Lv.6 빈칸 추론
+# STEP 3: Stage 6 빈칸 추론
 # ============================================================
 def step3_blank(passage: str, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step3_blank")
@@ -509,7 +509,7 @@ def step3_blank(passage: str, passage_dir: Path) -> dict:
     return data
 
 # ============================================================
-# STEP 4: Lv.7 주제 찾기
+# STEP 4: Stage 7 주제 찾기
 # ============================================================
 def step4_topic(passage: str, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step4_topic")
@@ -641,19 +641,35 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
 - 반의어: 해당 단어와 의미가 반대인 단어 3개
 - 발음/철자 유사 단어 절대 금지. 의미 기반으로만 출제
 
+[내용 일치 규칙]
+- content_match_kr: 반드시 10개 한국어 선지 (①~⑩). 일치 3~5개 + 불일치 5~7개
+- content_match_en: 반드시 10개 영어 선지 (①~⑩). 일치 3~5개 + 불일치 5~7개
+- 한국어와 영어 선지의 순서는 서로 다르게 랜덤 배치
+
 [JSON 형식]
 {{
   "vocab_advanced_passage": "괄호 포함 지문",
   "vocab_parta_answers": [{{"num":1, "answer":"regarded", "wrong":"overlooked", "reason":"~로 여겨지다 vs 간과하다"}}, ...],
   "vocab_partb": [{{"word":"regarded", "choices":"considered / perceived / overlooked / neglected / dismissed"}}, ...],
   "vocab_partb_answers": [{{"num":1, "correct":["considered", "perceived"], "wrong":["overlooked", "neglected", "dismissed"]}}, ...],
-  "content_match_kr": ["① 평소 극장에서 혼자 영화를 본다.", ...],
+  "content_match_kr": ["① 평소 극장에서 혼자 영화를 본다.", ... (반드시 10개 선지)],
   "content_match_kr_answer": ["②", "③", ...],
-  "content_match_en": ["① The writer normally watches movies alone.", ...],
+  "content_match_en": ["① The writer normally watches movies alone.", ... (반드시 10개 선지)],
   "content_match_en_answer": ["②", "④", ...]
 }}"""
 
     data = call_claude_json(SYS_JSON_KR, prompt, max_tokens=4000)
+
+    # 한국어 선지 셔플
+    kr_items = data.get("content_match_kr", [])
+    kr_answers = set(data.get("content_match_kr_answer", []))
+    if kr_items:
+        kr_texts = [re.sub(r'^[①②③④⑤⑥⑦⑧⑨⑩]\s*', '', item) for item in kr_items]
+        kr_correct = [_CIRCLE_NUMS[i] in kr_answers for i in range(len(kr_texts))]
+        kr_pairs = list(zip(kr_texts, kr_correct))
+        random.shuffle(kr_pairs)
+        data["content_match_kr"] = [f"{_CIRCLE_NUMS[i]} {kr_pairs[i][0]}" for i in range(len(kr_pairs))]
+        data["content_match_kr_answer"] = [_CIRCLE_NUMS[i] for i in range(len(kr_pairs)) if kr_pairs[i][1]]
 
     # Part B 영어 선지 셔플 (번호는 오름차순 유지, 문장만 랜덤)
     en_items = data.get("content_match_en", [])
@@ -673,7 +689,7 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
     return data
 
 # ============================================================
-# STEP 7: Lv.10 영작 (API 불필요 - 프로그래밍으로 처리)
+# STEP 7: Stage 10 영작 (API 불필요 - 프로그래밍으로 처리)
 # ============================================================
 def step7_writing(sentences: list, translation: str, passage_dir: Path, sentence_translations: list = None) -> dict:
     cached = load_step(passage_dir, "step7_writing")
@@ -733,12 +749,12 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
     blocks = []
 
     # Lv.1
-    blocks.append('<div class="ablock"><p class="ast">Lv.1 어휘 테스트</p>'
+    blocks.append('<div class="ablock"><p class="ast">Stage 1 어휘 테스트</p>'
                    '<p>A. (어휘 테스트 정답은 학생이 직접 확인)</p></div>')
 
     # Lv.5
     s2 = all_data.get("step2", {})
-    blocks.append(f'<div class="ablock"><p class="ast">Lv.5 순서 배열</p>'
+    blocks.append(f'<div class="ablock"><p class="ast">Stage 5 순서 배열</p>'
                    f'<p>정답: {s2.get("order_answer","")}</p>'
                    f'<p>삽입 정답: {s2.get("insert_answer","")}</p>'
                    f'<p>전체 배열: {s2.get("full_order_answer","")}</p></div>')
@@ -746,26 +762,26 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
     # Lv.6
     s3 = all_data.get("step3", {})
     correct = ', '.join(s3.get("blank_correct", []))
-    blocks.append(f'<div class="ablock"><p class="ast">Lv.6 빈칸 추론</p>'
+    blocks.append(f'<div class="ablock"><p class="ast">Stage 6 빈칸 추론</p>'
                    f'<p>정답: {correct}</p></div>')
 
     # Lv.7
     s4 = all_data.get("step4", {})
     correct = ', '.join(s4.get("topic_correct", []))
-    blocks.append(f'<div class="ablock"><p class="ast">Lv.7 주제 찾기</p>'
+    blocks.append(f'<div class="ablock"><p class="ast">Stage 7 주제 찾기</p>'
                    f'<p>정답: {correct}</p></div>')
 
     # Lv.8 괄호
     s5 = all_data.get("step5", {})
-    lv8_bracket = ['<div class="ablock"><p class="ast">Lv.8 어법 (괄호)</p>']
+    lv8_bracket = ['<div class="ablock"><p class="ast">Stage 8 어법 (괄호)</p>']
     for a in s5.get("grammar_bracket_answers", []):
         if isinstance(a, dict):
             lv8_bracket.append(f'<p>({a.get("num","")}) {a.get("answer","")}</p>')
     lv8_bracket.append('</div>')
     blocks.append(''.join(lv8_bracket))
 
-    # Lv.8 서술형
-    lv8_error = ['<div class="ablock"><p class="ast">Lv.8 서술형</p>']
+    # Stage 8 서술형
+    lv8_error = ['<div class="ablock"><p class="ast">Stage 8 서술형</p>']
     for a in s5.get("grammar_error_answers", []):
         if isinstance(a, dict):
             lv8_error.append(f'<p>{a.get("error","")}->{a.get("original","")}({a.get("reason","")})</p>')
@@ -774,7 +790,7 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
 
     # Lv.9-1 Part A
     s6 = all_data.get("step6", {})
-    lv9a = ['<div class="ablock"><p class="ast">Lv.9-1 어휘 Part A</p>']
+    lv9a = ['<div class="ablock"><p class="ast">Stage 9-1 어휘 Part A</p>']
     for a in s6.get("vocab_parta_answers", []):
         if isinstance(a, dict):
             lv9a.append(f'<p>({a.get("num","")}) {a.get("answer","")}</p>')
@@ -782,7 +798,7 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
     blocks.append(''.join(lv9a))
 
     # Lv.9-1 Part B + Lv.9-2
-    lv9b = ['<div class="ablock"><p class="ast">Lv.9-1 어휘 Part B</p>']
+    lv9b = ['<div class="ablock"><p class="ast">Stage 9-1 어휘 Part B</p>']
     for a in s6.get("vocab_partb_answers", []):
         if isinstance(a, dict):
             correct_list = ', '.join(a.get("correct", []))
@@ -797,7 +813,7 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
 
     # Lv.10
     s7 = all_data.get("step7", {})
-    lv10 = ['<div class="ablock"><p class="ast">Lv.10 영작</p>']
+    lv10 = ['<div class="ablock"><p class="ast">Stage 10 영작</p>']
     for idx, item in enumerate(s7.get("writing_items", []), start=1):
         lv10.append(f'<p>{idx}. {item.get("answer","")}</p>')
     lv10.append('</div>')
@@ -864,7 +880,7 @@ def merge_to_template_data(passage: str, meta: dict, all_steps: dict) -> dict:
         "vocab_partb": s6.get("vocab_partb", []),
         "content_match_kr": s6.get("content_match_kr", []),
         "content_match_en": s6.get("content_match_en", []),
-        # Lv.10 영작
+        # Stage 10 영작
         "writing_items": s7.get("writing_items", []),
         # 정답
         "answers_html": s8.get("answers_html", ""),
@@ -943,7 +959,7 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
     # Step 6: Lv.9 어휘+내용일치
     all_steps["step6"] = step6_vocab_content(passage, passage_dir)
 
-    # Step 7: Lv.10 영작 (로컬)
+    # Step 7: Stage 10 영작 (로컬)
     translation = all_steps["step1"].get("translation", "")
     sentence_translations = all_steps["step1"].get("sentence_translations", [])
     all_steps["step7"] = step7_writing(sentences_from_api, translation, passage_dir, sentence_translations)

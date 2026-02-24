@@ -21,12 +21,11 @@
   --border-dotted: #ccc;
   --red: #dc2626;
 }
-@page { size: A4; margin: 12mm 15mm 12mm 15mm; }
+@page { size: A4; margin: 12mm 15mm 18mm 15mm; @bottom-center { content: counter(page); font-size: 8pt; color: #666; } }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10pt; color: var(--text-primary); line-height: 1.5; -webkit-print-color-adjust: exact; counter-reset: page-counter; }
-.page { page-break-after: always; position: relative; padding-bottom: 16px; counter-increment: page-counter; }
+body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10pt; color: var(--text-primary); line-height: 1.5; -webkit-print-color-adjust: exact; }
+.page { page-break-after: always; position: relative; padding-bottom: 16px; }
 .page:last-child { page-break-after: avoid; }
-.page::after { content: counter(page-counter); position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-size: 8pt; color: var(--text-muted); }
 .hdr { display:flex; justify-content:space-between; align-items:baseline; padding-bottom:3px; border-bottom:1px solid #ccc; margin-bottom:6px; font-size:9.5pt; }
 .hdr-left { font-weight:bold; text-decoration:underline; }
 .hdr-right { color:var(--text-secondary); }
@@ -101,7 +100,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <p style="font-size:9pt;color:var(--text-muted);margin-top:4px;margin-left: 10px;text-align:left;">레벨미업학원 &nbsp;&nbsp;&nbsp;</p>
     <div class="cv-l">{{ subject }}</div>
     <div style="font-size:18pt;font-weight:bold;color:var(--green);margin-top:8px;">{{ challenge_title }}</div>
-    <p style="font-size:10pt;color:var(--text-secondary);margin-top:20px;">교재의 내용을 완벽히 이해하고 학습하는것이 중요합니다.</p>
+    <p style="font-size:10pt;color:var(--text-secondary);margin-top:20px;">이 교재의 학습 흐름</p>
     <table style="width:80%;margin:16px auto;border-collapse:separate;border-spacing:8px;">
       <tr>
         <td style="width:33%;border:1.5px solid var(--primary);border-radius:8px;padding:12px 8px;text-align:center;vertical-align:top;">
@@ -138,8 +137,8 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       </tr>
     </table>
     <div class="dashbox" style="max-width:82%;margin: auto auto 20px;">
-      <p class="b" style="font-size:10pt;">[오답 정리 → 강사 피드백 안내]</p>
-      <p style="font-size:9pt;margin-top:3px;">각 문제에는 <strong>오답 정리 칸</strong>이 있습니다. 풀고 채점한 후 반드시 오답 정리를 작성하세요.<br>작성 후 사진을 찍어 앱으로 강사에게 전송해 주세요. 개인별 피드백을 보내드립니다.</p>
+      <p class="b" style="font-size:10pt;">[오답정리의 중요성]</p>
+      <p style="font-size:9pt;margin-top:3px;">각 문제에는 <strong>오답정리 칸</strong>이 있습니다. 채점한 후 반드시 오답 정리를 작성하세요.<br>교재의 내용을 완벽히 이해하고 학습하는 것이 중요합니다.</p>
       <div style="max-width:82%;margin:0 auto;">
       </div>
     </div>
@@ -165,7 +164,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <tr><td><span class="sn">{{ s.split('.')[0] }}.</span> {{ s.split('. ',1)[1] }}</td>
     <td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td></tr>{% endfor %}</table>
   </div>
-  <p style="padding: 10px;"></p>
+  <div style="height:20px;"></div>
   <div style="font-size:13pt;font-weight:bold;color:var(--primary);border-bottom:3px solid var(--accent);padding-bottom:2px;display:inline-block;margin-bottom:4px;">Stage 1 지문 핵심 어휘</div>
   <p style="font-size:7.5pt;color:var(--text-muted);">STEP 1</p>
   <table style="width:100%;border-collapse:collapse;border:1px solid var(--border-table);font-size:8pt;">
@@ -179,7 +178,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       {% else %}<td style="border:1px solid var(--border-table);"></td><td style="border:1px solid var(--border-table);"></td>{% endif %}
     </tr>{% endfor %}
   </table>
-  <p style="padding: 10px;"></p>
+  <div style="height:20px;"></div>
   <p style="font-size:7.5pt;color:var(--text-muted);margin-top:4px;">STEP 2</p>
   <div style="font-size:10pt;font-weight:bold;margin-bottom:3px;">어휘 확인 테스트</div>
   <table style="width:100%;font-size:8.5pt;border-collapse:collapse;">
@@ -198,7 +197,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       </td>
     </tr>
   </table>
-  <p style="padding: 10px;"></p>
+  <div style="height:20px;"></div>
   <p style="font-size:7.5pt;color:var(--text-muted);margin-top:4px;">STEP 3</p>
   <div style="font-size:10pt;font-weight:bold;margin-bottom:3px;">D. 틀린 단어 사전 찾아 채우기</div>
   <table style="width:100%;border-collapse:separate;border-spacing:3px;font-size:7pt;line-height:1.15;">
@@ -244,7 +243,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <p class="b" style="font-size:10pt;margin-bottom:2px;">형광친 단어 사전검색 후 정리하기</p>
     <p style="font-size:8pt;color:var(--text-muted);margin-bottom:4px;"><span class="b">Step 1.</span> 형광 친 단어 옮겨 적기 → <span class="b">Step 2.</span> 사전 검색 후 뜻/동의어 정리</p>
     <table style="width:100%;border-collapse:separate;border-spacing:4px;font-size:8pt;line-height:1.3;">
-      {% for row in range(4) %}
+      {% for row in range(2) %}
       <tr>
         {% for col in range(2) %}
         <td style="width:50%;border:1px solid var(--border-light);border-radius:3px;padding:3px 6px;vertical-align:top;">
@@ -265,6 +264,8 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 {% endif %}
 {% if not levels or 3 in levels %}
 {# ==================== PAGE 4: Lv.3 ==================== #}
+{% if sentences|length <= 14 %}
+{# --- 짧은 지문: 1페이지 --- #}
 <div class="page" style="font-size:10pt;">
   <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
   <div class="phase" style="color:var(--green);">수업 중</div>
@@ -277,7 +278,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td></tr>{% endfor %}</table>
   </div>
   <div class="stitle">Stage 3 문장별 분석</div>
-  <p style="padding: 5px;"></p>
+  <div style="height:5px;"></div>
   <p class="slbl">STEP 1</p>
   <p style="font-size:9pt;margin-bottom:8px;">문장의 기본 구성요소(S/V/O/C)를 표시한 후, 수업을 들으며 중요한 표현을 필기하시오.</p>
   {% for sent in sentences %}
@@ -290,6 +291,44 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <div style="border-bottom:1px dashed var(--border-dotted);height:22px;margin-bottom:0;"></div>
   </div>
 </div>
+{% else %}
+{# --- 긴 지문: 2페이지 --- #}
+{% set half = (sentences|length + 1) // 2 %}
+<div class="page" style="font-size:10pt;">
+  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
+  <div class="phase" style="color:var(--green);">수업 중</div>
+  <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==3 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
+  <div class="ckl">
+    <div class="ckl-t">[수업 중 체크리스트 - Stage 3]</div>
+    <table><tr><td></td><td class="cc">1차</td><td class="cc">2차</td><td class="cc">3차</td></tr>
+    {% for s in ["Step 1. 해석 — 단어+문법으로 정확하게 해석하기","Step 2. 이해 — 나만의 예시로 문장 내용 확실히 이해하기","Step 3. 추론 — 다음에 나올 내용 예측 → 다음 문장에서 확인","Step 4. 반복 — 모든 문장에 해석→이해→추론 반복"] %}
+    <tr><td><span class="sn">{{ s.split('.')[0] }}.</span> {{ s.split('. ',1)[1] }}</td>
+    <td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td></tr>{% endfor %}</table>
+  </div>
+  <div class="stitle">Stage 3 문장별 분석</div>
+  <div style="height:5px;"></div>
+  <p class="slbl">STEP 1</p>
+  <p style="font-size:9pt;margin-bottom:8px;">문장의 기본 구성요소(S/V/O/C)를 표시한 후, 수업을 들으며 중요한 표현을 필기하시오.</p>
+  {% for sent in sentences[:half] %}
+  <p style="margin-bottom:28px;font-size:10pt;break-inside:avoid;"><strong>{{ loop.index }}.</strong> {{ sent }}</p>
+  {% endfor %}
+</div>
+<div class="page" style="font-size:10pt;">
+  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
+  <div class="phase" style="color:var(--green);">수업 중</div>
+  <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==3 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
+  <p class="slbl">STEP 1 (계속)</p>
+  {% for sent in sentences[half:] %}
+  <p style="margin-bottom:28px;font-size:10pt;break-inside:avoid;"><strong>{{ half + loop.index }}.</strong> {{ sent }}</p>
+  {% endfor %}
+  <div style="border:1px solid var(--border-light);border-radius:4px;padding:10px 14px;margin-top:12px;min-height:70px;break-inside:avoid;">
+    <p style="font-size:10pt;font-weight:bold;color:var(--primary);margin-bottom:8px;">시험 출제 가능 주요 문법 표현 정리</p>
+    <div style="border-bottom:1px dashed var(--border-dotted);height:22px;margin-bottom:0;"></div>
+    <div style="border-bottom:1px dashed var(--border-dotted);height:22px;margin-bottom:0;"></div>
+    <div style="border-bottom:1px dashed var(--border-dotted);height:22px;margin-bottom:0;"></div>
+  </div>
+</div>
+{% endif %}
 
 {% endif %}
 {% if not levels or 4 in levels %}
@@ -355,7 +394,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <tr><td style="width:35px;padding:2px 4px;border:1px solid var(--border-light);font-weight:bold;">1차</td><td style="padding:2px 4px;border:1px solid var(--border-light);color:var(--text-muted);">메모:</td></tr>
     <tr><td style="padding:2px 4px;border:1px solid var(--border-light);font-weight:bold;">2차</td><td style="padding:2px 4px;border:1px solid var(--border-light);color:var(--text-muted);">메모:</td></tr>
   </table>
-  <p style="padding: 10px;"></p>
+  <div style="height:20px;"></div>
   <p class="b mt4 mb2" style="font-size:9pt;">B. 문장 삽입</p>
   <p style="font-size:8pt;margin-bottom:2px;">주어진 문장이 들어가기에 가장 적절한 곳을 고르시오.</p>
   <div class="psg" style="font-size:8pt;padding:4px 8px;background:#eee;border:1px solid #ccc;line-height:1.45;">{{ insert_sentence }}</div>

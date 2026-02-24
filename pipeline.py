@@ -521,7 +521,8 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', passage) if s.strip()]
     sent_count = len(sentences)
     error_count = min(8, sent_count)  # 문장 수보다 많은 오류 불가
-    bracket_count = min(13, sent_count * 2)  # 문장당 최대 2개 괄호
+    bracket_count = min(20, sent_count * 2)  # 문장당 최대 2개 괄호
+    # bracket_count = sent_count * 2  # 문장당 최대 2개 괄호 / 예: 12문장이면 최대 24개 괄호 문제 + 24개 답안 박스가 생성됩니다.
     
     _safe_print("  step5: generating Lv.8 grammar...")
     prompt = f"""다음 영어 지문으로 어법 문제 2종류를 생성하세요.

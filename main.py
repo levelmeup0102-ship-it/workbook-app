@@ -325,6 +325,46 @@ async def sync_supabase(request: Request):
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+@app.post("/api/clear-cache")
+async def clear_cache(request: Request):
+    """특정 교재/지문의 step 캐시 삭제"""
+    _verify(request)
+    body = await request.json()
+    book = body.get("book")
+    unit = body.get("unit")
+    pid = body.get("passage_id")
+    scope = body.get("scope", "all")  # "all" = 교재 전체, "passage" = 특정 지문
+    
+    deleted = 0
+    
+    if scope == "passage" and all([book, unit, pid]):
+        # 특정 지문 캐시만 삭제
+        ck = _ck(book, unit, pid)
+        cache_dir = DATA_DIR / ck
+        if cache_dir.exists():
+            import shutil
+            for f in cache_dir.glob("step*.json"):
+                f.unlink()
+                deleted += 1
+            print(f"[cache] deleted {deleted} cache files for {ck}")
+    elif scope == "all" and book:
+        # 교재 전체 지문의 캐시 삭제
+        db = await _load_db()
+        if book in db.get("books", {}):
+            for u, ud in db["books"][book].get("units", {}).items():
+                for p in ud.get("passages", {}).keys():
+                    ck = _ck(book, u, p)
+                    cache_dir = DATA_DIR / ck
+                    if cache_dir.exists():
+                        for f in cache_dir.glob("step*.json"):
+                            f.unlink()
+                            deleted += 1
+        print(f"[cache] deleted {deleted} cache files for book '{book}'")
+    else:
+        raise HTTPException(400, "book 필요")
+    
+    return {"ok": True, "deleted": deleted}
+
 @app.post("/api/generate")
 async def generate(request: Request):
     _verify(request)

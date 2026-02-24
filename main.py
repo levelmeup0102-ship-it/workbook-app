@@ -190,15 +190,74 @@ async def upload_passages(request: Request):
         title = parts[i].strip()
         passage = parts[i+1].strip() if i+1 < len(parts) else ""
         if not passage: continue
-        m = re.match(r'(\d+강|SL|L\d+)\s*(.*)', title)
-        unit_name = m.group(1) if m else "etc"
-        pid = m.group(2) if m and m.group(2) else title
+        # 다양한 교재 형식 매칭: 05강, SL, L1, 1과, Lesson 1, Chapter 1, Unit 1, 1단원 등
+        m = re.match(r'(\d+강|\d+과|Lesson\s*\d+|L\d+|Chapter\s*\d+|Unit\s*\d+|\d+단원|SL)\s*(.*)', title, re.IGNORECASE)
+        unit_name = m.group(1).strip() if m else "etc"
+        pid = m.group(2).strip() if m and m.group(2).strip() else title
         if unit_name not in db["books"][book]["units"]:
             db["books"][book]["units"][unit_name] = {"passages": {}}
         db["books"][book]["units"][unit_name]["passages"][pid] = {"title": title, "text": passage}
         count += 1
     await _save_db(db)
     return {"ok": True, "count": count}
+
+@app.delete("/api/passages")
+async def delete_passage_api(request: Request):
+    """개별 지문 삭제"""
+    _verify(request)
+    body = await request.json()
+    book, unit, pid = body.get("book"), body.get("unit"), body.get("pid")
+    if not all([book, unit, pid]):
+        raise HTTPException(400, "book, unit, pid 필요")
+
+    db = await _load_db()
+    try:
+        del db["books"][book]["units"][unit]["passages"][pid]
+        # 빈 단원/교재 정리
+        if not db["books"][book]["units"][unit]["passages"]:
+            del db["books"][book]["units"][unit]
+        if not db["books"][book]["units"]:
+            del db["books"][book]
+    except KeyError:
+        raise HTTPException(404, "passage not found")
+
+    await _save_db(db)
+
+    # Supabase에서도 삭제
+    try:
+        import supa
+        if supa._enabled():
+            await supa.delete_passage(book, unit, pid)
+    except Exception as e:
+        print(f"[supa] delete error: {e}")
+
+    return {"ok": True}
+
+@app.delete("/api/books")
+async def delete_book_api(request: Request):
+    """교재 전체 삭제"""
+    _verify(request)
+    body = await request.json()
+    book = body.get("book")
+    if not book:
+        raise HTTPException(400, "book 필요")
+
+    db = await _load_db()
+    if book not in db.get("books", {}):
+        raise HTTPException(404, "book not found")
+
+    del db["books"][book]
+    await _save_db(db)
+
+    # Supabase에서도 삭제
+    try:
+        import supa
+        if supa._enabled():
+            await supa.delete_book(book)
+    except Exception as e:
+        print(f"[supa] delete book error: {e}")
+
+    return {"ok": True}
 
 @app.post("/api/generate")
 async def generate(request: Request):

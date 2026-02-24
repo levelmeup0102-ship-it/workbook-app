@@ -168,9 +168,8 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td></tr>{% endfor %}</table>
   </div>
   <p style="padding: 5px;"></p>
-  <p style="font-size:7.5pt;color:var(--text-muted);">STEP 1</p>
   <div style="font-size:13pt;font-weight:bold;color:var(--primary);border-bottom:3px solid var(--accent);padding-bottom:2px;display:inline-block;margin-bottom:4px;">Lv.1 지문 핵심 어휘</div>
-  <p style="padding: 5px;"></p>
+  <p style="font-size:7.5pt;color:var(--text-muted);">STEP 1</p>
   <table style="width:100%;border-collapse:collapse;border:1px solid var(--border-table);font-size:8pt;">
     {% for i in range(0, vocab|length, 2) %}
     <tr>
@@ -203,19 +202,19 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   </table>
   <p style="padding: 5px;"></p>
   <p style="font-size:7.5pt;color:var(--text-muted);margin-top:4px;">STEP 3</p>
-  <div style="font-size:10pt;font-weight:bold;margin-bottom:3px;">D. 틀린단어 사전 찾아 채우기</div>
+  <div style="font-size:10pt;font-weight:bold;margin-bottom:3px;">D. 틀린 단어 사전 찾아 채우기</div>
   <table style="width:100%;border-collapse:separate;border-spacing:3px;font-size:7pt;line-height:1.15;">
     {% for row in range(2) %}
     <tr>
       {% for col in range(3) %}
       <td style="width:33%;border:1px solid var(--border-table);border-radius:3px;padding:2px 4px;vertical-align:top;">
         <p><span style="color:var(--accent);font-weight:bold;">단어:</span> <span class="il" style="min-width:45px;height:10px;"></span></p>
-        <p><b>뜻</b> 1.<span class="il" style="min-width:35px;height:9px;"></span> 2.<span class="il" style="min-width:35px;height:9px;"></span> 3.<span class="il" style="min-width:35px;height:9px;"></span></p>
-        <p><b>예문</b> <span class="il" style="min-width:70px;height:9px;"></span></p>
+        <p><b>뜻</b> 1.<span class="il" style="min-width:35px;height:10px;"></span> 2.<span class="il" style="min-width:35px;height:10px;"></span> 3.<span class="il" style="min-width:35px;height:10px;"></span></p>
+        <p><b>예문</b> <span class="il" style="min-width:70px;height:10px;"></span></p>
         <p><b>영어 한글 5회</b></p>
-        <p>1.<span class="il" style="min-width:18px;height:9px;"></span>=<span class="il" style="min-width:18px;height:9px;"></span> 2.<span class="il" style="min-width:18px;height:9px;"></span>=<span class="il" style="min-width:18px;height:9px;"></span></p>
-        <p>3.<span class="il" style="min-width:18px;height:9px;"></span>=<span class="il" style="min-width:18px;height:9px;"></span> 4.<span class="il" style="min-width:18px;height:9px;"></span>=<span class="il" style="min-width:18px;height:9px;"></span></p>
-        <p>5.<span class="il" style="min-width:18px;height:9px;"></span>=<span class="il" style="min-width:18px;height:9px;"></span></p>
+        <p>1.<span class="il" style="min-width:35px;height:10px;"></span>=<span class="il" style="min-width:35px;height:10px;"></span> 2.<span class="il" style="min-width:35px;height:10px;"></span>=<span class="il" style="min-width:35px;height:10px;"></span></p>
+        <p>3.<span class="il" style="min-width:35px;height:10px;"></span>=<span class="il" style="min-width:35px;height:10px;"></span> 4.<span class="il" style="min-width:35px;height:10px;"></span>=<span class="il" style="min-width:35px;height:10px;"></span></p>
+        <p>5.<span class="il" style="min-width:35px;height:10px;"></span>=<span class="il" style="min-width:35px;height:10px;"></span></p>
       </td>
       {% endfor %}
     </tr>

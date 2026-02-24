@@ -619,6 +619,21 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
 }}"""
 
     data = call_claude_json(SYS_JSON_KR, prompt, max_tokens=4000)
+
+    # Part B 영어 선지 셔플 (번호는 오름차순 유지, 문장만 랜덤)
+    en_items = data.get("content_match_en", [])
+    en_answers = set(data.get("content_match_en_answer", []))
+    if en_items:
+        # 번호와 문장 분리
+        texts = [re.sub(r'^[①②③④⑤⑥⑦⑧⑨⑩]\s*', '', item) for item in en_items]
+        is_correct = [_CIRCLE_NUMS[i] in en_answers for i in range(len(texts))]
+        # 문장+정답 쌍을 셔플
+        pairs = list(zip(texts, is_correct))
+        random.shuffle(pairs)
+        # 번호 재부여 + 정답 갱신
+        data["content_match_en"] = [f"{_CIRCLE_NUMS[i]} {pairs[i][0]}" for i in range(len(pairs))]
+        data["content_match_en_answer"] = [_CIRCLE_NUMS[i] for i in range(len(pairs)) if pairs[i][1]]
+
     save_step(passage_dir, "step6_vocab_content", data)
     return data
 

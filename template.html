@@ -635,13 +635,14 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <div class="phase" style="color:var(--accent);">수업 후</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==9 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
   <div class="stitle" style="font-size:12pt;">Lv.9-2 내용 일치 (한국어 + 영어 - 모두 고르시오)</div>
-  <p style="padding: 5px;"></p>
+  <p style="padding: 5px;"></p> 
   <p class="slbl">STEP 1</p>
   <p style="font-size:8pt;margin-bottom:2px;">지문 구조 파악 및 정확한 해석 (영어지문 위에 직접 표시)</p>
   <div class="psg" style="font-size:8.5pt;line-height:1.45;padding:6px 8px;">{{ passage }}</div>
   <p style="padding: 5px;"></p>
   <p class="slbl mt4">STEP 2</p>
   <p style="font-size:8pt;margin-bottom:2px;">본문의 문장과 선지를 연결하여 정답 찾기</p>
+  <p style="padding: 1.5px;"></p>
   <table style="width:100%;border-collapse:collapse;font-size:8pt;">
     <tr style="vertical-align:top;">
       <td style="width:50%;padding-right:8px;">
@@ -654,7 +655,16 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       </td>
     </tr>
   </table>
-  <p class="mt3" style="font-size:8.5pt;">Part A 답: <span class="il" style="min-width:140px;"></span> &nbsp; Part B 답: <span class="il" style="min-width:140px;"></span></p>
+  <table style="width: 100%;border-collapse: collapse;">
+    <tr>
+      <td class="mt3" style="font-size:8.5pt;width: 50%;">
+        Part A 답: <span class="il" style="min-width:140px;"></span>
+      </td>
+      <td class="mt3" style="font-size:8.5pt;width: 50%;">
+        Part B 답: <span class="il" style="min-width:140px;"></span>
+      </td>
+    </tr>
+  </table>
   <p style="padding: 5px;"></p>
   <p class="slbl mt4">STEP 3</p>
   <p style="font-size:8pt;margin-bottom:2px;"><span class="b">오답정리</span></p>
@@ -664,14 +674,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       <td style="width:50%;">{% for _ in range(4) %}<p style="margin-bottom:2px;">( &nbsp; ) <span class="il" style="min-width:130px;"></span></p>{% endfor %}</td>
     </tr>
   </table>
-  <div style="border:2px solid var(--accent);border-radius:5px;padding:4px 6px;margin-top:4px;">
-    <p class="b" style="font-size:8pt;">틀린 단어 다시 정리</p>
-    <table style="width:100%;border-collapse:separate;border-spacing:2px;font-size:7.5pt;">
-      <tr>{% for _ in range(2) %}<td style="width:50%;border:1px solid var(--border-light);border-radius:2px;padding:2px 4px;">단어: <span class="il" style="min-width:40px;height:11px;"></span> 뜻: <span class="il" style="min-width:50px;height:11px;"></span></td>{% endfor %}</tr>
-      <tr>{% for _ in range(2) %}<td style="border:1px solid var(--border-light);border-radius:2px;padding:2px 4px;">단어: <span class="il" style="min-width:40px;height:11px;"></span> 뜻: <span class="il" style="min-width:50px;height:11px;"></span></td>{% endfor %}</tr>
-      <tr>{% for _ in range(2) %}<td style="border:1px solid var(--border-light);border-radius:2px;padding:2px 4px;">단어: <span class="il" style="min-width:40px;height:11px;"></span> 뜻: <span class="il" style="min-width:50px;height:11px;"></span></td>{% endfor %}</tr>
-    </table>
-  </div>
+  <p style="padding: 5px;"></p>
   <div class="solbox mt3" style="padding:4px 8px;">
     <p class="b" style="font-size:8pt;">[내용일치 솔루션]</p>
     <p style="font-size:7.5pt;"><span class="b">우리말 오답</span> = 해석 문제 → Lv.1~4로. <span class="b">영어 오답</span> = 어휘 문제 → 단어 정리 필수.</p>

@@ -15,7 +15,7 @@ def _enabled():
 def _get_client() -> httpx.AsyncClient:
     global _client
     if _client is None:
-        _client = httpx.AsyncClient(timeout=30)
+        _client = httpx.AsyncClient(timeout=60)
     return _client
 
 def _headers(extra: dict | None = None) -> dict:

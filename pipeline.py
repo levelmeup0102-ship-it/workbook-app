@@ -37,7 +37,7 @@ _ABBREVS = r'(?<!\bDr)(?<!\bMr)(?<!\bMs)(?<!\bSt)(?<!\bvs)(?<!\bNo)(?<!\bJr)(?<!
 
 def split_sentences(text: str) -> list:
     """영어 지문을 문장 단위로 분리 (경칭/약어 마침표 보호)"""
-    # 1단계: 경칭/약어의 마침표를 임시 토큰으로 치환
+    # 1단계: 경칭/약어의 마침표를 임시 토큰으로 치환 (단어 경계 기반)
     protected = text
     abbrevs = [
         'Dr.', 'Mr.', 'Ms.', 'Mrs.', 'Prof.', 'Jr.', 'Sr.', 'St.',
@@ -45,20 +45,23 @@ def split_sentences(text: str) -> list:
         'Sgt.', 'Cpl.', 'Lt.', 'Co.', 'Inc.', 'Ltd.', 'Corp.', 'Dept.',
         'Est.', 'al.', 'e.g.', 'i.e.', 'U.S.', 'U.K.', 'U.N.',
     ]
-    replacements = []
+    replacements = {}
     for ab in abbrevs:
         token = ab.replace('.', '§DOT§')
-        if ab in protected:
-            replacements.append((token, ab))
-            protected = protected.replace(ab, token)
+        # 단어 경계(\b)를 사용하여 정확한 약어만 매치
+        # 예: 'al.'은 단독 단어일 때만 (et al.), 'meal.'의 'al.'은 매치 안 됨
+        pattern = r'(?<!\w)' + re.escape(ab)
+        if re.search(pattern, protected):
+            replacements[token] = ab
+            protected = re.sub(pattern, token, protected)
     
-    # 2단계: 일반 문장 분리
-    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', protected) if s.strip()]
+    # 2단계: 일반 문장 분리 (닫는 따옴표 뒤 대문자 일반문장만 분리, 따옴표 연속은 합침)
+    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+(?=[A-Z])(?!["\u201c])|(?<=[.!?]["\u201d])\s+(?=[A-Z])(?!["\u201c])', protected) if s.strip()]
     
     # 3단계: 토큰을 원래 마침표로 복원
     restored = []
     for s in sentences:
-        for token, original in replacements:
+        for token, original in replacements.items():
             s = s.replace(token, original)
         restored.append(s)
     

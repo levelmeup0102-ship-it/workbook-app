@@ -220,6 +220,8 @@ Consumer surveys indicate that..."></textarea>
       <div class="section">
         <div class="section-title"><span class="icon">📊</span> 현재 등록된 지문</div>
         <div id="stats-list" style="font-size:13px;color:#666;">로딩 중...</div>
+        <button class="btn btn-sm" onclick="syncSupabase()" style="margin-top:8px;background:#EBF4FB;color:#4A90D9;border:1px solid #4A90D9;">🔄 수파베이스 동기화</button>
+        <div id="sync-status" style="font-size:12px;color:#666;margin-top:4px;"></div>
       </div>
     </div>
   </div>
@@ -683,6 +685,32 @@ function updateStats() {
   el.innerHTML = Object.entries(books).map(([name, info]) => 
     `<p style="margin-bottom:4px;"><strong>${name}</strong>: ${info.total}개 지문 (${info.ready}개 생성완료)</p>`
   ).join('');
+}
+
+// ============================================================
+// Sync Supabase
+// ============================================================
+async function syncSupabase() {
+  const status = document.getElementById('sync-status');
+  status.textContent = '🔄 동기화 중... (잠시 기다려주세요)';
+  status.style.color = '#4A90D9';
+  try {
+    const res = await fetch(API + '/api/sync-supabase', {
+      method: 'POST',
+      headers: headers()
+    });
+    const data = await res.json();
+    if (data.ok) {
+      status.textContent = `✅ 동기화 완료! ${data.count}/${data.total}개 전송됨`;
+      status.style.color = '#2E9E5A';
+    } else {
+      status.textContent = `❌ 실패: ${data.error}`;
+      status.style.color = '#dc2626';
+    }
+  } catch(e) {
+    status.textContent = `❌ 에러: ${e.message}`;
+    status.style.color = '#dc2626';
+  }
 }
 
 // ============================================================

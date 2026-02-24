@@ -94,8 +94,7 @@ async def _load_db():
     return {"books": {}}
 
 async def _save_db(d):
-    """Save passages - local + Supabase"""
-    # Count total passages
+    """Save passages - local + Supabase (batch)"""
     total = sum(
         len(ud.get("passages", {}))
         for bk, bd in d.get("books", {}).items()
@@ -106,7 +105,7 @@ async def _save_db(d):
     PASSAGES_FILE.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"[save_db] local file written OK")
 
-    # Also save to Supabase
+    # Also save to Supabase (배치 50개씩)
     try:
         import supa
         if supa._enabled():
@@ -120,8 +119,12 @@ async def _save_db(d):
                             "passage_text": pi.get("text", "")
                         })
             if rows:
-                print(f"[save_db] sending {len(rows)} rows to Supabase...")
-                await supa.upsert_passages_bulk(rows)
+                batch_size = 50
+                for start in range(0, len(rows), batch_size):
+                    batch = rows[start:start + batch_size]
+                    print(f"[save_db] Supabase batch {start//batch_size + 1}/{(len(rows)-1)//batch_size + 1} ({len(batch)} rows)...")
+                    await supa.upsert_passages_bulk(batch)
+                print(f"[save_db] Supabase sync done: {len(rows)} rows total")
         else:
             print("[save_db] Supabase not enabled")
     except Exception as e:
@@ -185,7 +188,10 @@ async def upload_passages(request: Request):
     db = await _load_db()
     if book not in db["books"]:
         db["books"][book] = {"units": {}}
+    
     count = 0
+    new_rows = []  # 새로 추가된 지문만 모으기
+    
     for i in range(1, len(parts), 2):
         title = parts[i].strip()
         passage = parts[i+1].strip() if i+1 < len(parts) else ""
@@ -197,8 +203,32 @@ async def upload_passages(request: Request):
         if unit_name not in db["books"][book]["units"]:
             db["books"][book]["units"][unit_name] = {"passages": {}}
         db["books"][book]["units"][unit_name]["passages"][pid] = {"title": title, "text": passage}
+        new_rows.append({
+            "book": book, "unit": unit_name, "pid": pid,
+            "title": title, "passage_text": passage
+        })
         count += 1
-    await _save_db(db)
+    
+    # 로컬 저장
+    PASSAGES_FILE.write_text(json.dumps(db, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"[upload] local file written OK ({count} new passages)")
+    
+    # 수파베이스에 새 지문만 보내기 (배치 50개씩)
+    if new_rows:
+        try:
+            import supa
+            if supa._enabled():
+                batch_size = 50
+                for start in range(0, len(new_rows), batch_size):
+                    batch = new_rows[start:start + batch_size]
+                    print(f"[upload] sending batch {start//batch_size + 1} ({len(batch)} rows) to Supabase...")
+                    await supa.upsert_passages_bulk(batch)
+                print(f"[upload] Supabase sync done: {len(new_rows)} rows")
+            else:
+                print("[upload] Supabase not enabled")
+        except Exception as e:
+            print(f"[upload] Supabase save error: {e}")
+    
     return {"ok": True, "count": count}
 
 @app.delete("/api/passages")
@@ -258,6 +288,42 @@ async def delete_book_api(request: Request):
         print(f"[supa] delete book error: {e}")
 
     return {"ok": True}
+
+@app.post("/api/sync-supabase")
+async def sync_supabase(request: Request):
+    """로컬 DB를 수파베이스에 강제 동기화"""
+    _verify(request)
+    try:
+        import supa
+        if not supa._enabled():
+            return {"ok": False, "error": "Supabase not enabled"}
+        
+        db = await _load_db()
+        rows = []
+        for bk, bd in db.get("books", {}).items():
+            for unit, ud in bd.get("units", {}).items():
+                for pid, pi in ud.get("passages", {}).items():
+                    rows.append({
+                        "book": bk, "unit": unit, "pid": pid,
+                        "title": pi.get("title", pid),
+                        "passage_text": pi.get("text", "")
+                    })
+        
+        if not rows:
+            return {"ok": True, "count": 0}
+        
+        # 배치 50개씩 전송
+        batch_size = 50
+        success = 0
+        for start in range(0, len(rows), batch_size):
+            batch = rows[start:start + batch_size]
+            result = await supa.upsert_passages_bulk(batch)
+            if isinstance(result, list):
+                success += len(result)
+        
+        return {"ok": True, "count": success, "total": len(rows)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 @app.post("/api/generate")
 async def generate(request: Request):

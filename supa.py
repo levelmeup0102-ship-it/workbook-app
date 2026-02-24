@@ -7,16 +7,8 @@ import httpx
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
-_client: httpx.AsyncClient | None = None
-
 def _enabled():
     return bool(SUPABASE_URL and SUPABASE_KEY)
-
-def _get_client() -> httpx.AsyncClient:
-    global _client
-    if _client is None:
-        _client = httpx.AsyncClient(timeout=60)
-    return _client
 
 def _headers(extra: dict | None = None) -> dict:
     h = {
@@ -30,15 +22,15 @@ def _headers(extra: dict | None = None) -> dict:
     return h
 
 async def _request(method: str, endpoint: str, body=None, extra_headers: dict | None = None):
-    """Async HTTP call to Supabase REST API"""
+    """Async HTTP call to Supabase REST API - fresh client each time to avoid Event loop closed"""
     if not _enabled():
         return None
     url = f"{SUPABASE_URL}/rest/v1/{endpoint}"
     headers = _headers(extra_headers)
-    client = _get_client()
     try:
-        resp = await client.request(method, url, headers=headers,
-                                    content=json.dumps(body, ensure_ascii=False) if body is not None else None)
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.request(method, url, headers=headers,
+                                        content=json.dumps(body, ensure_ascii=False) if body is not None else None)
         raw = resp.text.strip()
         if not raw:
             print(f"[supa] empty response for {method} {endpoint}")

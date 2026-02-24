@@ -174,10 +174,10 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     {% for i in range(0, vocab|length, 2) %}
     <tr>
       <td style="width:28%;padding:2px 4px;border:1px solid var(--border-table);vertical-align:top;"><span style="font-weight:bold;font-size:8.5pt;">{{ vocab[i].word }}</span><br><span style="font-size:6.5pt;color:var(--text-muted);">{{ vocab[i].synonyms }}</span></td>
-      <td style="width:22%;padding:2px 4px;border:1px solid var(--border-table);text-align:right;font-size:8.5pt;">{{ vocab[i].meaning }}</td>
+      <td style="width:22%;padding:2px 4px;border:1px solid var(--border-table);text-align:left;font-size:8.5pt;">{{ vocab[i].meaning }}</td>
       {% if i+1 < vocab|length %}
       <td style="width:28%;padding:2px 4px;border:1px solid var(--border-table);vertical-align:top;"><span style="font-weight:bold;font-size:8.5pt;">{{ vocab[i+1].word }}</span><br><span style="font-size:6.5pt;color:var(--text-muted);">{{ vocab[i+1].synonyms }}</span></td>
-      <td style="width:22%;padding:2px 4px;border:1px solid var(--border-table);text-align:right;font-size:8.5pt;">{{ vocab[i+1].meaning }}</td>
+      <td style="width:22%;padding:2px 4px;border:1px solid var(--border-table);text-align:left;font-size:8.5pt;">{{ vocab[i+1].meaning }}</td>
       {% else %}<td style="border:1px solid var(--border-table);"></td><td style="border:1px solid var(--border-table);"></td>{% endif %}
     </tr>{% endfor %}
   </table>

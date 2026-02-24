@@ -189,6 +189,9 @@ textarea:focus { border-color: #4A90D9; outline: none; }
         <button class="btn btn-primary" id="btn-generate" onclick="doGenerate()" disabled>
           워크북 생성하기
         </button>
+        <button class="btn btn-sm" id="btn-clear-passage-cache" onclick="clearPassageCache()" style="margin-left:8px;background:#FFF8F0;color:#E8833A;border:1px solid #E8833A;display:none;">
+          🗑️ 선택 지문 캐시 삭제
+        </button>
         <div class="progress hidden" id="progress">
           <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
           <div class="progress-text" id="progress-text">준비 중...</div>
@@ -455,11 +458,13 @@ function getSelectedLevels() {
 // ============================================================
 function updateGenerateBtn() {
   const btn = document.getElementById('btn-generate');
+  const cacheBtn = document.getElementById('btn-clear-passage-cache');
   const levels = getSelectedLevels();
   btn.disabled = selectedPassages.size === 0 || levels.length === 0;
   btn.textContent = selectedPassages.size > 0 
     ? `워크북 생성하기 (${selectedPassages.size}개 지문)` 
     : '워크북 생성하기';
+  if (cacheBtn) cacheBtn.style.display = selectedPassages.size > 0 ? 'inline-block' : 'none';
 }
 
 async function doGenerate() {
@@ -712,6 +717,30 @@ async function syncSupabase() {
     status.textContent = `❌ 에러: ${e.message}`;
     status.style.color = '#dc2626';
   }
+}
+
+async function clearPassageCache() {
+  const passages = [...selectedPassages.values()];
+  if (passages.length === 0) { alert('지문을 먼저 선택해주세요.'); return; }
+  
+  if (!confirm(`선택한 ${passages.length}개 지문의 캐시를 삭제하시겠습니까?\n삭제 후 워크북을 다시 생성하면 문제가 새로 만들어집니다.`)) return;
+  
+  const status = document.getElementById('sync-status');
+  let totalDeleted = 0;
+  
+  for (const p of passages) {
+    try {
+      const res = await fetch(API + '/api/clear-cache', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ book: p.book, unit: p.unit, passage_id: p.id, scope: 'passage' })
+      });
+      const data = await res.json();
+      if (data.ok) totalDeleted += data.deleted;
+    } catch(e) { console.error(e); }
+  }
+  
+  alert(`✅ 캐시 삭제 완료! ${totalDeleted}개 파일 삭제됨.\n워크북을 다시 생성하세요.`);
 }
 
 async function clearCacheUI() {

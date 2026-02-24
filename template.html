@@ -375,7 +375,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <p style="padding: 5px;"></p>
   <div class="warnbox" style="margin-top:4px;padding:6px 10px;">
     <p class="warnt" style="font-size:10pt;">!! WARNING - YOU DIED</p>
-    <p style="font-size:8pt;margin-top:2px;">순서/삽입을 틀렸다면, <span class="b">Lv.4 구조 정리</span>가 아직 완전하지 않다는 뜻입니다. Lv.4로 돌아가세요.</p>
+    <p style="font-size:8pt;margin-top:2px;">순서/삽입을 틀렸다면, <span class="b">Lv.4 구조 정리</span>가 아직 완전하지 않다는 뜻입니다. <strong>Lv.4로 돌아가세요.</strong></p>
   </div>
   <div class="pn">6</div>
 </div>
@@ -397,17 +397,23 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       {% else %}<td></td>{% endif %}
     </tr>{% endfor %}
   </table>
-  <p class="mt8 tc b" style="font-size:10pt;">{% for _ in full_order_blocks %}( &nbsp;&nbsp; ){% if not loop.last %} - {% endif %}{% endfor %}</p>
-  <p style="font-size:8.5pt;color:var(--accent);margin-top:6px;">순서를 틀렸다면 → <span style="color:var(--primary);font-weight:bold;">아래 오답정리를 반드시 작성한 뒤</span>, Lv.4로 돌아가 체크리스트를 따라 재학습하시오.</p>
+  <p class="mt8 tc b" style="font-size:10pt;margin-top: 10px;">{% for _ in full_order_blocks %}( &nbsp;&nbsp; ){% if not loop.last %} - {% endif %}{% endfor %}</p>
+  <div class="warnbox" style="margin-top:10px;padding:6px 10px;">
+    <p style="font-size:8.5pt;color:var(--accent);">• 순서를 틀렸다면 → <span style="color:var(--primary);font-weight:bold;">아래 오답정리를 반드시 작성한 뒤</span>, Lv.4로 돌아가 체크리스트를 따라 재학습하시오.</p>
+  </div>
   <p style="padding: 5px;"></p>
   <p class="b mt8 mb4" style="font-size:10pt;color:var(--accent);">오답 정리 — 정답 순서대로 한 줄 요약</p>
   <p style="font-size:8pt;color:var(--text-muted);margin-bottom:4px;">틀린 경우, 정답 순서의 기호를 왼쪽에 적고 → 오른쪽에 그 문장 내용을 한국말로 한 줄 요약하세요.</p>
   {% for _ in full_order_blocks %}
   <p style="font-size:9pt;margin-bottom:5px;">( &nbsp;&nbsp; ) : <span class="il" style="min-width:320px;"></span></p>{% endfor %}
   <p style="padding: 2.5px;"></p>
-  <div class="solbox mt8">
-    <p class="b" style="font-size:10pt;">📌 순서배열 솔루션</p>
-    {% for n in range(1,5) %}<p>Step {{ n }}. <span class="il" style="min-width:280px;"></span></p>{% endfor %}
+  <div class="solbox mt8" style="border-radius:4px;padding:10px 14px;margin-top:12px;min-height:140px;break-inside:avoid;">
+    <p style="font-size:10pt;font-weight:bold;color:var(--primary);margin-bottom:8px;">📌 순서배열 솔루션 ( 스스로 방법 정리 )</p>
+    <div style="border-bottom:1px dashed var(--border-dotted);height:22px;margin-bottom:0;"></div>
+    <div style="border-bottom:1px dashed var(--border-dotted);height:22px;margin-bottom:0;"></div>
+    <div style="border-bottom:1px dashed var(--border-dotted);height:22px;margin-bottom:0;"></div>
+    <div style="border-bottom:1px dashed var(--border-dotted);height:22px;margin-bottom:0;"></div>
+    <div style="border-bottom:1px dashed var(--border-dotted);height:22px;margin-bottom:0;"></div>
   </div>
   <div class="pn">7</div>
 </div>

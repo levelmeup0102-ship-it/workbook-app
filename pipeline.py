@@ -30,6 +30,41 @@ def _safe_print(msg):
         pass
 
 # ============================================================
+# 문장 분리 (Dr. Mr. Ms. Mrs. Prof. etc. 경칭 보호)
+# ============================================================
+# 마침표 뒤 공백에서 분리하되, 경칭/약어 뒤는 분리하지 않음
+_ABBREVS = r'(?<!\bDr)(?<!\bMr)(?<!\bMs)(?<!\bSt)(?<!\bvs)(?<!\bNo)(?<!\bJr)(?<!\bSr)(?<!\bet)(?<!\bMrs)(?<!\bal)(?<!\bProf)(?<!\bGen)(?<!\bGov)(?<!\bSgt)(?<!\bCpl)(?<!\bLt)(?<!\bCo)(?<!\bInc)(?<!\bLtd)(?<!\bCorp)(?<!\bDept)(?<!\bEst)(?<!\bFig)(?<!\bVol)(?<!\bRev)'
+
+def split_sentences(text: str) -> list:
+    """영어 지문을 문장 단위로 분리 (경칭/약어 마침표 보호)"""
+    # 1단계: 경칭/약어의 마침표를 임시 토큰으로 치환
+    protected = text
+    abbrevs = [
+        'Dr.', 'Mr.', 'Ms.', 'Mrs.', 'Prof.', 'Jr.', 'Sr.', 'St.',
+        'vs.', 'etc.', 'No.', 'Vol.', 'Fig.', 'Gen.', 'Gov.', 'Rev.',
+        'Sgt.', 'Cpl.', 'Lt.', 'Co.', 'Inc.', 'Ltd.', 'Corp.', 'Dept.',
+        'Est.', 'al.', 'e.g.', 'i.e.', 'U.S.', 'U.K.', 'U.N.',
+    ]
+    replacements = []
+    for ab in abbrevs:
+        token = ab.replace('.', '§DOT§')
+        if ab in protected:
+            replacements.append((token, ab))
+            protected = protected.replace(ab, token)
+    
+    # 2단계: 일반 문장 분리
+    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', protected) if s.strip()]
+    
+    # 3단계: 토큰을 원래 마침표로 복원
+    restored = []
+    for s in sentences:
+        for token, original in replacements:
+            s = s.replace(token, original)
+        restored.append(s)
+    
+    return restored
+
+# ============================================================
 # Claude API call (curl subprocess - ONLY method that bypasses Python latin-1)
 # ============================================================
 API_URL = "https://api.anthropic.com/v1/messages"
@@ -253,7 +288,7 @@ def step1_basic_analysis(passage: str, passage_dir: Path) -> dict:
         _safe_print("  step1: using cache")
         return cached
 
-    sentences_regex = [s.strip() for s in re.split(r'(?<=[.!?])\s+', passage) if s.strip()]
+    sentences_regex = split_sentences(passage)
     sent_count = len(sentences_regex)
 
     _safe_print("  step1: basic analysis...")
@@ -518,7 +553,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
         _safe_print("  step5: using cache")
         return cached
 
-    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', passage) if s.strip()]
+    sentences = split_sentences(passage)
     sent_count = len(sentences)
     error_count = min(8, sent_count)  # 문장 수보다 많은 오류 불가
     bracket_count = min(20, sent_count * 2)  # 문장당 최대 2개 괄호
@@ -564,7 +599,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     # 🔒 검증: 문장 수 체크
     for key in ['grammar_bracket_passage', 'grammar_error_passage']:
         gen_text = data.get(key, '')
-        gen_sents = len([s for s in re.split(r'(?<=[.!?])\s+', gen_text) if s.strip()])
+        gen_sents = len(split_sentences(gen_text))
         if gen_sents > sent_count + 1:
             _safe_print(f"  WARNING: {key}: {gen_sents} sentences (original {sent_count}), retrying...")
             cache_path = passage_dir / "step5_grammar.json"
@@ -886,7 +921,7 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
     _safe_print(f"Processing: {passage_id} ({meta.get('challenge_title','')})")
     _safe_print(f"{'='*50}")
 
-    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', passage) if s.strip()]
+    sentences = split_sentences(passage)
     all_steps = {}
 
     # Step 1: 기본 분석

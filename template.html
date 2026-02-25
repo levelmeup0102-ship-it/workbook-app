@@ -562,16 +562,23 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <p class="slbl mt8">STEP 2</p>
   <p style="font-size:9.5pt;margin-bottom:4px;"><span class="b">답안 작성 및 오답정리</span> (올바른 표현으로 고치지 못한 경우에도 무조건 오답정리)</p>
   <table style="width:100%;border-collapse:separate;border-spacing:4px;font-size:9pt;">
-    {% for i in range(0, grammar_error_count, 2) %}
+    {% for i in range(0, grammar_error_count, 3) %}
     <tr style="break-inside: avoid;">
-      <td style="width:50%;border:1px solid var(--border-light);border-radius:3px;padding:5px 8px;vertical-align:top;">
+      <td style="width:33%;border:1px solid var(--border-light);border-radius:3px;padding:5px 8px;vertical-align:top;">
         <p><span class="grammar-num">({{ i+1 }})</span> <span class="il" style="min-width:60px;border-color:var(--primary);"></span> <span style="color:var(--accent);font-weight:bold;">→</span> <span class="il" style="min-width:60px;border-color:var(--accent);"></span></p>
         <p style="color:var(--text-muted);font-size:8.5pt;">틀린 이유: <span class="il" style="min-width:100px;"></span></p>
         <p style="color:var(--text-muted);font-size:8.5pt;">문법 바로잡기: <span class="il" style="min-width:100px;"></span></p>
       </td>
       {% if i+1 < grammar_error_count %}
-      <td style="width:50%;border:1px solid var(--border-light);border-radius:3px;padding:5px 8px;vertical-align:top;">
+      <td style="width:33%;border:1px solid var(--border-light);border-radius:3px;padding:5px 8px;vertical-align:top;">
         <p><span class="grammar-num">({{ i+2 }})</span> <span class="il" style="min-width:60px;border-color:var(--primary);"></span> <span style="color:var(--accent);font-weight:bold;">→</span> <span class="il" style="min-width:60px;border-color:var(--accent);"></span></p>
+        <p style="color:var(--text-muted);font-size:8.5pt;">틀린 이유: <span class="il" style="min-width:100px;"></span></p>
+        <p style="color:var(--text-muted);font-size:8.5pt;">문법 바로잡기: <span class="il" style="min-width:100px;"></span></p>
+      </td>
+      {% else %}<td></td>{% endif %}
+      {% if i+2 < grammar_error_count %}
+      <td style="width:33%;border:1px solid var(--border-light);border-radius:3px;padding:5px 8px;vertical-align:top;">
+        <p><span class="grammar-num">({{ i+3 }})</span> <span class="il" style="min-width:60px;border-color:var(--primary);"></span> <span style="color:var(--accent);font-weight:bold;">→</span> <span class="il" style="min-width:60px;border-color:var(--accent);"></span></p>
         <p style="color:var(--text-muted);font-size:8.5pt;">틀린 이유: <span class="il" style="min-width:100px;"></span></p>
         <p style="color:var(--text-muted);font-size:8.5pt;">문법 바로잡기: <span class="il" style="min-width:100px;"></span></p>
       </td>

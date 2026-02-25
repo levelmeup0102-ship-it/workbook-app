@@ -600,11 +600,13 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <div class="stitle" style="font-size:15pt;">Stage 8-3 어법 최종 체크</div>
   <p style="padding: 5px;"></p>
   <p style="font-size:9.5pt;margin-bottom:10px;">각 단어들의 문법적 표현 중 명확한 이유를 모르는 단어 아래에 <span style="color:var(--red);font-weight:bold;">빨간 형광</span> 치기. 그 밑의 여백에 중요 문법을 직접 써 보세요.</p>
-  <div class="psg" style="line-height:2.8;font-size:11pt;">{{ passage }}</div>
-  <p style="padding: 5px;"></p>
-  <div class="encbox mt12">
-    <p class="b">⚡ 어법 유형 솔루션</p>
-    <p style="font-size:9.5pt;">문법적 이해 없이 단순 암기로 푸는 건 변형 시 <span class="b">반드시 틀립니다.</span><br>1회독 때 문법을 정리하지 않으면 시험 전 정리할 시간은 <span class="b">절대 없습니다.</span><br>모르겠으면 <span class="b" style="color:var(--red);">제발 물어보세요.</span> 모르는 채로 넘어가는 게 가장 위험합니다.</p>
+  <div id="lv83-content">
+    <div id="lv83-psg" class="psg" style="line-height:2.8;font-size:11pt;orphans:2;widows:2;">{{ passage }}</div>
+    <p style="padding: 5px;"></p>
+    <div class="encbox mt12">
+      <p class="b">⚡ 어법 유형 솔루션</p>
+      <p style="font-size:9.5pt;">문법적 이해 없이 단순 암기로 푸는 건 변형 시 <span class="b">반드시 틀립니다.</span><br>1회독 때 문법을 정리하지 않으면 시험 전 정리할 시간은 <span class="b">절대 없습니다.</span><br>모르겠으면 <span class="b" style="color:var(--red);">제발 물어보세요.</span> 모르는 채로 넘어가는 게 가장 위험합니다.</p>
+    </div>
   </div>
 </div>
 
@@ -744,5 +746,47 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 </div>
 
 {% endif %}
+<script>
+(function(){
+  var A4_PX=1123,MARGIN_PX=96,PRINTABLE=A4_PX-MARGIN_PX*2;
+  var MIN_FONT=9,MIN_LH=1.8;
+  var origFont='',origLH='';
+
+  window.addEventListener('beforeprint',function(){
+    var wrap=document.getElementById('lv83-content');
+    var psg=document.getElementById('lv83-psg');
+    if(!wrap||!psg)return;
+
+    origFont=psg.style.fontSize;
+    origLH=psg.style.lineHeight;
+
+    var page=wrap.closest('.page');
+    if(!page)return;
+
+    var pageTop=page.offsetTop;
+    var font=11,lh=2.8;
+
+    while(font>=MIN_FONT){
+      psg.style.fontSize=font+'pt';
+      psg.style.lineHeight=String(lh);
+      var pageBottom=pageTop+page.offsetHeight;
+      var usedPages=Math.ceil((pageBottom-pageTop)/PRINTABLE);
+      if(usedPages<=1)return;
+      font-=0.5;
+      lh=Math.max(MIN_LH,lh-0.2);
+    }
+
+    psg.style.fontSize=origFont;
+    psg.style.lineHeight=origLH;
+  });
+
+  window.addEventListener('afterprint',function(){
+    var psg=document.getElementById('lv83-psg');
+    if(!psg)return;
+    psg.style.fontSize=origFont;
+    psg.style.lineHeight=origLH;
+  });
+})();
+</script>
 </body>
 </html>

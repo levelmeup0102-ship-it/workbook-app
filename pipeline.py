@@ -4,6 +4,8 @@ PIPELINE_VERSION = "v9-curl-final"
 import asyncio, json, os, sys, time, random, re, math, logging
 
 logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s] %(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger("pipeline")
 from pathlib import Path
 
@@ -880,8 +882,8 @@ def merge_to_template_data(passage: str, meta: dict, all_steps: dict) -> dict:
         "test_b": s1.get("test_b", []),
         "test_c": s1.get("test_c", []),
         # Lv.3 문장분석 (전체 문장) + 핵심문장
-        "sentences": (lambda s: (logger.debug(f"[merge] sentences 개수: {len(s)}"), s)[1])(s1.get("sentences", [])),
-        "sentence_chunks": (lambda c: (logger.debug(f"[merge] sentence_chunks: {len(c)}페이지, 각 {[len(x) for x in c]}개"), c)[1])(_split_sentences_chunks(s1.get("sentences", []))),
+        "sentences": s1.get("sentences", []),
+        "sentence_chunks": _split_sentences_chunks(s1.get("sentences", [])),
         "key_sentences": s1.get("key_sentences", []),
         # Lv.5 순서/삽입
         "order_intro": s2.get("order_intro", ""),

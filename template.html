@@ -201,22 +201,22 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <p style="font-size:7.5pt;color:var(--text-muted);margin-top:4px;">STEP 3</p>
   <div style="font-size:10pt;font-weight:bold;margin-bottom:3px;">D. 틀린 단어 사전 찾아 채우기</div>
   <table style="width:100%;border-collapse:separate;border-spacing:3px;font-size:7pt;line-height:1.15;">
-    {% for row in range(2) %}
     <tr>
-      {% for col in range(2) %}
-      <td style="width:50%;border:1px solid var(--border-table);border-radius:3px;padding:2px 4px;vertical-align:top;">
+      {% for col in range(3) %}
+      <td style="width:33%;border:1px solid var(--border-table);border-radius:3px;padding:2px 4px;vertical-align:top;">
         <p><span style="color:var(--accent);font-weight:bold;">단어:</span> <span class="il" style="min-width:45px;height:10px;"></span></p>
-        <p><b>뜻</b> 1.<span class="il" style="min-width:35px;height:10px;"></span> 2.<span class="il" style="min-width:35px;height:10px;"></span> 3.<span class="il" style="min-width:35px;height:10px;"></span></p>
-        <p><b>예문</b> <span class="il" style="min-width:70px;height:10px;"></span></p>
-        <p><b>영어 한글 5회</b></p>
-        <p>1.<span class="il" style="min-width:35px;height:10px;"></span>=<span class="il" style="min-width:35px;height:10px;"></span> 2.<span class="il" style="min-width:35px;height:10px;"></span>=<span class="il" style="min-width:35px;height:10px;"></span></p>
-        <p>3.<span class="il" style="min-width:35px;height:10px;"></span>=<span class="il" style="min-width:35px;height:10px;"></span> 4.<span class="il" style="min-width:35px;height:10px;"></span>=<span class="il" style="min-width:35px;height:10px;"></span></p>
-        <p>5.<span class="il" style="min-width:35px;height:10px;"></span>=<span class="il" style="min-width:35px;height:10px;"></span></p>
+        <p><b style="width: 10%;">뜻</b> 1.<span class="il" style="width: 30%;height:10px;"></span> 2.<span class="il" style="width: 30%;height:10px;"></span> 3.<span class="il" style="width: 30%;height:10px;"></span></p>
+        <p><b style="width: 10%;">예문</b> <span class="il" style="width: 92.7%;height:10px;"></span></p>
       </td>
       {% endfor %}
     </tr>
-    {% endfor %}
+  <p style="padding: 5px;"></p>
   </table>
+  <div class="warnbox" style="margin-top:5px;padding:6px 10px;">
+    <p class="b" style="font-size:8pt;">[핵심 어휘 솔루션]</p>
+    <p style="font-size:8pt;margin-top:2px;">• Step 1: 처음 학습시, <strong>지문 핵심 어휘</strong>의 뜻 위주로 학습.</p>
+    <p style="font-size:8pt;margin-top:2px;">• Step 2: 단어와 뜻이 연상되면 동의어를 참고하여 단어 연상 학습.</p>
+  </div>
 </div>
 
 {% endif %}

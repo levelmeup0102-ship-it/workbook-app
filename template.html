@@ -246,7 +246,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <p style="font-size:8pt;color:var(--text-muted);margin-bottom:4px;"><span class="b">Step 1.</span> 형광 친 단어 옮겨 적기 → <span class="b">Step 2.</span> 사전 검색 후 뜻/동의어 정리</p>
     <table style="width:100%;border-collapse:separate;border-spacing:4px;font-size:8pt;line-height:1.3;">
       {% for row in range(4) %}
-      <tr>
+      <tr style="break-inside:avoid;">
         {% for col in range(2) %}
         <td style="width:50%;border:1px solid var(--border-light);border-radius:3px;padding:3px 6px;vertical-align:top;">
           <p><span style="color:var(--accent);font-weight:bold;">단어:</span> <span class="il" style="min-width:70px;height:13px;"></span></p>
@@ -322,10 +322,12 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <p class="mt4">영어:</p><div class="ilf" style="height:22px;"></div>
   </div>
   <p style="padding: 5px;"></p>
-  <p class="slbl mt8">STEP 3</p>
-  <p class="sttl">나만의 흐름 구조화 하기</p>
-  <div style="border:1px solid var(--border-light);border-radius:4px;padding:10px 14px;min-height:200px;">
-    <p style="font-size:9pt;color:var(--text-muted);">자유롭게 글의 흐름을 나만의 방식으로 정리하세요. (그림, 화살표, 마인드맵, 메모 등 자유 형식)</p>
+  <div style="break-inside: avoid;">
+    <p class="slbl mt8">STEP 3</p>
+    <p class="sttl">나만의 흐름 구조화 하기</p>
+    <div style="border:1px solid var(--border-light);border-radius:4px;padding:10px 14px;min-height:200px;">
+      <p style="font-size:9pt;color:var(--text-muted);">자유롭게 글의 흐름을 나만의 방식으로 정리하세요. (그림, 화살표, 마인드맵, 메모 등 자유 형식)</p>
+    </div>
   </div>
 </div>
 
@@ -354,7 +356,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   </div>
   <p style="padding: 1.5px;"></p>
   <p style="font-size:8.5pt;margin:3px 0;">{% for opt in order_choices %}{{ opt }} &nbsp;{% endfor %}</p>
-  <table style="width:100%;border-collapse:collapse;font-size:8pt;margin:3px 0;border:1px solid var(--border-light);">
+  <table style="width:100%;border-collapse:collapse;font-size:8pt;margin:3px 0;border:1px solid var(--border-light);break-inside: avoid;">
     <tr><td style="width:35px;padding:2px 4px;border:1px solid var(--border-light);font-weight:bold;">1차</td><td style="padding:2px 4px;border:1px solid var(--border-light);color:var(--text-muted);">메모:</td></tr>
     <tr><td style="padding:2px 4px;border:1px solid var(--border-light);font-weight:bold;">2차</td><td style="padding:2px 4px;border:1px solid var(--border-light);color:var(--text-muted);">메모:</td></tr>
   </table>
@@ -363,7 +365,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <p style="font-size:8pt;margin-bottom:2px;">주어진 문장이 들어가기에 가장 적절한 곳을 고르시오.</p>
   <div class="psg" style="font-size:8pt;padding:4px 8px;background:#eee;border:1px solid #ccc;line-height:1.45;">{{ insert_sentence }}</div>
   <div class="psg" style="font-size:8pt;padding:5px 8px;margin-top:2px;line-height:1.45;">{{ insert_passage }}</div>
-  <table style="width:100%;border-collapse:collapse;font-size:8pt;margin:3px 0;border:1px solid var(--border-light);">
+  <table style="width:100%;border-collapse:collapse;font-size:8pt;margin:3px 0;border:1px solid var(--border-light);break-inside: avoid;">
     <tr><td style="width:35px;padding:2px 4px;border:1px solid var(--border-light);font-weight:bold;">1차</td><td style="padding:2px 4px;border:1px solid var(--border-light);color:var(--text-muted);">메모:</td></tr>
     <tr><td style="padding:2px 4px;border:1px solid var(--border-light);font-weight:bold;">2차</td><td style="padding:2px 4px;border:1px solid var(--border-light);color:var(--text-muted);">메모:</td></tr>
   </table>

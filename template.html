@@ -437,9 +437,9 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <table style="width:100%;border-collapse:collapse;font-size:9pt;">
     {% for i in range(0, full_order_blocks|length, 2) %}
     <tr>
-      <td style="width:50%;padding-right:8px;padding-bottom:5px;">( &nbsp;&nbsp; ) : <span class="il" style="min-width:180px;"></span></td>
+      <td style="width:50%;padding-right:8px;padding-bottom:5px;">( &nbsp;&nbsp; ) : <span class="il" style="width: 80%;"></span></td>
       {% if i+1 < full_order_blocks|length %}
-      <td style="width:50%;padding-bottom:5px;">( &nbsp;&nbsp; ) : <span class="il" style="min-width:180px;"></span></td>
+      <td style="width:50%;padding-bottom:5px;">( &nbsp;&nbsp; ) : <span class="il" style="width: 80%;"></span></td>
       {% else %}<td></td>{% endif %}
     </tr>
     {% endfor %}

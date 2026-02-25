@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Workbook generation pipeline"""
 PIPELINE_VERSION = "v9-curl-final"
-import asyncio, json, os, sys, time, random, re
+import asyncio, json, os, sys, time, random, re, math
 from pathlib import Path
 
 # ============================================================
@@ -827,6 +827,21 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
     save_step(passage_dir, "step8_answers", data)
     return data
 
+def _split_sentences_chunks(sentences: list, max_per_page: int = 8) -> list:
+    """문장 리스트를 균등 분배하여 페이지별 청크로 나눈다."""
+    total = len(sentences)
+    if total <= max_per_page:
+        return [sentences]
+    num_pages = math.ceil(total / max_per_page)
+    base = total // num_pages
+    extra = total % num_pages
+    sizes = [base + 1] * extra + [base] * (num_pages - extra)
+    chunks, idx = [], 0
+    for size in sizes:
+        chunks.append(sentences[idx:idx + size])
+        idx += size
+    return chunks
+
 # ============================================================
 # 전체 데이터 → 템플릿 변수로 변환
 # ============================================================
@@ -858,6 +873,7 @@ def merge_to_template_data(passage: str, meta: dict, all_steps: dict) -> dict:
         "test_c": s1.get("test_c", []),
         # Lv.3 문장분석 (전체 문장) + 핵심문장
         "sentences": s1.get("sentences", []),
+        "sentence_chunks": _split_sentences_chunks(s1.get("sentences", [])),
         "key_sentences": s1.get("key_sentences", []),
         # Lv.5 순서/삽입
         "order_intro": s2.get("order_intro", ""),

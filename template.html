@@ -269,12 +269,14 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 {% endif %}
 {% if not levels or 3 in levels %}
 {# ==================== PAGE 4: Lv.3 ==================== #}
-{% if sentences|length <= 8 %}
-{# --- 짧은 지문: 1페이지 --- #}
+{# --- Lv.3: 동적 페이지 분할 --- #}
+{% set ns = namespace(offset=0) %}
+{% for chunk in sentence_chunks %}
 <div class="page" style="font-size:10pt;">
   <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
   <div class="phase" style="color:var(--green);">수업 중</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==3 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
+  {% if loop.first %}
   <div class="ckl">
     <div class="ckl-t">[수업 중 체크리스트 - Stage 3]</div>
     <table><tr><td></td><td class="cc">1차</td><td class="cc">2차</td><td class="cc">3차</td></tr>
@@ -286,52 +288,22 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <div style="height:5px;"></div>
   <p class="slbl">STEP 1</p>
   <p style="font-size:9pt;margin-bottom:8px;">문장의 기본 구성요소(S/V/O/C)를 표시한 후, 수업을 들으며 중요한 표현을 필기하시오.</p>
-  {% for sent in sentences %}
-  <p style="margin-bottom:28px;font-size:10pt;break-inside:avoid;"><strong>{{ loop.index }}.</strong> {{ sent }}</p>
+  {% else %}
+  <p class="slbl">STEP 1 (계속)</p>
+  {% endif %}
+  {% for sent in chunk %}
+  <p style="margin-bottom:28px;font-size:10pt;break-inside:avoid;"><strong>{{ ns.offset + loop.index }}.</strong> {{ sent }}</p>
   {% endfor %}
+  {% set ns.offset = ns.offset + chunk|length %}
+  {% if loop.last %}
   <div class="warnbox" style="margin-top:4px;padding:6px 10px;">
     <p class="b" style="font-size:8pt;">[문장 분석 솔루션]</p>
     <p style="font-size:7.5pt;">• Step1: 수업 중, 중요한 문법 강조 사항을 정독하며 <u>설명할 수 있는 수준으로</u> 이해가 되었는지 확인하세요!</p>
     <p style="font-size:7.5pt;">• Step2: 추가로 정리할 사항은 하단에 작성해보세요! </p>
   </div>
+  {% endif %}
 </div>
-{% else %}
-{# --- 긴 지문: 2페이지 --- #}
-{% set half = (sentences|length + 1) // 2 %}
-<div class="page" style="font-size:10pt;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
-  <div class="phase" style="color:var(--green);">수업 중</div>
-  <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==3 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
-  <div class="ckl">
-    <div class="ckl-t">[수업 중 체크리스트 - Stage 3]</div>
-    <table><tr><td></td><td class="cc">1차</td><td class="cc">2차</td><td class="cc">3차</td></tr>
-    {% for s in ["Step 1. 해석 — 단어+문법으로 정확하게 해석하기","Step 2. 이해 — 나만의 예시로 문장 내용 확실히 이해하기","Step 3. 추론 — 다음에 나올 내용 예측 → 다음 문장에서 확인","Step 4. 반복 — 모든 문장에 해석→이해→추론 반복"] %}
-    <tr><td><span class="sn">{{ s.split('.')[0] }}.</span> {{ s.split('. ',1)[1] }}</td>
-    <td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td></tr>{% endfor %}</table>
-  </div>
-  <div class="stitle">Stage 3 문장별 분석</div>
-  <div style="height:5px;"></div>
-  <p class="slbl">STEP 1</p>
-  <p style="font-size:9pt;margin-bottom:8px;">문장의 기본 구성요소(S/V/O/C)를 표시한 후, 수업을 들으며 중요한 표현을 필기하시오.</p>
-  {% for sent in sentences[:half] %}
-  <p style="margin-bottom:28px;font-size:10pt;break-inside:avoid;"><strong>{{ loop.index }}.</strong> {{ sent }}</p>
-  {% endfor %}
-</div>
-<div class="page" style="font-size:10pt;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
-  <div class="phase" style="color:var(--green);">수업 중</div>
-  <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==3 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
-  <p class="slbl">STEP 1 (계속)</p>
-  {% for sent in sentences[half:] %}
-  <p style="margin-bottom:28px;font-size:10pt;break-inside:avoid;"><strong>{{ half + loop.index }}.</strong> {{ sent }}</p>
-  {% endfor %}
-  <div class="warnbox" style="margin-top:4px;padding:6px 10px;">
-    <p class="b" style="font-size:8pt;">[문장 분석 솔루션]</p>
-    <p style="font-size:8pt;margin-top:2px;">• Step1: 수업 중, 중요한 문법 강조 사항을 정독하며 <u>설명할 수 있는 수준으로</u> 이해가 되었는지 확인하세요!</p>
-    <p style="font-size:8pt;margin-top:2px;">• Step2: 추가로 정리할 사항은 하단에 작성해보세요! </p>
-  </div>
-</div>
-{% endif %}
+{% endfor %}
 
 {% endif %}
 {% if not levels or 4 in levels %}

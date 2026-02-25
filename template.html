@@ -229,7 +229,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <div class="ckl" style="padding:6px 10px;font-size:8.5pt;">
     <div class="ckl-t" style="font-size:9pt;">[수업 전 체크리스트 - Stage 2]</div>
     <table><tr><td></td><td class="cc">1차</td><td class="cc">2차</td><td class="cc">3차</td></tr>
-    {% for s in ["Step 1. 모르는 단어에 <mark> 형광펜 </mark> 표시","Step 2. 사전 찾아 아래에 정리하기","Step 3. 한 문장씩 해석 연습","Step 4. 해석 안 되는 문장에 <span style="color: #dc2626;">★별표</span>"] %}
+    {% for s in ["Step 1. 모르는 단어에 <mark> 형광펜 </mark> 표시","Step 2. 사전 찾아 아래에 정리하기","Step 3. 한 문장씩 해석 연습","Step 4. 해석 안 되는 문장에 <span style='color: #dc2626;'>★별표</span>"] %}
     <tr><td><span class="sn">{{ s.split('.')[0] }}.</span> {{ s.split('. ',1)[1] }}</td>
     <td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td></tr>{% endfor %}</table>
     <p style="font-size:7.5pt;color:#4A90D9;margin-top:2px;">★별표 문장은 수업 시간에 확인합니다</p>

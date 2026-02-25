@@ -137,9 +137,12 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       <!-- 교재/단원 선택 -->
       <div class="section">
         <div class="section-title"><span class="icon">📚</span> 교재 선택</div>
-        <select id="sel-book" onchange="onBookChange()">
-          <option value="">교재를 선택하세요</option>
-        </select>
+        <div style="display:flex;gap:6px;">
+          <select id="sel-book" onchange="onBookChange()" style="flex:1;margin-bottom:0;">
+            <option value="">교재를 선택하세요</option>
+          </select>
+          <button class="btn btn-sm" onclick="deleteBook()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;white-space:nowrap;" title="선택한 교재 삭제">🗑️</button>
+        </div>
       </div>
 
       <!-- 지문 선택 -->
@@ -186,6 +189,9 @@ textarea:focus { border-color: #4A90D9; outline: none; }
         <button class="btn btn-primary" id="btn-generate" onclick="doGenerate()" disabled>
           워크북 생성하기
         </button>
+        <button class="btn btn-sm" id="btn-clear-passage-cache" onclick="clearPassageCache()" style="margin-left:8px;background:#FFF8F0;color:#E8833A;border:1px solid #E8833A;display:none;">
+          🗑️ 선택 지문 캐시 삭제
+        </button>
         <div class="progress hidden" id="progress">
           <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
           <div class="progress-text" id="progress-text">준비 중...</div>
@@ -217,6 +223,9 @@ Consumer surveys indicate that..."></textarea>
       <div class="section">
         <div class="section-title"><span class="icon">📊</span> 현재 등록된 지문</div>
         <div id="stats-list" style="font-size:13px;color:#666;">로딩 중...</div>
+        <button class="btn btn-sm" onclick="syncSupabase()" style="margin-top:8px;background:#EBF4FB;color:#4A90D9;border:1px solid #4A90D9;">🔄 수파베이스 동기화</button>
+        <button class="btn btn-sm" onclick="clearCacheUI()" style="margin-top:8px;margin-left:4px;background:#FFF8F0;color:#E8833A;border:1px solid #E8833A;">🗑️ 캐시 초기화</button>
+        <div id="sync-status" style="font-size:12px;color:#666;margin-top:4px;"></div>
       </div>
     </div>
   </div>
@@ -345,12 +354,15 @@ function onBookChange() {
     </div>`;
     for (const p of unitPassages) {
       const key = `${p.book}|${p.unit}|${p.id}`;
-      html += `<div class="passage-item" onclick="togglePassage('${p.book}','${p.unit}','${p.id}', this)">
-        <input type="checkbox" data-key="${key}">
-        <span class="title">${p.title}</span>
-        <span class="badge ${p.cache_status === 'ready' ? 'badge-ready' : 'badge-pending'}">
-          ${p.cache_status === 'ready' ? '✅ 준비됨' : '⏳ 미생성'}
-        </span>
+      html += `<div class="passage-item" style="position:relative;">
+        <div style="flex:1;display:flex;align-items:center;" onclick="togglePassage('${p.book}','${p.unit}','${p.id}', this.parentElement)">
+          <input type="checkbox" data-key="${key}">
+          <span class="title">${p.title}</span>
+          <span class="badge ${p.cache_status === 'ready' ? 'badge-ready' : 'badge-pending'}">
+            ${p.cache_status === 'ready' ? '✅ 준비됨' : '⏳ 미생성'}
+          </span>
+        </div>
+        <button onclick="event.stopPropagation();deletePassage('${p.book}','${p.unit}','${p.id}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:14px;padding:4px 6px;opacity:0.5;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.5" title="지문 삭제">✕</button>
       </div>`;
     }
   }
@@ -446,11 +458,13 @@ function getSelectedLevels() {
 // ============================================================
 function updateGenerateBtn() {
   const btn = document.getElementById('btn-generate');
+  const cacheBtn = document.getElementById('btn-clear-passage-cache');
   const levels = getSelectedLevels();
   btn.disabled = selectedPassages.size === 0 || levels.length === 0;
   btn.textContent = selectedPassages.size > 0 
     ? `워크북 생성하기 (${selectedPassages.size}개 지문)` 
     : '워크북 생성하기';
+  if (cacheBtn) cacheBtn.style.display = selectedPassages.size > 0 ? 'inline-block' : 'none';
 }
 
 async function doGenerate() {
@@ -579,6 +593,57 @@ ${bodies.join('\n')}
 }
 
 // ============================================================
+// Delete
+// ============================================================
+async function deleteBook() {
+  const book = document.getElementById('sel-book').value;
+  if (!book) { toast('삭제할 교재를 선택하세요'); return; }
+  if (!confirm(`"${book}" 교재의 모든 지문을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+
+  try {
+    const res = await fetch(API + '/api/books', {
+      method: 'DELETE',
+      headers: headers(),
+      body: JSON.stringify({ book })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast(`✅ "${book}" 교재 삭제 완료`);
+      selectedPassages.clear();
+      await loadPassages();
+      document.getElementById('sel-book').value = '';
+      onBookChange();
+    }
+  } catch(e) {
+    toast('삭제 실패: ' + e.message);
+  }
+}
+
+async function deletePassage(book, unit, pid) {
+  if (!confirm(`"${pid}" 지문을 삭제하시겠습니까?`)) return;
+
+  try {
+    const res = await fetch(API + '/api/passages', {
+      method: 'DELETE',
+      headers: headers(),
+      body: JSON.stringify({ book, unit, pid })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast('✅ 지문 삭제 완료');
+      const key = `${book}|${unit}|${pid}`;
+      selectedPassages.delete(key);
+      await loadPassages();
+      // 현재 교재 다시 선택
+      const sel = document.getElementById('sel-book');
+      if (sel.value) onBookChange();
+    }
+  } catch(e) {
+    toast('삭제 실패: ' + e.message);
+  }
+}
+
+// ============================================================
 // Upload
 // ============================================================
 async function doUpload() {
@@ -626,6 +691,91 @@ function updateStats() {
   el.innerHTML = Object.entries(books).map(([name, info]) => 
     `<p style="margin-bottom:4px;"><strong>${name}</strong>: ${info.total}개 지문 (${info.ready}개 생성완료)</p>`
   ).join('');
+}
+
+// ============================================================
+// Sync Supabase
+// ============================================================
+async function syncSupabase() {
+  const status = document.getElementById('sync-status');
+  status.textContent = '🔄 동기화 중... (잠시 기다려주세요)';
+  status.style.color = '#4A90D9';
+  try {
+    const res = await fetch(API + '/api/sync-supabase', {
+      method: 'POST',
+      headers: headers()
+    });
+    const data = await res.json();
+    if (data.ok) {
+      status.textContent = `✅ 동기화 완료! ${data.count}/${data.total}개 전송됨`;
+      status.style.color = '#2E9E5A';
+    } else {
+      status.textContent = `❌ 실패: ${data.error}`;
+      status.style.color = '#dc2626';
+    }
+  } catch(e) {
+    status.textContent = `❌ 에러: ${e.message}`;
+    status.style.color = '#dc2626';
+  }
+}
+
+async function clearPassageCache() {
+  const passages = [...selectedPassages.values()];
+  if (passages.length === 0) { alert('지문을 먼저 선택해주세요.'); return; }
+  
+  if (!confirm(`선택한 ${passages.length}개 지문의 캐시를 삭제하시겠습니까?\n삭제 후 워크북을 다시 생성하면 문제가 새로 만들어집니다.`)) return;
+  
+  const status = document.getElementById('sync-status');
+  let totalDeleted = 0;
+  
+  for (const p of passages) {
+    try {
+      const res = await fetch(API + '/api/clear-cache', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ book: p.book, unit: p.unit, passage_id: p.id, scope: 'passage' })
+      });
+      const data = await res.json();
+      if (data.ok) totalDeleted += data.deleted;
+    } catch(e) { console.error(e); }
+  }
+  
+  alert(`✅ 캐시 삭제 완료! ${totalDeleted}개 파일 삭제됨.\n워크북을 다시 생성하세요.`);
+}
+
+async function clearCacheUI() {
+  // 교재 선택 드롭다운에서 현재 선택된 교재 가져오기
+  const bookSel = document.getElementById('book-sel');
+  const book = bookSel ? bookSel.value : '';
+  
+  if (!book) {
+    alert('먼저 워크북 만들기 탭에서 교재를 선택해주세요.');
+    return;
+  }
+  
+  if (!confirm(`"${book}" 교재의 캐시를 초기화하시겠습니까?\n\n초기화 후 워크북을 다시 생성하면 내용일치 등이 새로 만들어집니다.`)) return;
+  
+  const status = document.getElementById('sync-status');
+  status.textContent = '🗑️ 캐시 초기화 중...';
+  status.style.color = '#E8833A';
+  try {
+    const res = await fetch(API + '/api/clear-cache', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ book: book, scope: 'all' })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      status.textContent = `✅ 캐시 초기화 완료! ${data.deleted}개 파일 삭제됨. 워크북을 다시 생성하세요.`;
+      status.style.color = '#2E9E5A';
+    } else {
+      status.textContent = `❌ 실패: ${data.error || '알 수 없는 오류'}`;
+      status.style.color = '#dc2626';
+    }
+  } catch(e) {
+    status.textContent = `❌ 에러: ${e.message}`;
+    status.style.color = '#dc2626';
+  }
 }
 
 // ============================================================

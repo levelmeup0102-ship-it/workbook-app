@@ -649,10 +649,11 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
 - 반의어: 해당 단어와 의미가 반대인 단어 3개
 - 발음/철자 유사 단어 절대 금지. 의미 기반으로만 출제
 
-[내용 일치 규칙]
-- content_match_kr: 반드시 10개 한국어 선지 (①~⑩). 일치 3~5개 + 불일치 5~7개
-- content_match_en: 반드시 10개 영어 선지 (①~⑩). 일치 3~5개 + 불일치 5~7개
+[내용 일치 규칙 - 매우 중요]
+- content_match_kr: 반드시 정확히 10개 한국어 선지 (①~⑩). 5개 미만 금지! 일치 3~5개 + 불일치 5~7개
+- content_match_en: 반드시 정확히 10개 영어 선지 (①~⑩). 5개 미만 금지! 일치 3~5개 + 불일치 5~7개
 - 한국어와 영어 선지의 순서는 서로 다르게 랜덤 배치
+- 10개 미만이면 실패로 간주됨. 반드시 ①②③④⑤⑥⑦⑧⑨⑩ 10개 모두 작성할 것
 
 [JSON 형식]
 {{
@@ -660,20 +661,20 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
   "vocab_parta_answers": [{{"num":1, "answer":"regarded", "wrong":"overlooked", "reason":"~로 여겨지다 vs 간과하다"}}, ...],
   "vocab_partb": [{{"word":"regarded", "choices":"considered / perceived / overlooked / neglected / dismissed"}}, ...],
   "vocab_partb_answers": [{{"num":1, "correct":["considered", "perceived"], "wrong":["overlooked", "neglected", "dismissed"]}}, ...],
-  "content_match_kr": ["① 평소 극장에서 혼자 영화를 본다.", ... (반드시 10개 선지)],
-  "content_match_kr_answer": ["②", "③", ...],
-  "content_match_en": ["① The writer normally watches movies alone.", ... (반드시 10개 선지)],
+  "content_match_kr": ["① ...", "② ...", "③ ...", "④ ...", "⑤ ...", "⑥ ...", "⑦ ...", "⑧ ...", "⑨ ...", "⑩ ..."],
+  "content_match_kr_answer": ["②", "③", "⑤", ...],
+  "content_match_en": ["① ...", "② ...", "③ ...", "④ ...", "⑤ ...", "⑥ ...", "⑦ ...", "⑧ ...", "⑨ ...", "⑩ ..."],
   "content_match_en_answer": ["②", "④", ...]
 }}"""
 
-    data = call_claude_json(SYS_JSON_KR, prompt, max_tokens=4000)
+    data = call_claude_json(SYS_JSON_KR, prompt, max_tokens=6000)
 
     # 내용일치 10개 미만이면 1회 재시도
     kr_count = len(data.get("content_match_kr", []))
     en_count = len(data.get("content_match_en", []))
     if kr_count < 10 or en_count < 10:
         _safe_print(f"  step6: content_match count insufficient (kr={kr_count}, en={en_count}), retrying...")
-        data2 = call_claude_json(SYS_JSON_KR, prompt, max_tokens=4000)
+        data2 = call_claude_json(SYS_JSON_KR, prompt, max_tokens=6000)
         if len(data2.get("content_match_kr", [])) >= kr_count:
             data["content_match_kr"] = data2.get("content_match_kr", data.get("content_match_kr", []))
             data["content_match_kr_answer"] = data2.get("content_match_kr_answer", data.get("content_match_kr_answer", []))

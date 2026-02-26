@@ -205,7 +205,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       {% for col in range(3) %}
       <td style="width:33%;border:1px solid var(--border-table);border-radius:3px;padding:2px 4px;vertical-align:top;">
         <p><span style="color:var(--accent);font-weight:bold;">단어:</span> <span class="il" style="min-width:45px;height:10px;"></span></p>
-        <p><b style="width: 10%;">뜻</b> 1.<span class="il" style="width: 30%;height:10px;"></span> 2.<span class="il" style="width: 30%;height:10px;"></span> 3.<span class="il" style="width: 30%;height:10px;"></span></p>
+        <p><b style="width: 10%;">뜻</b> 1.<span class="il" style="width: 35%;height:10px;"></span> 2.<span class="il" style="width: 35%;height:10px;"></span></p>
         <p><b style="width: 10%;">예문</b> <span class="il" style="width: 92.7%;height:10px;"></span></p>
       </td>
       {% endfor %}
@@ -246,9 +246,9 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       <tr style="break-inside: avoid;">
         {% for col in range(3) %}
         <td style="width:33%;border:1px solid var(--border-light);border-radius:3px;padding:3px 6px;vertical-align:top;">
-          <p><span style="color:var(--accent);font-weight:bold;">단어:</span> <span class="il" style="min-width:70px;height:13px;"></span></p>
-          <p><b>뜻</b> &nbsp; 1.<span class="il" style="width: 45%;;height:17px;"></span> &nbsp; 2.<span class="il" style="width: 45%;;height:17px;"></span></p>
-          <p><b>동의어</b> 1.<span class="il" style="width: 45%;height:17px;"></span> &nbsp; 2.<span class="il" style="width: 45%;height:17px;"></span></p>
+          <p><span style="color:var(--accent);font-weight:bold;">단어:</span> <span class="il" style="width:calc(100% - 35px);height:13px;"></span></p>
+          <p><b>뜻</b> 1.<span class="il" style="width:calc(50% - 20px);height:13px;"></span> 2.<span class="il" style="width:calc(50% - 20px);height:13px;"></span></p>
+          <p><b>동의어</b> 1.<span class="il" style="width:calc(50% - 25px);height:13px;"></span> 2.<span class="il" style="width:calc(50% - 25px);height:13px;"></span></p>
         </td>
         {% endfor %}
       </tr>
@@ -405,9 +405,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     </tr>{% endfor %}
   </table>
   <p class="mt8 tc b" style="font-size:10pt;margin-top: 10px;">{% for _ in full_order_blocks %}( &nbsp;&nbsp; ){% if not loop.last %} - {% endif %}{% endfor %}</p>
-  <div class="warnbox" style="margin-top:10px;padding:6px 10px;">
   <p style="padding: 5px;"></p>
-  <p class="b mt8 mb4" style="font-size:10pt;color:var(--accent);">오답 정리 — 정답 순서대로 한 줄 요약</p>
   <p style="font-size:8pt;color:var(--text-muted);margin-bottom:4px;">틀린 경우, 정답 순서의 기호를 왼쪽에 적고 → 오른쪽에 그 문장 내용을 한국말로 한 줄 요약하세요.</p>
   <table style="width:100%;border-collapse:collapse;font-size:9pt;">
     {% for i in range(0, full_order_blocks|length, 2) %}
@@ -724,14 +722,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <p style="font-weight:bold;font-size:8.5pt;">{{ loop.index }}. {{ item.korean }}</p>
     <div style="background:#f3f4f6;border:1px solid var(--border-light);border-radius:3px;padding:3px 6px;font-size:8pt;margin:2px 0;line-height:1.4;">{{ item.scrambled }}</div>
     <div class="ilf" style="height:28px;"></div>
-  </div>{% endfor %}
-  <p style="padding: 5px;"></p>
-  <p class="slbl mt4">STEP 2</p>
-  <p style="font-size:8.5pt;font-weight:bold;margin-bottom:3px;">영작 오답 정리</p>
-  {% for _ in range(3) %}
-  <div style="margin-bottom:3px;font-size:8pt;">
-    <p>틀린 번호 ( &nbsp; ) / 오답 이유: <span class="il" style="min-width:160px;height:12px;"></span></p>
-    <p>다시 쓰기: <span class="ilf" style="height:12px;"></span></p>
   </div>{% endfor %}
   <p style="padding: 5px;"></p>
   <div class="solbox" style="padding:4px 8px;">

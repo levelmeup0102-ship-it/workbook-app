@@ -388,7 +388,7 @@ async def sync_supabase(request: Request):
 
 @app.post("/api/clear-cache")
 async def clear_cache(request: Request):
-    """특정 교재/지문의 step 캐시 삭제 (로컬만 확실히)"""
+    """특정 교재/지문의 step 캐시 삭제 (로컬 + Supabase step_cache 같이 삭제)"""
     _verify(request)
     body = await request.json()
 
@@ -397,22 +397,37 @@ async def clear_cache(request: Request):
     pid = body.get("passage_id")
     scope = body.get("scope", "all")  # "all" = 교재 전체, "passage" = 특정 지문
 
-    deleted = 0
+    deleted_local = 0
+    deleted_supa_targets = 0  # 몇 개 cache_key를 대상으로 supa delete 요청했는지(카운트용)
+
+    # supabase helper (없어도 서버가 죽지 않게)
+    try:
+        import supa
+    except Exception:
+        supa = None
 
     if scope == "passage" and all([book, unit, pid]):
         ck = _ck(book, unit, pid)
+
+        # 로컬 step*.json 삭제
         cache_dir = DATA_DIR / ck
         if cache_dir.exists():
             for f in cache_dir.glob("step*.json"):
                 try:
                     f.unlink()
-                    deleted += 1
+                    deleted_local += 1
                 except Exception:
                     pass
-            print(f"[cache] deleted {deleted} local cache files for {ck}")
+            print(f"[cache] deleted {deleted_local} local cache files for {ck}")
 
-        # Supabase step_cache 삭제는 다음 단계에서 supa.py에 함수 추가 후 연결
-        # (지금은 서버 에러 없이 로컬 캐시만 확실히 삭제)
+        # Supabase step_cache 삭제
+        try:
+            if supa and supa._enabled():
+                await supa.delete_steps_by_cache_key(ck)
+                deleted_supa_targets += 1
+                print(f"[cache] deleted supabase step_cache for {ck}")
+        except Exception as e:
+            print(f"[cache] supabase delete error: {e}")
 
     elif scope == "all" and book:
         db = await _load_db()
@@ -420,19 +435,37 @@ async def clear_cache(request: Request):
             for u, ud in db["books"][book].get("units", {}).items():
                 for p in ud.get("passages", {}).keys():
                     ck = _ck(book, u, p)
+
+                    # 로컬 삭제
                     cache_dir = DATA_DIR / ck
                     if cache_dir.exists():
                         for f in cache_dir.glob("step*.json"):
                             try:
                                 f.unlink()
-                                deleted += 1
+                                deleted_local += 1
                             except Exception:
                                 pass
-        print(f"[cache] deleted {deleted} local cache files for book '{book}'")
+
+                    # Supabase 삭제
+                    try:
+                        if supa and supa._enabled():
+                            await supa.delete_steps_by_cache_key(ck)
+                            deleted_supa_targets += 1
+                    except Exception as e:
+                        print(f"[cache] supabase delete error: {e}")
+
+        print(f"[cache] deleted {deleted_local} local cache files for book '{book}'")
+        if deleted_supa_targets:
+            print(f"[cache] supabase step_cache delete targets: {deleted_supa_targets}")
+
     else:
         raise HTTPException(400, "book 필요")
 
-    return {"ok": True, "deleted": deleted}
+    return {
+        "ok": True,
+        "deleted": deleted_local,
+        "supa_targets": deleted_supa_targets,
+    }
 
 
 @app.post("/api/generate")

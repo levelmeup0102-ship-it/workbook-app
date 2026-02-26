@@ -366,7 +366,18 @@ async def clear_cache(request: Request):
             for f in cache_dir.glob("step*.json"):
                 f.unlink()
                 deleted += 1
-            print(f"[cache] deleted {deleted} cache files for {ck}")
+            print(f"[cache] deleted {deleted} local cache files for {ck}")
+        # 수파베이스 캐시도 삭제
+        try:
+            import supa
+            if supa._enabled():
+                for step_name in ["step1_vocab", "step2_grammar", "step3_blank", "step4_topic", "step5_order", "step6_vocab_content", "step7_writing"]:
+                    try:
+                        supa.supabase.table("workbook_cache").delete().eq("cache_key", ck).eq("step_name", step_name).execute()
+                    except: pass
+                print(f"[cache] deleted supabase cache for {ck}")
+        except Exception as e:
+            print(f"[cache] supabase delete error: {e}")
     elif scope == "all" and book:
         # 교재 전체 지문의 캐시 삭제
         db = await _load_db()

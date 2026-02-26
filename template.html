@@ -620,6 +620,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==9 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
   <div class="stitle" style="font-size:14pt;">Stage 9-1 어휘 심화</div>
   <p style="padding: 5px;"></p>
+  <div style="break-inside:avoid;">
   <p class="b mb4" style="font-size:10pt;">Part A. 수능 수준 - 괄호 속 올바른 어휘 고르기</p>
   <div class="psg" style="font-size:9.5pt;line-height:1.6;">{{ vocab_advanced_passage }}</div>
   <table style="width:100%;border-collapse:collapse;font-size:9pt;margin:6px 0;">
@@ -633,7 +634,9 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       <tr>{% for _ in range(2) %}<td style="border:1px solid var(--border-light);border-radius:2px;padding:2px 6px;">단어: <span class="il" style="min-width:50px;height:13px;"></span> &nbsp; 뜻: <span class="il" style="min-width:70px;height:13px;"></span></td>{% endfor %}</tr>
     </table>
   </div>
+  </div>
   <p style="padding: 5px;"></p>
+  <div style="break-inside:avoid;">
   <p class="b mt8 mb4" style="font-size:10pt;">Part B. 최상위 - 올바른 동의어에 O 표시 (모두 고르시오)</p>
   {% for item in vocab_partb %}
   <p style="font-size:9.5pt;margin-bottom:4px;">{{ loop.index }}. <strong>{{ item.word }}</strong>: &nbsp; {{ item.choices }}</p>{% endfor %}
@@ -650,6 +653,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       <p style="font-size:9.5pt;">• Step 1: 원문에 쓰인 단어 <strong>확인</strong>.</p>
       <p style="font-size:9.5pt;">• Step 2: 원문과 변형되어 출제되었는지 <strong>확인</strong>.</p>
     </div>
+  </div>
   </div>
 </div>
 

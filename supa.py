@@ -29,11 +29,15 @@ async def _request(method: str, endpoint: str, body=None, extra_headers: dict | 
     headers = _headers(extra_headers)
     try:
         async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.request(method, url, headers=headers,
-                                        content=json.dumps(body, ensure_ascii=False) if body is not None else None)
+            resp = await client.request(
+                method,
+                url,
+                headers=headers,
+                content=json.dumps(body, ensure_ascii=False) if body is not None else None,
+            )
         raw = resp.text.strip()
         if not raw:
-            print(f"[supa] empty response for {method} {endpoint}")
+            # DELETE는 원래 빈 응답이 흔함
             return None
         parsed = json.loads(raw)
         if isinstance(parsed, dict) and "message" in parsed:
@@ -59,18 +63,24 @@ async def get_passage(book, unit, pid):
 
 async def upsert_passage(book, unit, pid, title, text):
     body = {"book": book, "unit": unit, "pid": pid, "title": title, "passage_text": text}
-    return await _request("POST", "passages?on_conflict=book,unit,pid",
-                          body=body,
-                          extra_headers={"Prefer": "resolution=merge-duplicates, return=representation"})
+    return await _request(
+        "POST",
+        "passages?on_conflict=book,unit,pid",
+        body=body,
+        extra_headers={"Prefer": "resolution=merge-duplicates, return=representation"},
+    )
 
 async def upsert_passages_bulk(rows):
     """Bulk upsert: [{book, unit, pid, title, passage_text}, ...]"""
     if not rows:
         return None
     print(f"[supa] upserting {len(rows)} passages...")
-    result = await _request("POST", "passages?on_conflict=book,unit,pid",
-                            body=rows,
-                            extra_headers={"Prefer": "resolution=merge-duplicates, return=representation"})
+    result = await _request(
+        "POST",
+        "passages?on_conflict=book,unit,pid",
+        body=rows,
+        extra_headers={"Prefer": "resolution=merge-duplicates, return=representation"},
+    )
     if isinstance(result, list):
         print(f"[supa] upsert success: {len(result)} rows")
     else:
@@ -89,9 +99,12 @@ async def get_step(cache_key, step_name):
 
 async def save_step_supa(cache_key, step_name, data):
     body = {"cache_key": cache_key, "step_name": step_name, "data": data}
-    return await _request("POST", "step_cache?on_conflict=cache_key,step_name",
-                          body=body,
-                          extra_headers={"Prefer": "resolution=merge-duplicates, return=representation"})
+    return await _request(
+        "POST",
+        "step_cache?on_conflict=cache_key,step_name",
+        body=body,
+        extra_headers={"Prefer": "resolution=merge-duplicates, return=representation"},
+    )
 
 async def count_steps(cache_key):
     q = f"step_cache?cache_key=eq.{quote(cache_key, safe='')}&select=step_name"
@@ -100,8 +113,18 @@ async def count_steps(cache_key):
         return len(result)
     return 0
 
+async def delete_step(cache_key, step_name):
+    """Delete a single cached step for a cache_key"""
+    q = f"step_cache?cache_key=eq.{quote(cache_key, safe='')}&step_name=eq.{quote(step_name, safe='')}"
+    return await _request("DELETE", q)
+
+async def delete_steps_by_cache_key(cache_key):
+    """Delete ALL cached steps for a cache_key"""
+    q = f"step_cache?cache_key=eq.{quote(cache_key, safe='')}"
+    return await _request("DELETE", q)
+
 # ========================
-# Delete
+# Delete (Passages)
 # ========================
 async def delete_passage(book, unit, pid):
     """Delete a single passage"""

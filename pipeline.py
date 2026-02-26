@@ -668,7 +668,18 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
 
     data = call_claude_json(SYS_JSON_KR, prompt, max_tokens=4000)
 
-    # 한국어 선지 셔플
+    # 내용일치 10개 미만이면 1회 재시도
+    kr_count = len(data.get("content_match_kr", []))
+    en_count = len(data.get("content_match_en", []))
+    if kr_count < 10 or en_count < 10:
+        _safe_print(f"  step6: content_match count insufficient (kr={kr_count}, en={en_count}), retrying...")
+        data2 = call_claude_json(SYS_JSON_KR, prompt, max_tokens=4000)
+        if len(data2.get("content_match_kr", [])) >= kr_count:
+            data["content_match_kr"] = data2.get("content_match_kr", data.get("content_match_kr", []))
+            data["content_match_kr_answer"] = data2.get("content_match_kr_answer", data.get("content_match_kr_answer", []))
+        if len(data2.get("content_match_en", [])) >= en_count:
+            data["content_match_en"] = data2.get("content_match_en", data.get("content_match_en", []))
+            data["content_match_en_answer"] = data2.get("content_match_en_answer", data.get("content_match_en_answer", []))
     kr_items = data.get("content_match_kr", [])
     kr_answers = set(data.get("content_match_kr_answer", []))
     if kr_items:

@@ -1,54 +1,189 @@
 #!/usr/bin/env python3
-"""Workbook webapp server v7"""
-import os, json, hashlib, re, sys, io
+"""Workbook webapp server v12 - stable local + supabase passages, cache status"""
+import os, json, hashlib, re, shutil
 from pathlib import Path
+
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-APP_VERSION = "v11b-supa-fix"
+APP_VERSION = "v12-main-replace"
 
 # Clear bytecode cache on startup (prevent stale .pyc from old deploys)
-import shutil
 for p in Path(".").glob("__pycache__"):
     shutil.rmtree(p, ignore_errors=True)
 
 APP_PASSWORD = os.getenv("APP_PASSWORD", "levelmeup2026")
+
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
+
 PASSAGES_FILE = DATA_DIR / "passages.json"  # data/ 안에 저장 → 볼륨으로 영속
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
+# ============================================================
+# Auth
+# ============================================================
+def _token(pw: str) -> str:
+    return hashlib.sha256(f"{pw}_wb2026".encode()).hexdigest()[:32]
+
+def _verify(r: Request) -> None:
+    got = r.headers.get("Authorization", "").replace("Bearer ", "")
+    if got != _token(APP_PASSWORD):
+        raise HTTPException(401)
+
+
+# ============================================================
+# DB Load/Save (Supabase first, local fallback)
+# ============================================================
+async def _load_db():
+    """Load passages - Supabase first, local fallback"""
+    # Supabase
+    try:
+        import supa
+        if supa._enabled():
+            rows = await supa.get_all_passages()
+            if isinstance(rows, list) and rows:
+                db = {"books": {}}
+                for r in rows:
+                    bk = r.get("book", "")
+                    unit = r.get("unit", "")
+                    pid = r.get("pid", "")
+                    if not (bk and unit and pid):
+                        continue
+                    db["books"].setdefault(bk, {"units": {}})
+                    db["books"][bk]["units"].setdefault(unit, {"passages": {}})
+                    db["books"][bk]["units"][unit]["passages"][pid] = {
+                        "title": r.get("title", pid),
+                        "text": r.get("passage_text", ""),
+                    }
+                return db
+    except Exception as e:
+        print(f"[supa] load error: {e}")
+
+    # Local fallback
+    if PASSAGES_FILE.exists():
+        try:
+            return json.loads(PASSAGES_FILE.read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"[local] passages.json parse error: {e}")
+
+    return {"books": {}}
+
+async def _save_db(d):
+    """Save passages - local + Supabase (batch)"""
+    # local
+    PASSAGES_FILE.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    print("[save_db] local file written OK")
+
+    # supabase passages sync (best-effort)
+    try:
+        import supa
+        if not supa._enabled():
+            print("[save_db] Supabase not enabled")
+            return
+
+        rows = []
+        for bk, bd in d.get("books", {}).items():
+            for unit, ud in bd.get("units", {}).items():
+                for pid, pi in ud.get("passages", {}).items():
+                    rows.append({
+                        "book": bk,
+                        "unit": unit,
+                        "pid": pid,
+                        "title": pi.get("title", pid),
+                        "passage_text": pi.get("text", ""),
+                    })
+
+        if not rows:
+            return
+
+        batch_size = 50
+        for start in range(0, len(rows), batch_size):
+            batch = rows[start:start + batch_size]
+            print(f"[save_db] Supabase upsert batch {start//batch_size + 1} ({len(batch)} rows)")
+            await supa.upsert_passages_bulk(batch)
+
+        print(f"[save_db] Supabase sync done: {len(rows)} rows total")
+    except Exception as e:
+        print(f"[supa] save error: {e}")
+
+
+# ============================================================
+# Cache Key / Cache Check
+# ============================================================
+def _ck(book: str, unit: str, pid: str) -> str:
+    """캐시 키: 한국어 → ASCII 해시로 변환"""
+    raw = f"{book}_{unit}_{pid}"
+    h = hashlib.md5(raw.encode("utf-8")).hexdigest()[:12]
+    nums = re.findall(r"\d+", raw)
+    prefix = "_".join(nums) if nums else "p"
+    return f"{prefix}_{h}"
+
+async def _is_cached(ck: str) -> bool:
+    """Check cache - local first, then Supabase (count only)"""
+    # local cache: step*.json 8개 이상이면 ready로 간주
+    d = DATA_DIR / ck
+    if d.exists():
+        try:
+            if sum(1 for _ in d.glob("step*.json")) >= 8:
+                return True
+        except Exception:
+            pass
+
+    # supabase cache count (best-effort)
+    try:
+        import supa
+        if supa._enabled():
+            n = await supa.count_steps(ck)
+            if isinstance(n, int) and n >= 8:
+                return True
+    except Exception:
+        pass
+
+    return False
+
+
+# ============================================================
+# Routes
+# ============================================================
+@app.get("/", response_class=HTMLResponse)
+async def index():
+    return Path("static/index.html").read_text(encoding="utf-8")
+
+
 @app.get("/api/version")
 async def version():
     key = os.getenv("ANTHROPIC_API_KEY", "NOT_SET")
+
     pf_exists = PASSAGES_FILE.exists()
     passage_count = 0
     supa_count = 0
     supa_ok = False
-    
-    # Count from _load_db (Supabase or local)
+
     try:
         db = await _load_db()
         for bk in db.get("books", {}).values():
             for ud in bk.get("units", {}).values():
                 passage_count += len(ud.get("passages", {}))
-    except: pass
+    except Exception:
+        pass
 
-    # Check Supabase directly
     try:
         import supa
         if supa._enabled():
             rows = await supa.get_all_passages()
-            supa_count = len(rows)
+            supa_count = len(rows) if isinstance(rows, list) else 0
             supa_ok = True
-    except: pass
-    
+    except Exception:
+        pass
+
     cache_dirs = len(list(DATA_DIR.glob("*_*"))) if DATA_DIR.exists() else 0
     return {
         "version": APP_VERSION,
@@ -61,100 +196,6 @@ async def version():
         "cache_dirs": cache_dirs,
     }
 
-def _token(pw): return hashlib.sha256(f"{pw}_wb2026".encode()).hexdigest()[:32]
-def _verify(r: Request):
-    if r.headers.get("Authorization","").replace("Bearer ","") != _token(APP_PASSWORD):
-        raise HTTPException(401)
-
-async def _load_db():
-    """Load passages - Supabase first, local fallback"""
-    try:
-        import supa
-        if supa._enabled():
-            rows = await supa.get_all_passages()
-            if rows:
-                db = {"books": {}}
-                for r in rows:
-                    bk = r["book"]
-                    unit = r["unit"]
-                    pid = r["pid"]
-                    if bk not in db["books"]:
-                        db["books"][bk] = {"units": {}}
-                    if unit not in db["books"][bk]["units"]:
-                        db["books"][bk]["units"][unit] = {"passages": {}}
-                    db["books"][bk]["units"][unit]["passages"][pid] = {
-                        "title": r["title"], "text": r["passage_text"]
-                    }
-                return db
-    except Exception as e:
-        print(f"[supa] load error: {e}")
-    # Local fallback
-    if PASSAGES_FILE.exists():
-        return json.loads(PASSAGES_FILE.read_text(encoding="utf-8"))
-    return {"books": {}}
-
-async def _save_db(d):
-    """Save passages - local + Supabase (batch)"""
-    total = sum(
-        len(ud.get("passages", {}))
-        for bk, bd in d.get("books", {}).items()
-        for unit, ud in bd.get("units", {}).items()
-    )
-    print(f"[save_db] saving {total} passages...")
-
-    PASSAGES_FILE.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"[save_db] local file written OK")
-
-    # Also save to Supabase (배치 50개씩)
-    try:
-        import supa
-        if supa._enabled():
-            rows = []
-            for bk, bd in d.get("books", {}).items():
-                for unit, ud in bd.get("units", {}).items():
-                    for pid, pi in ud.get("passages", {}).items():
-                        rows.append({
-                            "book": bk, "unit": unit, "pid": pid,
-                            "title": pi.get("title", pid),
-                            "passage_text": pi.get("text", "")
-                        })
-            if rows:
-                batch_size = 50
-                for start in range(0, len(rows), batch_size):
-                    batch = rows[start:start + batch_size]
-                    print(f"[save_db] Supabase batch {start//batch_size + 1}/{(len(rows)-1)//batch_size + 1} ({len(batch)} rows)...")
-                    await supa.upsert_passages_bulk(batch)
-                print(f"[save_db] Supabase sync done: {len(rows)} rows total")
-        else:
-            print("[save_db] Supabase not enabled")
-    except Exception as e:
-        print(f"[supa] save error: {e}")
-
-def _ck(book, unit, pid):
-    """캐시 키: 한국어 → ASCII 해시로 변환"""
-    raw = f"{book}_{unit}_{pid}"
-    h = hashlib.md5(raw.encode('utf-8')).hexdigest()[:12]
-    # 숫자만 추출해서 읽기 쉽게
-    nums = re.findall(r'\d+', raw)
-    prefix = "_".join(nums) if nums else "p"
-    return f"{prefix}_{h}"
-
-async def _is_cached(ck):
-    """Check cache - local first, then Supabase"""
-    d = DATA_DIR / ck
-    if d.exists() and sum(1 for f in d.glob("step*.json")) >= 8:
-        return True
-    # Check Supabase
-    try:
-        import supa
-        if supa._enabled() and await supa.count_steps(ck) >= 8:
-            return True
-    except: pass
-    return False
-
-@app.get("/", response_class=HTMLResponse)
-async def index():
-    return Path("static/index.html").read_text(encoding="utf-8")
 
 @app.post("/api/auth")
 async def auth(request: Request):
@@ -163,80 +204,79 @@ async def auth(request: Request):
         return {"ok": True, "token": _token(APP_PASSWORD)}
     raise HTTPException(401, "wrong password")
 
+
 @app.get("/api/passages")
 async def list_passages(request: Request):
     _verify(request)
     db = await _load_db()
     result = []
-    for bk, bd in db.get("books",{}).items():
-        for unit, ud in bd.get("units",{}).items():
-            for pid, pi in ud.get("passages",{}).items():
+    for bk, bd in db.get("books", {}).items():
+        for unit, ud in bd.get("units", {}).items():
+            for pid, pi in ud.get("passages", {}).items():
+                ck = _ck(bk, unit, pid)
                 result.append({
-                    "book": bk, "unit": unit, "id": pid,
+                    "book": bk,
+                    "unit": unit,
+                    "id": pid,  # 프론트에서 p.id 로 씀
                     "title": pi.get("title", pid),
-                    "cache_status": "ready" if await _is_cached(_ck(bk,unit,pid)) else "not_ready"
+                    "cache_status": "ready" if await _is_cached(ck) else "not_ready",
                 })
     return result
+
 
 @app.post("/api/passages/upload")
 async def upload_passages(request: Request):
     _verify(request)
     body = await request.json()
-    book = body.get("book", "26 suteuk")
-    text = body.get("text", "")
-    parts = re.split(r'###(.+?)###', text)
+    book = (body.get("book") or "").strip()
+    text = body.get("text") or ""
+
+    if not book:
+        raise HTTPException(400, "book 필요")
+    if not text.strip():
+        raise HTTPException(400, "text 필요")
+
+    parts = re.split(r"###(.+?)###", text)
     db = await _load_db()
-    if book not in db["books"]:
-        db["books"][book] = {"units": {}}
-    
+    db.setdefault("books", {})
+    db["books"].setdefault(book, {"units": {}})
+
     count = 0
-    new_rows = []  # 새로 추가된 지문만 모으기
-    
+
     for i in range(1, len(parts), 2):
         title = parts[i].strip()
-        passage = parts[i+1].strip() if i+1 < len(parts) else ""
-        if not passage: continue
-        # 다양한 교재 형식 매칭: 05강, SL, L1, 1과, Lesson 1, Chapter 1, Unit 1, 1단원 등
-        m = re.match(r'(\d+강|\d+과|Lesson\s*\d+|L\d+|Chapter\s*\d+|Unit\s*\d+|\d+단원|SL)\s*(.*)', title, re.IGNORECASE)
+        passage = parts[i + 1].strip() if i + 1 < len(parts) else ""
+        if not passage:
+            continue
+
+        # 다양한 교재 형식 매칭
+        m = re.match(
+            r"(\d+강|\d+과|Lesson\s*\d+|L\d+|Chapter\s*\d+|Unit\s*\d+|\d+단원|SL)\s*(.*)",
+            title,
+            re.IGNORECASE,
+        )
         unit_name = m.group(1).strip() if m else "etc"
-        pid = m.group(2).strip() if m and m.group(2).strip() else title
-        if unit_name not in db["books"][book]["units"]:
-            db["books"][book]["units"][unit_name] = {"passages": {}}
+        pid = m.group(2).strip() if (m and m.group(2).strip()) else title
+
+        db["books"][book]["units"].setdefault(unit_name, {"passages": {}})
         db["books"][book]["units"][unit_name]["passages"][pid] = {"title": title, "text": passage}
-        new_rows.append({
-            "book": book, "unit": unit_name, "pid": pid,
-            "title": title, "passage_text": passage
-        })
         count += 1
-    
-    # 로컬 저장
-    PASSAGES_FILE.write_text(json.dumps(db, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"[upload] local file written OK ({count} new passages)")
-    
-    # 수파베이스에 새 지문만 보내기 (배치 50개씩)
-    if new_rows:
-        try:
-            import supa
-            if supa._enabled():
-                batch_size = 50
-                for start in range(0, len(new_rows), batch_size):
-                    batch = new_rows[start:start + batch_size]
-                    print(f"[upload] sending batch {start//batch_size + 1} ({len(batch)} rows) to Supabase...")
-                    await supa.upsert_passages_bulk(batch)
-                print(f"[upload] Supabase sync done: {len(new_rows)} rows")
-            else:
-                print("[upload] Supabase not enabled")
-        except Exception as e:
-            print(f"[upload] Supabase save error: {e}")
-    
+
+    await _save_db(db)
+    print(f"[upload] saved ({count} passages) book='{book}'")
     return {"ok": True, "count": count}
+
 
 @app.delete("/api/passages")
 async def delete_passage_api(request: Request):
     """개별 지문 삭제"""
     _verify(request)
     body = await request.json()
-    book, unit, pid = body.get("book"), body.get("unit"), body.get("pid")
+
+    # 프론트 deletePassage()는 {book, unit, pid}로 보냄
+    book = body.get("book")
+    unit = body.get("unit")
+    pid = body.get("pid")
     if not all([book, unit, pid]):
         raise HTTPException(400, "book, unit, pid 필요")
 
@@ -248,28 +288,28 @@ async def delete_passage_api(request: Request):
             del db["books"][book]["units"][unit]
         if not db["books"][book]["units"]:
             del db["books"][book]
-    except KeyError:
+    except Exception:
         raise HTTPException(404, "passage not found")
 
     await _save_db(db)
 
-    # 캐시도 삭제
+    # 로컬 캐시도 삭제
     ck = _ck(book, unit, pid)
     cache_dir = DATA_DIR / ck
     if cache_dir.exists():
-        import shutil
         shutil.rmtree(cache_dir, ignore_errors=True)
-        print(f"[cache] deleted cache dir for {ck}")
+        print(f"[cache] deleted local cache dir {ck}")
 
-    # Supabase에서도 삭제
+    # Supabase passage row 삭제 (best-effort)
     try:
         import supa
         if supa._enabled():
             await supa.delete_passage(book, unit, pid)
     except Exception as e:
-        print(f"[supa] delete error: {e}")
+        print(f"[supa] delete passage error: {e}")
 
     return {"ok": True}
+
 
 @app.delete("/api/books")
 async def delete_book_api(request: Request):
@@ -284,22 +324,19 @@ async def delete_book_api(request: Request):
     if book not in db.get("books", {}):
         raise HTTPException(404, "book not found")
 
-    db_copy_units = db["books"][book].get("units", {})
-
-    # 캐시도 삭제
-    import shutil
-    for u, ud in db_copy_units.items():
-        for p in ud.get("passages", {}).keys():
-            ck = _ck(book, u, p)
+    # 로컬 캐시도 삭제
+    for unit, ud in db["books"][book].get("units", {}).items():
+        for pid in ud.get("passages", {}).keys():
+            ck = _ck(book, unit, pid)
             cache_dir = DATA_DIR / ck
             if cache_dir.exists():
                 shutil.rmtree(cache_dir, ignore_errors=True)
-    print(f"[cache] deleted all cache for book '{book}'")
+    print(f"[cache] deleted all local cache for book '{book}'")
 
     del db["books"][book]
     await _save_db(db)
 
-    # Supabase에서도 삭제
+    # Supabase에서도 삭제 (best-effort)
     try:
         import supa
         if supa._enabled():
@@ -309,6 +346,7 @@ async def delete_book_api(request: Request):
 
     return {"ok": True}
 
+
 @app.post("/api/sync-supabase")
 async def sync_supabase(request: Request):
     """로컬 DB를 수파베이스에 강제 동기화"""
@@ -317,22 +355,24 @@ async def sync_supabase(request: Request):
         import supa
         if not supa._enabled():
             return {"ok": False, "error": "Supabase not enabled"}
-        
+
         db = await _load_db()
+
         rows = []
         for bk, bd in db.get("books", {}).items():
             for unit, ud in bd.get("units", {}).items():
                 for pid, pi in ud.get("passages", {}).items():
                     rows.append({
-                        "book": bk, "unit": unit, "pid": pid,
+                        "book": bk,
+                        "unit": unit,
+                        "pid": pid,
                         "title": pi.get("title", pid),
-                        "passage_text": pi.get("text", "")
+                        "passage_text": pi.get("text", ""),
                     })
-        
+
         if not rows:
-            return {"ok": True, "count": 0}
-        
-        # 배치 50개씩 전송
+            return {"ok": True, "count": 0, "total": 0}
+
         batch_size = 50
         success = 0
         for start in range(0, len(rows), batch_size):
@@ -340,46 +380,41 @@ async def sync_supabase(request: Request):
             result = await supa.upsert_passages_bulk(batch)
             if isinstance(result, list):
                 success += len(result)
-        
+
         return {"ok": True, "count": success, "total": len(rows)}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+
 @app.post("/api/clear-cache")
 async def clear_cache(request: Request):
-    """특정 교재/지문의 step 캐시 삭제"""
+    """특정 교재/지문의 step 캐시 삭제 (로컬만 확실히)"""
     _verify(request)
     body = await request.json()
+
     book = body.get("book")
     unit = body.get("unit")
     pid = body.get("passage_id")
     scope = body.get("scope", "all")  # "all" = 교재 전체, "passage" = 특정 지문
-    
+
     deleted = 0
-    
+
     if scope == "passage" and all([book, unit, pid]):
-        # 특정 지문 캐시만 삭제
         ck = _ck(book, unit, pid)
         cache_dir = DATA_DIR / ck
         if cache_dir.exists():
-            import shutil
             for f in cache_dir.glob("step*.json"):
-                f.unlink()
-                deleted += 1
+                try:
+                    f.unlink()
+                    deleted += 1
+                except Exception:
+                    pass
             print(f"[cache] deleted {deleted} local cache files for {ck}")
-        # 수파베이스 캐시도 삭제
-        try:
-            import supa
-            if supa._enabled():
-                for step_name in ["step1_vocab", "step2_grammar", "step3_blank", "step4_topic", "step5_order", "step6_vocab_content", "step7_writing"]:
-                    try:
-                        supa.supabase.table("workbook_cache").delete().eq("cache_key", ck).eq("step_name", step_name).execute()
-                    except: pass
-                print(f"[cache] deleted supabase cache for {ck}")
-        except Exception as e:
-            print(f"[cache] supabase delete error: {e}")
+
+        # Supabase step_cache 삭제는 다음 단계에서 supa.py에 함수 추가 후 연결
+        # (지금은 서버 에러 없이 로컬 캐시만 확실히 삭제)
+
     elif scope == "all" and book:
-        # 교재 전체 지문의 캐시 삭제
         db = await _load_db()
         if book in db.get("books", {}):
             for u, ud in db["books"][book].get("units", {}).items():
@@ -388,67 +423,80 @@ async def clear_cache(request: Request):
                     cache_dir = DATA_DIR / ck
                     if cache_dir.exists():
                         for f in cache_dir.glob("step*.json"):
-                            f.unlink()
-                            deleted += 1
-        print(f"[cache] deleted {deleted} cache files for book '{book}'")
+                            try:
+                                f.unlink()
+                                deleted += 1
+                            except Exception:
+                                pass
+        print(f"[cache] deleted {deleted} local cache files for book '{book}'")
     else:
         raise HTTPException(400, "book 필요")
-    
+
     return {"ok": True, "deleted": deleted}
+
 
 @app.post("/api/generate")
 async def generate(request: Request):
     _verify(request)
     body = await request.json()
-    book, unit, pid = body.get("book"), body.get("unit"), body.get("passage_id")
+
+    book = body.get("book")
+    unit = body.get("unit")
+    pid = body.get("passage_id")
     levels = body.get("levels")
-    
-    # Debug logging
-    print(f"[generate] book={book}, unit={unit}, pid={pid}")
-    print(f"[generate] passages.json exists: {PASSAGES_FILE.exists()}")
+
+    if not all([book, unit, pid]):
+        raise HTTPException(400, "book, unit, passage_id 필요")
 
     db = await _load_db()
-    
-    # Debug: show what's in the DB
-    books_list = list(db.get("books", {}).keys())
-    print(f"[generate] books in db: {books_list}")
-    if book in db.get("books", {}):
-        units_list = list(db["books"][book].get("units", {}).keys())
-        print(f"[generate] units in '{book}': {units_list}")
-        if unit in db["books"][book].get("units", {}):
-            pids_list = list(db["books"][book]["units"][unit].get("passages", {}).keys())
-            print(f"[generate] passages in '{unit}': {pids_list}")
-    
+
     try:
         pinfo = db["books"][book]["units"][unit]["passages"][pid]
-    except (KeyError, TypeError) as e:
-        print(f"[generate] PASSAGE NOT FOUND: {e}")
+    except Exception as e:
+        print(f"[generate] passage not found: {e}")
         raise HTTPException(404, f"passage not found: book={book}, unit={unit}, pid={pid}")
 
-    passage_text = pinfo["text"]
-    title = pinfo["title"]
-    m = re.match(r'(\d+)', unit)
+    passage_text = pinfo.get("text", "")
+    title = pinfo.get("title", pid)
+
+    m = re.match(r"(\d+)", unit or "")
     lesson_num = m.group(1) if m else "00"
+
     ck = _ck(book, unit, pid)
 
     try:
         import pipeline as pl
+
         pl.DATA_DIR = DATA_DIR
         pl.TEMPLATE_DIR = Path(".")
         pl.OUTPUT_DIR = Path("output")
         pl.OUTPUT_DIR.mkdir(exist_ok=True)
 
-        meta = {"lesson_num": lesson_num, "lesson_n": lesson_num, "challenge_title": title, "subject": book}
-        result_path = pl.process_passage(passage=passage_text, meta=meta, passage_id=ck, levels=levels)
+        meta = {
+            "lesson_num": lesson_num,
+            "lesson_n": lesson_num,
+            "challenge_title": title,
+            "subject": book,
+        }
+
+        result_path = pl.process_passage(
+            passage=passage_text,
+            meta=meta,
+            passage_id=ck,
+            levels=levels,
+        )
 
         if result_path:
-            hp = result_path.with_suffix('.html') if result_path.suffix != '.html' else result_path
+            hp = result_path.with_suffix(".html") if result_path.suffix != ".html" else result_path
             if hp.exists():
                 return {"ok": True, "html": hp.read_text(encoding="utf-8"), "filename": hp.name}
+
         raise HTTPException(500, "generation failed")
-    except HTTPException: raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, str(e))
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))

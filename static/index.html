@@ -171,16 +171,16 @@ textarea:focus { border-color: #4A90D9; outline: none; }
         </div>
         <div class="level-grid">
           <div class="level-btn selected" data-level="0" onclick="toggleLevel(this)">표지+정답</div>
-          <div class="level-btn selected" data-level="1" onclick="toggleLevel(this)">Lv.1 어휘</div>
-          <div class="level-btn selected" data-level="2" onclick="toggleLevel(this)">Lv.2 해석</div>
-          <div class="level-btn green selected" data-level="3" onclick="toggleLevel(this)">Lv.3 분석</div>
-          <div class="level-btn green selected" data-level="4" onclick="toggleLevel(this)">Lv.4 구조</div>
-          <div class="level-btn orange selected" data-level="5" onclick="toggleLevel(this)">Lv.5 순서</div>
-          <div class="level-btn orange selected" data-level="6" onclick="toggleLevel(this)">Lv.6 빈칸</div>
-          <div class="level-btn orange selected" data-level="7" onclick="toggleLevel(this)">Lv.7 주제</div>
-          <div class="level-btn orange selected" data-level="8" onclick="toggleLevel(this)">Lv.8 어법</div>
-          <div class="level-btn orange selected" data-level="9" onclick="toggleLevel(this)">Lv.9 어휘</div>
-          <div class="level-btn orange selected" data-level="10" onclick="toggleLevel(this)">Lv.10 영작</div>
+          <div class="level-btn selected" data-level="1" onclick="toggleLevel(this)">Stage 1 어휘</div>
+          <div class="level-btn selected" data-level="2" onclick="toggleLevel(this)">Stage 2 해석</div>
+          <div class="level-btn green selected" data-level="3" onclick="toggleLevel(this)">Stage 3 분석</div>
+          <div class="level-btn green selected" data-level="4" onclick="toggleLevel(this)">Stage 4 구조</div>
+          <div class="level-btn orange selected" data-level="5" onclick="toggleLevel(this)">Stage 5 순서</div>
+          <div class="level-btn orange selected" data-level="6" onclick="toggleLevel(this)">Stage 6 빈칸</div>
+          <div class="level-btn orange selected" data-level="7" onclick="toggleLevel(this)">Stage 7 주제</div>
+          <div class="level-btn orange selected" data-level="8" onclick="toggleLevel(this)">Stage 8 어법</div>
+          <div class="level-btn orange selected" data-level="9" onclick="toggleLevel(this)">Stage 9 어휘</div>
+          <div class="level-btn orange selected" data-level="10" onclick="toggleLevel(this)">Stage 10 영작</div>
         </div>
       </div>
 
@@ -188,9 +188,6 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       <div class="generate-area">
         <button class="btn btn-primary" id="btn-generate" onclick="doGenerate()" disabled>
           워크북 생성하기
-        </button>
-        <button class="btn btn-sm" id="btn-clear-passage-cache" onclick="clearPassageCache()" style="margin-left:8px;background:#FFF8F0;color:#E8833A;border:1px solid #E8833A;display:none;">
-          🗑️ 선택 지문 캐시 삭제
         </button>
         <div class="progress hidden" id="progress">
           <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>

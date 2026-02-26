@@ -90,13 +90,11 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 .mb2{margin-bottom:2px} .mb4{margin-bottom:4px} .mb6{margin-bottom:6px} .mb8{margin-bottom:8px}
 .tc{text-align:center} .tm{color:var(--text-muted)} .ts{font-size:8.5pt}
 
-/* ===== 가로 오버플로우 방지 ===== */
+/* ===== Print shrink 방지 ===== */
 .page, .page * {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-
-/* ===== Print layout 안정화 ===== */
 @media print {
   html, body { height: auto; margin: 0; padding: 0; }
   .page {

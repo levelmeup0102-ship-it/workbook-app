@@ -37,7 +37,7 @@ async def _request(method: str, endpoint: str, body=None, extra_headers: dict | 
             )
         raw = resp.text.strip()
         if not raw:
-            # DELETE는 원래 빈 응답이 흔함
+            print(f"[supa] empty response for {method} {endpoint} (status={resp.status_code})")
             return None
         parsed = json.loads(raw)
         if isinstance(parsed, dict) and "message" in parsed:
@@ -55,7 +55,12 @@ async def get_all_passages():
     return result if isinstance(result, list) else []
 
 async def get_passage(book, unit, pid):
-    q = f"passages?book=eq.{quote(book, safe='')}&unit=eq.{quote(unit, safe='')}&pid=eq.{quote(pid, safe='')}&select=*"
+    q = (
+        "passages?"
+        f"book=eq.{quote(book, safe='')}&"
+        f"unit=eq.{quote(unit, safe='')}&"
+        f"pid=eq.{quote(pid, safe='')}&select=*"
+    )
     result = await _request("GET", q)
     if isinstance(result, list) and len(result) > 0:
         return result[0]
@@ -88,10 +93,14 @@ async def upsert_passages_bulk(rows):
     return result
 
 # ========================
-# Step Cache
+# Step Cache (table: step_cache)
 # ========================
 async def get_step(cache_key, step_name):
-    q = f"step_cache?cache_key=eq.{quote(cache_key, safe='')}&step_name=eq.{quote(step_name, safe='')}&select=data"
+    q = (
+        "step_cache?"
+        f"cache_key=eq.{quote(cache_key, safe='')}&"
+        f"step_name=eq.{quote(step_name, safe='')}&select=data"
+    )
     result = await _request("GET", q)
     if isinstance(result, list) and len(result) > 0:
         return result[0].get("data")
@@ -113,22 +122,22 @@ async def count_steps(cache_key):
         return len(result)
     return 0
 
-async def delete_step(cache_key, step_name):
-    """Delete a single cached step for a cache_key"""
-    q = f"step_cache?cache_key=eq.{quote(cache_key, safe='')}&step_name=eq.{quote(step_name, safe='')}"
-    return await _request("DELETE", q)
-
 async def delete_steps_by_cache_key(cache_key):
-    """Delete ALL cached steps for a cache_key"""
+    """Delete all cached steps for a cache_key from step_cache"""
     q = f"step_cache?cache_key=eq.{quote(cache_key, safe='')}"
     return await _request("DELETE", q)
 
 # ========================
-# Delete (Passages)
+# Delete passages
 # ========================
 async def delete_passage(book, unit, pid):
     """Delete a single passage"""
-    q = f"passages?book=eq.{quote(book, safe='')}&unit=eq.{quote(unit, safe='')}&pid=eq.{quote(pid, safe='')}"
+    q = (
+        "passages?"
+        f"book=eq.{quote(book, safe='')}&"
+        f"unit=eq.{quote(unit, safe='')}&"
+        f"pid=eq.{quote(pid, safe='')}"
+    )
     return await _request("DELETE", q)
 
 async def delete_book(book):

@@ -6,9 +6,7 @@
 :root {
   --primary: #4A90D9;
   --accent: #E8833A;
-  --green: #2E9E5A;
   --bg-blue: #EBF4FB;
-  --bg-green: #E8F5E9;
   --bg-orange: #FFF8F0;
   --bg-yellow: #FFFDE7;
   --bg-passage: #f9fafb;
@@ -21,11 +19,13 @@
   --border-dotted: #ccc;
   --red: #dc2626;
 }
-@page { size: A4; margin: 12mm 15mm 18mm 15mm; @bottom-center { content: counter(page); font-size: 8pt; color: #666; } }
+@page { size: A4; margin: 12mm 15mm 14mm 15mm; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10pt; color: var(--text-primary); line-height: 1.5; -webkit-print-color-adjust: exact; }
-.page { page-break-after: always; position: relative; padding-bottom: 16px; }
+.page { page-break-after: always; position: relative; padding-bottom: 20px; }
 .page:last-child { page-break-after: avoid; }
+
+/* Header */
 .hdr { display:flex; justify-content:space-between; align-items:baseline; padding-bottom:3px; border-bottom:1px solid #ccc; margin-bottom:6px; font-size:9.5pt; }
 .hdr-left { font-weight:bold; text-decoration:underline; }
 .hdr-right { color:var(--text-secondary); }
@@ -33,6 +33,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 .lnav { display:flex; gap:4px; justify-content:center; margin:4px 0 8px; }
 .lb { width:20px; height:20px; border-radius:50%; border:1px solid #ccc; text-align:center; line-height:20px; font-size:8pt; color:var(--text-muted); display:inline-flex; align-items:center; justify-content:center; }
 .lb.on { background:var(--primary); color:#fff; border-color:var(--primary); }
+.pn { text-align:center; color:var(--primary); font-size:8.5pt; position:absolute; bottom:2px; left:0; right:0; }
 
 /* Section title */
 .stitle { font-size:16pt; font-weight:bold; color:var(--primary); border-bottom:3px solid var(--accent); padding-bottom:3px; display:inline-block; margin-bottom:8px; }
@@ -40,7 +41,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 .sttl { font-size:11pt; font-weight:bold; text-decoration:underline; margin-bottom:4px; }
 
 /* Checklist */
-.ckl { border:2px solid var(--primary); border-radius:8px; background:var(--bg-blue); padding:8px 12px; margin-bottom:8px; font-size:9pt; break-inside:avoid; }
+.ckl { border:2px solid var(--primary); border-radius:8px; background:var(--bg-blue); padding:8px 12px; margin-bottom:8px; font-size:9pt; }
 .ckl-t { font-weight:bold; color:var(--primary); font-size:10pt; margin-bottom:3px; }
 .ckl table { width:100%; border-collapse:collapse; }
 .ckl td { padding:2px 0; }
@@ -49,7 +50,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 .cb { width:12px; height:12px; border:1px solid #999; display:inline-block; }
 
 /* Passage box */
-.psg { border:1px solid var(--border-light); border-radius:4px; background:var(--bg-passage); padding:12px 16px; line-height:1.8; font-size:10pt; margin-bottom:6px; break-inside:avoid; }
+.psg { border:1px solid var(--border-light); border-radius:4px; background:var(--bg-passage); padding:12px 16px; line-height:1.8; font-size:10pt; margin-bottom:6px; }
 
 /* Input lines */
 .il { border-bottom:1px solid var(--border-input); min-width:100px; display:inline-block; height:18px; }
@@ -57,11 +58,11 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 .ild { border-bottom:1px dotted var(--border-dotted); min-width:120px; display:inline-block; height:18px; }
 
 /* Boxes */
-.solbox { border:2px solid var(--accent); border-radius:8px; background:var(--bg-orange); padding:10px 14px; margin-top:8px; font-size:9.5pt; break-inside:avoid; }
-.warnbox { border:2px solid var(--accent); border-radius:8px; background:var(--bg-orange); padding:10px 14px; margin-top:8px; break-inside:avoid; }
+.solbox { border:2px solid var(--accent); border-radius:8px; background:var(--bg-orange); padding:10px 14px; margin-top:8px; font-size:9.5pt; }
+.warnbox { border:2px solid var(--accent); border-radius:8px; background:var(--bg-orange); padding:10px 14px; margin-top:8px; }
 .warnt { color:var(--red); font-weight:bold; font-size:11pt; }
-.encbox { border:1px solid var(--accent); border-radius:8px; background:var(--bg-yellow); padding:10px 14px; font-size:9.5pt; margin-top:8px; break-inside:avoid; }
-.dashbox { border:2px dashed var(--border-dotted); border-radius:8px; padding:10px 14px; break-inside:avoid; }
+.encbox { border:1px solid var(--accent); border-radius:8px; background:var(--bg-yellow); padding:10px 14px; font-size:9.5pt; margin-top:8px; }
+.dashbox { border:2px dashed var(--border-dotted); border-radius:8px; padding:10px 14px; }
 
 /* Grammar */
 .grammar-num { font-weight:bold; color:var(--primary); }
@@ -74,13 +75,12 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 .orev { flex:1; color:var(--text-muted); border-bottom:1px dotted var(--border-dotted); font-size:9pt; min-height:16px; }
 
 /* Answer page */
-.apage { columns:2; column-gap:18px; font-size:8pt; line-height:1.4; overflow-wrap:break-word; }
+.apage { columns:2; column-gap:18px; font-size:8pt; line-height:1.4; }
 .apage .ast { font-weight:bold; color:var(--primary); font-size:9pt; margin-top:6px; margin-bottom:2px; break-after:avoid; }
 .apage p { break-inside:avoid; }
-.ablock { break-inside:avoid; }
 
 /* Cover */
-.cv-c { text-align:center; display:flex; flex-direction:column; min-height:calc(273mm - 25mm); }
+.cv-c { text-align:center; }
 .cv-l { font-size:28pt; font-weight:bold; margin-top:40px; }
 .cv-ch { font-size:18pt; font-weight:bold; color:var(--primary); margin-top:8px; }
 
@@ -89,312 +89,288 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 .mt2{margin-top:2px} .mt4{margin-top:4px} .mt6{margin-top:6px} .mt8{margin-top:8px} .mt10{margin-top:10px} .mt12{margin-top:12px}
 .mb2{margin-bottom:2px} .mb4{margin-bottom:4px} .mb6{margin-bottom:6px} .mb8{margin-bottom:8px}
 .tc{text-align:center} .tm{color:var(--text-muted)} .ts{font-size:8.5pt}
+
+/* ===== 가로 오버플로우 방지 ===== */
+.page, .page * {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* ===== Print layout 안정화 ===== */
+@media print {
+  html, body { height: auto; margin: 0; padding: 0; }
+  .page {
+    height: 267mm;
+    max-height: 267mm;
+    overflow: hidden;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    box-sizing: border-box;
+  }
+}
 </style>
 </head>
 <body>
 
-{% if not levels or 0 in levels %}
 {# ==================== PAGE 1: COVER ==================== #}
 <div class="page">
   <div class="cv-c">
-    <p style="font-size:9pt;color:var(--text-muted);margin-top:4px;margin-left: 10px;text-align:left;">레벨미업학원 &nbsp;&nbsp;&nbsp;</p>
-    <div class="cv-l">{{ subject }}</div>
-    <div style="font-size:18pt;font-weight:bold;color:var(--green);margin-top:8px;">{{ challenge_title }}</div>
-    <p style="font-size:10pt;color:var(--text-secondary);margin-top:20px;">이 교재의 학습 흐름</p>
+    <p style="font-size:9pt;color:var(--text-muted);margin-top:4px;">ë ˆë²¨ë¯¸ì—…í•™ì› &nbsp;&nbsp;&nbsp; {{ subject }} / {{ publisher }}</p>
+    <div class="cv-l">{{ lesson_num }}ê³¼ Lesson {{ lesson_n }}</div>
+    <div class="cv-ch">{{ challenge_title }}</div>
+    <p style="font-size:10pt;color:var(--text-secondary);margin-top:20px;">ì´ êµìž¬ì˜ í•™ìŠµ íë¦„</p>
     <table style="width:80%;margin:16px auto;border-collapse:separate;border-spacing:8px;">
       <tr>
         <td style="width:33%;border:1.5px solid var(--primary);border-radius:8px;padding:12px 8px;text-align:center;vertical-align:top;">
-          <p style="font-size:11pt;font-weight:bold;color:var(--primary);margin-bottom:4px;">수업 전</p>
-          <p style="font-size:9pt;"><span style="font-weight:bold;color:var(--primary);">Stage 1</span> 어휘 학습<br><span style="font-weight:bold;color:var(--primary);">Stage 2</span> 해석 예습</p>
-          <p style="font-size:8pt;color:var(--text-muted);margin-top:3px;">모르는 단어/문장 미리 정리</p>
+          <p style="font-size:11pt;font-weight:bold;color:var(--primary);margin-bottom:4px;">ìˆ˜ì—… ì „</p>
+          <p style="font-size:9pt;"><span style="font-weight:bold;color:var(--primary);">Lv.1</span> ì–´íœ˜ í•™ìŠµ<br><span style="font-weight:bold;color:var(--primary);">Lv.2</span> í•´ì„ ì˜ˆìŠµ</p>
+          <p style="font-size:8pt;color:var(--text-muted);margin-top:3px;">ëª¨ë¥´ëŠ” ë‹¨ì–´/ë¬¸ìž¥ ë¯¸ë¦¬ ì •ë¦¬</p>
         </td>
-        <td style="width:33%;border:1.5px solid var(--green);border-radius:8px;padding:12px 8px;text-align:center;vertical-align:top;">
-          <p style="font-size:11pt;font-weight:bold;color:var(--green);margin-bottom:4px;">수업 중</p>
-          <p style="font-size:9pt;"><span style="font-weight:bold;color:var(--green);">Stage 3</span> 문장별 분석<br><span style="font-weight:bold;color:var(--green);">Stage 4</span> 구조 정리</p>
-          <p style="font-size:8pt;color:var(--text-muted);margin-top:3px;">문법/주장 정리</p>
+        <td style="width:33%;border:1.5px solid var(--primary);border-radius:8px;padding:12px 8px;text-align:center;vertical-align:top;">
+          <p style="font-size:11pt;font-weight:bold;color:var(--primary);margin-bottom:4px;">ìˆ˜ì—… ì¤‘</p>
+          <p style="font-size:9pt;"><span style="font-weight:bold;color:var(--primary);">Lv.3</span> ë¬¸ìž¥ë³„ ë¶„ì„<br><span style="font-weight:bold;color:var(--primary);">Lv.4</span> êµ¬ì¡° ì •ë¦¬</p>
+          <p style="font-size:8pt;color:var(--text-muted);margin-top:3px;">ë¬¸ë²•/íë¦„/ì£¼ìž¥ ì •ë¦¬</p>
         </td>
-        <td style="width:33%;border:1.5px solid var(--accent);border-radius:8px;padding:12px 8px;text-align:center;vertical-align:top;">
-          <p style="font-size:11pt;font-weight:bold;color:var(--accent);margin-bottom:4px;">수업 후</p>
-          <p style="font-size:9pt;"><span style="font-weight:bold;color:var(--accent);">Stage 5~10</span> 복습 문제<br>흐름/빈칸/주제/어법/<br>어휘/내용 일치/영작</p>
-          <p style="font-size:8pt;color:var(--text-muted);margin-top:3px;">오답정리 → 강사 피드백</p>
+        <td style="width:33%;border:1.5px solid var(--primary);border-radius:8px;padding:12px 8px;text-align:center;vertical-align:top;">
+          <p style="font-size:11pt;font-weight:bold;color:var(--primary);margin-bottom:4px;">ìˆ˜ì—… í›„</p>
+          <p style="font-size:9pt;"><span style="font-weight:bold;color:var(--primary);">Lv.5~10</span> ë³µìŠµ ë¬¸ì œ<br>ìˆœì„œ/ë¹ˆì¹¸/ì£¼ì œ/ì–´ë²•</p>
+          <p style="font-size:8pt;color:var(--text-muted);margin-top:3px;">ì˜¤ë‹µì •ë¦¬ â†’ ê°•ì‚¬ í”¼ë“œë°±</p>
         </td>
       </tr>
     </table>
-    <table style="width:70%;margin:16px auto;border-collapse:separate;border-spacing:4px;table-layout:fixed;">
+    <table style="width:70%;margin:16px auto;border-collapse:separate;border-spacing:4px;">
       <tr>
-        <td style="width:20%;border:1px solid var(--primary);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--primary);"><span class="b">Stage 1</span><br>어휘</td>
-        <td style="width:20%;border:1px solid var(--primary);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--primary);"><span class="b">Stage 2</span><br>해석</td>
-        <td style="width:20%;border:1px solid var(--green);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--green);"><span class="b">Stage 3</span><br>분석</td>
-        <td style="width:20%;border:1px solid var(--green);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--green);"><span class="b">Stage 4</span><br>정리</td>
-        <td style="width:20%;border:1px solid var(--accent);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--accent);"><span class="b">Stage 5</span><br>흐름</td>
+        <td style="border:1px solid var(--primary);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--primary);"><span class="b">Lv.1</span><br>ì–´íœ˜</td>
+        <td style="border:1px solid var(--primary);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--primary);"><span class="b">Lv.2</span><br>í•´ì„</td>
+        <td style="border:1px solid var(--primary);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--primary);"><span class="b">Lv.3</span><br>ë¶„ì„</td>
+        <td style="border:1px solid var(--primary);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--primary);"><span class="b">Lv.4</span><br>ì •ë¦¬</td>
+        <td style="border:1px solid var(--primary);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--primary);"><span class="b">Lv.5</span><br>íë¦„</td>
       </tr>
       <tr>
-        <td style="border:1px solid var(--accent);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--accent);"><span class="b">Stage 6</span><br>빈칸</td>
-        <td style="border:1px solid var(--accent);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--accent);"><span class="b">Stage 7</span><br>주제</td>
-        <td style="border:1px solid var(--accent);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--accent);"><span class="b">Stage 8</span><br>어법</td>
-        <td style="border:1px solid var(--accent);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--accent);"><span class="b">Stage 9</span><br>어휘+내용일치</td>
-        <td style="border:1px solid var(--accent);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--accent);"><span class="b">Stage 10</span><br>영작</td>
+        <td style="border:1px solid var(--primary);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--primary);"><span class="b">Lv.6</span><br>ë¹ˆì¹¸</td>
+        <td style="border:1px solid var(--primary);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--primary);"><span class="b">Lv.7</span><br>ì£¼ì œ</td>
+        <td style="border:1px solid var(--primary);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--primary);"><span class="b">Lv.8</span><br>ì–´ë²•</td>
+        <td style="border:1px solid var(--primary);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--primary);"><span class="b">Lv.9</span><br>ì–´íœ˜+ë‚´ìš©ì¼ì¹˜</td>
+        <td style="border:1px solid var(--primary);border-radius:5px;padding:3px 4px;text-align:center;font-size:8pt;color:var(--primary);"><span class="b">Lv.10</span><br>ì˜ìž‘</td>
       </tr>
     </table>
-    <div class="dashbox" style="max-width:82%;margin: auto auto 20px;">
-      <p class="b" style="font-size:10pt;">[오답정리의 중요성]</p>
-      <p style="font-size:9pt;margin-top:3px;">각 문제에는 <strong>오답정리 칸</strong>이 있습니다. 채점한 후 반드시 오답 정리를 작성하세요.<br>교재의 내용을 완벽히 이해하고 학습하는 것이 중요합니다.</p>
-      <div style="max-width:82%;margin:0 auto;">
-      </div>
+    <div class="dashbox" style="max-width:82%;margin:20px auto;">
+      <p class="b" style="font-size:10pt;">[ì˜¤ë‹µ ì •ë¦¬ â†’ ê°•ì‚¬ í”¼ë“œë°± ì•ˆë‚´]</p>
+      <p style="font-size:9pt;margin-top:3px;">ê° ë¬¸ì œì—ëŠ” <strong>ì˜¤ë‹µ ì •ë¦¬ ì¹¸</strong>ì´ ìžˆìŠµë‹ˆë‹¤. í’€ê³  ì±„ì í•œ í›„ ë°˜ë“œì‹œ ì˜¤ë‹µ ì •ë¦¬ë¥¼ ìž‘ì„±í•˜ì„¸ìš”.<br>ìž‘ì„± í›„ ì‚¬ì§„ì„ ì°ì–´ ì•±ìœ¼ë¡œ ê°•ì‚¬ì—ê²Œ ì „ì†¡í•´ ì£¼ì„¸ìš”. ê°œì¸ë³„ í”¼ë“œë°±ì„ ë³´ë‚´ë“œë¦½ë‹ˆë‹¤.</p>
     </div>
-    <p style="font-size:10pt;">학생 이름: <span class="il" style="min-width:200px;"></span> &nbsp;&nbsp;&nbsp; 
-    </p>
-    <p>
-      날짜: <span class="il" style="min-width:200px;"></span>
-    </p>
+    <div style="max-width:82%;margin:20px auto;">
+      <p style="font-size:10pt;">í•™ìƒ ì´ë¦„: <span class="il" style="min-width:200px;"></span> &nbsp;&nbsp;&nbsp; ë‚ ì§œ: <span class="il" style="min-width:200px;"></span></p>
+    </div>
   </div>
+  <div class="pn">1</div>
 </div>
 
-{% endif %}
-{% if not levels or 1 in levels %}
 {# ==================== PAGE 2: Lv.1 ==================== #}
 <div class="page" style="font-size:8.5pt;line-height:1.2;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
-  <div class="phase">수업 전</div>
+  <div class="hdr"><span class="hdr-left">ë ˆë²¨ë¯¸ì—…í•™ì›</span><span class="hdr-right">{{ lesson_num }}ê³¼ - {{ challenge_title }}</span></div>
+  <div class="phase">ìˆ˜ì—… ì „</div>
   <div class="lnav"><span class="lb on">1</span>{% for i in range(2,11) %}<span class="lb">{{ i }}</span>{% endfor %}</div>
   <div class="ckl" style="padding:4px 8px;font-size:8pt;">
-    <div class="ckl-t" style="font-size:8.5pt;">[수업 전 체크리스트 - Stage 1]</div>
-    <table><tr><td></td><td class="cc">1차</td><td class="cc">2차</td><td class="cc">3차</td></tr>
-    {% for s in ["Step 1. 지문 핵심 어휘 암기","Step 2. 어휘 확인 테스트","Step 3. 틀린 단어 사전 찾아 채우기"] %}
+    <div class="ckl-t" style="font-size:8.5pt;">[ìˆ˜ì—… ì „ ì²´í¬ë¦¬ìŠ¤íŠ¸ - Lv.1]</div>
+    <table><tr><td></td><td class="cc">1ì°¨</td><td class="cc">2ì°¨</td><td class="cc">3ì°¨</td></tr>
+    {% for s in ["Step 1. ì§€ë¬¸ í•µì‹¬ ì–´íœ˜ ì•”ê¸°","Step 2. ì–´íœ˜ í™•ì¸ í…ŒìŠ¤íŠ¸","Step 3. í‹€ë¦° ë‹¨ì–´ ì‚¬ì „ ì°¾ì•„ ì±„ìš°ê¸°"] %}
     <tr><td><span class="sn">{{ s.split('.')[0] }}.</span> {{ s.split('. ',1)[1] }}</td>
     <td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td></tr>{% endfor %}</table>
   </div>
-  <div style="height:20px;"></div>
-  <div style="font-size:13pt;font-weight:bold;color:var(--primary);border-bottom:3px solid var(--accent);padding-bottom:2px;display:inline-block;margin-bottom:4px;">Stage 1 지문 핵심 어휘</div>
   <p style="font-size:7.5pt;color:var(--text-muted);">STEP 1</p>
+  <div style="font-size:13pt;font-weight:bold;color:var(--primary);border-bottom:3px solid var(--accent);padding-bottom:2px;display:inline-block;margin-bottom:4px;">Lv.1 ì§€ë¬¸ í•µì‹¬ ì–´íœ˜</div>
   <table style="width:100%;border-collapse:collapse;border:1px solid var(--border-table);font-size:8pt;">
     {% for i in range(0, vocab|length, 2) %}
     <tr>
       <td style="width:28%;padding:2px 4px;border:1px solid var(--border-table);vertical-align:top;"><span style="font-weight:bold;font-size:8.5pt;">{{ vocab[i].word }}</span><br><span style="font-size:6.5pt;color:var(--text-muted);">{{ vocab[i].synonyms }}</span></td>
-      <td style="width:22%;padding:2px 4px;border:1px solid var(--border-table);text-align:left;font-size:8.5pt;">{{ vocab[i].meaning }}</td>
+      <td style="width:22%;padding:2px 4px;border:1px solid var(--border-table);text-align:right;font-size:8.5pt;">{{ vocab[i].meaning }}</td>
       {% if i+1 < vocab|length %}
       <td style="width:28%;padding:2px 4px;border:1px solid var(--border-table);vertical-align:top;"><span style="font-weight:bold;font-size:8.5pt;">{{ vocab[i+1].word }}</span><br><span style="font-size:6.5pt;color:var(--text-muted);">{{ vocab[i+1].synonyms }}</span></td>
-      <td style="width:22%;padding:2px 4px;border:1px solid var(--border-table);text-align:left;font-size:8.5pt;">{{ vocab[i+1].meaning }}</td>
+      <td style="width:22%;padding:2px 4px;border:1px solid var(--border-table);text-align:right;font-size:8.5pt;">{{ vocab[i+1].meaning }}</td>
       {% else %}<td style="border:1px solid var(--border-table);"></td><td style="border:1px solid var(--border-table);"></td>{% endif %}
     </tr>{% endfor %}
   </table>
-  <div style="height:20px;"></div>
   <p style="font-size:7.5pt;color:var(--text-muted);margin-top:4px;">STEP 2</p>
-  <div style="font-size:10pt;font-weight:bold;margin-bottom:3px;">어휘 확인 테스트</div>
+  <div style="font-size:10pt;font-weight:bold;margin-bottom:3px;">ì–´íœ˜ í™•ì¸ í…ŒìŠ¤íŠ¸</div>
   <table style="width:100%;font-size:8.5pt;border-collapse:collapse;">
     <tr style="vertical-align:top;">
       <td style="width:33%;padding-right:8px;">
-        <p class="b" style="margin-bottom:2px;">A. 뜻 쓰기</p>
+        <p class="b" style="margin-bottom:2px;">A. ëœ» ì“°ê¸°</p>
         {% for w in test_a %}<p style="margin-bottom:2px;">{{ loop.index }}. {{ w }} = <span class="il" style="min-width:60px;"></span></p>{% endfor %}
       </td>
       <td style="width:33%;padding-right:8px;">
-        <p class="b" style="margin-bottom:2px;">B. 동의어 1개 쓰기</p>
+        <p class="b" style="margin-bottom:2px;">B. ë™ì˜ì–´ 1ê°œ ì“°ê¸°</p>
         {% for w in test_b %}<p style="margin-bottom:2px;">{{ loop.index }}. {{ w }} = <span class="il" style="min-width:60px;"></span></p>{% endfor %}
       </td>
       <td style="width:33%;">
-        <p class="b" style="margin-bottom:2px;">C. 철자 쓰기</p>
+        <p class="b" style="margin-bottom:2px;">C. ì² ìž ì“°ê¸°</p>
         {% for w in test_c %}<p style="margin-bottom:2px;">{{ loop.index }}. {{ w }} = <span class="il" style="min-width:60px;"></span></p>{% endfor %}
       </td>
     </tr>
   </table>
-  <div style="height:20px;"></div>
   <p style="font-size:7.5pt;color:var(--text-muted);margin-top:4px;">STEP 3</p>
-  <div style="font-size:10pt;font-weight:bold;margin-bottom:3px;">D. 틀린 단어 사전 찾아 채우기</div>
+  <div style="font-size:10pt;font-weight:bold;margin-bottom:3px;">D. í‹€ë¦°ë‹¨ì–´ ì‚¬ì „ ì°¾ì•„ ì±„ìš°ê¸°</div>
   <table style="width:100%;border-collapse:separate;border-spacing:3px;font-size:7pt;line-height:1.15;">
+    {% for row in range(2) %}
     <tr>
       {% for col in range(3) %}
       <td style="width:33%;border:1px solid var(--border-table);border-radius:3px;padding:2px 4px;vertical-align:top;">
-        <p><span style="color:var(--accent);font-weight:bold;">단어:</span> <span class="il" style="min-width:45px;height:10px;"></span></p>
-        <p><b style="width: 10%;">뜻</b> 1.<span class="il" style="width: 35%;height:10px;"></span> 2.<span class="il" style="width: 35%;height:10px;"></span></p>
-        <p><b style="width: 10%;">예문</b> <span class="il" style="width: 92.7%;height:10px;"></span></p>
+        <p><span style="color:var(--accent);font-weight:bold;">ë‹¨ì–´:</span> <span class="il" style="min-width:45px;height:10px;"></span></p>
+        <p><b>ëœ»</b> 1.<span class="il" style="min-width:35px;height:9px;"></span> 2.<span class="il" style="min-width:35px;height:9px;"></span> 3.<span class="il" style="min-width:35px;height:9px;"></span></p>
+        <p><b>ì˜ˆë¬¸</b> <span class="il" style="min-width:70px;height:9px;"></span></p>
+        <p><b>ì˜ì–´ í•œê¸€ 5íšŒ</b></p>
+        <p>1.<span class="il" style="min-width:18px;height:9px;"></span>=<span class="il" style="min-width:18px;height:9px;"></span> 2.<span class="il" style="min-width:18px;height:9px;"></span>=<span class="il" style="min-width:18px;height:9px;"></span></p>
+        <p>3.<span class="il" style="min-width:18px;height:9px;"></span>=<span class="il" style="min-width:18px;height:9px;"></span> 4.<span class="il" style="min-width:18px;height:9px;"></span>=<span class="il" style="min-width:18px;height:9px;"></span></p>
+        <p>5.<span class="il" style="min-width:18px;height:9px;"></span>=<span class="il" style="min-width:18px;height:9px;"></span></p>
       </td>
       {% endfor %}
     </tr>
-  <p style="padding: 5px;"></p>
+    {% endfor %}
   </table>
-  <div class="warnbox" style="margin-top:5px;padding:6px 10px;">
-    <p class="b" style="font-size:8pt;">[핵심 어휘 솔루션]</p>
-    <p style="font-size:8pt;margin-top:2px;">• Step 1: 처음 학습시, <strong>지문 핵심 어휘</strong>의 뜻 위주로 학습.</p>
-    <p style="font-size:8pt;margin-top:2px;">• Step 2: 단어와 뜻이 연상되면 동의어를 참고하여 단어 연상 학습.</p>
-  </div>
+  <div class="pn">2</div>
 </div>
 
-{% endif %}
-{% if not levels or 2 in levels %}
 {# ==================== PAGE 3: Lv.2 ==================== #}
 <div class="page" style="font-size:9.5pt;line-height:1.4;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
-  <div class="phase">수업 전</div>
+  <div class="hdr"><span class="hdr-left">ë ˆë²¨ë¯¸ì—…í•™ì›</span><span class="hdr-right">{{ lesson_num }}ê³¼ - {{ challenge_title }}</span></div>
+  <div class="phase">ìˆ˜ì—… ì „</div>
   <div class="lnav"><span class="lb">1</span><span class="lb on">2</span>{% for i in range(3,11) %}<span class="lb">{{ i }}</span>{% endfor %}</div>
   <div class="ckl" style="padding:6px 10px;font-size:8.5pt;">
-    <div class="ckl-t" style="font-size:9pt;">[수업 전 체크리스트 - Stage 2]</div>
-    <table><tr><td></td><td class="cc">1차</td><td class="cc">2차</td><td class="cc">3차</td></tr>
-    {% for s in ["Step 1. 모르는 단어에 <mark> 형광펜 </mark> 표시","Step 2. 사전 찾아 아래에 정리하기","Step 3. 한 문장씩 해석 연습","Step 4. 해석 안 되는 문장에 <span style='color: #dc2626;'>★별표</span>"] %}
+    <div class="ckl-t" style="font-size:9pt;">[ìˆ˜ì—… ì „ ì²´í¬ë¦¬ìŠ¤íŠ¸ - Lv.2]</div>
+    <table><tr><td></td><td class="cc">1ì°¨</td><td class="cc">2ì°¨</td><td class="cc">3ì°¨</td></tr>
+    {% for s in ["Step 1. Lv.1 ì–´íœ˜ë¥¼ ëª¨ë‘ ì™¸ìš°ê³  í…ŒìŠ¤íŠ¸ë¥¼ ì™„ë£Œí–ˆë‹¤","Step 2. ì•„ëž˜ ì§€ë¬¸ì„ ìŠ¤ìŠ¤ë¡œ í•´ì„í•´ ë³´ì•˜ë‹¤","Step 3. ëª¨ë¥´ëŠ” ë‹¨ì–´ì— í˜•ê´‘íŽœ ì¹ í•˜ê³  ì•„ëž˜ì— ì •ë¦¬","Step 4. í•´ì„ ì•ˆ ë˜ëŠ” ë¬¸ìž¥ì— â˜…ë³„í‘œ í›„ ì‚¬ì§„ ì—…ë¡œë“œ"] %}
     <tr><td><span class="sn">{{ s.split('.')[0] }}.</span> {{ s.split('. ',1)[1] }}</td>
     <td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td></tr>{% endfor %}</table>
-    <p style="font-size:7.5pt;color:#4A90D9;margin-top:2px;">★별표 문장은 수업 시간에 확인합니다</p>
+    <p style="font-size:7.5pt;color:var(--text-muted);margin-top:2px;">â˜…ë³„í‘œ ë¬¸ìž¥ì€ ìˆ˜ì—… ì‹œê°„ì— ê°•ì‚¬ê°€ ìš°ì„  ì„¤ëª…í•©ë‹ˆë‹¤. ë°˜ë“œì‹œ ë¯¸ë¦¬ ë³´ë‚´ì£¼ì„¸ìš”!</p>
   </div>
-  <p style="padding: 5px;"></p>
-  <div class="stitle" style="font-size:15pt;">Stage 2 해석 예습</div>
-  <p style="font-size:8.5pt;color:var(--text-muted);margin-bottom:3px;">※ 모르는 단어 → 형광펜 / 해석 안 되는 문장 → ★표시</p>
+  <div class="stitle" style="font-size:15pt;">Lv.2 í•´ì„ ì˜ˆìŠµ</div>
+  <p style="font-size:8.5pt;color:var(--text-muted);margin-bottom:3px;">â€» ëª¨ë¥´ëŠ” ë‹¨ì–´ â†’ í˜•ê´‘íŽœ / í•´ì„ ì•ˆ ë˜ëŠ” ë¬¸ìž¥ â†’ â˜…í‘œì‹œ</p>
   <div class="psg" style="font-size:9.5pt;line-height:1.75;">{{ passage }}</div>
+
   <div style="margin-top:8px;border-top:1px solid var(--border-light);padding-top:6px;">
-    <p style="padding: 5px;"></p>
-    <p class="b" style="font-size:10pt;margin-bottom:2px;">형광친 단어 사전검색 후 정리하기</p>
-    <p style="font-size:8pt;color:var(--text-muted);margin-bottom:4px;"><span class="b">Step 1.</span> 형광 친 단어 옮겨 적기 → <span class="b">Step 2.</span> 사전 검색 후 뜻/동의어 정리</p>
+    <p class="b" style="font-size:10pt;margin-bottom:2px;">í˜•ê´‘ì¹œ ë‹¨ì–´ ì‚¬ì „ê²€ìƒ‰ í›„ ì •ë¦¬í•˜ê¸°</p>
+    <p style="font-size:8pt;color:var(--text-muted);margin-bottom:4px;"><span class="b">Step 1.</span> í˜•ê´‘ ì¹œ ë‹¨ì–´ ì˜®ê²¨ ì ê¸° â†’ <span class="b">Step 2.</span> ì‚¬ì „ ê²€ìƒ‰ í›„ ëœ»/ë™ì˜ì–´ ì •ë¦¬</p>
     <table style="width:100%;border-collapse:separate;border-spacing:4px;font-size:8pt;line-height:1.3;">
-      <tr style="break-inside: avoid;">
-        {% for col in range(3) %}
-        <td style="width:33%;border:1px solid var(--border-light);border-radius:3px;padding:3px 6px;vertical-align:top;">
-          <p><span style="color:var(--accent);font-weight:bold;">단어:</span> <span class="il" style="width:calc(100% - 35px);height:13px;"></span></p>
-          <p><b>뜻</b> 1.<span class="il" style="width:calc(50% - 20px);height:13px;"></span> 2.<span class="il" style="width:calc(50% - 20px);height:13px;"></span></p>
-          <p><b>동의어</b> 1.<span class="il" style="width:calc(50% - 25px);height:13px;"></span> 2.<span class="il" style="width:calc(50% - 25px);height:13px;"></span></p>
+      {% for row in range(4) %}
+      <tr>
+        {% for col in range(2) %}
+        <td style="width:50%;border:1px solid var(--border-light);border-radius:3px;padding:3px 6px;vertical-align:top;">
+          <p><span style="color:var(--accent);font-weight:bold;">ë‹¨ì–´:</span> <span class="il" style="min-width:70px;height:13px;"></span></p>
+          <p><b>ëœ»</b> &nbsp; 1.<span class="il" style="min-width:40px;height:12px;"></span> &nbsp; 2.<span class="il" style="min-width:40px;height:12px;"></span> &nbsp; 3.<span class="il" style="min-width:40px;height:12px;"></span></p>
+          <p><b>ë™ì˜ì–´</b> 1.<span class="il" style="min-width:40px;height:12px;"></span> &nbsp; 2.<span class="il" style="min-width:40px;height:12px;"></span> &nbsp; 3.<span class="il" style="min-width:40px;height:12px;"></span></p>
         </td>
         {% endfor %}
       </tr>
+      {% endfor %}
     </table>
   </div>
-  <p style="padding: 5px;"></p>
-  <div style="break-inside: avoid;">
-    <p class="b mt6" style="font-size:10pt;">▼ 해석 확인 (스스로 해석 후 비교)</p>
-    <p style="font-size:8.5pt;line-height:1.5;margin-top:3px;color:var(--text-secondary);">{{ translation }}</p>
-  </div>
-  <div class="warnbox" style="margin-top:5px;padding:6px 10px;">
-    <p class="b" style="font-size:8pt;">[해석 예습 솔루션]</p>
-    <p style="font-size:8pt;margin-top:2px;">• Step 1: 상단의 해석을 보지 않은 채로 영어 지문의 해석이 정확하게 되는지 반드시 확인하세요!</p>
-    <p style="font-size:8pt;margin-top:2px;">• Step 2: 수업 중, 담당 선생님이 <strong>해석을 확인할 테니</strong> <u>수업 전 다시 한번 해석 연습을 하고 수업에 들어옵시다!</u></p>
-  </div>
+
+  <p class="b mt6" style="font-size:10pt;">â–¼ í•´ì„ í™•ì¸ (ìŠ¤ìŠ¤ë¡œ í•´ì„ í›„ ë¹„êµ)</p>
+  <p style="font-size:8.5pt;line-height:1.5;margin-top:3px;color:var(--text-secondary);">{{ translation }}</p>
+  <div class="pn">3</div>
 </div>
 
-{% endif %}
-{% if not levels or 3 in levels %}
 {# ==================== PAGE 4: Lv.3 ==================== #}
-{# --- Lv.3: 동적 페이지 분할 --- #}
-{% set ns = namespace(offset=0) %}
-{% for chunk in sentence_chunks %}
 <div class="page" style="font-size:10pt;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
-  <div class="phase" style="color:var(--green);">수업 중</div>
+  <div class="hdr"><span class="hdr-left">ë ˆë²¨ë¯¸ì—…í•™ì›</span><span class="hdr-right">{{ lesson_num }}ê³¼ - {{ challenge_title }}</span></div>
+  <div class="phase">ìˆ˜ì—… ì¤‘</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==3 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
-  {% if loop.first %}
   <div class="ckl">
-    <div class="ckl-t">[수업 중 체크리스트 - Stage 3]</div>
-    <table><tr><td></td><td class="cc">1차</td><td class="cc">2차</td><td class="cc">3차</td></tr>
-    {% for s in ["Step 1. 해석 — 단어+문법으로 정확하게 해석하기","Step 2. 이해 — 나만의 예시로 문장 내용 확실히 이해하기","Step 3. 추론 — 다음에 나올 내용 예측 → 다음 문장에서 확인","Step 4. 반복 — 모든 문장에 해석→이해→추론 반복"] %}
+    <div class="ckl-t">[ìˆ˜ì—… ì¤‘ ì²´í¬ë¦¬ìŠ¤íŠ¸ - Lv.3]</div>
+    <table><tr><td></td><td class="cc">1ì°¨</td><td class="cc">2ì°¨</td><td class="cc">3ì°¨</td></tr>
+    {% for s in ["Step 1. í•´ì„ â€” ë‹¨ì–´+ë¬¸ë²•ìœ¼ë¡œ ì •í™•í•˜ê²Œ í•´ì„í•˜ê¸°","Step 2. ì´í•´ â€” ë‚˜ë§Œì˜ ì˜ˆì‹œë¡œ ë¬¸ìž¥ ë‚´ìš© í™•ì‹¤ížˆ ì´í•´í•˜ê¸°","Step 3. ì¶”ë¡  â€” ë‹¤ìŒì— ë‚˜ì˜¬ ë‚´ìš© ì˜ˆì¸¡ â†’ ë‹¤ìŒ ë¬¸ìž¥ì—ì„œ í™•ì¸","Step 4. ë°˜ë³µ â€” ëª¨ë“  ë¬¸ìž¥ì— í•´ì„â†’ì´í•´â†’ì¶”ë¡  ë°˜ë³µ"] %}
     <tr><td><span class="sn">{{ s.split('.')[0] }}.</span> {{ s.split('. ',1)[1] }}</td>
     <td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td></tr>{% endfor %}</table>
   </div>
-  <div class="stitle">Stage 3 문장별 분석</div>
-  <div style="height:5px;"></div>
+  <div class="stitle">Lv.3 ë¬¸ìž¥ë³„ ë¶„ì„</div>
   <p class="slbl">STEP 1</p>
-  <p style="font-size:9pt;margin-bottom:8px;">문장의 기본 구성요소(S/V/O/C)를 표시한 후, 수업을 들으며 중요한 표현을 필기하시오.</p>
-  {% else %}
-  <p class="slbl">STEP 1 (계속)</p>
-  {% endif %}
-  {% for sent in chunk %}
-  <p style="margin-bottom:28px;font-size:10pt;break-inside:avoid;"><strong>{{ ns.offset + loop.index }}.</strong> {{ sent }}</p>
+  <p style="font-size:9pt;margin-bottom:8px;">ë¬¸ìž¥ì˜ ê¸°ë³¸ êµ¬ì„±ìš”ì†Œ(S/V/O/C)ë¥¼ í‘œì‹œí•œ í›„, ìˆ˜ì—…ì„ ë“¤ìœ¼ë©° ì¤‘ìš”í•œ í‘œí˜„ì„ í•„ê¸°í•˜ì‹œì˜¤.</p>
+  {% for sent in key_sentences %}
+  <p style="margin-bottom:28px;font-size:10pt;"><strong>{{ loop.index }}.</strong> {{ sent }}</p>
   {% endfor %}
-  {% set ns.offset = ns.offset + chunk|length %}
-  {% if loop.last %}
-  <div class="warnbox" style="margin-top:4px;padding:6px 10px;">
-    <p class="b" style="font-size:8pt;">[문장 분석 솔루션]</p>
-    <p style="font-size:7.5pt;">• Step1: 수업 중, 중요한 문법 강조 사항을 정독하며 <u>설명할 수 있는 수준으로</u> 이해가 되었는지 확인하세요!</p>
-    <p style="font-size:7.5pt;">• Step2: 추가로 정리할 사항은 하단에 작성해보세요! </p>
+  <div style="border:1px solid var(--border-light);border-radius:4px;padding:10px 14px;margin-top:12px;">
+    <p style="font-size:10pt;font-weight:bold;color:var(--primary);">ì‹œí—˜ ì¶œì œ ê°€ëŠ¥ ì£¼ìš” ë¬¸ë²• í‘œí˜„ ì •ë¦¬</p>
   </div>
-  {% endif %}
+  <div class="pn">4</div>
 </div>
-{% endfor %}
 
-{% endif %}
-{% if not levels or 4 in levels %}
 {# ==================== PAGE 5: Lv.4 ==================== #}
 <div class="page" style="font-size:10pt;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
-  <div class="phase" style="color:var(--green);">수업 중</div>
+  <div class="hdr"><span class="hdr-left">ë ˆë²¨ë¯¸ì—…í•™ì›</span><span class="hdr-right">{{ lesson_num }}ê³¼ - {{ challenge_title }}</span></div>
+  <div class="phase">ìˆ˜ì—… ì¤‘</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==4 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
   <div class="ckl">
-    <div class="ckl-t">[수업 중 체크리스트 - Stage 4]</div>
-    <table><tr><td></td><td class="cc">1차</td><td class="cc">2차</td><td class="cc">3차</td></tr>
-    {% for s in ["Step 1. 해석 점검 — 지문에서 배운 문법/구문 확인 및 해석 점검","Step 2. 주장/요지 — 글 전체의 주장/요지를 직접 적기","Step 3. 상기+구조화 — 글 처음~끝 떠올리며 나만의 흐름 정리"] %}
+    <div class="ckl-t">[ìˆ˜ì—… ì¤‘ ì²´í¬ë¦¬ìŠ¤íŠ¸ - Lv.4]</div>
+    <table><tr><td></td><td class="cc">1ì°¨</td><td class="cc">2ì°¨</td><td class="cc">3ì°¨</td></tr>
+    {% for s in ["Step 1. í•´ì„ ì ê²€ â€” ì§€ë¬¸ì—ì„œ ë°°ìš´ ë¬¸ë²•/êµ¬ë¬¸ í™•ì¸ ë° í•´ì„ ì ê²€","Step 2. ì£¼ìž¥/ìš”ì§€ â€” ê¸€ ì „ì²´ì˜ ì£¼ìž¥/ìš”ì§€ë¥¼ ì§ì ‘ ì ê¸°","Step 3. ìƒê¸°+êµ¬ì¡°í™” â€” ê¸€ ì²˜ìŒ~ë ë– ì˜¬ë¦¬ë©° ë‚˜ë§Œì˜ íë¦„ ì •ë¦¬"] %}
     <tr><td><span class="sn">{{ s.split('.')[0] }}.</span> {{ s.split('. ',1)[1] }}</td>
     <td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td></tr>{% endfor %}</table>
   </div>
-  <p style="padding: 5px;"></p>
-  <div class="stitle">Stage 4 구조 정리 / 재해석 / 주장 쓰기</div>
-  <p style="padding: 5px;"></p>
+  <div class="stitle">Lv.4 êµ¬ì¡° ì •ë¦¬ / ìž¬í•´ì„ / ì£¼ìž¥ ì“°ê¸°</div>
   <p class="slbl">STEP 1</p>
-  <p class="sttl">지문에서 배운 문법/구문 확인 및 해석 점검</p>
+  <p class="sttl">ì§€ë¬¸ì—ì„œ ë°°ìš´ ë¬¸ë²•/êµ¬ë¬¸ í™•ì¸ ë° í•´ì„ ì ê²€</p>
   <div class="psg" style="font-size:9.5pt;">{{ passage }}</div>
-  <p style="padding: 5px;"></p>
   <p class="slbl mt8">STEP 2</p>
-  <p class="sttl">글의 주장을 직접 쓰기</p>
+  <p class="sttl">ê¸€ì˜ ì£¼ìž¥ì„ ì§ì ‘ ì“°ê¸°</p>
   <div style="border:1px solid var(--border-light);border-radius:4px;padding:10px 14px;margin-bottom:8px;">
-    <p>한국어:</p><div class="ilf" style="height:22px;"></div>
-    <p class="mt4">영어:</p><div class="ilf" style="height:22px;"></div>
+    <p>í•œêµ­ì–´:</p><div class="ilf" style="height:22px;"></div>
+    <p class="mt4">ì˜ì–´:</p><div class="ilf" style="height:22px;"></div>
   </div>
-  <p style="padding: 5px;"></p>
-  <div class="warnbox" style="width: 100%;border-radius:4px;padding:10px 14px;min-height:150px;">
-    <p class="b" style="font-size:8pt;">[구조 정리 솔루션]</p>
-    <div style="display:flex;align-items:center;font-size:9pt;">
-      <span style="flex:1;text-align:left;">Step 1. 나만의 흐름 구조화 하기</span>
-      <span style="flex:1;text-align:left;">Step 2. 자유롭게 글의 흐름을 나만의 방식으로 정리하세요.<br>(그림, 화살표, 마인드맵, 메모 등 자유 형식)</span>
-    </div>
+  <p class="slbl mt8">STEP 3</p>
+  <p class="sttl">ë‚˜ë§Œì˜ íë¦„ êµ¬ì¡°í™” í•˜ê¸°</p>
+  <div style="border:1px solid var(--border-light);border-radius:4px;padding:10px 14px;min-height:200px;">
+    <p style="font-size:9pt;color:var(--text-muted);">ìžìœ ë¡­ê²Œ ê¸€ì˜ íë¦„ì„ ë‚˜ë§Œì˜ ë°©ì‹ìœ¼ë¡œ ì •ë¦¬í•˜ì„¸ìš”. (ê·¸ë¦¼, í™”ì‚´í‘œ, ë§ˆì¸ë“œë§µ, ë©”ëª¨ ë“± ìžìœ  í˜•ì‹)</p>
   </div>
+  <div class="pn">5</div>
 </div>
 
-{% endif %}
-{% if not levels or 5 in levels %}
-{# ==================== PAGE 6: Lv.5 순서+삽입 ==================== #}
+{# ==================== PAGE 6: Lv.5 ìˆœì„œ+ì‚½ìž… ==================== #}
 <div class="page" style="font-size:8.5pt;line-height:1.25;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
-  <div class="phase" style="color:var(--accent);">수업 후 (복습)</div>
-  <p style="font-size:9pt;text-align:center;color:var(--accent);font-weight:bold;margin:3px 0;">여기서부터 복습입니다!</p>
+  <div class="hdr"><span class="hdr-left">ë ˆë²¨ë¯¸ì—…í•™ì›</span><span class="hdr-right">{{ lesson_num }}ê³¼ - {{ challenge_title }}</span></div>
+  <div class="phase">ìˆ˜ì—… í›„ (ë³µìŠµ)</div>
+  <p style="font-size:9pt;text-align:center;color:var(--accent);font-weight:bold;margin:3px 0;">ì—¬ê¸°ì„œë¶€í„° ë³µìŠµìž…ë‹ˆë‹¤!</p>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==5 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
   <div class="ckl" style="padding:4px 8px;font-size:7.5pt;">
-    <div class="ckl-t" style="font-size:8pt;">[수업 후 복습 체크리스트]</div>
-    <table><tr><td></td><td class="cc">1차</td><td class="cc">2차</td><td class="cc">3차</td></tr>
-    {% for s in ["Stage 5 글의 흐름","Stage 6 빈칸 추론","Stage 7 주제 찾기","Stage 8 어법","Stage 9 어휘+내용일치","Stage 10 영작"] %}
+    <div class="ckl-t" style="font-size:8pt;">[ìˆ˜ì—… í›„ ë³µìŠµ ì²´í¬ë¦¬ìŠ¤íŠ¸]</div>
+    <table><tr><td></td><td class="cc">1ì°¨</td><td class="cc">2ì°¨</td><td class="cc">3ì°¨</td></tr>
+    {% for s in ["Lv.5 ê¸€ì˜ íë¦„","Lv.6 ë¹ˆì¹¸ ì¶”ë¡ ","Lv.7 ì£¼ì œ ì°¾ê¸°","Lv.8 ì–´ë²•","Lv.9 ì–´íœ˜+ë‚´ìš©ì¼ì¹˜","Lv.10 ì˜ìž‘"] %}
     <tr><td>{{ s }}</td><td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td></tr>{% endfor %}</table>
   </div>
-  <div class="stitle" style="font-size:13pt;">Stage 5 글의 흐름 (순서 + 삽입)</div>
-  <p style="padding: 5px;"></p>
-  <p style="font-size:7.5pt;color:var(--text-muted);margin-bottom:3px;"><span class="b">[목적]</span> 글의 전반적 흐름 이해. 학교 시험 2~4문제 반드시 출제!</p>
-  <p class="b mb2" style="font-size:9pt;">A. 순서 배열</p>
-  <p style="font-size:8pt;margin-bottom:2px;">주어진 문장 다음에 이어질 글의 순서를 고르시오.</p>
+  <div class="stitle" style="font-size:13pt;">Lv.5 ê¸€ì˜ íë¦„ (ìˆœì„œ + ì‚½ìž…)</div>
+  <p style="font-size:7.5pt;color:var(--text-muted);margin-bottom:3px;"><span class="b">[ëª©ì ]</span> ê¸€ì˜ ì „ë°˜ì  íë¦„ ì´í•´. í•™êµ ì‹œí—˜ 2~4ë¬¸ì œ ë°˜ë“œì‹œ ì¶œì œ!</p>
+  <p class="b mb2" style="font-size:9pt;">A. ìˆœì„œ ë°°ì—´</p>
+  <p style="font-size:8pt;margin-bottom:2px;">ì£¼ì–´ì§„ ë¬¸ìž¥ ë‹¤ìŒì— ì´ì–´ì§ˆ ê¸€ì˜ ìˆœì„œë¥¼ ê³ ë¥´ì‹œì˜¤.</p>
   <div class="psg" style="font-size:8pt;padding:5px 8px;line-height:1.45;">{{ order_intro }}</div>
   <div style="font-size:8pt;line-height:1.4;margin:3px 0;">
     {% for label, text in order_paragraphs %}<p style="margin-bottom:2px;"><strong>({{ label }})</strong> {{ text }}</p>{% endfor %}
   </div>
-  <p style="padding: 1.5px;"></p>
   <p style="font-size:8.5pt;margin:3px 0;">{% for opt in order_choices %}{{ opt }} &nbsp;{% endfor %}</p>
-  <table style="width:100%;border-collapse:collapse;font-size:8pt;margin:3px 0;border:1px solid var(--border-light);break-inside: avoid;">
-    <tr><td style="width:35px;padding:2px 4px;border:1px solid var(--border-light);font-weight:bold;">1차</td><td style="padding:2px 4px;border:1px solid var(--border-light);color:var(--text-muted);">메모:</td></tr>
-    <tr><td style="padding:2px 4px;border:1px solid var(--border-light);font-weight:bold;">2차</td><td style="padding:2px 4px;border:1px solid var(--border-light);color:var(--text-muted);">메모:</td></tr>
+  <table style="width:100%;border-collapse:collapse;font-size:8pt;margin:3px 0;border:1px solid var(--border-light);">
+    <tr><td style="width:35px;padding:2px 4px;border:1px solid var(--border-light);font-weight:bold;">1ì°¨</td><td style="padding:2px 4px;border:1px solid var(--border-light);color:var(--text-muted);">ë©”ëª¨:</td></tr>
+    <tr><td style="padding:2px 4px;border:1px solid var(--border-light);font-weight:bold;">2ì°¨</td><td style="padding:2px 4px;border:1px solid var(--border-light);color:var(--text-muted);">ë©”ëª¨:</td></tr>
   </table>
-  <div style="height:20px;"></div>
-  <p class="b mt4 mb2" style="font-size:9pt;">B. 문장 삽입</p>
-  <p style="font-size:8pt;margin-bottom:2px;">주어진 문장이 들어가기에 가장 적절한 곳을 고르시오.</p>
+  <p class="b mt4 mb2" style="font-size:9pt;">B. ë¬¸ìž¥ ì‚½ìž…</p>
+  <p style="font-size:8pt;margin-bottom:2px;">ì£¼ì–´ì§„ ë¬¸ìž¥ì´ ë“¤ì–´ê°€ê¸°ì— ê°€ìž¥ ì ì ˆí•œ ê³³ì„ ê³ ë¥´ì‹œì˜¤.</p>
   <div class="psg" style="font-size:8pt;padding:4px 8px;background:#eee;border:1px solid #ccc;line-height:1.45;">{{ insert_sentence }}</div>
   <div class="psg" style="font-size:8pt;padding:5px 8px;margin-top:2px;line-height:1.45;">{{ insert_passage }}</div>
-  <table style="width:100%;border-collapse:collapse;font-size:8pt;margin:3px 0;border:1px solid var(--border-light);break-inside: avoid;">
-    <tr><td style="width:35px;padding:2px 4px;border:1px solid var(--border-light);font-weight:bold;">1차</td><td style="padding:2px 4px;border:1px solid var(--border-light);color:var(--text-muted);">메모:</td></tr>
-    <tr><td style="padding:2px 4px;border:1px solid var(--border-light);font-weight:bold;">2차</td><td style="padding:2px 4px;border:1px solid var(--border-light);color:var(--text-muted);">메모:</td></tr>
+  <table style="width:100%;border-collapse:collapse;font-size:8pt;margin:3px 0;border:1px solid var(--border-light);">
+    <tr><td style="width:35px;padding:2px 4px;border:1px solid var(--border-light);font-weight:bold;">1ì°¨</td><td style="padding:2px 4px;border:1px solid var(--border-light);color:var(--text-muted);">ë©”ëª¨:</td></tr>
+    <tr><td style="padding:2px 4px;border:1px solid var(--border-light);font-weight:bold;">2ì°¨</td><td style="padding:2px 4px;border:1px solid var(--border-light);color:var(--text-muted);">ë©”ëª¨:</td></tr>
   </table>
-  <p style="padding: 5px;"></p>
-  <div class="solbox" style="margin-top:4px;padding:6px 10px;">
-    <p class="b" style="font-size:9pt;">[글의 흐름 솔루션]</p>
-    <p style="font-size:8pt;margin-top:2px;">순서/삽입을 틀렸다면, <span class="b">Stage 4 구조 정리</span>가 아직 완전하지 않다는 뜻입니다. <strong>Stage 4로 돌아가세요.</strong></p>
+  <div class="warnbox" style="margin-top:4px;padding:6px 10px;">
+    <p class="warnt" style="font-size:10pt;">!! WARNING - YOU DIED</p>
+    <p style="font-size:8pt;margin-top:2px;">ìˆœì„œ/ì‚½ìž…ì„ í‹€ë ¸ë‹¤ë©´, <span class="b">Lv.4 êµ¬ì¡° ì •ë¦¬</span>ê°€ ì•„ì§ ì™„ì „í•˜ì§€ ì•Šë‹¤ëŠ” ëœ»ìž…ë‹ˆë‹¤. Lv.4ë¡œ ëŒì•„ê°€ì„¸ìš”.</p>
   </div>
+  <div class="pn">6</div>
 </div>
 
-{# ==================== PAGE 7: Lv.5 심화 ==================== #}
+{# ==================== PAGE 7: Lv.5 ì‹¬í™” ==================== #}
 <div class="page" style="font-size:9.5pt;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
-  <div class="phase" style="color:var(--accent);">수업 후 (복습)</div>
+  <div class="hdr"><span class="hdr-left">ë ˆë²¨ë¯¸ì—…í•™ì›</span><span class="hdr-right">{{ lesson_num }}ê³¼ - {{ challenge_title }}</span></div>
+  <div class="phase">ìˆ˜ì—… í›„ (ë³µìŠµ)</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==5 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
-  <div class="stitle" style="font-size:15pt;">Stage 5 전체 문장 순서 배열 (심화)</div>
-  <p style="padding: 2.5px;"></p>
-  <p style="font-size:8.5pt;color:var(--text-muted);margin-bottom:8px;"><span class="b">[목적]</span> 지문의 모든 문장을 정확한 순서로 배열하여 글의 흐름을 완벽히 체화합니다.</p>
+  <div class="stitle" style="font-size:15pt;">Lv.5 ì „ì²´ ë¬¸ìž¥ ìˆœì„œ ë°°ì—´ (ì‹¬í™”)</div>
+  <p style="font-size:8.5pt;color:var(--text-muted);margin-bottom:8px;"><span class="b">[ëª©ì ]</span> ì§€ë¬¸ì˜ ëª¨ë“  ë¬¸ìž¥ì„ ì •í™•í•œ ìˆœì„œë¡œ ë°°ì—´í•˜ì—¬ ê¸€ì˜ íë¦„ì„ ì™„ë²½ížˆ ì²´í™”í•©ë‹ˆë‹¤.</p>
   <table style="width:100%;border-collapse:separate;border-spacing:4px;font-size:8.5pt;">
     {% for i in range(0, full_order_blocks|length, 2) %}
     <tr>
@@ -404,273 +380,215 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       {% else %}<td></td>{% endif %}
     </tr>{% endfor %}
   </table>
-  <p class="mt8 tc b" style="font-size:10pt;margin-top: 10px;">{% for _ in full_order_blocks %}( &nbsp;&nbsp; ){% if not loop.last %} - {% endif %}{% endfor %}</p>
-  <p style="padding: 5px;"></p>
-  <p style="font-size:8pt;color:var(--text-muted);margin-bottom:4px;">틀린 경우, 정답 순서의 기호를 왼쪽에 적고 → 오른쪽에 그 문장 내용을 한국말로 한 줄 요약하세요.</p>
-  <table style="width:100%;border-collapse:collapse;font-size:9pt;">
-    {% for i in range(0, full_order_blocks|length, 2) %}
-    <tr>
-      <td style="width:50%;padding-right:8px;padding-bottom:5px;">( &nbsp;&nbsp; ) : <span class="il" style="width: 80%;"></span></td>
-      {% if i+1 < full_order_blocks|length %}
-      <td style="width:50%;padding-bottom:5px;">( &nbsp;&nbsp; ) : <span class="il" style="width: 80%;"></span></td>
-      {% else %}<td></td>{% endif %}
-    </tr>
-    {% endfor %}
-  </table>
-  <p style="padding: 2.5px;"></p>
-  <div class="solbox mt8" style="border-radius:4px;padding:10px 14px;margin-top:12px;break-inside:avoid;">
-    <p class="b" style="font-size:9pt;">[전체배열 솔루션]</p>
-    <p style="font-size:8pt;margin-top:2px;"><span style="color:var(--accent);font-weight:bold;">Step 1:</span> 아무 문장 하나 읽기 → 지문 인식 → 핵심 내용 + 전개 흐름 상기</p>
-    <p style="font-size:8pt;"><span style="color:var(--accent);font-weight:bold;">Step 2:</span> 첫 문장 찾기</p>
-    <p style="font-size:8pt;"><span style="color:var(--accent);font-weight:bold;">Step 3:</span> 연결 단서를 찾아 순서 연결해 보기 (관사, 지시어, 접속사, 어휘반복)</p>
-    <p style="font-size:8pt;"><span style="color:var(--accent);font-weight:bold;">Step 4:</span> 전체 흐름 확인하기 (처음→ 끝까지 읽으며 자연스러운지 점검)</p>
+  <p class="mt8 tc b" style="font-size:10pt;">( &nbsp;&nbsp; ) - ( &nbsp;&nbsp; ) - ( &nbsp;&nbsp; ) - ( &nbsp;&nbsp; ) - ( &nbsp;&nbsp; ) - ( &nbsp;&nbsp; ) - ( &nbsp;&nbsp; ) - ( &nbsp;&nbsp; ) - ( &nbsp;&nbsp; )</p>
+  <p style="font-size:8.5pt;color:var(--accent);margin-top:6px;">ìˆœì„œë¥¼ í‹€ë ¸ë‹¤ë©´ â†’ <span style="color:var(--primary);font-weight:bold;">ì•„ëž˜ ì˜¤ë‹µì •ë¦¬ë¥¼ ë°˜ë“œì‹œ ìž‘ì„±í•œ ë’¤</span>, Lv.4ë¡œ ëŒì•„ê°€ ì²´í¬ë¦¬ìŠ¤íŠ¸ë¥¼ ë”°ë¼ ìž¬í•™ìŠµí•˜ì‹œì˜¤.</p>
+  <p class="b mt8 mb4" style="font-size:10pt;color:var(--accent);">ì˜¤ë‹µ ì •ë¦¬ â€” ì •ë‹µ ìˆœì„œëŒ€ë¡œ í•œ ì¤„ ìš”ì•½</p>
+  <p style="font-size:8pt;color:var(--text-muted);margin-bottom:4px;">í‹€ë¦° ê²½ìš°, ì •ë‹µ ìˆœì„œì˜ ê¸°í˜¸ë¥¼ ì™¼ìª½ì— ì ê³  â†’ ì˜¤ë¥¸ìª½ì— ê·¸ ë¬¸ìž¥ ë‚´ìš©ì„ í•œêµ­ë§ë¡œ í•œ ì¤„ ìš”ì•½í•˜ì„¸ìš”.</p>
+  {% for _ in full_order_blocks %}
+  <p style="font-size:9pt;margin-bottom:5px;">( &nbsp;&nbsp; ) : <span class="il" style="min-width:320px;"></span></p>{% endfor %}
+  <div class="solbox mt8">
+    <p class="b" style="font-size:10pt;">ðŸ“Œ ìˆœì„œë°°ì—´ ì†”ë£¨ì…˜</p>
+    {% for n in range(1,5) %}<p>Step {{ n }}. <span class="il" style="min-width:280px;"></span></p>{% endfor %}
   </div>
+  <div class="pn">7</div>
 </div>
 
-{% endif %}
-{% if not levels or 6 in levels %}
-{# ==================== PAGE 8: Lv.6 빈칸 ==================== #}
-<div class="page" style="font-size:9pt;line-height:1.25;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
-  <div class="phase" style="color:var(--accent);">수업 후</div>
+{# ==================== PAGE 8: Lv.6 ë¹ˆì¹¸ ==================== #}
+<div class="page" style="font-size:10pt;">
+  <div class="hdr"><span class="hdr-left">ë ˆë²¨ë¯¸ì—…í•™ì›</span><span class="hdr-right">{{ lesson_num }}ê³¼ - {{ challenge_title }}</span></div>
+  <div class="phase">ìˆ˜ì—… í›„</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==6 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
-  <div class="stitle" style="font-size:12pt;">Stage 6 빈칸 추론 (모두 고르시오)</div>
-  <p style="padding: 5px;"></p>
-  <p style="font-size:8pt;color:var(--primary);font-weight:bold;margin-bottom:4px;">[핵심] 원문 표현이 <span style="text-decoration:underline;">동의어로 변형</span>되어 출제. 동의어 정리가 핵심!</p>
-  <div class="psg" style="font-size:8.5pt;line-height:1.45;padding:6px 8px;">{{ blank_passage }}</div>
-  <p style="padding: 5px;"></p>
-  <p class="slbl" style="font-size:8pt;">STEP 1</p>
-  <p class="sttl" style="font-size:8.5pt;">빈칸에 들어갈 내용을 우리말로 적기</p>
-  <div style="border:1px solid var(--border-light);border-radius:3px;padding:4px 8px;margin-bottom:4px;">
-    <p style="font-size:8.5pt;">빈칸 우리말: <span class="il" style="min-width:260px;"></span></p>
+  <div class="stitle">Lv.6 ë¹ˆì¹¸ ì¶”ë¡  (ëª¨ë‘ ê³ ë¥´ì‹œì˜¤)</div>
+  <p style="font-size:9pt;color:var(--primary);font-weight:bold;margin-bottom:6px;">[í•µì‹¬] ì›ë¬¸ í‘œí˜„ì´ <span style="text-decoration:underline;">ë™ì˜ì–´ë¡œ ë³€í˜•</span>ë˜ì–´ ì¶œì œ. ë™ì˜ì–´ ì •ë¦¬ê°€ í•µì‹¬!</p>
+  <div class="psg" style="font-size:10pt;">{{ blank_passage }}</div>
+  <p class="slbl">STEP 1</p>
+  <p class="sttl">ë¹ˆì¹¸ì— ë“¤ì–´ê°ˆ ë‚´ìš©ì„ ìš°ë¦¬ë§ë¡œ ì ê¸°</p>
+  <div style="border:1px solid var(--border-light);border-radius:3px;padding:6px 10px;margin-bottom:6px;">
+    <p>ë¹ˆì¹¸ ìš°ë¦¬ë§: <span class="il" style="min-width:300px;"></span></p>
   </div>
-  <p style="padding: 5px;"></p>
-  <p class="slbl" style="font-size:8pt;">STEP 2</p>
-  <p class="sttl" style="font-size:8.5pt;">그 내용과 같은 선지 찾기 (관근 동의어 + <span style="color:var(--accent);">비유적 표현</span> 주의!)</p>
+  <p class="slbl">STEP 2</p>
+  <p class="sttl">ê·¸ ë‚´ìš©ê³¼ ê°™ì€ ì„ ì§€ ì°¾ê¸° (ê´€ê·¼ ë™ì˜ì–´ + <span style="color:var(--accent);">ë¹„ìœ ì  í‘œí˜„</span> ì£¼ì˜!)</p>
   {% for opt in blank_options %}
-  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;font-size:8.5pt;line-height:1.35;">
-    <span style="flex-shrink:0;">{{ opt }}</span>
-    <span style="flex-shrink:0;color:var(--text-muted);font-size:7.5pt;margin-left:8px;white-space:nowrap;">→ 오답정리: <span class="ild" style="min-width:100px;"></span></span>
+  <div style="margin-bottom:6px;font-size:9.5pt;">
+    <span>{{ opt }}</span>
+    <span style="float:right;color:var(--text-muted);font-size:8.5pt;">â†’ ì˜¤ë‹µì •ë¦¬: <span class="ild" style="min-width:180px;"></span></span>
   </div>{% endfor %}
-  <p style="margin-top:4px;">답: <span class="il" style="min-width:250px;"></span></p>
-  <p style="padding: 5px;"></p>
-  <div class="solbox" style="padding:5px 8px;font-size:8pt;">
-    <p class="b">[빈칸 유형 솔루션]</p>
-    <p><span style="color:var(--accent);font-weight:bold;">Step 1.</span> 빈칸에 들어갈 내용을 우리말로 적기 → 빈칸 우리말:</p>
-    <p><span style="color:var(--accent);font-weight:bold;">Step 2.</span> 그 내용과 같은 선지 찾기 (관근 동의어 + <span class="b">비유적 표현</span> 주의!)</p>
-    <p><span style="color:var(--accent);font-weight:bold;">Step 3.</span> 틀린 선지 <u>단어 정리</u> <strong>꼭</strong> 할 것.</p>
-    <p style="margin-top:2px;">• 원문 단어: <span class="il" style="min-width:100px;"></span> (형광 체크) / 선지의 같은 의미 표현: 같은 형광펜으로 체크!</p>
+  <p class="mt6">ë‹µ: <span class="il" style="min-width:280px;"></span></p>
+  <div class="solbox">
+    <p class="b">[ë¹ˆì¹¸ ìœ í˜• ì†”ë£¨ì…˜]</p>
+    <p style="font-size:9pt;"><span style="color:var(--accent);font-weight:bold;">Step 1.</span> ë¹ˆì¹¸ì— ë“¤ì–´ê°ˆ ë‚´ìš©ì„ ìš°ë¦¬ë§ë¡œ ì ê¸° â†’ ë¹ˆì¹¸ ìš°ë¦¬ë§:</p>
+    <p style="font-size:9pt;"><span style="color:var(--accent);font-weight:bold;">Step 2.</span> ê·¸ ë‚´ìš©ê³¼ ê°™ì€ ì„ ì§€ ì°¾ê¸° (ê´€ê·¼ ë™ì˜ì–´ + <span class="b">ë¹„ìœ ì  í‘œí˜„</span> ì£¼ì˜!)</p>
+    <p style="font-size:8.5pt;margin-top:3px;">â€¢ ì›ë¬¸ ë‹¨ì–´: <span class="il" style="min-width:120px;"></span> (í˜•ê´‘ ì²´í¬)<br>â€¢ ì„ ì§€ì˜ ê°™ì€ ì˜ë¯¸ í‘œí˜„: ê°™ì€ í˜•ê´‘íŽœìœ¼ë¡œ ì²´í¬!</p>
   </div>
+  <div class="pn">8</div>
 </div>
 
-{% endif %}
-{% if not levels or 7 in levels %}
-{# ==================== PAGE 9: Lv.7 주제 ==================== #}
-<div class="page" style="font-size:9pt;line-height:1.25;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
-  <div class="phase" style="color:var(--accent);">수업 후</div>
+{# ==================== PAGE 9: Lv.7 ì£¼ì œ ==================== #}
+<div class="page" style="font-size:10pt;">
+  <div class="hdr"><span class="hdr-left">ë ˆë²¨ë¯¸ì—…í•™ì›</span><span class="hdr-right">{{ lesson_num }}ê³¼ - {{ challenge_title }}</span></div>
+  <div class="phase">ìˆ˜ì—… í›„</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==7 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
-  <div class="stitle" style="font-size:12pt;">Stage 7 주제 찾기 (모두 고르시오)</div>
-  <p style="padding: 5px;"></p>
-  <p style="font-size:8pt;color:var(--primary);font-weight:bold;margin-bottom:4px;">[핵심] 주제문 키워드가 동의어로 바뀌어 출제. 정확한 내용 이해 + 동의어 파악!</p>
-  <div class="psg" style="font-size:8.5pt;line-height:1.45;padding:6px 8px;">{{ topic_passage }}</div>
-  <p style="padding: 5px;"></p>
-  <p class="slbl" style="font-size:8pt;">STEP 1</p>
-  <p style="font-size:8.5pt;margin-bottom:3px;">지문 내 <span class="b">주제문을 다시 형광</span> 치기 / 본인이 생각하는 주제문 직접 쓰기</p>
-  <div style="border:1px solid var(--border-light);border-radius:3px;padding:4px 8px;margin-bottom:4px;">
-    <p style="font-size:8.5pt;">주제문 직접 쓰기: <span class="il" style="min-width:280px;"></span></p>
+  <div class="stitle">Lv.7 ì£¼ì œ ì°¾ê¸° (ëª¨ë‘ ê³ ë¥´ì‹œì˜¤)</div>
+  <p style="font-size:9pt;color:var(--primary);font-weight:bold;margin-bottom:6px;">[í•µì‹¬] ì£¼ì œë¬¸ í‚¤ì›Œë“œê°€ ë™ì˜ì–´ë¡œ ë°”ë€Œì–´ ì¶œì œ. ì •í™•í•œ ë‚´ìš© ì´í•´ + ë™ì˜ì–´ íŒŒì•…!</p>
+  <div class="psg" style="font-size:10pt;">{{ topic_passage }}</div>
+  <p class="slbl">STEP 1</p>
+  <p style="font-size:9.5pt;margin-bottom:4px;">ì§€ë¬¸ ë‚´ <span class="b">ì£¼ì œë¬¸ì„ ë‹¤ì‹œ í˜•ê´‘</span> ì¹˜ê¸° / ë³¸ì¸ì´ ìƒê°í•˜ëŠ” ì£¼ì œë¬¸ ì§ì ‘ ì“°ê¸°</p>
+  <div style="border:1px solid var(--border-light);border-radius:3px;padding:6px 10px;margin-bottom:6px;">
+    <p>ì£¼ì œë¬¸ ì§ì ‘ ì“°ê¸°: <span class="il" style="min-width:320px;"></span></p>
   </div>
-  <p style="padding: 5px;"></p>
-  <p class="slbl" style="font-size:8pt;">STEP 2</p>
-  <p style="font-size:8.5pt;margin-bottom:3px;">그 내용과 가장 유사한 <span class="b">비유적/문맥적 내용</span> 찾기</p>
+  <p class="slbl">STEP 2</p>
+  <p style="font-size:9.5pt;margin-bottom:4px;">ê·¸ ë‚´ìš©ê³¼ ê°€ìž¥ ìœ ì‚¬í•œ <span class="b">ë¹„ìœ ì /ë¬¸ë§¥ì  ë‚´ìš©</span> ì°¾ê¸°</p>
   {% for opt in topic_options %}
-  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;font-size:8.5pt;line-height:1.35;">
-    <span style="flex-shrink:0;">{{ opt }}</span>
-    <span style="flex-shrink:0;color:var(--text-muted);font-size:7.5pt;margin-left:8px;white-space:nowrap;">→ 오답정리: <span class="ild" style="min-width:100px;"></span></span>
+  <div style="margin-bottom:6px;font-size:9.5pt;">
+    <span>{{ opt }}</span>
+    <span style="float:right;color:var(--text-muted);font-size:8.5pt;">â†’ ì˜¤ë‹µì •ë¦¬: <span class="ild" style="min-width:180px;"></span></span>
   </div>{% endfor %}
-  <p style="margin-top:4px;">답: <span class="il" style="min-width:250px;"></span></p>
-  <p style="padding: 5px;"></p>
-  <div class="solbox" style="padding:5px 8px;font-size:8pt;">
-    <p class="b">[주제 찾기 솔루션]</p>
-    <p><span style="color:var(--accent);font-weight:bold;">Step 1.</span> 지문 내 <span class="b">주제문을 다시 형광</span> 치기 / 본인이 생각하는 주제문 직접 쓰기</p>
-    <p><span style="color:var(--accent);font-weight:bold;">Step 2.</span> 그 내용과 가장 유사한 <span class="b">비유적/문맥적 내용</span> 찾기</p>
-    <p style="color:var(--red);margin-top:2px;">⚠ 주제문 선지에서 <span class="b">추론적 사고 금지!</span> 글에서 <span class="b">언급되지 않은 내용은 오답</span></p>
+  <p class="mt6">ë‹µ: <span class="il" style="min-width:280px;"></span></p>
+  <div class="solbox">
+    <p class="b">[ì£¼ì œ ì°¾ê¸° ì†”ë£¨ì…˜]</p>
+    <p style="font-size:9pt;"><span style="color:var(--accent);font-weight:bold;">Step 1.</span> ì§€ë¬¸ ë‚´ <span class="b">ì£¼ì œë¬¸ì„ ë‹¤ì‹œ í˜•ê´‘</span> ì¹˜ê¸° / ë³¸ì¸ì´ ìƒê°í•˜ëŠ” ì£¼ì œë¬¸ ì§ì ‘ ì“°ê¸°</p>
+    <p style="font-size:9pt;"><span style="color:var(--accent);font-weight:bold;">Step 2.</span> ê·¸ ë‚´ìš©ê³¼ ê°€ìž¥ ìœ ì‚¬í•œ <span class="b">ë¹„ìœ ì /ë¬¸ë§¥ì  ë‚´ìš©</span> ì°¾ê¸°</p>
+    <p style="font-size:8.5pt;color:var(--red);margin-top:4px;">âš  ì£¼ì˜ì‚¬í•­</p>
+    <p style="font-size:8.5pt;">â€¢ ì£¼ì œë¬¸ ì„ ì§€ì—ì„œ <span class="b">ì¶”ë¡ ì  ì‚¬ê³  ê¸ˆì§€!</span> ìƒìƒí•˜ë©´ ë‹¤ ë§žì•„ ë³´ìž…ë‹ˆë‹¤<br>â€¢ ê¸€ì—ì„œ <span class="b">ì–¸ê¸‰ë˜ì§€ ì•Šì€ ë‚´ìš©ì€ ì˜¤ë‹µ</span> â€” ìƒ‰ì¹ ê³µë¶€ì²˜ëŸ¼ ë‹µ ì°¾ê¸°!</p>
   </div>
+  <div class="pn">9</div>
 </div>
 
-{% endif %}
-{% if not levels or 8 in levels %}
 {# ==================== PAGE 10: Lv.8-1 ==================== #}
 <div class="page" style="font-size:9pt;line-height:1.25;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
-  <div class="phase" style="color:var(--accent);">수업 후</div>
+  <div class="hdr"><span class="hdr-left">ë ˆë²¨ë¯¸ì—…í•™ì›</span><span class="hdr-right">{{ lesson_num }}ê³¼ - {{ challenge_title }}</span></div>
+  <div class="phase">ìˆ˜ì—… í›„</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==8 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
-  <div class="stitle" style="font-size:13pt;">Stage 8-1 어법 (괄호 속 올바른 표현 고르기)</div>
-  <p style="padding: 5px;"></p>
+  <div class="stitle" style="font-size:13pt;">Lv.8-1 ì–´ë²• (ê´„í˜¸ ì† ì˜¬ë°”ë¥¸ í‘œí˜„ ê³ ë¥´ê¸°)</div>
   <p class="slbl">STEP 1</p>
-  <p style="font-size:8.5pt;margin-bottom:3px;">기본적인 문장구조를 표시하여 <span class="b">정답의 근거를 분석</span>해보기</p>
+  <p style="font-size:8.5pt;margin-bottom:3px;">ê¸°ë³¸ì ì¸ ë¬¸ìž¥êµ¬ì¡°ë¥¼ í‘œì‹œí•˜ì—¬ <span class="b">ì •ë‹µì˜ ê·¼ê±°ë¥¼ ë¶„ì„</span>í•´ë³´ê¸°</p>
   <div class="psg" style="font-size:9pt;line-height:1.5;padding:8px 12px;">{{ grammar_bracket_passage }}</div>
-  <p style="padding: 5px;"></p>
   <p class="slbl mt4">STEP 2</p>
-  <p style="font-size:8.5pt;margin-bottom:3px;">각 번호에 해당하는 답을 <span class="b">'영어'</span>로 작성</p>
+  <p style="font-size:8.5pt;margin-bottom:3px;">ê° ë²ˆí˜¸ì— í•´ë‹¹í•˜ëŠ” ë‹µì„ <span class="b">'ì˜ì–´'</span>ë¡œ ìž‘ì„±</p>
   <table style="width:100%;border-collapse:separate;border-spacing:3px;font-size:8pt;">
-    {% for i in range(0, grammar_bracket_count, 3) %}
-    <tr style="break-inside: avoid;">
-      <td style="width:33.3%;border:1px solid var(--border-light);border-radius:3px;padding:3px 6px;vertical-align:top;">
-        <p><span class="grammar-num">({{ i+1 }})</span> <span class="il" style="width:calc(100% - 30px);"></span></p>
-        <p style="color:var(--text-muted);font-size:7.5pt;">틀린 이유: <span class="il" style="width:calc(100% - 55px);"></span></p>
-        <p style="color:var(--text-muted);font-size:7.5pt;">문법 바로잡기: <span class="il" style="width:calc(100% - 70px);"></span></p>
+    {% for i in range(0, grammar_bracket_count, 2) %}
+    <tr>
+      <td style="width:50%;border:1px solid var(--border-light);border-radius:3px;padding:3px 6px;vertical-align:top;">
+        <p><span class="grammar-num">({{ i+1 }})</span> <span class="il" style="min-width:70px;"></span></p>
+        <p style="color:var(--text-muted);font-size:7.5pt;">í‹€ë¦° ì´ìœ : <span class="il" style="min-width:80px;"></span></p>
+        <p style="color:var(--text-muted);font-size:7.5pt;">ë¬¸ë²• ë°”ë¡œìž¡ê¸°: <span class="il" style="min-width:80px;"></span></p>
       </td>
       {% if i+1 < grammar_bracket_count %}
-      <td style="width:33.3%;border:1px solid var(--border-light);border-radius:3px;padding:3px 6px;vertical-align:top;">
-        <p><span class="grammar-num">({{ i+2 }})</span> <span class="il" style="width:calc(100% - 30px);"></span></p>
-        <p style="color:var(--text-muted);font-size:7.5pt;">틀린 이유: <span class="il" style="width:calc(100% - 55px);"></span></p>
-        <p style="color:var(--text-muted);font-size:7.5pt;">문법 바로잡기: <span class="il" style="width:calc(100% - 70px);"></span></p>
-      </td>
-      {% else %}<td></td>{% endif %}
-      {% if i+2 < grammar_bracket_count %}
-      <td style="width:33.3%;border:1px solid var(--border-light);border-radius:3px;padding:3px 6px;vertical-align:top;">
-        <p><span class="grammar-num">({{ i+3 }})</span> <span class="il" style="width:calc(100% - 30px);"></span></p>
-        <p style="color:var(--text-muted);font-size:7.5pt;">틀린 이유: <span class="il" style="width:calc(100% - 55px);"></span></p>
-        <p style="color:var(--text-muted);font-size:7.5pt;">문법 바로잡기: <span class="il" style="width:calc(100% - 70px);"></span></p>
+      <td style="width:50%;border:1px solid var(--border-light);border-radius:3px;padding:3px 6px;vertical-align:top;">
+        <p><span class="grammar-num">({{ i+2 }})</span> <span class="il" style="min-width:70px;"></span></p>
+        <p style="color:var(--text-muted);font-size:7.5pt;">í‹€ë¦° ì´ìœ : <span class="il" style="min-width:80px;"></span></p>
+        <p style="color:var(--text-muted);font-size:7.5pt;">ë¬¸ë²• ë°”ë¡œìž¡ê¸°: <span class="il" style="min-width:80px;"></span></p>
       </td>
       {% else %}<td></td>{% endif %}
     </tr>{% endfor %}
   </table>
-  <p style="padding: 5px;"></p>
-  <div class="solbox" style="margin-top:4px;padding:6px 10px;">
-    <p class="b" style="font-size:9pt;">[어법 유형 솔루션]</p>
-    <p style="font-size:8pt;">문법적 이해 없이 단순 암기로 푸는 건 변형 시 <span class="b">반드시 틀립니다.</span> 모르겠으면 <span class="b" style="color:var(--red);">제발 물어보세요.</span></p>
+  <div class="encbox" style="margin-top:4px;padding:6px 10px;">
+    <p class="b" style="font-size:9pt;">âš¡ ì–´ë²•ì„ í‹€ë¦° ë‹¹ì‹ ì—ê²Œ</p>
+    <p style="font-size:8pt;">ë¬¸ë²•ì  ì´í•´ ì—†ì´ ë‹¨ìˆœ ì•”ê¸°ë¡œ í‘¸ëŠ” ê±´ ë³€í˜• ì‹œ <span class="b">ë°˜ë“œì‹œ í‹€ë¦½ë‹ˆë‹¤.</span> ëª¨ë¥´ê² ìœ¼ë©´ <span class="b" style="color:var(--red);">ì œë°œ ë¬¼ì–´ë³´ì„¸ìš”.</span></p>
   </div>
+  <div class="pn">10</div>
 </div>
 
 {# ==================== PAGE 11: Lv.8-2 ==================== #}
 <div class="page" style="font-size:10pt;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
-  <div class="phase" style="color:var(--accent);">수업 후</div>
+  <div class="hdr"><span class="hdr-left">ë ˆë²¨ë¯¸ì—…í•™ì›</span><span class="hdr-right">{{ lesson_num }}ê³¼ - {{ challenge_title }}</span></div>
+  <div class="phase">ìˆ˜ì—… í›„</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==8 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
-  <div class="stitle">Stage 8-2 어법 서술형 (틀린 곳 찾아 고치기)</div>
-  <p style="padding: 5px;"></p>
-  <p style="font-size:9.5pt;margin-bottom:6px;">다음 글에서 어법상 틀린 부분을 <span class="b">{{ grammar_error_count }}곳</span> 찾아 바르게 고치시오. <span style="color:var(--red);">(밑줄 없음!)</span></p>
+  <div class="stitle">Lv.8-2 ì–´ë²• ì„œìˆ í˜• (í‹€ë¦° ê³³ ì°¾ì•„ ê³ ì¹˜ê¸°)</div>
+  <p style="font-size:9.5pt;margin-bottom:6px;">ë‹¤ìŒ ê¸€ì—ì„œ ì–´ë²•ìƒ í‹€ë¦° ë¶€ë¶„ì„ <span class="b">{{ grammar_error_count }}ê³³</span> ì°¾ì•„ ë°”ë¥´ê²Œ ê³ ì¹˜ì‹œì˜¤. <span style="color:var(--red);">(ë°‘ì¤„ ì—†ìŒ!)</span></p>
   <p class="slbl">STEP 1</p>
-  <p style="font-size:9.5pt;margin-bottom:4px;">기본적인 문장구조를 표시하여 <span class="b">정답의 근거</span>를 분석해보기</p>
+  <p style="font-size:9.5pt;margin-bottom:4px;">ê¸°ë³¸ì ì¸ ë¬¸ìž¥êµ¬ì¡°ë¥¼ í‘œì‹œí•˜ì—¬ <span class="b">ì •ë‹µì˜ ê·¼ê±°</span>ë¥¼ ë¶„ì„í•´ë³´ê¸°</p>
   <div class="psg" style="font-size:10pt;line-height:1.8;">{{ grammar_error_passage }}</div>
-  <p style="padding: 5px;"></p>
   <p class="slbl mt8">STEP 2</p>
-  <p style="font-size:9.5pt;margin-bottom:4px;"><span class="b">답안 작성 및 오답정리</span> (올바른 표현으로 고치지 못한 경우에도 무조건 오답정리)</p>
+  <p style="font-size:9.5pt;margin-bottom:4px;"><span class="b">ë‹µì•ˆ ìž‘ì„± ë° ì˜¤ë‹µì •ë¦¬</span> (ì˜¬ë°”ë¥¸ í‘œí˜„ìœ¼ë¡œ ê³ ì¹˜ì§€ ëª»í•œ ê²½ìš°ì—ë„ ë¬´ì¡°ê±´ ì˜¤ë‹µì •ë¦¬)</p>
   <table style="width:100%;border-collapse:separate;border-spacing:4px;font-size:9pt;">
-    {% for i in range(0, grammar_error_count, 3) %}
-    <tr style="break-inside: avoid;">
-      <td style="width:33%;border:1px solid var(--border-light);border-radius:3px;padding:5px 8px;vertical-align:top;">
-        <p><span class="grammar-num">({{ i+1 }})</span> <span class="il" style="min-width:60px;border-color:var(--primary);"></span> <span style="color:var(--accent);font-weight:bold;">→</span> <span class="il" style="min-width:60px;border-color:var(--accent);"></span></p>
-        <p style="color:var(--text-muted);font-size:8.5pt;">틀린 이유: <span class="il" style="min-width:100px;"></span></p>
-        <p style="color:var(--text-muted);font-size:8.5pt;">문법 바로잡기: <span class="il" style="min-width:100px;"></span></p>
+    {% for i in range(0, grammar_error_count, 2) %}
+    <tr>
+      <td style="width:50%;border:1px solid var(--border-light);border-radius:3px;padding:5px 8px;vertical-align:top;">
+        <p><span class="grammar-num">({{ i+1 }})</span> <span class="il" style="min-width:60px;border-color:var(--primary);"></span> <span style="color:var(--accent);font-weight:bold;">â†’</span> <span class="il" style="min-width:60px;border-color:var(--accent);"></span></p>
+        <p style="color:var(--text-muted);font-size:8.5pt;">í‹€ë¦° ì´ìœ : <span class="il" style="min-width:100px;"></span></p>
+        <p style="color:var(--text-muted);font-size:8.5pt;">ë¬¸ë²• ë°”ë¡œìž¡ê¸°: <span class="il" style="min-width:100px;"></span></p>
       </td>
       {% if i+1 < grammar_error_count %}
-      <td style="width:33%;border:1px solid var(--border-light);border-radius:3px;padding:5px 8px;vertical-align:top;">
-        <p><span class="grammar-num">({{ i+2 }})</span> <span class="il" style="min-width:60px;border-color:var(--primary);"></span> <span style="color:var(--accent);font-weight:bold;">→</span> <span class="il" style="min-width:60px;border-color:var(--accent);"></span></p>
-        <p style="color:var(--text-muted);font-size:8.5pt;">틀린 이유: <span class="il" style="min-width:100px;"></span></p>
-        <p style="color:var(--text-muted);font-size:8.5pt;">문법 바로잡기: <span class="il" style="min-width:100px;"></span></p>
-      </td>
-      {% else %}<td></td>{% endif %}
-      {% if i+2 < grammar_error_count %}
-      <td style="width:33%;border:1px solid var(--border-light);border-radius:3px;padding:5px 8px;vertical-align:top;">
-        <p><span class="grammar-num">({{ i+3 }})</span> <span class="il" style="min-width:60px;border-color:var(--primary);"></span> <span style="color:var(--accent);font-weight:bold;">→</span> <span class="il" style="min-width:60px;border-color:var(--accent);"></span></p>
-        <p style="color:var(--text-muted);font-size:8.5pt;">틀린 이유: <span class="il" style="min-width:100px;"></span></p>
-        <p style="color:var(--text-muted);font-size:8.5pt;">문법 바로잡기: <span class="il" style="min-width:100px;"></span></p>
+      <td style="width:50%;border:1px solid var(--border-light);border-radius:3px;padding:5px 8px;vertical-align:top;">
+        <p><span class="grammar-num">({{ i+2 }})</span> <span class="il" style="min-width:60px;border-color:var(--primary);"></span> <span style="color:var(--accent);font-weight:bold;">â†’</span> <span class="il" style="min-width:60px;border-color:var(--accent);"></span></p>
+        <p style="color:var(--text-muted);font-size:8.5pt;">í‹€ë¦° ì´ìœ : <span class="il" style="min-width:100px;"></span></p>
+        <p style="color:var(--text-muted);font-size:8.5pt;">ë¬¸ë²• ë°”ë¡œìž¡ê¸°: <span class="il" style="min-width:100px;"></span></p>
       </td>
       {% else %}<td></td>{% endif %}
     </tr>{% endfor %}
   </table>
-  <p style="padding: 5px;"></p>
-  <div class="solbox">
-    <p class="b" style="font-size:9pt;">[어법 유형 솔루션]</p>
-    <p style="font-size:9pt;"><span style="color:var(--accent);font-weight:bold;">Step 1:</span> 문법적 이해 없이 단순 암기로 푸는 건 변형 시 <span class="b">반드시 틀립니다.</span></p>
-    <p style="font-size:9pt;"><span style="color:var(--accent);font-weight:bold;">Step 2:</span> 1회독 때 문법을 정리하지 않으면 시험 전 정리할 시간은 <span class="b">절대 없습니다.</span></p>
-    <p style="font-size:9pt;">모르겠으면 <span class="b" style="color:var(--red);">제발 물어보세요.</span> 모르는 채로 넘어가는 게 가장 위험합니다.</p>
+  <div class="encbox">
+    <p class="b">âš¡ ì–´ë²•ì„ í‹€ë¦° ë‹¹ì‹ ì—ê²Œ</p>
+    <p style="font-size:9pt;">ë¬¸ë²•ì  ì´í•´ ì—†ì´ ë‹¨ìˆœ ì•”ê¸°ë¡œ í‘¸ëŠ” ê±´ ë³€í˜• ì‹œ <span class="b">ë°˜ë“œì‹œ í‹€ë¦½ë‹ˆë‹¤.</span><br>1íšŒë… ë•Œ ë¬¸ë²•ì„ ì •ë¦¬í•˜ì§€ ì•Šìœ¼ë©´ ì‹œí—˜ ì „ ì •ë¦¬í•  ì‹œê°„ì€ <span class="b">ì ˆëŒ€ ì—†ìŠµë‹ˆë‹¤.</span><br>ëª¨ë¥´ê² ìœ¼ë©´ <span class="b" style="color:var(--red);">ì œë°œ ë¬¼ì–´ë³´ì„¸ìš”.</span> ëª¨ë¥´ëŠ” ì±„ë¡œ ë„˜ì–´ê°€ëŠ” ê²Œ ê°€ìž¥ ìœ„í—˜í•©ë‹ˆë‹¤.</p>
   </div>
+  <div class="pn">11</div>
 </div>
 
 {# ==================== PAGE 12: Lv.8-3 ==================== #}
 <div class="page" style="font-size:11pt;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
-  <div class="phase" style="color:var(--accent);">수업 후</div>
+  <div class="hdr"><span class="hdr-left">ë ˆë²¨ë¯¸ì—…í•™ì›</span><span class="hdr-right">{{ lesson_num }}ê³¼ - {{ challenge_title }}</span></div>
+  <div class="phase">ìˆ˜ì—… í›„</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==8 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
-  <div class="stitle" style="font-size:15pt;">Stage 8-3 어법 최종 체크</div>
-  <p style="padding: 5px;"></p>
-  <p style="font-size:9.5pt;margin-bottom:10px;">각 단어들의 문법적 표현 중 명확한 이유를 모르는 단어 아래에 <span style="color:var(--red);font-weight:bold;">빨간 형광</span> 치기. 그 밑의 여백에 중요 문법을 직접 써 보세요.</p>
-  <div id="lv83-content">
-    <div id="lv83-psg" class="psg" style="line-height:2.8;font-size:11pt;orphans:2;widows:2;">{{ passage }}</div>
-    <p style="padding: 5px;"></p>
-    <div class="solbox mt12">
-      <p class="b" style="font-size:9pt;">[어법 유형 솔루션]</p>
-      <p style="font-size:9.5pt;"><span style="color:var(--accent);font-weight:bold;">Step 1:</span> 문법적 이해 없이 단순 암기로 푸는 건 변형 시 <span class="b">반드시 틀립니다.</span></p>
-      <p style="font-size:9.5pt;"><span style="color:var(--accent);font-weight:bold;">Step 2:</span> 1회독 때 문법을 정리하지 않으면 시험 전 정리할 시간은 <span class="b">절대 없습니다.</span></p>
-      <p style="font-size:9.5pt;">모르겠으면 <span class="b" style="color:var(--red);">제발 물어보세요.</span> 모르는 채로 넘어가는 게 가장 위험합니다.</p>
-    </div>
+  <div class="stitle" style="font-size:15pt;">Lv.8-3 ì–´ë²• ìµœì¢… ì²´í¬</div>
+  <p style="font-size:9.5pt;margin-bottom:10px;">ê° ë‹¨ì–´ë“¤ì˜ ë¬¸ë²•ì  í‘œí˜„ ì¤‘ ëª…í™•í•œ ì´ìœ ë¥¼ ëª¨ë¥´ëŠ” ë‹¨ì–´ ì•„ëž˜ì— <span style="color:var(--red);font-weight:bold;">ë¹¨ê°„ í˜•ê´‘</span> ì¹˜ê¸°. ê·¸ ë°‘ì˜ ì—¬ë°±ì— ì¤‘ìš” ë¬¸ë²•ì„ ì§ì ‘ ì¨ ë³´ì„¸ìš”.</p>
+  <div class="psg" style="line-height:2.8;font-size:11pt;">{{ passage }}</div>
+  <div class="encbox mt12">
+    <p class="b">âš¡ ì–´ë²•ì„ í‹€ë¦° ë‹¹ì‹ ì—ê²Œ</p>
+    <p style="font-size:9.5pt;">ë¬¸ë²•ì  ì´í•´ ì—†ì´ ë‹¨ìˆœ ì•”ê¸°ë¡œ í‘¸ëŠ” ê±´ ë³€í˜• ì‹œ <span class="b">ë°˜ë“œì‹œ í‹€ë¦½ë‹ˆë‹¤.</span><br>1íšŒë… ë•Œ ë¬¸ë²•ì„ ì •ë¦¬í•˜ì§€ ì•Šìœ¼ë©´ ì‹œí—˜ ì „ ì •ë¦¬í•  ì‹œê°„ì€ <span class="b">ì ˆëŒ€ ì—†ìŠµë‹ˆë‹¤.</span><br>ëª¨ë¥´ê² ìœ¼ë©´ <span class="b" style="color:var(--red);">ì œë°œ ë¬¼ì–´ë³´ì„¸ìš”.</span> ëª¨ë¥´ëŠ” ì±„ë¡œ ë„˜ì–´ê°€ëŠ” ê²Œ ê°€ìž¥ ìœ„í—˜í•©ë‹ˆë‹¤.</p>
   </div>
+  <div class="pn">12</div>
 </div>
 
-{% endif %}
-{% if not levels or 9 in levels %}
 {# ==================== PAGE 13: Lv.9-1 ==================== #}
 <div class="page" style="font-size:9.5pt;line-height:1.35;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
-  <div class="phase" style="color:var(--accent);">수업 후</div>
+  <div class="hdr"><span class="hdr-left">ë ˆë²¨ë¯¸ì—…í•™ì›</span><span class="hdr-right">{{ lesson_num }}ê³¼ - {{ challenge_title }}</span></div>
+  <div class="phase">ìˆ˜ì—… í›„</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==9 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
-  <div class="stitle" style="font-size:14pt;">Stage 9-1 어휘 심화</div>
-  <p style="padding: 5px;"></p>
-  <p class="b mb4" style="font-size:10pt;">Part A. 수능 수준 - 괄호 속 올바른 어휘 고르기</p>
+  <div class="stitle" style="font-size:14pt;">Lv.9-1 ì–´íœ˜ ì‹¬í™”</div>
+  <p class="b mb4" style="font-size:10pt;">Part A. ìˆ˜ëŠ¥ ìˆ˜ì¤€ - ê´„í˜¸ ì† ì˜¬ë°”ë¥¸ ì–´íœ˜ ê³ ë¥´ê¸°</p>
   <div class="psg" style="font-size:9.5pt;line-height:1.6;">{{ vocab_advanced_passage }}</div>
   <table style="width:100%;border-collapse:collapse;font-size:9pt;margin:6px 0;">
-  <tr>{% for n in range(1, vocab_parta_answers|length + 1) %}{% if n == 6 %}</tr><tr>{% endif %}<td style="width:20%;padding:2px 4px;">({{ n }})<span class="il" style="min-width:60px;"></span></td>{% endfor %}</tr>
+    <tr>{% for n in range(1,6) %}<td style="width:20%;padding:2px 4px;">({{ n }})<span class="il" style="min-width:60px;"></span></td>{% endfor %}</tr>
+    <tr>{% for n in range(6,10) %}<td style="width:20%;padding:2px 4px;">({{ n }})<span class="il" style="min-width:60px;"></span></td>{% endfor %}<td></td></tr>
   </table>
   <div style="border-top:2px solid var(--accent);margin-top:6px;padding-top:4px;">
-    <p class="b" style="font-size:9pt;color:var(--accent);">Part A 오답 - 틀린 단어 다시 정리</p>
+    <p class="b" style="font-size:9pt;color:var(--accent);">Part A ì˜¤ë‹µ - í‹€ë¦° ë‹¨ì–´ ë‹¤ì‹œ ì •ë¦¬</p>
     <table style="width:100%;border-collapse:separate;border-spacing:3px;font-size:8pt;">
-      <tr>{% for _ in range(2) %}<td style="width:50%;border:1px solid var(--border-light);border-radius:2px;padding:2px 6px;">단어: <span class="il" style="min-width:50px;height:13px;"></span> &nbsp; 뜻: <span class="il" style="min-width:70px;height:13px;"></span></td>{% endfor %}</tr>
-      <tr>{% for _ in range(2) %}<td style="border:1px solid var(--border-light);border-radius:2px;padding:2px 6px;">단어: <span class="il" style="min-width:50px;height:13px;"></span> &nbsp; 뜻: <span class="il" style="min-width:70px;height:13px;"></span></td>{% endfor %}</tr>
-      <tr>{% for _ in range(2) %}<td style="border:1px solid var(--border-light);border-radius:2px;padding:2px 6px;">단어: <span class="il" style="min-width:50px;height:13px;"></span> &nbsp; 뜻: <span class="il" style="min-width:70px;height:13px;"></span></td>{% endfor %}</tr>
+      <tr>{% for _ in range(2) %}<td style="width:50%;border:1px solid var(--border-light);border-radius:2px;padding:2px 6px;">ë‹¨ì–´: <span class="il" style="min-width:50px;height:13px;"></span> &nbsp; ëœ»: <span class="il" style="min-width:70px;height:13px;"></span></td>{% endfor %}</tr>
+      <tr>{% for _ in range(2) %}<td style="border:1px solid var(--border-light);border-radius:2px;padding:2px 6px;">ë‹¨ì–´: <span class="il" style="min-width:50px;height:13px;"></span> &nbsp; ëœ»: <span class="il" style="min-width:70px;height:13px;"></span></td>{% endfor %}</tr>
+      <tr>{% for _ in range(2) %}<td style="border:1px solid var(--border-light);border-radius:2px;padding:2px 6px;">ë‹¨ì–´: <span class="il" style="min-width:50px;height:13px;"></span> &nbsp; ëœ»: <span class="il" style="min-width:70px;height:13px;"></span></td>{% endfor %}</tr>
     </table>
   </div>
-  <p style="padding: 5px;"></p>
-  <p class="b mt8 mb4" style="font-size:10pt;">Part B. 최상위 - 올바른 동의어에 O 표시 (모두 고르시오)</p>
+  <p class="b mt8 mb4" style="font-size:10pt;">Part B. ìµœìƒìœ„ - ì˜¬ë°”ë¥¸ ë™ì˜ì–´ì— O í‘œì‹œ (ëª¨ë‘ ê³ ë¥´ì‹œì˜¤)</p>
   {% for item in vocab_partb %}
   <p style="font-size:9.5pt;margin-bottom:4px;">{{ loop.index }}. <strong>{{ item.word }}</strong>: &nbsp; {{ item.choices }}</p>{% endfor %}
   <div style="border-top:2px solid var(--accent);margin-top:8px;padding-top:4px;">
-    <p class="b" style="font-size:9pt;color:var(--accent);">Part B 오답 - 틀린 단어 다시 정리</p>
+    <p class="b" style="font-size:9pt;color:var(--accent);">Part B ì˜¤ë‹µ - í‹€ë¦° ë‹¨ì–´ ë‹¤ì‹œ ì •ë¦¬</p>
     <table style="width:100%;border-collapse:separate;border-spacing:3px;font-size:8pt;">
-      <tr>{% for _ in range(2) %}<td style="width:50%;border:1px solid var(--border-light);border-radius:2px;padding:2px 6px;">단어: <span class="il" style="min-width:50px;height:13px;"></span> &nbsp; 뜻: <span class="il" style="min-width:70px;height:13px;"></span></td>{% endfor %}</tr>
-      <tr>{% for _ in range(2) %}<td style="border:1px solid var(--border-light);border-radius:2px;padding:2px 6px;">단어: <span class="il" style="min-width:50px;height:13px;"></span> &nbsp; 뜻: <span class="il" style="min-width:70px;height:13px;"></span></td>{% endfor %}</tr>
-      <tr>{% for _ in range(2) %}<td style="border:1px solid var(--border-light);border-radius:2px;padding:2px 6px;">단어: <span class="il" style="min-width:50px;height:13px;"></span> &nbsp; 뜻: <span class="il" style="min-width:70px;height:13px;"></span></td>{% endfor %}</tr>
+      <tr>{% for _ in range(2) %}<td style="width:50%;border:1px solid var(--border-light);border-radius:2px;padding:2px 6px;">ë‹¨ì–´: <span class="il" style="min-width:50px;height:13px;"></span> &nbsp; ëœ»: <span class="il" style="min-width:70px;height:13px;"></span></td>{% endfor %}</tr>
+      <tr>{% for _ in range(2) %}<td style="border:1px solid var(--border-light);border-radius:2px;padding:2px 6px;">ë‹¨ì–´: <span class="il" style="min-width:50px;height:13px;"></span> &nbsp; ëœ»: <span class="il" style="min-width:70px;height:13px;"></span></td>{% endfor %}</tr>
+      <tr>{% for _ in range(2) %}<td style="border:1px solid var(--border-light);border-radius:2px;padding:2px 6px;">ë‹¨ì–´: <span class="il" style="min-width:50px;height:13px;"></span> &nbsp; ëœ»: <span class="il" style="min-width:70px;height:13px;"></span></td>{% endfor %}</tr>
     </table>
-    <p style="padding: 5px;"></p>
-    <div class="solbox mt12">
-      <p class="b" style="font-size:9pt;">[어휘 유형 솔루션]</p>
-      <p style="font-size:9.5pt;">• Step 1: 원문에 쓰인 단어 <strong>확인</strong>.</p>
-      <p style="font-size:9.5pt;">• Step 2: 원문과 변형되어 출제되었는지 <strong>확인</strong>.</p>
-    </div>
   </div>
+  <div class="pn">13</div>
 </div>
 
 {# ==================== PAGE 14: Lv.9-2 ==================== #}
 <div class="page" style="font-size:8.5pt;line-height:1.2;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
-  <div class="phase" style="color:var(--accent);">수업 후</div>
+  <div class="hdr"><span class="hdr-left">ë ˆë²¨ë¯¸ì—…í•™ì›</span><span class="hdr-right">{{ lesson_num }}ê³¼ - {{ challenge_title }}</span></div>
+  <div class="phase">ìˆ˜ì—… í›„</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==9 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
-  <div class="stitle" style="font-size:12pt;">Stage 9-2 내용 일치 (한국어 + 영어 - 모두 고르시오)</div>
-  <p style="padding: 5px;"></p> 
+  <div class="stitle" style="font-size:12pt;">Lv.9-2 ë‚´ìš© ì¼ì¹˜ (í•œêµ­ì–´ + ì˜ì–´ - ëª¨ë‘ ê³ ë¥´ì‹œì˜¤)</div>
   <p class="slbl">STEP 1</p>
-  <p style="font-size:8pt;margin-bottom:2px;">지문 구조 파악 및 정확한 해석 (영어지문 위에 직접 표시)</p>
+  <p style="font-size:8pt;margin-bottom:2px;">ì§€ë¬¸ êµ¬ì¡° íŒŒì•… ë° ì •í™•í•œ í•´ì„ (ì˜ì–´ì§€ë¬¸ ìœ„ì— ì§ì ‘ í‘œì‹œ)</p>
   <div class="psg" style="font-size:8.5pt;line-height:1.45;padding:6px 8px;">{{ passage }}</div>
-  <p style="padding: 5px;"></p>
   <p class="slbl mt4">STEP 2</p>
-  <p style="font-size:8pt;margin-bottom:2px;">본문의 문장과 선지를 연결하여 정답 찾기</p>
-  <p style="padding: 1.5px;"></p>
+  <p style="font-size:8pt;margin-bottom:2px;">ë³¸ë¬¸ì˜ ë¬¸ìž¥ê³¼ ì„ ì§€ë¥¼ ì—°ê²°í•˜ì—¬ ì •ë‹µ ì°¾ê¸°</p>
   <table style="width:100%;border-collapse:collapse;font-size:8pt;">
     <tr style="vertical-align:top;">
       <td style="width:50%;padding-right:8px;">
-        <p class="b" style="font-size:8.5pt;color:var(--accent);margin-bottom:2px;">Part A. 한국어 - 일치하는 것 모두</p>
+        <p class="b" style="font-size:8.5pt;color:var(--accent);margin-bottom:2px;">Part A. í•œêµ­ì–´ - ì¼ì¹˜í•˜ëŠ” ê²ƒ ëª¨ë‘</p>
         {% for s in content_match_kr %}<p style="margin-bottom:1px;">{{ s }}</p>{% endfor %}
       </td>
       <td style="width:50%;">
@@ -679,108 +597,67 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       </td>
     </tr>
   </table>
-  <table style="width: 100%;border-collapse: collapse;">
-    <tr>
-      <td class="mt3" style="font-size:8.5pt;width: 50%;">
-        Part A 답: <span class="il" style="min-width:140px;"></span>
-      </td>
-      <td class="mt3" style="font-size:8.5pt;width: 50%;">
-        Part B 답: <span class="il" style="min-width:140px;"></span>
-      </td>
-    </tr>
-  </table>
-  <p style="padding: 5px;"></p>
+  <p class="mt3" style="font-size:8.5pt;">Part A ë‹µ: <span class="il" style="min-width:140px;"></span> &nbsp; Part B ë‹µ: <span class="il" style="min-width:140px;"></span></p>
   <p class="slbl mt4">STEP 3</p>
-  <p style="font-size:8pt;margin-bottom:2px;"><span class="b">오답정리</span></p>
+  <p style="font-size:8pt;margin-bottom:2px;"><span class="b">ì˜¤ë‹µì •ë¦¬</span></p>
   <table style="width:100%;border-collapse:collapse;font-size:8pt;">
     <tr style="vertical-align:top;">
-      <td style="width:50%;padding-right:6px;">{% for _ in range(6) %}<p style="margin-bottom:2px;">( &nbsp; ) <span class="il" style="min-width:130px;"></span></p>{% endfor %}</td>
-      <td style="width:50%;">{% for _ in range(6) %}<p style="margin-bottom:2px;">( &nbsp; ) <span class="il" style="min-width:130px;"></span></p>{% endfor %}</td>
+      <td style="width:50%;padding-right:6px;">{% for _ in range(4) %}<p style="margin-bottom:2px;">( &nbsp; ) <span class="il" style="min-width:130px;"></span></p>{% endfor %}</td>
+      <td style="width:50%;">{% for _ in range(4) %}<p style="margin-bottom:2px;">( &nbsp; ) <span class="il" style="min-width:130px;"></span></p>{% endfor %}</td>
     </tr>
   </table>
-  <p style="padding: 5px;"></p>
-  <div class="solbox mt3" style="padding:4px 8px;">
-    <p class="b" style="font-size:8pt;">[내용일치 솔루션]</p>
-    <p style="font-size:7.5pt;"><span class="b">우리말 오답</span> = 해석 문제 → Stage 1~4로. <span class="b">영어 오답</span> = 어휘 문제 → 단어 정리 필수.</p>
+  <div style="border:2px solid var(--accent);border-radius:5px;padding:4px 6px;margin-top:4px;">
+    <p class="b" style="font-size:8pt;">í‹€ë¦° ë‹¨ì–´ ë‹¤ì‹œ ì •ë¦¬</p>
+    <table style="width:100%;border-collapse:separate;border-spacing:2px;font-size:7.5pt;">
+      <tr>{% for _ in range(2) %}<td style="width:50%;border:1px solid var(--border-light);border-radius:2px;padding:2px 4px;">ë‹¨ì–´: <span class="il" style="min-width:40px;height:11px;"></span> ëœ»: <span class="il" style="min-width:50px;height:11px;"></span></td>{% endfor %}</tr>
+      <tr>{% for _ in range(2) %}<td style="border:1px solid var(--border-light);border-radius:2px;padding:2px 4px;">ë‹¨ì–´: <span class="il" style="min-width:40px;height:11px;"></span> ëœ»: <span class="il" style="min-width:50px;height:11px;"></span></td>{% endfor %}</tr>
+      <tr>{% for _ in range(2) %}<td style="border:1px solid var(--border-light);border-radius:2px;padding:2px 4px;">ë‹¨ì–´: <span class="il" style="min-width:40px;height:11px;"></span> ëœ»: <span class="il" style="min-width:50px;height:11px;"></span></td>{% endfor %}</tr>
+    </table>
   </div>
+  <div class="solbox mt3" style="padding:4px 8px;">
+    <p class="b" style="font-size:8pt;">[ë‚´ìš©ì¼ì¹˜ ì†”ë£¨ì…˜]</p>
+    <p style="font-size:7.5pt;"><span class="b">ìš°ë¦¬ë§ ì˜¤ë‹µ</span> = í•´ì„ ë¬¸ì œ â†’ Lv.1~4ë¡œ. <span class="b">ì˜ì–´ ì˜¤ë‹µ</span> = ì–´íœ˜ ë¬¸ì œ â†’ ë‹¨ì–´ ì •ë¦¬ í•„ìˆ˜.</p>
+  </div>
+  <div class="pn">14</div>
 </div>
 
-{% endif %}
-{% if not levels or 10 in levels %}
 {# ==================== PAGE 15: Lv.10 ==================== #}
 <div class="page" style="font-size:8.5pt;line-height:1.2;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
-  <div class="phase" style="color:var(--accent);">수업 후</div>
+  <div class="hdr"><span class="hdr-left">ë ˆë²¨ë¯¸ì—…í•™ì›</span><span class="hdr-right">{{ lesson_num }}ê³¼ - {{ challenge_title }}</span></div>
+  <div class="phase">ìˆ˜ì—… í›„</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==10 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
-  <div class="stitle" style="font-size:13pt;">Stage 10 영작 (단어 배열)</div>
-  <p style="font-size:8.5pt;margin-bottom:2px;">다음 우리말과 일치하도록 주어진 단어를 올바르게 배열하시오.</p>
-  <p style="padding: 5px;"></p>
+  <div class="stitle" style="font-size:13pt;">Lv.10 ì˜ìž‘ (ë‹¨ì–´ ë°°ì—´)</div>
+  <p style="font-size:8.5pt;margin-bottom:2px;">ë‹¤ìŒ ìš°ë¦¬ë§ê³¼ ì¼ì¹˜í•˜ë„ë¡ ì£¼ì–´ì§„ ë‹¨ì–´ë¥¼ ì˜¬ë°”ë¥´ê²Œ ë°°ì—´í•˜ì‹œì˜¤.</p>
   <p class="slbl">STEP 1</p>
-  <p style="font-size:8pt;margin-bottom:4px;"><span class="b">우리말에 구조 분석</span>(S/V/O 체크) → 영어 어순으로 작성</p>
+  <p style="font-size:8pt;margin-bottom:4px;"><span class="b">ìš°ë¦¬ë§ì— êµ¬ì¡° ë¶„ì„</span>(S/V/O ì²´í¬) â†’ ì˜ì–´ ì–´ìˆœìœ¼ë¡œ ìž‘ì„±</p>
   {% for item in writing_items %}
-  <div style="margin-bottom:5px;break-inside: avoid;">
+  <div style="margin-bottom:5px;">
     <p style="font-weight:bold;font-size:8.5pt;">{{ loop.index }}. {{ item.korean }}</p>
     <div style="background:#f3f4f6;border:1px solid var(--border-light);border-radius:3px;padding:3px 6px;font-size:8pt;margin:2px 0;line-height:1.4;">{{ item.scrambled }}</div>
-    <div class="ilf" style="height:28px;"></div>
+    <div class="ilf" style="height:14px;"></div>
   </div>{% endfor %}
-  <p style="padding: 5px;"></p>
+
+  <p class="slbl mt4">STEP 2</p>
+  <p style="font-size:8.5pt;font-weight:bold;margin-bottom:3px;">ì˜ìž‘ ì˜¤ë‹µ ì •ë¦¬</p>
+  {% for _ in range(5) %}
+  <div style="margin-bottom:3px;font-size:8pt;">
+    <p>í‹€ë¦° ë²ˆí˜¸ ( &nbsp; ) / ì˜¤ë‹µ ì´ìœ : <span class="il" style="min-width:160px;height:12px;"></span></p>
+    <p>ë‹¤ì‹œ ì“°ê¸°: <span class="ilf" style="height:12px;"></span></p>
+  </div>{% endfor %}
   <div class="solbox" style="padding:4px 8px;">
-    <p class="b" style="font-size:8.5pt;">[영작 솔루션]</p>
-    <p style="font-size:8pt;">(1) 우리말 구조 분석(S/V/O) → (2) 영어 어순으로 써보기 → (3) 반복! <span class="b" style="color:var(--red);">써봐라. 지금 당장.</span></p>
+    <p class="b" style="font-size:8.5pt;">[ì˜ìž‘ ì†”ë£¨ì…˜]</p>
+    <p style="font-size:8pt;">(1) ìš°ë¦¬ë§ êµ¬ì¡° ë¶„ì„(S/V/O) â†’ (2) ì˜ì–´ ì–´ìˆœìœ¼ë¡œ ì¨ë³´ê¸° â†’ (3) ë°˜ë³µ! <span class="b" style="color:var(--red);">ì¨ë´ë¼. ì§€ê¸ˆ ë‹¹ìž¥.</span></p>
   </div>
+  <div class="pn">15</div>
 </div>
 
-{% endif %}
-{% if not levels or 0 in levels %}
-{# ==================== PAGE 16: 정답 ==================== #}
+{# ==================== PAGE 16: ì •ë‹µ ==================== #}
 <div class="page">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span>정답 및 해설</span></div>
-  <div style="text-align:center;font-size:15pt;font-weight:bold;margin:6px 0;padding-bottom:6px;border-bottom:2px solid var(--primary);">정답 및 해설</div>
+  <div class="hdr"><span class="hdr-left">ë ˆë²¨ë¯¸ì—…í•™ì›</span><span>ì •ë‹µ ë° í•´ì„¤</span></div>
+  <div style="text-align:center;font-size:15pt;font-weight:bold;margin:6px 0;padding-bottom:6px;border-bottom:2px solid var(--primary);">ì •ë‹µ ë° í•´ì„¤</div>
   <div class="apage">{{ answers_html }}</div>
+  <div class="pn">16</div>
 </div>
 
-{% endif %}
-<script>
-(function(){
-  var A4_PX=1123,MARGIN_PX=96,PRINTABLE=A4_PX-MARGIN_PX*2;
-  var MIN_FONT=9,MIN_LH=1.8;
-  var origFont='',origLH='';
-
-  window.addEventListener('beforeprint',function(){
-    var wrap=document.getElementById('lv83-content');
-    var psg=document.getElementById('lv83-psg');
-    if(!wrap||!psg)return;
-
-    origFont=psg.style.fontSize;
-    origLH=psg.style.lineHeight;
-
-    var page=wrap.closest('.page');
-    if(!page)return;
-
-    var pageTop=page.offsetTop;
-    var font=11,lh=2.8;
-
-    while(font>=MIN_FONT){
-      psg.style.fontSize=font+'pt';
-      psg.style.lineHeight=String(lh);
-      var pageBottom=pageTop+page.offsetHeight;
-      var usedPages=Math.ceil((pageBottom-pageTop)/PRINTABLE);
-      if(usedPages<=1)return;
-      font-=0.5;
-      lh=Math.max(MIN_LH,lh-0.2);
-    }
-
-    psg.style.fontSize=origFont;
-    psg.style.lineHeight=origLH;
-  });
-
-  window.addEventListener('afterprint',function(){
-    var psg=document.getElementById('lv83-psg');
-    if(!psg)return;
-    psg.style.fontSize=origFont;
-    psg.style.lineHeight=origLH;
-  });
-})();
-</script>
 </body>
 </html>

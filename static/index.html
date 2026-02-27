@@ -128,8 +128,8 @@ textarea:focus { border-color: #4A90D9; outline: none; }
   <div class="container">
     <!-- 탭 -->
     <div class="tabs">
-      <div class="tab active" onclick="switchTab('generate')">📄 워크북 생성</div>
-      <div class="tab" onclick="switchTab('upload')">📤 지문 관리</div>
+      <div class="tab active" onclick="switchTab('generate', this)">📄 워크북 생성</div>
+      <div class="tab" onclick="switchTab('upload', this)">📤 지문 관리</div>
     </div>
 
     <!-- ==================== 생성 탭 ==================== -->
@@ -565,14 +565,18 @@ function downloadMerged() {
     return bodyMatch ? bodyMatch[1] : r.html;
   });
   
-  // 합본 생성
   const unit = document.getElementById('sel-book').value || '합본';
+
+  // 합본 생성 (모바일 축소 방지: viewport + text-size-adjust)
   const merged = `<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${unit} 합본</title>
 <style>
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { margin: 0; }
 ${css}
 </style>
 </head>
@@ -723,7 +727,6 @@ async function clearPassageCache() {
   
   if (!confirm(`선택한 ${passages.length}개 지문의 캐시를 삭제하시겠습니까?\n삭제 후 워크북을 다시 생성하면 문제가 새로 만들어집니다.`)) return;
   
-  const status = document.getElementById('sync-status');
   let totalDeleted = 0;
   
   for (const p of passages) {
@@ -742,8 +745,8 @@ async function clearPassageCache() {
 }
 
 async function clearCacheUI() {
-  // 교재 선택 드롭다운에서 현재 선택된 교재 가져오기
-  const bookSel = document.getElementById('book-sel');
+  // 현재 선택된 교재
+  const bookSel = document.getElementById('sel-book');
   const book = bookSel ? bookSel.value : '';
   
   if (!book) {
@@ -779,9 +782,9 @@ async function clearCacheUI() {
 // ============================================================
 // Tabs
 // ============================================================
-function switchTab(tab) {
+function switchTab(tab, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  event.target.classList.add('active');
+  if (el) el.classList.add('active');
   document.getElementById('tab-generate').classList.toggle('hidden', tab !== 'generate');
   document.getElementById('tab-upload').classList.toggle('hidden', tab !== 'upload');
 }

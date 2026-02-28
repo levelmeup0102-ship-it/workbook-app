@@ -293,7 +293,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       {% for col in range(3) %}
       <td style="width:33%;border:1px solid var(--border-table);border-radius:3px;padding:2px 4px;vertical-align:top;">
         <p><span style="color:var(--accent);font-weight:bold;">단어:</span> <span class="il" style="min-width:45px;height:10px;"></span></p>
-        <p><b style="width: 10%;">뜻</b> 1.<span class="il" style="width: 30%;height:10px;"></span> 2.<span class="il" style="width: 30%;height:10px;"></span> 3.<span class="il" style="width: 30%;height:10px;"></span></p>
+        <p><b style="width: 10%;">뜻</b> 1.<span class="il" style="width: 35%;height:10px;"></span> 2.<span class="il" style="width: 35%;height:10px;"></span></p>
         <p><b style="width: 10%;">예문</b> <span class="il" style="width: 92.7%;height:10px;"></span></p>
       </td>
       {% endfor %}
@@ -356,9 +356,9 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       <tr style="break-inside: avoid;">
         {% for col in range(3) %}
         <td style="width:33%;border:1px solid var(--border-light);border-radius:3px;padding:3px 6px;vertical-align:top;">
-          <p><span style="color:var(--accent);font-weight:bold;">단어:</span> <span class="il" style="min-width:70px;height:13px;"></span></p>
-          <p><b>뜻</b> &nbsp; 1.<span class="il" style="width: 45%;;height:17px;"></span> &nbsp; 2.<span class="il" style="width: 45%;;height:17px;"></span></p>
-          <p><b>동의어</b> 1.<span class="il" style="width: 45%;height:17px;"></span> &nbsp; 2.<span class="il" style="width: 45%;height:17px;"></span></p>
+          <p><span style="color:var(--accent);font-weight:bold;">단어:</span> <span class="il" style="width:calc(100% - 35px);height:13px;"></span></p>
+          <p><b>뜻</b> 1.<span class="il" style="width:calc(50% - 20px);height:13px;"></span> 2.<span class="il" style="width:calc(50% - 20px);height:13px;"></span></p>
+          <p><b>동의어</b> 1.<span class="il" style="width:calc(50% - 25px);height:13px;"></span> 2.<span class="il" style="width:calc(50% - 25px);height:13px;"></span></p>
         </td>
         {% endfor %}
       </tr>
@@ -491,8 +491,8 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <tr><td style="padding:2px 4px;border:1px solid var(--border-light);font-weight:bold;">2차</td><td style="padding:2px 4px;border:1px solid var(--border-light);color:var(--text-muted);">메모:</td></tr>
   </table>
   <p style="padding: 5px;"></p>
-  <div class="warnbox" style="margin-top:4px;padding:6px 10px;">
-    <p class="warnt" style="font-size:10pt;">!! WARNING - YOU DIED</p>
+  <div class="solbox" style="margin-top:4px;padding:6px 10px;">
+    <p class="b" style="font-size:9pt;">[글의 흐름 솔루션]</p>
     <p style="font-size:8pt;margin-top:2px;">순서/삽입을 틀렸다면, <span class="b">Stage 4 구조 정리</span>가 아직 완전하지 않다는 뜻입니다. <strong>Stage 4로 돌아가세요.</strong></p>
   </div>
 </div>
@@ -519,7 +519,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <p style="font-size:8.5pt;color:var(--accent);">• 순서를 틀렸다면 → <span style="color:var(--primary);font-weight:bold;">아래 오답정리를 반드시 작성한 뒤</span>, Stage 4로 돌아가 체크리스트를 따라 재학습하시오.</p>
   </div> -->
   <p style="padding: 5px;"></p>
-  <p class="b mt8 mb4" style="font-size:10pt;color:var(--accent);">오답 정리 — 정답 순서대로 한 줄 요약</p>
   <p style="font-size:8pt;color:var(--text-muted);margin-bottom:4px;">틀린 경우, 정답 순서의 기호를 왼쪽에 적고 → 오른쪽에 그 문장 내용을 한국말로 한 줄 요약하세요.</p>
   <table style="width:100%;border-collapse:collapse;font-size:9pt;">
     {% for i in range(0, full_order_blocks|length, 2) %}
@@ -532,11 +531,12 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     {% endfor %}
   </table>
   <p style="padding: 2.5px;"></p>
-  <div class="solbox mt8" style="border-radius:4px;padding:10px 14px;margin-top:12px;min-height:70px;break-inside:avoid;">
-    <p style="font-size:10pt;font-weight:bold;color:var(--primary);margin-bottom:8px;">📌 순서배열 솔루션 ( 스스로 방법 정리 )</p>
-    <div style="border-bottom:1px dashed var(--border-dotted);height:22px;margin-bottom:0;"></div>
-    <div style="border-bottom:1px dashed var(--border-dotted);height:22px;margin-bottom:0;"></div>
-    <div style="border-bottom:1px dashed var(--border-dotted);height:22px;margin-bottom:0;"></div>
+  <div class="solbox mt8" style="border-radius:4px;padding:10px 14px;margin-top:12px;break-inside:avoid;">
+    <p class="b" style="font-size:9pt;">[전체배열 솔루션]</p>
+    <p style="font-size:8pt;margin-top:2px;"><span style="color:var(--accent);font-weight:bold;">Step 1:</span> 아무 문장 하나 읽기 → 지문 인식 → 핵심 내용 + 전개 흐름 상기</p>
+    <p style="font-size:8pt;"><span style="color:var(--accent);font-weight:bold;">Step 2:</span> 첫 문장 찾기</p>
+    <p style="font-size:8pt;"><span style="color:var(--accent);font-weight:bold;">Step 3:</span> 연결 단서를 찾아 순서 연결해 보기 (관사, 지시어, 접속사, 어휘반복)</p>
+    <p style="font-size:8pt;"><span style="color:var(--accent);font-weight:bold;">Step 4:</span> 전체 흐름 확인하기 (처음→ 끝까지 읽으며 자연스러운지 점검)</p>
   </div>
 </div>
 
@@ -651,8 +651,8 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     </tr>{% endfor %}
   </table>
   <p style="padding: 5px;"></p>
-  <div class="encbox" style="margin-top:4px;padding:6px 10px;">
-    <p class="b" style="font-size:9pt;">⚡ 어법 유형 솔루션</p>
+  <div class="solbox" style="margin-top:4px;padding:6px 10px;">
+    <p class="b" style="font-size:9pt;">[어법 유형 솔루션]</p>
     <p style="font-size:8pt;">문법적 이해 없이 단순 암기로 푸는 건 변형 시 <span class="b">반드시 틀립니다.</span> 모르겠으면 <span class="b" style="color:var(--red);">제발 물어보세요.</span></p>
   </div>
 </div>
@@ -696,9 +696,11 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     </tr>{% endfor %}
   </table>
   <p style="padding: 5px;"></p>
-  <div class="encbox">
-    <p class="b">⚡ 어법 유형 솔루션</p>
-    <p style="font-size:9pt;">문법적 이해 없이 단순 암기로 푸는 건 변형 시 <span class="b">반드시 틀립니다.</span><br>1회독 때 문법을 정리하지 않으면 시험 전 정리할 시간은 <span class="b">절대 없습니다.</span><br>모르겠으면 <span class="b" style="color:var(--red);">제발 물어보세요.</span> 모르는 채로 넘어가는 게 가장 위험합니다.</p>
+  <div class="solbox">
+    <p class="b" style="font-size:9pt;">[어법 유형 솔루션]</p>
+    <p style="font-size:9pt;"><span style="color:var(--accent);font-weight:bold;">Step 1:</span> 문법적 이해 없이 단순 암기로 푸는 건 변형 시 <span class="b">반드시 틀립니다.</span></p>
+    <p style="font-size:9pt;"><span style="color:var(--accent);font-weight:bold;">Step 2:</span> 1회독 때 문법을 정리하지 않으면 시험 전 정리할 시간은 <span class="b">절대 없습니다.</span></p>
+    <p style="font-size:9pt;">모르겠으면 <span class="b" style="color:var(--red);">제발 물어보세요.</span> 모르는 채로 넘어가는 게 가장 위험합니다.</p>
   </div>
 </div>
 
@@ -713,9 +715,11 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <div id="lv83-content">
     <div id="lv83-psg" class="psg" style="line-height:2.8;font-size:11pt;orphans:2;widows:2;">{{ passage }}</div>
     <p style="padding: 5px;"></p>
-    <div class="encbox mt12">
-      <p class="b">⚡ 어법 유형 솔루션</p>
-      <p style="font-size:9.5pt;">문법적 이해 없이 단순 암기로 푸는 건 변형 시 <span class="b">반드시 틀립니다.</span><br>1회독 때 문법을 정리하지 않으면 시험 전 정리할 시간은 <span class="b">절대 없습니다.</span><br>모르겠으면 <span class="b" style="color:var(--red);">제발 물어보세요.</span> 모르는 채로 넘어가는 게 가장 위험합니다.</p>
+    <div class="solbox mt12">
+      <p class="b" style="font-size:9pt;">[어법 유형 솔루션]</p>
+      <p style="font-size:9.5pt;"><span style="color:var(--accent);font-weight:bold;">Step 1:</span> 문법적 이해 없이 단순 암기로 푸는 건 변형 시 <span class="b">반드시 틀립니다.</span></p>
+      <p style="font-size:9.5pt;"><span style="color:var(--accent);font-weight:bold;">Step 2:</span> 1회독 때 문법을 정리하지 않으면 시험 전 정리할 시간은 <span class="b">절대 없습니다.</span></p>
+      <p style="font-size:9.5pt;">모르겠으면 <span class="b" style="color:var(--red);">제발 물어보세요.</span> 모르는 채로 넘어가는 게 가장 위험합니다.</p>
     </div>
   </div>
 </div>
@@ -729,6 +733,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==9 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
   <div class="stitle" style="font-size:14pt;">Stage 9-1 어휘 심화</div>
   <p style="padding: 5px;"></p>
+  <div style="break-inside:avoid;">
   <p class="b mb4" style="font-size:10pt;">Part A. 수능 수준 - 괄호 속 올바른 어휘 고르기</p>
   <div class="psg" style="font-size:9.5pt;line-height:1.6;">{{ vocab_advanced_passage }}</div>
   <table style="width:100%;border-collapse:collapse;font-size:9pt;margin:6px 0;">
@@ -742,7 +747,9 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       <tr>{% for _ in range(2) %}<td style="border:1px solid var(--border-light);border-radius:2px;padding:2px 6px;">단어: <span class="il" style="min-width:50px;height:13px;"></span> &nbsp; 뜻: <span class="il" style="min-width:70px;height:13px;"></span></td>{% endfor %}</tr>
     </table>
   </div>
+  </div>
   <p style="padding: 5px;"></p>
+  <div style="break-inside:avoid;">
   <p class="b mt8 mb4" style="font-size:10pt;">Part B. 최상위 - 올바른 동의어에 O 표시 (모두 고르시오)</p>
   {% for item in vocab_partb %}
   <p style="font-size:9.5pt;margin-bottom:4px;">{{ loop.index }}. <strong>{{ item.word }}</strong>: &nbsp; {{ item.choices }}</p>{% endfor %}
@@ -754,10 +761,12 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       <tr>{% for _ in range(2) %}<td style="border:1px solid var(--border-light);border-radius:2px;padding:2px 6px;">단어: <span class="il" style="min-width:50px;height:13px;"></span> &nbsp; 뜻: <span class="il" style="min-width:70px;height:13px;"></span></td>{% endfor %}</tr>
     </table>
     <p style="padding: 5px;"></p>
-    <div class="encbox mt12">
-      <p class="b">⚡ 어휘 유형 솔루션 추가</p>
-      <p style="font-size:9.5pt;">• step1: 원문에 쓰인 단어 <strong>확인</strong>.</span><br>• step2: 원뭔과 변형되어 출제되었는지 <strong>확인</strong>.</p>
+    <div class="solbox mt12">
+      <p class="b" style="font-size:9pt;">[어휘 유형 솔루션]</p>
+      <p style="font-size:9.5pt;">• Step 1: 원문에 쓰인 단어 <strong>확인</strong>.</p>
+      <p style="font-size:9.5pt;">• Step 2: 원문과 변형되어 출제되었는지 <strong>확인</strong>.</p>
     </div>
+  </div>
   </div>
 </div>
 
@@ -830,14 +839,6 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <p style="font-weight:bold;font-size:8.5pt;">{{ loop.index }}. {{ item.korean }}</p>
     <div style="background:#f3f4f6;border:1px solid var(--border-light);border-radius:3px;padding:3px 6px;font-size:8pt;margin:2px 0;line-height:1.4;">{{ item.scrambled }}</div>
     <div class="ilf" style="height:28px;"></div>
-  </div>{% endfor %}
-  <p style="padding: 5px;"></p>
-  <p class="slbl mt4">STEP 2</p>
-  <p style="font-size:8.5pt;font-weight:bold;margin-bottom:3px;">영작 오답 정리</p>
-  {% for _ in range(3) %}
-  <div style="margin-bottom:3px;font-size:8pt;">
-    <p>틀린 번호 ( &nbsp; ) / 오답 이유: <span class="il" style="min-width:160px;height:12px;"></span></p>
-    <p>다시 쓰기: <span class="ilf" style="height:12px;"></span></p>
   </div>{% endfor %}
   <p style="padding: 5px;"></p>
   <div class="solbox" style="padding:4px 8px;">

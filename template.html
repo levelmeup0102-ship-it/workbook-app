@@ -267,7 +267,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 {% if not levels or 1 in levels %}
 {# ==================== PAGE 2: Lv.1 ==================== #}
 <div class="page" style="font-size:8.5pt;line-height:1.2;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
+  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ subject }} - {{ challenge_title }}</span></div>
   <div class="phase">수업 전</div>
   <div class="lnav"><span class="lb on">1</span>{% for i in range(2,11) %}<span class="lb">{{ i }}</span>{% endfor %}</div>
   <div class="ckl" style="padding:4px 8px;font-size:8pt;">
@@ -353,7 +353,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 {% if not levels or 2 in levels %}
 {# ==================== PAGE 3: Lv.2 ==================== #}
 <div class="page" style="font-size:9.5pt;line-height:1.4;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
+  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ subject }} - {{ challenge_title }}</span></div>
   <div class="phase">수업 전</div>
   <div class="lnav"><span class="lb">1</span><span class="lb on">2</span>{% for i in range(3,11) %}<span class="lb">{{ i }}</span>{% endfor %}</div>
   <div class="ckl" style="padding:6px 10px;font-size:8.5pt;">
@@ -422,7 +422,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 {% set ns = namespace(offset=0) %}
 {% for chunk in sentence_chunks %}
 <div class="page" style="font-size:10pt;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
+  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ subject }} - {{ challenge_title }}</span></div>
   <div class="phase" style="color:var(--green);">수업 중</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==3 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
   {% if loop.first %}
@@ -458,7 +458,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 {% if not levels or 4 in levels %}
 {# ==================== PAGE 5: Lv.4 ==================== #}
 <div class="page" style="font-size:10pt;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
+  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ subject }} - {{ challenge_title }}</span></div>
   <div class="phase" style="color:var(--green);">수업 중</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==4 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
   <div class="ckl">
@@ -495,7 +495,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 {% if not levels or 5 in levels %}
 {# ==================== PAGE 6: Lv.5 순서+삽입 ==================== #}
 <div class="page" style="font-size:8.5pt;line-height:1.25;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
+  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ subject }} - {{ challenge_title }}</span></div>
   <div class="phase" style="color:var(--accent);">수업 후 (복습)</div>
   <p style="font-size:9pt;text-align:center;color:var(--accent);font-weight:bold;margin:3px 0;">여기서부터 복습입니다!</p>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==5 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
@@ -538,7 +538,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 
 {# ==================== PAGE 7: Lv.5 심화 ==================== #}
 <div class="page" style="font-size:9.5pt;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
+  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ subject }} - {{ challenge_title }}</span></div>
   <div class="phase" style="color:var(--accent);">수업 후 (복습)</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==5 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
   <div class="stitle" style="font-size:15pt;">Stage 5 전체 문장 순서 배열 (심화)</div>
@@ -583,7 +583,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 {% if not levels or 6 in levels %}
 {# ==================== PAGE 8: Lv.6 빈칸 ==================== #}
 <div class="page" style="font-size:9pt;line-height:1.25;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
+  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ subject }} - {{ challenge_title }}</span></div>
   <div class="phase" style="color:var(--accent);">수업 후</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==6 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
   <div class="stitle" style="font-size:12pt;">Stage 6 빈칸 추론 (모두 고르시오)</div>
@@ -619,7 +619,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 {% if not levels or 7 in levels %}
 {# ==================== PAGE 9: Lv.7 주제 ==================== #}
 <div class="page" style="font-size:9pt;line-height:1.25;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
+  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ subject }} - {{ challenge_title }}</span></div>
   <div class="phase" style="color:var(--accent);">수업 후</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==7 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
   <div class="stitle" style="font-size:12pt;">Stage 7 주제 찾기 (모두 고르시오)</div>
@@ -654,7 +654,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 {% if not levels or 8 in levels %}
 {# ==================== PAGE 10: Lv.8-1 ==================== #}
 <div class="page" style="font-size:9pt;line-height:1.25;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
+  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ subject }} - {{ challenge_title }}</span></div>
   <div class="phase" style="color:var(--accent);">수업 후</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==8 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
   <div class="stitle" style="font-size:13pt;">Stage 8-1 어법 (괄호 속 올바른 표현 고르기)</div>
@@ -698,7 +698,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 
 {# ==================== PAGE 11: Lv.8-2 ==================== #}
 <div class="page" style="font-size:10pt;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
+  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ subject }} - {{ challenge_title }}</span></div>
   <div class="phase" style="color:var(--accent);">수업 후</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==8 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
   <div class="stitle">Stage 8-2 어법 서술형 (틀린 곳 찾아 고치기)</div>
@@ -745,7 +745,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 
 {# ==================== PAGE 12: Lv.8-3 ==================== #}
 <div class="page" style="font-size:11pt;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
+  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ subject }} - {{ challenge_title }}</span></div>
   <div class="phase" style="color:var(--accent);">수업 후</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==8 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
   <div class="stitle" style="font-size:15pt;">Stage 8-3 어법 최종 체크</div>
@@ -767,7 +767,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 {% if not levels or 9 in levels %}
 {# ==================== PAGE 13: Lv.9-1 ==================== #}
 <div class="page" style="font-size:9.5pt;line-height:1.35;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
+  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ subject }} - {{ challenge_title }}</span></div>
   <div class="phase" style="color:var(--accent);">수업 후</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==9 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
   <div class="stitle" style="font-size:14pt;">Stage 9-1 어휘 심화</div>
@@ -811,7 +811,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 
 {# ==================== PAGE 14: Lv.9-2 ==================== #}
 <div class="page" style="font-size:8.5pt;line-height:1.2;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
+  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ subject }} - {{ challenge_title }}</span></div>
   <div class="phase" style="color:var(--accent);">수업 후</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==9 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
   <div class="stitle" style="font-size:12pt;">Stage 9-2 내용 일치 (한국어 + 영어 - 모두 고르시오)</div>
@@ -865,7 +865,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 {% if not levels or 10 in levels %}
 {# ==================== PAGE 15: Lv.10 ==================== #}
 <div class="page" style="font-size:8.5pt;line-height:1.2;">
-  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ lesson_num }}과 - {{ challenge_title }}</span></div>
+  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ subject }} - {{ challenge_title }}</span></div>
   <div class="phase" style="color:var(--accent);">수업 후</div>
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==10 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
   <div class="stitle" style="font-size:13pt;">Stage 10 영작 (단어 배열)</div>

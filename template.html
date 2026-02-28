@@ -669,22 +669,22 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     {% for i in range(0, grammar_bracket_count, 3) %}
     <tr style="break-inside: avoid;">
       <td style="width:33.3%;border:1px solid var(--border-light);border-radius:3px;padding:3px 6px;vertical-align:top;">
-        <p><span class="grammar-num">({{ i+1 }})</span> <span class="il" style="width:calc(100% - 30px);"></span></p>
-        <p style="color:var(--text-muted);font-size:7.5pt;">틀린 이유: <span class="il" style="width:calc(100% - 55px);"></span></p>
-        <p style="color:var(--text-muted);font-size:7.5pt;">문법 바로잡기: <span class="il" style="width:calc(100% - 70px);"></span></p>
+        <p class="triple__row--fixed"><span class="grammar-num triple__b">({{ i+1 }})</span><span class="il triple__line"></span></p>
+        <p class="triple__row--fixed" style="color:var(--text-muted);font-size:7.5pt;"><span class="triple__b">틀린 이유:</span><span class="il triple__line"></span></p>
+        <p class="triple__row--fixed" style="color:var(--text-muted);font-size:7.5pt;"><span class="triple__b">문법 바로잡기:</span><span class="il triple__line"></span></p>
       </td>
       {% if i+1 < grammar_bracket_count %}
       <td style="width:33.3%;border:1px solid var(--border-light);border-radius:3px;padding:3px 6px;vertical-align:top;">
-        <p><span class="grammar-num">({{ i+2 }})</span> <span class="il" style="width:calc(100% - 30px);"></span></p>
-        <p style="color:var(--text-muted);font-size:7.5pt;">틀린 이유: <span class="il" style="width:calc(100% - 55px);"></span></p>
-        <p style="color:var(--text-muted);font-size:7.5pt;">문법 바로잡기: <span class="il" style="width:calc(100% - 70px);"></span></p>
+        <p class="triple__row--fixed"><span class="grammar-num triple__b">({{ i+2 }})</span><span class="il triple__line"></span></p>
+        <p class="triple__row--fixed" style="color:var(--text-muted);font-size:7.5pt;"><span class="triple__b">틀린 이유:</span><span class="il triple__line"></span></p>
+        <p class="triple__row--fixed" style="color:var(--text-muted);font-size:7.5pt;"><span class="triple__b">문법 바로잡기:</span><span class="il triple__line"></span></p>
       </td>
       {% else %}<td></td>{% endif %}
       {% if i+2 < grammar_bracket_count %}
       <td style="width:33.3%;border:1px solid var(--border-light);border-radius:3px;padding:3px 6px;vertical-align:top;">
-        <p><span class="grammar-num">({{ i+3 }})</span> <span class="il" style="width:calc(100% - 30px);"></span></p>
-        <p style="color:var(--text-muted);font-size:7.5pt;">틀린 이유: <span class="il" style="width:calc(100% - 55px);"></span></p>
-        <p style="color:var(--text-muted);font-size:7.5pt;">문법 바로잡기: <span class="il" style="width:calc(100% - 70px);"></span></p>
+        <p class="triple__row--fixed"><span class="grammar-num triple__b">({{ i+3 }})</span><span class="il triple__line"></span></p>
+        <p class="triple__row--fixed" style="color:var(--text-muted);font-size:7.5pt;"><span class="triple__b">틀린 이유:</span><span class="il triple__line"></span></p>
+        <p class="triple__row--fixed" style="color:var(--text-muted);font-size:7.5pt;"><span class="triple__b">문법 바로잡기:</span><span class="il triple__line"></span></p>
       </td>
       {% else %}<td></td>{% endif %}
     </tr>{% endfor %}
@@ -715,21 +715,21 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <tr style="break-inside: avoid;">
       <td style="width:33%;border:1px solid var(--border-light);border-radius:3px;padding:5px 8px;vertical-align:top;">
         <p><span class="grammar-num">({{ i+1 }})</span> <span class="il" style="min-width:60px;border-color:var(--primary);"></span> <span style="color:var(--accent);font-weight:bold;">→</span> <span class="il" style="min-width:60px;border-color:var(--accent);"></span></p>
-        <p style="color:var(--text-muted);font-size:8.5pt;">틀린 이유: <span class="il" style="min-width:100px;"></span></p>
-        <p style="color:var(--text-muted);font-size:8.5pt;">문법 바로잡기: <span class="il" style="min-width:100px;"></span></p>
+        <p class="triple__row--fixed" style="color:var(--text-muted);font-size:8.5pt;"><span class="triple__b">틀린 이유:</span><span class="il triple__line"></span></p>
+        <p class="triple__row--fixed" style="color:var(--text-muted);font-size:8.5pt;"><span class="triple__b">문법 바로잡기:</span><span class="il triple__line"></span></p>
       </td>
       {% if i+1 < grammar_error_count %}
       <td style="width:33%;border:1px solid var(--border-light);border-radius:3px;padding:5px 8px;vertical-align:top;">
         <p><span class="grammar-num">({{ i+2 }})</span> <span class="il" style="min-width:60px;border-color:var(--primary);"></span> <span style="color:var(--accent);font-weight:bold;">→</span> <span class="il" style="min-width:60px;border-color:var(--accent);"></span></p>
-        <p style="color:var(--text-muted);font-size:8.5pt;">틀린 이유: <span class="il" style="min-width:100px;"></span></p>
-        <p style="color:var(--text-muted);font-size:8.5pt;">문법 바로잡기: <span class="il" style="min-width:100px;"></span></p>
+        <p class="triple__row--fixed" style="color:var(--text-muted);font-size:8.5pt;"><span class="triple__b">틀린 이유:</span><span class="il triple__line"></span></p>
+        <p class="triple__row--fixed" style="color:var(--text-muted);font-size:8.5pt;"><span class="triple__b">문법 바로잡기:</span><span class="il triple__line"></span></p>
       </td>
       {% else %}<td></td>{% endif %}
       {% if i+2 < grammar_error_count %}
       <td style="width:33%;border:1px solid var(--border-light);border-radius:3px;padding:5px 8px;vertical-align:top;">
         <p><span class="grammar-num">({{ i+3 }})</span> <span class="il" style="min-width:60px;border-color:var(--primary);"></span> <span style="color:var(--accent);font-weight:bold;">→</span> <span class="il" style="min-width:60px;border-color:var(--accent);"></span></p>
-        <p style="color:var(--text-muted);font-size:8.5pt;">틀린 이유: <span class="il" style="min-width:100px;"></span></p>
-        <p style="color:var(--text-muted);font-size:8.5pt;">문법 바로잡기: <span class="il" style="min-width:100px;"></span></p>
+        <p class="triple__row--fixed" style="color:var(--text-muted);font-size:8.5pt;"><span class="triple__b">틀린 이유:</span><span class="il triple__line"></span></p>
+        <p class="triple__row--fixed" style="color:var(--text-muted);font-size:8.5pt;"><span class="triple__b">문법 바로잡기:</span><span class="il triple__line"></span></p>
       </td>
       {% else %}<td></td>{% endif %}
     </tr>{% endfor %}
@@ -850,8 +850,8 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <p style="font-size:8pt;margin-bottom:2px;"><span class="b">오답정리</span></p>
   <table style="width:100%;border-collapse:collapse;font-size:8pt;">
     <tr style="vertical-align:top;">
-      <td style="width:50%;padding-right:6px;">{% for _ in range(6) %}<p style="margin-bottom:2px;">( &nbsp; ) <span class="il" style="min-width:130px;"></span></p>{% endfor %}</td>
-      <td style="width:50%;">{% for _ in range(6) %}<p style="margin-bottom:2px;">( &nbsp; ) <span class="il" style="min-width:130px;"></span></p>{% endfor %}</td>
+      <td style="width:50%;padding-right:6px;">{% for _ in range(6) %}<p class="triple__row--fixed" style="margin-bottom:2px;"><span class="triple__b">( &nbsp; )</span><span class="il triple__line"></span></p>{% endfor %}</td>
+      <td style="width:50%;">{% for _ in range(6) %}<p class="triple__row--fixed" style="margin-bottom:2px;"><span class="triple__b">( &nbsp; )</span><span class="il triple__line"></span></p>{% endfor %}</td>
     </tr>
   </table>
   <p style="padding: 5px;"></p>

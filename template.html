@@ -89,6 +89,72 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 .mt2{margin-top:2px} .mt4{margin-top:4px} .mt6{margin-top:6px} .mt8{margin-top:8px} .mt10{margin-top:10px} .mt12{margin-top:12px}
 .mb2{margin-bottom:2px} .mb4{margin-bottom:4px} .mb6{margin-bottom:6px} .mb8{margin-bottom:8px}
 .tc{text-align:center} .tm{color:var(--text-muted)} .ts{font-size:8.5pt}
+
+/* 오답정리 CSS 공통: 3칸 table 안정화 */
+.triple{
+  width:100%;
+  table-layout:fixed;
+  border-collapse:separate;   /* collapse + border-radius 조합이 애매해서 separate 권장 */
+  border-spacing:0;           /* spacing은 쓰지 말고 padding으로 처리 */
+  font-size:7pt;
+  line-height:1.15;
+}
+
+.triple > tbody > tr{ break-inside:avoid; }
+.triple__cell{
+  width:33.333%;
+  vertical-align:top;
+  box-sizing:border-box;
+  min-width:0;
+  overflow-wrap:anywhere;     /* 긴 토큰이 폭 밀어내는 것 방지 */
+  padding:2px;                /* cell 바깥 간격(=옛 border-spacing 역할) */
+}
+
+/* 실제 박스 */
+.triple__cell--t1{
+  border:1px solid var(--border-table);
+  border-radius:3px;
+  padding:2px 4px;            /* 박스 내부 패딩 */
+}
+
+/* p 기본 마진 제거 + 줄 간격 정리 */
+.triple__row{ margin:0 0 2px 0; }
+.triple__row:last-child{ margin-bottom:0; }
+
+.triple__label{
+  color:var(--accent);
+  font-weight:700;
+}
+
+.triple__b{
+  display:inline-block;
+  min-width:1.6em;            /* ‘뜻/예문’ 라벨 폭 흔들림 방지 */
+}
+
+/* il 유틸 */
+.il--w45{ min-width:45px; }
+.il--w30{ width:30%; }
+.il--w92{ width:92.7%; }
+.il--h10{ height:10px; }
+
+/* Stage2 단어정리칸 CSS */
+.triple--t2{
+  font-size:8pt;
+  line-height:1.3;
+}
+
+.triple__cell--t2{
+  border:1px solid var(--border-light);
+  border-radius:3px;
+  padding:3px 6px;
+}
+
+/* il 유틸 추가 */
+.il--w70{ min-width:70px; }
+.il--h13{ height:13px; }
+.il--h17{ height:17px; }
+.il--w45{ width:45%; } /* table2에서 45% 채우는 용도 */
+
 </style>
 </head>
 <body>
@@ -200,7 +266,29 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <div style="height:20px;"></div>
   <p style="font-size:7.5pt;color:var(--text-muted);margin-top:4px;">STEP 3</p>
   <div style="font-size:10pt;font-weight:bold;margin-bottom:3px;">D. 틀린 단어 사전 찾아 채우기</div>
-  <table style="width:100%;border-collapse:separate;border-spacing:3px;font-size:7pt;line-height:1.15;">
+  <table class="triple triple--t1">
+  <tr>
+    {% for col in range(3) %}
+    <td class="triple__cell triple__cell--t1">
+      <p class="triple__row">
+        <span class="triple__label">단어:</span>
+        <span class="il il--w45 il--h10"></span>
+      </p>
+      <p class="triple__row">
+        <b class="triple__b">뜻</b>
+        1.<span class="il il--w30 il--h10"></span>
+        2.<span class="il il--w30 il--h10"></span>
+        3.<span class="il il--w30 il--h10"></span>
+      </p>
+      <p class="triple__row">
+        <b class="triple__b">예문</b>
+        <span class="il il--w92 il--h10"></span>
+      </p>
+    </td>
+    {% endfor %}
+  </tr>
+</table>
+  <!-- <table class="triple" style="width:100%;border-collapse:collapse;border-spacing:3px;font-size:7pt;line-height:1.15;">
     <tr>
       {% for col in range(3) %}
       <td style="width:33%;border:1px solid var(--border-table);border-radius:3px;padding:2px 4px;vertical-align:top;">
@@ -210,8 +298,8 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
       </td>
       {% endfor %}
     </tr>
+  </table> -->
   <p style="padding: 5px;"></p>
-  </table>
   <div class="warnbox" style="margin-top:5px;padding:6px 10px;">
     <p class="b" style="font-size:8pt;">[핵심 어휘 솔루션]</p>
     <p style="font-size:8pt;margin-top:2px;">• Step 1: 처음 학습시, <strong>지문 핵심 어휘</strong>의 뜻 위주로 학습.</p>
@@ -242,7 +330,29 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <p style="padding: 5px;"></p>
     <p class="b" style="font-size:10pt;margin-bottom:2px;">형광친 단어 사전검색 후 정리하기</p>
     <p style="font-size:8pt;color:var(--text-muted);margin-bottom:4px;"><span class="b">Step 1.</span> 형광 친 단어 옮겨 적기 → <span class="b">Step 2.</span> 사전 검색 후 뜻/동의어 정리</p>
-    <table style="width:100%;border-collapse:separate;border-spacing:4px;font-size:8pt;line-height:1.3;">
+    <table class="triple triple--t2">
+      <tr>
+        {% for col in range(3) %}
+        <td class="triple__cell triple__cell--t2">
+          <p class="triple__row">
+            <span class="triple__label">단어:</span>
+            <span class="il il--w70 il--h13"></span>
+          </p>
+          <p class="triple__row">
+            <b class="triple__b">뜻</b>
+            1.<span class="il il--w45 il--h17"></span>
+            2.<span class="il il--w45 il--h17"></span>
+          </p>
+          <p class="triple__row">
+            <b class="triple__b">동의어</b>
+            1.<span class="il il--w45 il--h17"></span>
+            2.<span class="il il--w45 il--h17"></span>
+          </p>
+        </td>
+        {% endfor %}
+      </tr>
+    </table>
+    <!-- <table style="width:100%;border-collapse:separate;border-spacing:4px;font-size:8pt;line-height:1.3;">
       <tr style="break-inside: avoid;">
         {% for col in range(3) %}
         <td style="width:33%;border:1px solid var(--border-light);border-radius:3px;padding:3px 6px;vertical-align:top;">
@@ -252,7 +362,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
         </td>
         {% endfor %}
       </tr>
-    </table>
+    </table> -->
   </div>
   <p style="padding: 5px;"></p>
   <div style="break-inside: avoid;">
@@ -405,9 +515,9 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     </tr>{% endfor %}
   </table>
   <p class="mt8 tc b" style="font-size:10pt;margin-top: 10px;">{% for _ in full_order_blocks %}( &nbsp;&nbsp; ){% if not loop.last %} - {% endif %}{% endfor %}</p>
-  <div class="warnbox" style="margin-top:10px;padding:6px 10px;">
+  <!-- <div class="warnbox" style="margin-top:10px;padding:6px 10px;">
     <p style="font-size:8.5pt;color:var(--accent);">• 순서를 틀렸다면 → <span style="color:var(--primary);font-weight:bold;">아래 오답정리를 반드시 작성한 뒤</span>, Stage 4로 돌아가 체크리스트를 따라 재학습하시오.</p>
-  </div>
+  </div> -->
   <p style="padding: 5px;"></p>
   <p class="b mt8 mb4" style="font-size:10pt;color:var(--accent);">오답 정리 — 정답 순서대로 한 줄 요약</p>
   <p style="font-size:8pt;color:var(--text-muted);margin-bottom:4px;">틀린 경우, 정답 순서의 기호를 왼쪽에 적고 → 오른쪽에 그 문장 내용을 한국말로 한 줄 요약하세요.</p>

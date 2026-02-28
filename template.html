@@ -202,6 +202,15 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   padding:3px 6px;           /* table2는 패딩 더 큼 */
 }
 
+/* ===== Print ===== */
+@media print {
+  html, body { width: 210mm; }
+  .page { max-width: 180mm; }
+  .psg { overflow-wrap: break-word; word-break: break-word; }
+  table { max-width: 100%; }
+  .orow-line { flex-wrap: wrap; }
+}
+
 </style>
 </head>
 <body>

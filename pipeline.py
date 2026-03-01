@@ -41,20 +41,29 @@ def _safe_print(msg):
 _ABBREVS = r'(?<!\bDr)(?<!\bMr)(?<!\bMs)(?<!\bSt)(?<!\bvs)(?<!\bNo)(?<!\bJr)(?<!\bSr)(?<!\bet)(?<!\bMrs)(?<!\bal)(?<!\bProf)(?<!\bGen)(?<!\bGov)(?<!\bSgt)(?<!\bCpl)(?<!\bLt)(?<!\bCo)(?<!\bInc)(?<!\bLtd)(?<!\bCorp)(?<!\bDept)(?<!\bEst)(?<!\bFig)(?<!\bVol)(?<!\bRev)'
 
 def split_sentences(text: str) -> list:
-    """영어 지문을 문장 단위로 분리 (경칭/약어/따옴표 안 마침표 보호)"""
+    """영어 지문 문장 분리
+    핵심 규칙:
+    - "word." Only → 따옴표 닫힌 뒤 새 대문자 → 분리
+    - "text. More text" → 따옴표 안 마침표+대문자 → 분리 안함
+    - "text? More?" She → 따옴표 안 물음표 → 분리 안함
+    """
     protected = text
 
-    # 0단계: 따옴표(큰따옴표/열린닫힌따옴표) 안의 내용을 통째로 토큰화
-    # "~~." / "~~?" / "~~!" 등 따옴표로 감싸진 전체를 하나의 토큰으로 보호
-    quote_map = {}
-    def protect_quoted(m):
-        key = f"§QUOTE{len(quote_map)}§"
-        quote_map[key] = m.group(0)
-        return key
-    # 큰따옴표 " ... " (U+0022, U+201C/D)
-    protected = re.sub(r'[\u201c"](.*?)[\u201d"]', protect_quoted, protected, flags=re.DOTALL)
+    # 1단계: 따옴표 안의 내부 문장경계([.!?] + 공백 + 대문자)만 토큰으로 보호
+    def protect_quote_internals(match):
+        inner = match.group(1)
+        open_q = match.group(0)[0]
+        close_q = match.group(0)[-1]
+        protected_inner = re.sub(
+            r'([.!?])\s+([A-Z])',
+            lambda m2: f"{m2.group(1)}§QSEP§{m2.group(2)}",
+            inner
+        )
+        return open_q + protected_inner + close_q
 
-    # 1단계: 경칭/약어의 마침표를 임시 토큰으로 치환
+    protected = re.sub(r'["“](.*?)["”]', protect_quote_internals, protected, flags=re.DOTALL)
+
+    # 2단계: 약어 마침표 보호
     abbrevs = [
         'Dr.', 'Mr.', 'Ms.', 'Mrs.', 'Prof.', 'Jr.', 'Sr.', 'St.',
         'vs.', 'etc.', 'No.', 'Vol.', 'Fig.', 'Gen.', 'Gov.', 'Rev.',
@@ -69,19 +78,18 @@ def split_sentences(text: str) -> list:
             replacements[token] = ab
             protected = re.sub(pattern, token, protected)
 
-    # 2단계: 일반 문장 분리
+    # 3단계: 문장 분리
     sentences = [s.strip() for s in re.split(
-        r'(?<=[.!?])\s+(?=[A-Z])(?!["\u201c])|(?<=[.!?]["\u201d])\s+(?=[A-Z])(?!["\u201c])',
+        r'(?<=[.!?])\s+(?=[A-Z])(?!["“])|(?<=[.!?]["”])\s+(?=[A-Z])(?!["“])',
         protected
     ) if s.strip()]
 
-    # 3단계: 토큰 복원 (약어 먼저, 따옴표 나중)
+    # 4단계: 토큰 복원
     restored = []
     for s in sentences:
         for token, original in replacements.items():
             s = s.replace(token, original)
-        for key, original in quote_map.items():
-            s = s.replace(key, original)
+        s = s.replace('§QSEP§', ' ')
         restored.append(s)
 
     return restored
@@ -651,9 +659,25 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
             break
     
-    # ★ 서술형 error_count를 실제 answers 길이로 보정 (API가 개수 틀리게 반환하는 경우 대비)
+    # ★ 서술형 error_count를 실제 answers 길이로 보정
     actual_errors = data.get("grammar_error_answers", [])
     data["grammar_error_count"] = len(actual_errors)
+
+    # ★ grammar_bracket_passage / grammar_error_passage 중복 제거
+    # API가 지문을 2번 붙여서 반환하는 경우 방어
+    for key in ["grammar_bracket_passage", "grammar_error_passage"]:
+        val = data.get(key, "")
+        if val:
+            half = len(val) // 2
+            # 앞절반과 뒷절반이 80% 이상 유사하면 앞절반만 사용
+            first_half = val[:half].strip()
+            second_half = val[half:].strip()
+            if first_half and second_half:
+                overlap = sum(1 for a, b in zip(first_half[-200:], second_half[:200]) if a == b)
+                similarity = overlap / min(200, len(first_half), len(second_half))
+                if similarity > 0.7:
+                    _safe_print(f"  WARNING: {key} appears duplicated, trimming...")
+                    data[key] = first_half
 
     save_step(passage_dir, "step5_grammar", data)
     return data
@@ -686,9 +710,13 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
 - 5개 중 유의어 2개 + 반의어 3개로 구성
 - "모두 고르시오" 형태: 유의어만 골라야 정답
 - 정답(유의어) 2개의 위치는 5개 선택지 중 무작위로 배치 (항상 앞에 오면 안됨)
-- 유의어: 수능 수준의 정확한 유의어
-- 반의어: 해당 단어와 의미가 반대인 단어 3개
-- 발음/철자 유사 단어 절대 금지. 의미 기반으로만 출제
+- 유의어: 수능 빈출 고급 어휘만 사용 (예: talented→gifted/skilled, progress→advancement/improvement)
+  * 쉬운 단어(good/bad/big/small 등) 절대 금지
+  * 수능 3~1등급 수준의 정확한 유의어 쌍
+  * 해당 단어와 의미가 완전히 일치하는 단어만 (부분 유의어 금지)
+- 반의어: 해당 단어와 의미가 정반대인 수능 빈출 단어 3개
+  * incompetent/untalented/mediocre 같은 명확한 반의어
+  * 발음/철자 유사 단어 절대 금지. 의미 기반으로만 출제
 
 [내용 일치 규칙 - 매우 중요]
 - content_match_kr: 반드시 정확히 10개 한국어 선지 (①~⑩). 5개 미만 금지! 일치 3~5개 + 불일치 5~7개

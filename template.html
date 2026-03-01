@@ -301,7 +301,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
         {% for w in test_a %}<p style="margin-bottom:2px;">{{ loop.index }}. {{ w }} = <span class="il" style="min-width:60px;"></span></p>{% endfor %}
       </td>
       <td style="width:33%;padding-right:8px;">
-        <p class="b" style="margin-bottom:2px;">B. 동의어 1개 쓰기</p>
+        <p class="b" style="margin-bottom:2px;">B. 유의어 1개 쓰기</p>
         {% for w in test_b %}<p style="margin-bottom:2px;">{{ loop.index }}. {{ w }} = <span class="il" style="min-width:60px;"></span></p>{% endfor %}
       </td>
       <td style="width:33%;">
@@ -345,7 +345,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <div class="warnbox" style="margin-top:5px;padding:6px 10px;">
     <p class="b" style="font-size:8pt;">[핵심 어휘 솔루션]</p>
     <p style="font-size:8pt;margin-top:2px;">• Step 1: 처음 학습시, <strong>지문 핵심 어휘</strong>의 뜻 위주로 학습.</p>
-    <p style="font-size:8pt;margin-top:2px;">• Step 2: 단어와 뜻이 연상되면 동의어를 참고하여 단어 연상 학습.</p>
+    <p style="font-size:8pt;margin-top:2px;">• Step 2: 단어와 뜻이 연상되면 유의어를 참고하여 단어 연상 학습.</p>
   </div>
 </div>
 
@@ -371,7 +371,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <div style="margin-top:8px;border-top:1px solid var(--border-light);padding-top:6px;">
     <p style="padding: 5px;"></p>
     <p class="b" style="font-size:10pt;margin-bottom:2px;">형광친 단어 사전검색 후 정리하기</p>
-    <p style="font-size:8pt;color:var(--text-muted);margin-bottom:4px;"><span class="b">Step 1.</span> 형광 친 단어 옮겨 적기 → <span class="b">Step 2.</span> 사전 검색 후 뜻/동의어 정리</p>
+    <p style="font-size:8pt;color:var(--text-muted);margin-bottom:4px;"><span class="b">Step 1.</span> 형광 친 단어 옮겨 적기 → <span class="b">Step 2.</span> 사전 검색 후 뜻/유의어 정리</p>
     <table class="triple triple--t2">
       <tr class="triple__tr triple__tr--avoid-break">
         {% for col in range(3) %}
@@ -390,7 +390,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
             </span>
           </p>
           <p class="triple__row triple__row--fixed">
-            <b class="triple__b">동의어</b>
+            <b class="triple__b">유의어</b>
             <span class="triple__grp">
               1.<span class="il triple__line triple__line--h17"></span>
             </span>
@@ -588,7 +588,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==6 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
   <div class="stitle" style="font-size:12pt;">Stage 6 빈칸 추론 (모두 고르시오)</div>
   <p style="padding: 5px;"></p>
-  <p style="font-size:8pt;color:var(--primary);font-weight:bold;margin-bottom:4px;">[핵심] 원문 표현이 <span style="text-decoration:underline;">동의어로 변형</span>되어 출제. 동의어 정리가 핵심!</p>
+  <p style="font-size:8pt;color:var(--primary);font-weight:bold;margin-bottom:4px;">[핵심] 원문 표현이 <span style="text-decoration:underline;">유의어로 변형</span>되어 출제. 유의어 정리가 핵심!</p>
   <div class="psg" style="font-size:8.5pt;line-height:1.45;padding:6px 8px;">{{ blank_passage }}</div>
   <p style="padding: 5px;"></p>
   <p class="slbl" style="font-size:8pt;">STEP 1</p>
@@ -598,7 +598,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   </div>
   <p style="padding: 5px;"></p>
   <p class="slbl" style="font-size:8pt;">STEP 2</p>
-  <p class="sttl" style="font-size:8.5pt;">그 내용과 같은 선지 찾기 (관근 동의어 + <span style="color:var(--accent);">비유적 표현</span> 주의!)</p>
+  <p class="sttl" style="font-size:8.5pt;">그 내용과 같은 선지 찾기 (관련 유의어 + <span style="color:var(--accent);">비유적 표현</span> 주의!)</p>
   {% for opt in blank_options %}
   <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;font-size:8.5pt;line-height:1.35;">
     <span style="flex-shrink:0;">{{ opt }}</span>
@@ -609,7 +609,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <div class="solbox" style="padding:5px 8px;font-size:8pt;">
     <p class="b">[빈칸 유형 솔루션]</p>
     <p><span style="color:var(--accent);font-weight:bold;">Step 1.</span> 빈칸에 들어갈 내용을 우리말로 적기 → 빈칸 우리말:</p>
-    <p><span style="color:var(--accent);font-weight:bold;">Step 2.</span> 그 내용과 같은 선지 찾기 (관근 동의어 + <span class="b">비유적 표현</span> 주의!)</p>
+    <p><span style="color:var(--accent);font-weight:bold;">Step 2.</span> 그 내용과 같은 선지 찾기 (관련 유의어 + <span class="b">비유적 표현</span> 주의!)</p>
     <p><span style="color:var(--accent);font-weight:bold;">Step 3.</span> 틀린 선지 <u>단어 정리</u> <strong>꼭</strong> 할 것.</p>
     <p style="margin-top:2px;">• 원문 단어: <span class="il" style="min-width:100px;"></span> (형광 체크) / 선지의 같은 의미 표현: 같은 형광펜으로 체크!</p>
   </div>
@@ -624,7 +624,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==7 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
   <div class="stitle" style="font-size:12pt;">Stage 7 주제 찾기 (모두 고르시오)</div>
   <p style="padding: 5px;"></p>
-  <p style="font-size:8pt;color:var(--primary);font-weight:bold;margin-bottom:4px;">[핵심] 주제문 키워드가 동의어로 바뀌어 출제. 정확한 내용 이해 + 동의어 파악!</p>
+  <p style="font-size:8pt;color:var(--primary);font-weight:bold;margin-bottom:4px;">[핵심] 주제문 키워드가 유의어로 바뀌어 출제. 정확한 내용 이해 + 유의어 파악!</p>
   <div class="psg" style="font-size:8.5pt;line-height:1.45;padding:6px 8px;">{{ topic_passage }}</div>
   <p style="padding: 5px;"></p>
   <p class="slbl" style="font-size:8pt;">STEP 1</p>
@@ -750,7 +750,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <div class="lnav">{% for i in range(1,11) %}<span class="lb{% if i==8 %} on{% endif %}">{{ i }}</span>{% endfor %}</div>
   <div class="stitle" style="font-size:15pt;">Stage 8-3 어법 최종 체크</div>
   <p style="padding: 5px;"></p>
-  <p style="font-size:9.5pt;margin-bottom:10px;">각 단어들의 문법적 표현 중 명확한 이유를 모르는 단어 아래에 <span style="color:var(--red);font-weight:bold;">빨간 형광</span> 치기. 그 밑의 여백에 중요 문법을 직접 써 보세요.</p>
+  <p style="font-size:9.5pt;margin-bottom:10px;">지문을 읽고 각 문장에서의 문법적 요소(지문에서의 핵심 문법)를 스스로 상기해보며 정리해보세요. 기억이 나지 않거나 잘 이해가 가지 않는 부분은 다시 한 번 필기를 보며 공부해보세요.</p>
   <div id="lv83-content">
     <div id="lv83-psg" class="psg" style="line-height:2.8;font-size:11pt;orphans:2;widows:2;">{{ passage }}</div>
     <p style="padding: 5px;"></p>
@@ -789,7 +789,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   </div>
   <p style="padding: 5px;"></p>
   <div style="break-inside:avoid;">
-  <p class="b mt8 mb4" style="font-size:10pt;">Part B. 최상위 - 올바른 동의어에 O 표시 (모두 고르시오)</p>
+  <p class="b mt8 mb4" style="font-size:10pt;">Part B. 최상위 - 올바른 유의어에 O 표시 (모두 고르시오)</p>
   {% for item in vocab_partb %}
   <p style="font-size:9.5pt;margin-bottom:4px;">{{ loop.index }}. <strong>{{ item.word }}</strong>: &nbsp; {{ item.choices }}</p>{% endfor %}
   <div style="border-top:2px solid var(--accent);margin-top:8px;padding-top:4px;">

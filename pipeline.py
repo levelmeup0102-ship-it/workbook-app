@@ -41,9 +41,20 @@ def _safe_print(msg):
 _ABBREVS = r'(?<!\bDr)(?<!\bMr)(?<!\bMs)(?<!\bSt)(?<!\bvs)(?<!\bNo)(?<!\bJr)(?<!\bSr)(?<!\bet)(?<!\bMrs)(?<!\bal)(?<!\bProf)(?<!\bGen)(?<!\bGov)(?<!\bSgt)(?<!\bCpl)(?<!\bLt)(?<!\bCo)(?<!\bInc)(?<!\bLtd)(?<!\bCorp)(?<!\bDept)(?<!\bEst)(?<!\bFig)(?<!\bVol)(?<!\bRev)'
 
 def split_sentences(text: str) -> list:
-    """영어 지문을 문장 단위로 분리 (경칭/약어 마침표 보호)"""
-    # 1단계: 경칭/약어의 마침표를 임시 토큰으로 치환 (단어 경계 기반)
+    """영어 지문을 문장 단위로 분리 (경칭/약어/따옴표 안 마침표 보호)"""
     protected = text
+
+    # 0단계: 따옴표(큰따옴표/열린닫힌따옴표) 안의 내용을 통째로 토큰화
+    # "~~." / "~~?" / "~~!" 등 따옴표로 감싸진 전체를 하나의 토큰으로 보호
+    quote_map = {}
+    def protect_quoted(m):
+        key = f"§QUOTE{len(quote_map)}§"
+        quote_map[key] = m.group(0)
+        return key
+    # 큰따옴표 " ... " (U+0022, U+201C/D)
+    protected = re.sub(r'[\u201c"](.*?)[\u201d"]', protect_quoted, protected, flags=re.DOTALL)
+
+    # 1단계: 경칭/약어의 마침표를 임시 토큰으로 치환
     abbrevs = [
         'Dr.', 'Mr.', 'Ms.', 'Mrs.', 'Prof.', 'Jr.', 'Sr.', 'St.',
         'vs.', 'etc.', 'No.', 'Vol.', 'Fig.', 'Gen.', 'Gov.', 'Rev.',
@@ -53,23 +64,26 @@ def split_sentences(text: str) -> list:
     replacements = {}
     for ab in abbrevs:
         token = ab.replace('.', '§DOT§')
-        # 단어 경계(\b)를 사용하여 정확한 약어만 매치
-        # 예: 'al.'은 단독 단어일 때만 (et al.), 'meal.'의 'al.'은 매치 안 됨
         pattern = r'(?<!\w)' + re.escape(ab)
         if re.search(pattern, protected):
             replacements[token] = ab
             protected = re.sub(pattern, token, protected)
-    
-    # 2단계: 일반 문장 분리 (닫는 따옴표 뒤 대문자 일반문장만 분리, 따옴표 연속은 합침)
-    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+(?=[A-Z])(?!["\u201c])|(?<=[.!?]["\u201d])\s+(?=[A-Z])(?!["\u201c])', protected) if s.strip()]
-    
-    # 3단계: 토큰을 원래 마침표로 복원
+
+    # 2단계: 일반 문장 분리
+    sentences = [s.strip() for s in re.split(
+        r'(?<=[.!?])\s+(?=[A-Z])(?!["\u201c])|(?<=[.!?]["\u201d])\s+(?=[A-Z])(?!["\u201c])',
+        protected
+    ) if s.strip()]
+
+    # 3단계: 토큰 복원 (약어 먼저, 따옴표 나중)
     restored = []
     for s in sentences:
         for token, original in replacements.items():
             s = s.replace(token, original)
+        for key, original in quote_map.items():
+            s = s.replace(key, original)
         restored.append(s)
-    
+
     return restored
 
 # ============================================================
@@ -306,7 +320,7 @@ def step1_basic_analysis(passage: str, passage_dir: Path) -> dict:
 {passage}
 
 [생성 항목]
-1. vocab: 핵심 어휘 14개 (각각 word, meaning(한국어), synonyms(영어 동의어 4개 쉼표구분))
+1. vocab: 핵심 어휘 14개 (각각 word, meaning(한국어), synonyms(영어 유의어 4개 쉼표구분))
 2. translation: 지문 전체의 자연스러운 한국어 번역
 3. sentences: 지문의 모든 문장을 개별 배열로 분리 (정확히 {sent_count}개!)
    - 짧은 문장도 절대 합치지 마세요 (예: "That's not loyalty." 는 독립 문장)
@@ -314,7 +328,7 @@ def step1_basic_analysis(passage: str, passage_dir: Path) -> dict:
 4. sentence_translations: 각 문장의 한국어 번역 (sentences와 정확히 같은 수, 같은 순서!)
 5. key_sentences: 시험 출제 가능성이 높은 핵심 문장 8개 (원문 그대로)
 6. test_a: vocab에서 뜻 쓰기 테스트용 5개 단어 (영어)
-7. test_b: vocab에서 동의어 테스트용 5개 단어 (test_a와 겹치지 않게, 영어)
+7. test_b: vocab에서 유의어 테스트용 5개 단어 (test_a와 겹치지 않게, 영어)
 8. test_c: vocab에서 철자 테스트용 5개 (한국어 뜻)
 
 JSON 형식:
@@ -475,6 +489,18 @@ JSON 형식:
             _safe_print(f"  WARNING: still mismatch ({block_count2} vs {sentence_count}), using original")
             data["full_order_blocks"] = [[chr(65+i), s] for i, s in enumerate(sentences)]
 
+    # ★ 삽입 선지 후처리: ( ④ )와 ( ⑤ )가 연속으로 나오면 ( ⑤ ) 제거
+    insert_p = data.get("insert_passage", "")
+    if insert_p:
+        import re as _re
+        # ④⑤ 연속 패턴 제거 (다양한 표기 대응)
+        insert_p = _re.sub(
+            r'\(\s*[④④]\s*\)(.{0,30})\(\s*[⑤⑤]\s*\)',
+            r'( ④ )\g<1>',
+            insert_p
+        )
+        data["insert_passage"] = insert_p
+
     save_step(passage_dir, "step2_order", data)
     return data
 
@@ -499,7 +525,7 @@ def step3_blank(passage: str, passage_dir: Path) -> dict:
 - 빈칸 문장 외의 다른 문장은 원문 그대로 유지 (생략/축약/변형 절대 금지)
 - 빈칸을 제외한 나머지 문장 부분도 절대 변형하지 말 것
 - 선지 12개: 정답 6~7개 + 오답 5~6개
-- 정답: 원문 핵심 표현을 동의어/비유적 표현으로 변형
+- 정답: 원문 핵심 표현을 유의어/비유적 표현으로 변형
 - 오답: 지문 내용 왜곡, 반대 의미, 미언급 내용
 - 각 선지는 15단어 이내로 간결하게
 
@@ -535,7 +561,7 @@ def step4_topic(passage: str, passage_dir: Path) -> dict:
 - 지문은 원문 그대로 (생략/변형 금지)
 - 선지 12개: 정답 5개 + 오답 7개
 - 선지는 반드시 영어로 작성 (한국어 금지)
-- 정답: 주제문 키워드를 동의어로 치환한 영어 표현
+- 정답: 주제문 키워드를 유의어로 치환한 영어 표현
 - 오답: 지문 미언급, 부분적 내용, 왜곡 (영어)
 - 추론적 사고 금지: 글에서 직접 언급된 내용만 정답
 - 각 선지는 30단어 이내로 간결하게
@@ -580,26 +606,35 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 4. 원문 문장에 괄호나 오류만 삽입하고, 나머지는 원문 그대로 유지
 5. 문장 수가 부족하면 오류/괄호 수를 줄이세요 (문장 추가는 절대 금지!)
 
+[어법 오류 출제 금지 유형 - 아래는 오류가 아님]
+- start/continue/love/like/hate 뒤: to부정사 = ing (둘 다 허용)
+- 주어 자리: to부정사 = 동명사 (둘 다 허용)
+- help + 목적어 + 목적격보어: to부정사 = 동사원형 (둘 다 허용)
+- as ~ as 원급: 형용사/부사는 문맥으로 판단 (단순 형태만으로 오류 불가)
+- 목적격 관계대명사: who = whom (둘 다 허용, 단 전치사 바로 뒤는 whom만)
+
 [어법 괄호형 Lv.8-1]
 - 원문 {sent_count}개 문장 모두 포함 (출제 안 하는 문장도 원문 그대로)
 - {bracket_count}개 괄호: (N)[정답 / 오답] 형태
 - 한 문장에 여러 괄호 가능
+- 정답이 왼쪽/오른쪽에 치우치지 않게 무작위로 배치 (정답이 항상 왼쪽이거나 항상 오른쪽이면 안됨)
 - 출제: 시제, 대명사, 동명사, to부정사, 형용사/부사, 관계대명사, 분사, 사역동사 등
 
 [어법 서술형 Lv.8-2]
 - 원문 {sent_count}개 문장 모두 포함
-- {error_count}개 문법 오류 삽입 (밑줄 없이)
+- 실제 출제 가능한 오류만 삽입 (위 금지 유형 제외)
 - 한 문장에 최대 1개 오류
-- 문장이 {sent_count}개뿐이므로 오류도 최대 {error_count}개만!
+- 오류를 삽입한 실제 개수를 grammar_error_count에 정확히 기록할 것
+- 오류 개수 = grammar_error_answers 배열 길이와 반드시 일치
 
 [JSON 형식]
 {{
   "grammar_bracket_passage": "괄호 포함 전체 지문 (정확히 {sent_count}문장)",
   "grammar_bracket_count": {bracket_count},
-  "grammar_bracket_answers": [{{"num":1, "answer":"go", "wrong":"will go", "reason":"if 조건절 현재시제"}}, ...],
+  "grammar_bracket_answers": [{{"num":1, "answer":"go", "wrong":"will go"}}, ...],
   "grammar_error_passage": "오류 포함 전체 지문 (정확히 {sent_count}문장)",
-  "grammar_error_count": {error_count},
-  "grammar_error_answers": [{{"num":1, "original":"watch", "error":"watching", "reason":"tend to + 동사원형"}}, ...]
+  "grammar_error_count": 실제삽입개수,
+  "grammar_error_answers": [{{"num":1, "original":"watch", "error":"watching"}}, ...]
 }}"""
 
     data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
@@ -616,6 +651,10 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
             break
     
+    # ★ 서술형 error_count를 실제 answers 길이로 보정 (API가 개수 틀리게 반환하는 경우 대비)
+    actual_errors = data.get("grammar_error_answers", [])
+    data["grammar_error_count"] = len(actual_errors)
+
     save_step(passage_dir, "step5_grammar", data)
     return data
 
@@ -637,15 +676,17 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
 [Lv.9-1 Part A 규칙]
 - 원문의 모든 문장을 빠짐없이 포함
 - 7~9개 괄호: (N)[정답 / 반의어] 형태
+- 한 문장에 괄호는 반드시 1개만 (한 문장에 2개 이상 절대 금지)
 - 정답과 오답은 의미가 반대인 단어 쌍으로 구성 (예: regarded/overlooked, effective/futile, mild/severe, constant/intermittent)
 - 발음 유사 단어 절대 금지. 반드시 반의어로 출제
 - 문맥을 읽어야 정답을 고를 수 있는 수능 수준 반의어 쌍
 
 [Lv.9-1 Part B 규칙]
 - 10개 단어 (최소 8개, 가능하면 10개), 각 5개 선택지
-- 5개 중 동의어 2개 + 반의어 3개로 구성
-- "모두 고르시오" 형태: 동의어만 골라야 정답
-- 동의어: 수능 수준의 정확한 유의어
+- 5개 중 유의어 2개 + 반의어 3개로 구성
+- "모두 고르시오" 형태: 유의어만 골라야 정답
+- 정답(유의어) 2개의 위치는 5개 선택지 중 무작위로 배치 (항상 앞에 오면 안됨)
+- 유의어: 수능 수준의 정확한 유의어
 - 반의어: 해당 단어와 의미가 반대인 단어 3개
 - 발음/철자 유사 단어 절대 금지. 의미 기반으로만 출제
 
@@ -690,6 +731,22 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
         random.shuffle(kr_pairs)
         data["content_match_kr"] = [f"{_CIRCLE_NUMS[i]} {kr_pairs[i][0]}" for i in range(len(kr_pairs))]
         data["content_match_kr_answer"] = [_CIRCLE_NUMS[i] for i in range(len(kr_pairs)) if kr_pairs[i][1]]
+
+    # ★ Part B choices 안에서 정답 위치 랜덤화
+    vocab_partb = data.get("vocab_partb", [])
+    vocab_partb_answers = data.get("vocab_partb_answers", [])
+    for i, (item, ans) in enumerate(zip(vocab_partb, vocab_partb_answers)):
+        choices_str = item.get("choices", "")
+        correct_list = ans.get("correct", [])
+        wrong_list = ans.get("wrong", [])
+        if choices_str and correct_list and wrong_list:
+            all_choices = correct_list + wrong_list
+            random.shuffle(all_choices)
+            vocab_partb[i]["choices"] = " / ".join(all_choices)
+            vocab_partb_answers[i]["correct"] = [c for c in all_choices if c in correct_list]
+            vocab_partb_answers[i]["wrong"] = [c for c in all_choices if c in wrong_list]
+    data["vocab_partb"] = vocab_partb
+    data["vocab_partb_answers"] = vocab_partb_answers
 
     # Part B 영어 선지 셔플 (번호는 오름차순 유지, 문장만 랜덤)
     en_items = data.get("content_match_en", [])
@@ -800,11 +857,11 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
     lv8_bracket.append('</div>')
     blocks.append(''.join(lv8_bracket))
 
-    # Stage 8 서술형
+    # Stage 8 서술형 (해설 없이 오류→정답만)
     lv8_error = ['<div class="ablock"><p class="ast">Stage 8 서술형</p>']
     for a in s5.get("grammar_error_answers", []):
         if isinstance(a, dict):
-            lv8_error.append(f'<p>{a.get("error","")}->{a.get("original","")}({a.get("reason","")})</p>')
+            lv8_error.append(f'<p>{a.get("error","")}->{a.get("original","")}</p>')
     lv8_error.append('</div>')
     blocks.append(''.join(lv8_error))
 

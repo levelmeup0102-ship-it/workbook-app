@@ -540,5 +540,27 @@ async def generate(request: Request):
         raise HTTPException(500, str(e))
 
 
+
+@app.get("/api/notice")
+async def get_notice():
+    """공지사항 조회"""
+    import json
+    notice_file = DATA_DIR / "notice.json"
+    if notice_file.exists():
+        return json.loads(notice_file.read_text(encoding="utf-8"))
+    return {"text": "", "updated_at": ""}
+
+@app.post("/api/notice")
+async def set_notice(request: Request):
+    """공지사항 저장"""
+    _verify(request)
+    import json
+    from datetime import datetime
+    body = await request.json()
+    text = body.get("text", "").strip()
+    data = {"text": text, "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M")}
+    (DATA_DIR / "notice.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return {"ok": True}
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))

@@ -78,9 +78,9 @@ def split_sentences(text: str) -> list:
             replacements[token] = ab
             protected = re.sub(pattern, token, protected)
 
-    # 3단계: 문장 분리
+    # 3단계: 문장 분리 (닫힌따옴표 뒤 열린따옴표+대문자도 분리)
     sentences = [s.strip() for s in re.split(
-        r'(?<=[.!?])\s+(?=[A-Z])(?!["“])|(?<=[.!?]["”])\s+(?=[A-Z])(?!["“])',
+        r'(?<=[.!?])\s+(?=[A-Z])(?![\u201c\u201d\u0022])|(?<=[.!?][\u201c\u201d\u0022])\s+(?=[\u201c\u201d\u0022]?[A-Z])',
         protected
     ) if s.strip()]
 
@@ -334,6 +334,8 @@ def step1_basic_analysis(passage: str, passage_dir: Path) -> dict:
    - 짧은 문장도 절대 합치지 마세요 (예: "That's not loyalty." 는 독립 문장)
    - 문장을 절대 분리하지 마세요 (세미콜론 ; 으로 연결된 것은 1문장)
 4. sentence_translations: 각 문장의 한국어 번역 (sentences와 정확히 같은 수, 같은 순서!)
+   - 따옴표(" " 또는 “ ”) 안의 마침표는 문장의 끝으로 처리하지 말 것
+   - 영어 sentences 배열 수와 반드시 일치해야 함 (정확히 {sent_count}개!)
 5. key_sentences: 시험 출제 가능성이 높은 핵심 문장 8개 (원문 그대로)
 6. test_a: vocab에서 뜻 쓰기 테스트용 5개 단어 (영어)
 7. test_b: vocab에서 유의어 테스트용 5개 단어 (test_a와 겹치지 않게, 영어)
@@ -807,7 +809,9 @@ def step7_writing(sentences: list, translation: str, passage_dir: Path, sentence
     if sentence_translations and len(sentence_translations) >= len(sentences):
         kr_sentences = sentence_translations
     else:
-        kr_sentences = [s.strip() for s in re.split(r'(?<=[.!?다요음임])\s+', translation) if s.strip()]
+        # fallback: 따옴표 안의 마침표 보호 후 분리
+        protected_kr = re.sub(r'[\u201c\u0022]([^\u201c\u201d\u0022]*)\.([^\u201c\u201d\u0022]*)[\u201d\u0022]', lambda m: m.group(0).replace('.', '\uff61'), translation)
+        kr_sentences = [s.strip().replace('\uff61', '.') for s in re.split(r'(?<=[.!?다요음임])\s+', protected_kr) if s.strip()]
 
     writing_items = []
     for i, eng in enumerate(sentences):

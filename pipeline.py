@@ -78,9 +78,9 @@ def split_sentences(text: str) -> list:
             replacements[token] = ab
             protected = re.sub(pattern, token, protected)
 
-    # 3단계: 문장 분리 (닫힌따옴표 뒤 열린따옴표+대문자도 분리)
+    # 3단계: 문장 분리
     sentences = [s.strip() for s in re.split(
-        r'(?<=[.!?])\s+(?=[A-Z])(?![“”"])|(?<=[.!?][“”"])\s+(?=[“”"]?[A-Z])',
+        r'(?<=[.!?])\s+(?=[\u201c\u201d\u0022]?[A-Z])|(?<=[.!?][\u201c\u201d\u0022])\s+(?=[\u201c\u201d\u0022]?[A-Z])',
         protected
     ) if s.strip()]
 

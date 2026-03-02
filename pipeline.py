@@ -329,11 +329,13 @@ def step1_basic_analysis(passage: str, passage_dir: Path) -> dict:
 
 [생성 항목]
 1. vocab: 핵심 어휘 14개 (각각 word, meaning(한국어), synonyms(영어 유의어 4개 쉼표구분))
-2. translation: 지문 전체의 자연스러운 한국어 번역
+2. translation: 지문 전체의 한국어 번역 (직역 위주, 영어 동사/구조가 한국어에 반영되도록)
 3. sentences: 지문의 모든 문장을 개별 배열로 분리 (정확히 {sent_count}개!)
    - 짧은 문장도 절대 합치지 마세요 (예: "That's not loyalty." 는 독립 문장)
    - 문장을 절대 분리하지 마세요 (세미콜론 ; 으로 연결된 것은 1문장)
 4. sentence_translations: 각 문장의 한국어 번역 (sentences와 정확히 같은 수, 같은 순서!)
+   - 직역 위주! 영어 핵심 동사가 한국어에서도 드러나야 함 (met→만났다, said→말했다)
+   - 학생이 한국어를 보고 영어 단어를 떠올릴 수 있게 번역
    - 따옴표(" " 또는 " ") 안의 마침표는 문장의 끝으로 처리하지 말 것
    - 따옴표가 열렸으면 반드시 닫힌 후에야 다음 문장으로 넘어감
    - 예: "연설 때문에 부끄럽습니다."라고 말했다. → 이것은 하나의 번역!
@@ -360,63 +362,47 @@ JSON 형식:
     # 🔒 검증: API 문장 분리 대신 항상 regex 사용 (AI가 문장을 합치거나 쪼개는 것 방지)
     data["sentences"] = sentences_regex
 
-    # ★ sentence_translations: 영어 sentences와 반드시 1:1 매칭 보장
-    # 핵심: API가 따옴표 안 마침표에서 잘못 분리하여 개수만 우연히 맞추는 경우 방어
+    # ★ sentence_translations: API 결과 개수 검증 → 불일치시 개별 번역 API 호출
+    # 한국어 코드 분리는 불완전하므로, 개수 불일치시 API에 문장별 번역을 다시 요청
     st = data.get("sentence_translations", [])
     
-    def _protect_punct_in_quotes(t: str) -> str:
-        """따옴표가 닫히기 전까지는 .!?로 절대 분리하지 않음"""
-        quote_chars = {'"', '\u201c', '\u201d', '\u0022'}
-        in_q = False
-        out = []
-        for ch in t:
-            if ch in quote_chars:
-                in_q = not in_q
-                out.append(ch)
-                continue
-            if in_q and ch in '.!?':
-                out.append('\uff61')
+    # 지문에 따옴표가 포함되어 있으면 무조건 재요청 (잘못 분리 위험 높음)
+    passage_has_quotes = any('"' in s or '\u201c' in s or '\u201d' in s for s in sentences_regex)
+    if len(st) != sent_count or (passage_has_quotes and len(st) == sent_count):
+        reason = f"{len(st)}개 ≠ {sent_count}개" if len(st) != sent_count else "지문에 따옴표 포함 → 안전 재요청"
+        _safe_print(f"  WARNING: sentence_translations {reason} → 문장별 번역 재요청")
+        # 영어 문장 리스트를 넘겨서 1:1 번역 요청
+        numbered_sents = "\n".join([f"{i+1}. {s}" for i, s in enumerate(sentences_regex)])
+        retry_prompt = f"""다음 영어 문장들을 각각 한국어로 번역하세요.
+
+[필수 규칙]
+- 반드시 정확히 {sent_count}개의 번역을 배열로 반환
+- 따옴표 안의 내용도 하나의 문장에 포함 (절대 분리하지 말 것)
+- 직역 위주로 번역 (의역 금지!). 영어 원문의 핵심 동사가 한국어에서도 드러나야 함
+- 예: "I met Ms. Harper" → "나는 하퍼 선생님을 만났다" (O) / "나는 하퍼 선생님과 이야기했다" (X)
+- 영어 문장의 주어-동사-목적어 구조가 한국어에서도 유지되어야 함
+- 학생이 한국어를 보고 영어 단어를 떠올릴 수 있도록 번역할 것
+
+[영어 문장 - 총 {sent_count}개]
+{numbered_sents}
+
+JSON 형식:
+{{"translations": ["1번 문장 번역", "2번 문장 번역", ...]}}"""
+        try:
+            retry_data = call_claude_json(SYS_JSON_KR, retry_prompt, max_tokens=3000)
+            retry_st = retry_data.get("translations", [])
+            if len(retry_st) == sent_count:
+                st = retry_st
+                _safe_print(f"  ✅ 문장별 번역 성공: {len(st)}개")
             else:
-                out.append(ch)
-        return ''.join(out)
-    
-    def _split_kr_translation(translation_text: str) -> list:
-        protected = _protect_punct_in_quotes(translation_text)
-        parts = [s.strip().replace('\uff61', '.') 
-                 for s in re.split(r'(?<=[.!?다요음임])\s+', protected) if s.strip()]
-        return parts
-    
-    # 검증 1: 개수 불일치
-    need_rebuild = False
-    if len(st) != sent_count:
-        need_rebuild = True
-        _safe_print(f"  WARNING: sentence_translations {len(st)}개 ≠ sentences {sent_count}개 → 재생성")
-    
-    # 검증 2: 개수 맞아도 따옴표 짝 불일치 체크 (잘못 분리된 증거)
-    if not need_rebuild and st:
-        for idx_st, kr in enumerate(st):
-            open_q = kr.count('\u201c') + kr.count('"')
-            close_q = kr.count('\u201d') + kr.count('"')
-            if open_q != close_q:
-                need_rebuild = True
-                _safe_print(f"  WARNING: sentence_translations[{idx_st}] 따옴표 짝 불일치 → 재생성")
-                break
-    
-    # 검증 3: 영어에 따옴표 있는데 대응 한국어에 없으면 불일치
-    if not need_rebuild and st and len(st) == sent_count:
-        for idx_st, (eng, kr) in enumerate(zip(sentences_regex, st)):
-            eng_has_q = '"' in eng or '\u201c' in eng or '\u201d' in eng
-            kr_has_q = '"' in kr or '\u201c' in kr or '\u201d' in kr or '"' in kr
-            if eng_has_q and not kr_has_q:
-                need_rebuild = True
-                _safe_print(f"  WARNING: 영어 문장 {idx_st+1}에 따옴표 있으나 한국어에 없음 → 재생성")
-                break
-    
-    if need_rebuild:
-        kr_split = _split_kr_translation(data.get("translation", "") or "")
-        while len(kr_split) < sent_count:
-            kr_split.append(f"문장 {len(kr_split)+1}")
-        data["sentence_translations"] = kr_split[:sent_count]
+                _safe_print(f"  ⚠ 문장별 번역도 {len(retry_st)}개, 원본 사용 후 보정")
+        except Exception as e:
+            _safe_print(f"  ⚠ 문장별 번역 실패: {str(e)[:80]}")
+        
+        # 최종 보정
+        while len(st) < sent_count:
+            st.append(f"문장 {len(st)+1}")
+        data["sentence_translations"] = st[:sent_count]
     else:
         data["sentence_translations"] = st
 

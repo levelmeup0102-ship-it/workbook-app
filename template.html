@@ -43,7 +43,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 .ckl { border:2px solid var(--primary); border-radius:8px; background:var(--bg-blue); padding:8px 12px; margin-bottom:8px; font-size:9pt; break-inside:avoid; }
 .ckl-t { font-weight:bold; color:var(--primary); font-size:10pt; margin-bottom:3px; }
 .ckl table { width:100%; border-collapse:collapse; }
-.ckl td { padding:2px 0; }
+.ckl td { padding:2px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:0; font-size:7.5pt; }
 .ckl .sn { color:var(--accent); font-weight:bold; }
 .ckl .cc { text-align:center; width:30px; font-size:7.5pt; color:var(--text-muted); }
 .cb { width:12px; height:12px; border:1px solid #999; display:inline-block; }
@@ -274,9 +274,9 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <div class="ckl-t" style="font-size:8.5pt;">[수업 전 체크리스트 - Stage 1]</div>
     <table style="width:100%;border-collapse:collapse;">
     <tr>
-      <td style="width:50%;padding:1px 4px;"><span class="sn">Step 1.</span> 지문 핵심 어휘 암기</td>
+      <td style="width:50%;padding:1px 4px;white-space:nowrap;overflow:hidden;font-size:7.5pt;"><span class="sn">Step 1.</span> 지문 핵심 어휘 암기</td>
       <td class="cc" style="white-space:nowrap;"><span class="cb"></span><span class="cb"></span><span class="cb"></span></td>
-      <td style="width:50%;padding:1px 4px;"><span class="sn">Step 2.</span> 어휘 확인 테스트</td>
+      <td style="width:50%;padding:1px 4px;white-space:nowrap;overflow:hidden;font-size:7.5pt;"><span class="sn">Step 2.</span> 어휘 확인 테스트</td>
       <td class="cc" style="white-space:nowrap;"><span class="cb"></span><span class="cb"></span><span class="cb"></span></td>
     </tr>
     <tr>
@@ -354,8 +354,8 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <div class="ckl">
     <div class="ckl-t">[수업 중 체크리스트 - Stage 3]</div>
     <table style="width:100%;border-collapse:collapse;">
-    <tr><td style="width:50%;padding:1px 4px;"><span class="sn">Step 1.</span> 해석 — 단어+문법으로 정확하게 해석하기</td><td class="cc" style="white-space:nowrap;"><span class="cb"></span><span class="cb"></span><span class="cb"></span></td><td style="width:50%;padding:1px 4px;"><span class="sn">Step 2.</span> 이해 — 나만의 예시로 문장 내용 확실히 이해하기</td><td class="cc" style="white-space:nowrap;"><span class="cb"></span><span class="cb"></span><span class="cb"></span></td></tr>
-    <tr><td style="width:50%;padding:1px 4px;"><span class="sn">Step 3.</span> 추론 — 다음에 나올 내용 예측 → 다음 문장에서 확인</td><td class="cc" style="white-space:nowrap;"><span class="cb"></span><span class="cb"></span><span class="cb"></span></td><td style="width:50%;padding:1px 4px;"><span class="sn">Step 4.</span> 반복 — 모든 문장에 해석→이해→추론 반복</td><td class="cc" style="white-space:nowrap;"><span class="cb"></span><span class="cb"></span><span class="cb"></span></td></tr>
+    <tr><td style="width:50%;padding:1px 4px;white-space:nowrap;overflow:hidden;font-size:7.5pt;"><span class="sn">Step 1.</span> 해석 — 단어+문법으로 정확하게 해석하기</td><td class="cc" style="white-space:nowrap;"><span class="cb"></span><span class="cb"></span><span class="cb"></span></td><td style="width:50%;padding:1px 4px;white-space:nowrap;overflow:hidden;font-size:7.5pt;"><span class="sn">Step 2.</span> 이해 — 나만의 예시로 문장 내용 확실히 이해하기</td><td class="cc" style="white-space:nowrap;"><span class="cb"></span><span class="cb"></span><span class="cb"></span></td></tr>
+    <tr><td style="width:50%;padding:1px 4px;white-space:nowrap;overflow:hidden;font-size:7.5pt;"><span class="sn">Step 3.</span> 추론 — 다음에 나올 내용 예측 → 다음 문장에서 확인</td><td class="cc" style="white-space:nowrap;"><span class="cb"></span><span class="cb"></span><span class="cb"></span></td><td style="width:50%;padding:1px 4px;white-space:nowrap;overflow:hidden;font-size:7.5pt;"><span class="sn">Step 4.</span> 반복 — 모든 문장에 해석→이해→추론 반복</td><td class="cc" style="white-space:nowrap;"><span class="cb"></span><span class="cb"></span><span class="cb"></span></td></tr>
     </table>
   </div>
   <div class="stitle">Stage 3 문장별 분석</div>
@@ -391,8 +391,8 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <div class="ckl">
     <div class="ckl-t">[수업 중 체크리스트 - Stage 4]</div>
     <table style="width:100%;border-collapse:collapse;">
-    <tr><td style="width:50%;padding:1px 4px;"><span class="sn">Step 1.</span> 해석 점검 — 지문에서 배운 문법/구문 확인 및 해석 점검</td><td class="cc" style="white-space:nowrap;"><span class="cb"></span><span class="cb"></span><span class="cb"></span></td><td style="width:50%;padding:1px 4px;"><span class="sn">Step 2.</span> 주장/요지 — 글 전체의 주장/요지를 직접 적기</td><td class="cc" style="white-space:nowrap;"><span class="cb"></span><span class="cb"></span><span class="cb"></span></td></tr>
-    <tr><td style="width:50%;padding:1px 4px;"><span class="sn">Step 3.</span> 상기+구조화 — 글 처음~끝 떠올리며 나만의 흐름 정리</td><td class="cc" style="white-space:nowrap;"><span class="cb"></span><span class="cb"></span><span class="cb"></span></td><td></td><td></td></tr>
+    <tr><td style="width:50%;padding:1px 4px;white-space:nowrap;overflow:hidden;font-size:7.5pt;"><span class="sn">Step 1.</span> 해석 점검 — 지문에서 배운 문법/구문 확인 및 해석 점검</td><td class="cc" style="white-space:nowrap;"><span class="cb"></span><span class="cb"></span><span class="cb"></span></td><td style="width:50%;padding:1px 4px;white-space:nowrap;overflow:hidden;font-size:7.5pt;"><span class="sn">Step 2.</span> 주장/요지 — 글 전체의 주장/요지를 직접 적기</td><td class="cc" style="white-space:nowrap;"><span class="cb"></span><span class="cb"></span><span class="cb"></span></td></tr>
+    <tr><td style="width:50%;padding:1px 4px;white-space:nowrap;overflow:hidden;font-size:7.5pt;"><span class="sn">Step 3.</span> 상기+구조화 — 글 처음~끝 떠올리며 나만의 흐름 정리</td><td class="cc" style="white-space:nowrap;"><span class="cb"></span><span class="cb"></span><span class="cb"></span></td><td></td><td></td></tr>
     </table>
   </div>
   <p style="padding: 5px;"></p>
@@ -430,9 +430,9 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     <div class="ckl-t" style="font-size:8pt;">[수업 후 복습 체크리스트]</div>
     <table style="width:100%;border-collapse:collapse;">
     <tr>
-      <td style="width:50%;padding:1px 4px;">Stage 5 글의 흐름</td>
+      <td style="width:50%;padding:1px 4px;white-space:nowrap;overflow:hidden;font-size:7.5pt;">Stage 5 글의 흐름</td>
       <td class="cc" style="white-space:nowrap;"><span class="cb"></span><span class="cb"></span><span class="cb"></span></td>
-      <td style="width:50%;padding:1px 4px;">Stage 6 빈칸 추론</td>
+      <td style="width:50%;padding:1px 4px;white-space:nowrap;overflow:hidden;font-size:7.5pt;">Stage 6 빈칸 추론</td>
       <td class="cc" style="white-space:nowrap;"><span class="cb"></span><span class="cb"></span><span class="cb"></span></td>
     </tr>
     <tr>

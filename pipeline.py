@@ -803,24 +803,51 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             break
     
     
-    # 🔒 최종 가드: Lv.8-1(괄호형)에서 원문 문장 수를 초과하는 문장(스토리 추가) 절대 금지
-    bracket_text = data.get("grammar_bracket_passage", "")
-    if bracket_text:
-        gen_sents_list = split_sentences(bracket_text)
+    # 🔒 최종 가드: 8-1/8-2에서 원문에 없는 문장이 추가되었는지 확인
+    # 괄호/오류를 제거한 후 원문과 길이 비교 → 20% 이상 길어졌으면 원문 외 내용 추가된 것
+    def _strip_brackets(t: str) -> str:
+        """어법 괄호 (N)[A / B]를 정답만 남기고 제거"""
+        stripped = re.sub(r'\(\d+\)\[([^/\]]+)\s*/\s*[^\]]+\]', r'\1', t)
+        return re.sub(r'\s+', ' ', stripped).strip()
+    
+    orig_len = len(re.sub(r'\s+', '', passage))
+    
+    for key in ["grammar_bracket_passage", "grammar_error_passage"]:
+        gen_text = data.get(key, "")
+        if not gen_text:
+            continue
+        gen_sents_list = split_sentences(gen_text)
+        
+        # 문장 수 체크
         if len(gen_sents_list) > sent_count:
-            # 대부분 "끝에 한 문장 추가" 형태이므로, 앞에서부터 원문 문장 수만큼만 유지
-            data["grammar_bracket_passage"] = " ".join(gen_sents_list[:sent_count]).strip()
+            _safe_print(f"  WARNING: {key}: {len(gen_sents_list)} sentences > original {sent_count}, trimming...")
+            data[key] = " ".join(gen_sents_list[:sent_count]).strip()
         elif len(gen_sents_list) < sent_count:
-            # 부족한 경우는 추가 생성 대신 원문을 유지 (문장 추가/삭제 금지 원칙)
-            data["grammar_bracket_passage"] = passage
-
-    error_text = data.get("grammar_error_passage", "")
-    if error_text:
-        gen_err_list = split_sentences(error_text)
-        if len(gen_err_list) > sent_count:
-            data["grammar_error_passage"] = " ".join(gen_err_list[:sent_count]).strip()
-        elif len(gen_err_list) < sent_count:
-            data["grammar_error_passage"] = passage
+            _safe_print(f"  WARNING: {key}: {len(gen_sents_list)} sentences < original {sent_count}, using original")
+            data[key] = passage
+        
+        # 길이 체크: 괄호 제거 후 원문 대비 20% 이상 길면 내용 추가된 것
+        stripped = _strip_brackets(data.get(key, ""))
+        stripped_len = len(re.sub(r'\s+', '', stripped))
+        if orig_len > 0 and stripped_len > orig_len * 1.2:
+            _safe_print(f"  WARNING: {key} length {stripped_len} >> original {orig_len} (>20%), retrying...")
+            cache_path = passage_dir / "step5_grammar.json"
+            if cache_path.exists():
+                cache_path.unlink()
+            retry_data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
+            retry_text = retry_data.get(key, "")
+            retry_stripped = _strip_brackets(retry_text)
+            retry_len = len(re.sub(r'\s+', '', retry_stripped))
+            if retry_len <= orig_len * 1.2:
+                data[key] = retry_text
+                # 관련 답안도 갱신
+                if "bracket" in key:
+                    data["grammar_bracket_answers"] = retry_data.get("grammar_bracket_answers", data.get("grammar_bracket_answers", []))
+                else:
+                    data["grammar_error_answers"] = retry_data.get("grammar_error_answers", data.get("grammar_error_answers", []))
+                _safe_print(f"  ✅ {key} retry successful (length {retry_len})")
+            else:
+                _safe_print(f"  ⚠ {key} retry still too long ({retry_len}), keeping best version")
 # ★ 서술형 error_count를 실제 answers 길이로 보정 (문제 텍스트와 일치시키기 위해 반드시 이후에 처리)
     actual_errors = data.get("grammar_error_answers", [])
     actual_error_count = len(actual_errors)

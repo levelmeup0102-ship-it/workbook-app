@@ -833,8 +833,20 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
         data["content_match_en"] = [f"{_CIRCLE_NUMS[i]} {pairs[i][0]}" for i in range(len(pairs))]
         data["content_match_en_answer"] = [_CIRCLE_NUMS[i] for i in range(len(pairs)) if pairs[i][1]]
 
-    # ★ 9-1 Part A 개수 보정 (vocab_parta_answers 길이 = passage 괄호 수 일치)
+    # ★ 9-1 Part A 5개 미만이면 재시도 (최소 5개 강제)
     actual_parta = data.get("vocab_parta_answers", [])
+    if len(actual_parta) < 5:
+        _safe_print(f"  step6: Part A {len(actual_parta)}개 < 5개 최소 기준, 재시도...")
+        for _retry in range(2):  # 최대 2회 재시도
+            data2 = call_claude_json(SYS_JSON_KR, prompt, max_tokens=6000)
+            parta2 = data2.get("vocab_parta_answers", [])
+            if len(parta2) >= 5:
+                data["vocab_parta_answers"] = parta2
+                data["vocab_advanced_passage"] = data2.get("vocab_advanced_passage", data.get("vocab_advanced_passage", ""))
+                actual_parta = parta2
+                _safe_print(f"  step6: Part A 재시도 성공 → {len(parta2)}개")
+                break
+            _safe_print(f"  step6: Part A 재시도 {_retry+1} 실패 ({len(parta2)}개)")
     data["vocab_parta_count"] = len(actual_parta)
 
     # ★ 9-1 Part A 정답 좌우 진짜 랜덤 shuffle (각 괄호 개별 50% 확률)
@@ -866,16 +878,11 @@ def step7_writing(sentences: list, translation: str, passage_dir: Path, sentence
         return cached
 
     _safe_print("  step7: generating Lv.10 writing...")
-    # 한국어 문장: sentence_translations 우선, 없으면 translation 분리
-    if sentence_translations and len(sentence_translations) == len(sentences):
-        kr_sentences = sentence_translations
-    elif sentence_translations and len(sentence_translations) > len(sentences):
-        # 해석이 더 많으면 앞에서 sentences 수만큼만 사용
-        kr_sentences = sentence_translations[:len(sentences)]
-    else:
-        # fallback: 따옴표 안의 마침표 보호 후 분리
-        protected_kr = re.sub(r'[""""]([^""""]*)\.([^""""]*)[""""""]', lambda m: m.group(0).replace('.', '｡'), translation)
-        kr_sentences = [s.strip().replace('｡', '.') for s in re.split(r'(?<=[.!?다요음임])\s+', protected_kr) if s.strip()]
+    # 한국어 문장: sentence_translations 그대로 사용 (Step1에서 sentences와 개수 맞춰짐)
+    # Stage2 해석예습의 번호와 Stage10 영작 번호가 완전히 동일하게
+    kr_sentences = (sentence_translations or [])[:len(sentences)]
+    while len(kr_sentences) < len(sentences):
+        kr_sentences.append(f"문장 {len(kr_sentences)+1}")
 
     writing_items = []
     for i, eng in enumerate(sentences):

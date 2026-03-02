@@ -368,10 +368,29 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
   <div class="lnav"><span class="lb">1</span><span class="lb on">2</span>{% for i in range(3,11) %}<span class="lb">{{ i }}</span>{% endfor %}</div>
   <div class="ckl" style="padding:6px 10px;font-size:8.5pt;">
     <div class="ckl-t" style="font-size:9pt;">[수업 전 체크리스트 - Stage 2]</div>
-    <table><tr><td></td><td class="cc">1차</td><td class="cc">2차</td><td class="cc">3차</td></tr>
-    {% for s in ["Step 1. 모르는 단어에 <mark> 형광펜 </mark> 표시","Step 2. 사전 찾아 아래에 정리하기","Step 3. 한 문장씩 해석 연습","Step 4. 해석 안 되는 문장에 <span style='color: #dc2626;'>★별표</span>"] %}
-    <tr><td><span class="sn">{{ s.split('.')[0] }}.</span> {{ s.split('. ',1)[1] }}</td>
-    <td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td></tr>{% endfor %}</table>
+    <table style="width:100%;border-collapse:collapse;">
+      <tr>
+        <td></td><td class="cc">1차</td><td class="cc">2차</td><td class="cc">3차</td>
+        <td></td><td class="cc">1차</td><td class="cc">2차</td><td class="cc">3차</td>
+      </tr>
+      {% set steps = ["Step 1. 모르는 단어에 <mark> 형광펜 </mark> 표시",
+                      "Step 2. 사전 찾아 아래에 정리하기",
+                      "Step 3. 한 문장씩 해석 연습",
+                      "Step 4. 해석 안 되는 문장에 <span style='color: #dc2626;'>★별표</span>"] %}
+      {% for i in range(0, steps|length, 2) %}
+      <tr>
+        <td style="width:42%;"><span class="sn">{{ steps[i].split('.')[0] }}.</span> {{ steps[i].split('. ',1)[1] }}</td>
+        <td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td>
+
+        {% if i+1 < steps|length %}
+        <td style="width:42%;"><span class="sn">{{ steps[i+1].split('.')[0] }}.</span> {{ steps[i+1].split('. ',1)[1] }}</td>
+        <td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td>
+        {% else %}
+        <td></td><td class="cc"></td><td class="cc"></td><td class="cc"></td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </table>
     <p style="font-size:7.5pt;color:#4A90D9;margin-top:2px;">★별표 문장은 수업 시간에 확인합니다</p>
   </div>
   <p style="padding: 5px;"></p>

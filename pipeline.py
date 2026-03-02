@@ -662,54 +662,32 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
             break
     
-    # ★ 서술형 error_count를 실제 answers 길이로 보정
+    # ★ 서술형 error_count를 실제 answers 길이로 보정 (문제 텍스트와 일치시키기 위해 반드시 이후에 처리)
     actual_errors = data.get("grammar_error_answers", [])
-    data["grammar_error_count"] = len(actual_errors)
+    actual_error_count = len(actual_errors)
+    data["grammar_error_count"] = actual_error_count
 
     # ★ bracket_count를 실제 answers 길이로 보정 (오답박스 수 일치)
     actual_brackets = data.get("grammar_bracket_answers", [])
     data["grammar_bracket_count"] = len(actual_brackets)
 
-    # ★ 8-1 정답 좌우 균등 shuffle
-    import re as _re
-    bracket_passage = data.get("grammar_bracket_answers", [])
-    vocab_passage_text = data.get("grammar_bracket_passage", "")
-    if bracket_passage and vocab_passage_text:
-        # 정답이 왼쪽인 괄호 vs 오른쪽인 괄호 카운트 후 균등하게 조정
-        def shuffle_bracket_sides(passage_text, answers):
-            # 각 괄호 (N)[A / B] 를 찾아서 정답이 왼쪽이면 절반은 오른쪽으로 swap
-            result = passage_text
-            left_count = 0
-            for ans in answers:
-                num = ans.get("num", 0)
-                correct = ans.get("answer", "")
-                wrong = ans.get("wrong", "")
-                if not correct or not wrong:
-                    continue
-                # 현재 해당 괄호에서 정답이 왼쪽인지 오른쪽인지 확인
+    # ★ 8-1 정답 좌우 진짜 랜덤 shuffle (각 괄호 개별 50% 확률)
+    import re as _re, random as _rand_sh
+    bracket_answers = data.get("grammar_bracket_answers", [])
+    bracket_text = data.get("grammar_bracket_passage", "")
+    if bracket_answers and bracket_text:
+        result = bracket_text
+        for ans in bracket_answers:
+            num = ans.get("num", 0)
+            if _rand_sh.random() < 0.5:  # 50% 확률로 각각 독립적으로 swap
                 pat = _re.compile(r'\(' + str(num) + r'\)\[([^\]]+)\]')
-                m = pat.search(result)
-                if m:
-                    inner = m.group(1)
-                    parts = [p.strip() for p in inner.split(' / ')]
-                    if len(parts) == 2 and parts[0] == correct:
-                        left_count += 1
-            # 절반 이상 왼쪽이면 홀수번 괄호들 swap
-            if left_count > len(answers) * 0.6:
-                swap_targets = [ans["num"] for i, ans in enumerate(answers) if i % 2 == 1]
-                for num in swap_targets:
-                    pat = _re.compile(r'\(' + str(num) + r'\)\[([^\]]+)\]')
-                    def do_swap(m):
-                        inner = m.group(1)
-                        parts = [p.strip() for p in inner.split(' / ')]
-                        if len(parts) == 2:
-                            return f'({num})[{parts[1]} / {parts[0]}]'
-                        return m.group(0)
-                    result = pat.sub(do_swap, result)
-            return result
-        data["grammar_bracket_passage"] = shuffle_bracket_sides(vocab_passage_text, bracket_passage)
+                def do_swap_81(m, n=num):
+                    parts = [p.strip() for p in m.group(1).split(' / ')]
+                    return f'({n})[{parts[1]} / {parts[0]}]' if len(parts)==2 else m.group(0)
+                result = pat.sub(do_swap_81, result)
+        data["grammar_bracket_passage"] = result
 
-    # ★ grammar_bracket_passage / grammar_error_passage 중복 제거
+        # ★ grammar_bracket_passage / grammar_error_passage 중복 제거
     # API가 지문을 2번 붙여서 반환하는 경우 방어
     for key in ["grammar_bracket_passage", "grammar_error_passage"]:
         val = data.get(key, "")
@@ -837,27 +815,27 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
         data["content_match_en"] = [f"{_CIRCLE_NUMS[i]} {pairs[i][0]}" for i in range(len(pairs))]
         data["content_match_en_answer"] = [_CIRCLE_NUMS[i] for i in range(len(pairs)) if pairs[i][1]]
 
-    # ★ 9-1 Part A 정답 좌우 균등 shuffle
+    # ★ 9-1 Part A 개수 보정 (vocab_parta_answers 길이 = passage 괄호 수 일치)
+    actual_parta = data.get("vocab_parta_answers", [])
+    data["vocab_parta_count"] = len(actual_parta)
+
+    # ★ 9-1 Part A 정답 좌우 진짜 랜덤 shuffle (각 괄호 개별 50% 확률)
+    import re as _re2, random as _rand_va
     va_passage = data.get("vocab_advanced_passage", "")
     va_answers = data.get("vocab_parta_answers", [])
     if va_passage and va_answers:
-        import re as _re2
-        left_count = sum(
-            1 for ans in va_answers
-            if (m := _re2.search(r'\(' + str(ans.get("num","")) + r'\)\[([^\]]+)\]', va_passage))
-            and m.group(1).split(' / ')[0].strip() == ans.get("answer","")
-        )
-        if left_count > len(va_answers) * 0.6:
-            swap_idx = [ans["num"] for i, ans in enumerate(va_answers) if i % 2 == 1]
-            for num in swap_idx:
+        result_va = va_passage
+        for ans in va_answers:
+            num = ans.get("num", "")
+            if _rand_va.random() < 0.5:  # 50% 확률로 각각 독립적으로 swap
                 pat = _re2.compile(r'\(' + str(num) + r'\)\[([^\]]+)\]')
                 def do_swap_va(m, n=num):
                     parts = [p.strip() for p in m.group(1).split(' / ')]
                     return f'({n})[{parts[1]} / {parts[0]}]' if len(parts)==2 else m.group(0)
-                va_passage = pat.sub(do_swap_va, va_passage)
-            data["vocab_advanced_passage"] = va_passage
+                result_va = pat.sub(do_swap_va, result_va)
+        data["vocab_advanced_passage"] = result_va
 
-    save_step(passage_dir, "step6_vocab_content", data)
+        save_step(passage_dir, "step6_vocab_content", data)
     return data
 
 # ============================================================
@@ -871,8 +849,11 @@ def step7_writing(sentences: list, translation: str, passage_dir: Path, sentence
 
     _safe_print("  step7: generating Lv.10 writing...")
     # 한국어 문장: sentence_translations 우선, 없으면 translation 분리
-    if sentence_translations and len(sentence_translations) >= len(sentences):
+    if sentence_translations and len(sentence_translations) == len(sentences):
         kr_sentences = sentence_translations
+    elif sentence_translations and len(sentence_translations) > len(sentences):
+        # 해석이 더 많으면 앞에서 sentences 수만큼만 사용
+        kr_sentences = sentence_translations[:len(sentences)]
     else:
         # fallback: 따옴표 안의 마침표 보호 후 분리
         protected_kr = re.sub(r'[""""]([^""""]*)\.([^""""]*)[""""""]', lambda m: m.group(0).replace('.', '｡'), translation)

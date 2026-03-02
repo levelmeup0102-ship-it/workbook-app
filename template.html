@@ -287,10 +287,97 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
     </table>
     <p style="font-size:7.5pt;color:#4A90D9;margin-top:2px;">★별표 문장은 수업 시간에 확인합니다</p>
   </div>
+  <div style="height:20px;"></div>
+  <div style="font-size:13pt;font-weight:bold;color:var(--primary);border-bottom:3px solid var(--accent);padding-bottom:2px;display:inline-block;margin-bottom:4px;">Stage 1 지문 핵심 어휘</div>
+  <p style="font-size:7.5pt;color:var(--text-muted);">STEP 1</p>
+  <table style="width:100%;border-collapse:collapse;border:1px solid var(--border-table);font-size:8pt;">
+    {% for i in range(0, vocab|length, 2) %}
+    <tr>
+      <td style="width:28%;padding:2px 4px;border:1px solid var(--border-table);vertical-align:top;"><span style="font-weight:bold;font-size:8.5pt;">{{ vocab[i].word }}</span><br><span style="font-size:6.5pt;color:var(--text-muted);">{{ vocab[i].synonyms }}</span></td>
+      <td style="width:22%;padding:2px 4px;border:1px solid var(--border-table);text-align:left;font-size:8.5pt;">{{ vocab[i].meaning }}</td>
+      {% if i+1 < vocab|length %}
+      <td style="width:28%;padding:2px 4px;border:1px solid var(--border-table);vertical-align:top;"><span style="font-weight:bold;font-size:8.5pt;">{{ vocab[i+1].word }}</span><br><span style="font-size:6.5pt;color:var(--text-muted);">{{ vocab[i+1].synonyms }}</span></td>
+      <td style="width:22%;padding:2px 4px;border:1px solid var(--border-table);text-align:left;font-size:8.5pt;">{{ vocab[i+1].meaning }}</td>
+      {% else %}<td style="border:1px solid var(--border-table);"></td><td style="border:1px solid var(--border-table);"></td>{% endif %}
+    </tr>{% endfor %}
+  </table>
+  <div style="height:20px;"></div>
+  <p style="font-size:7.5pt;color:var(--text-muted);margin-top:4px;">STEP 2</p>
+  <div style="font-size:10pt;font-weight:bold;margin-bottom:3px;">어휘 확인 테스트</div>
+  <table style="width:100%;font-size:8.5pt;border-collapse:collapse;">
+    <tr style="vertical-align:top;">
+      <td style="width:33%;padding-right:8px;">
+        <p class="b" style="margin-bottom:2px;">A. 뜻 쓰기</p>
+        {% for w in test_a %}<p style="margin-bottom:2px;">{{ loop.index }}. {{ w }} = <span class="il" style="min-width:60px;"></span></p>{% endfor %}
+      </td>
+      <td style="width:33%;padding-right:8px;">
+        <p class="b" style="margin-bottom:2px;">B. 유의어 1개 쓰기</p>
+        {% for w in test_b %}<p style="margin-bottom:2px;">{{ loop.index }}. {{ w }} = <span class="il" style="min-width:60px;"></span></p>{% endfor %}
+      </td>
+      <td style="width:33%;">
+        <p class="b" style="margin-bottom:2px;">C. 철자 쓰기</p>
+        {% for w in test_c %}<p style="margin-bottom:2px;">{{ loop.index }}. {{ w }} = <span class="il" style="min-width:60px;"></span></p>{% endfor %}
+      </td>
+    </tr>
+  </table>
+  <div style="height:20px;"></div>
+  <p style="font-size:7.5pt;color:var(--text-muted);margin-top:4px;">STEP 3</p>
+  <div style="font-size:10pt;font-weight:bold;margin-bottom:3px;">D. 틀린 단어 사전 찾아 채우기</div>
+  <table class="triple triple--t1">
+    <tr class="triple__tr">
+      {% for col in range(3) %}
+      <td class="triple__td">
+        <p class="triple__row">
+          <span class="triple__label">단어:</span>
+          <span class="il il--w70 il--h13"></span>
+        </p>
+        <p class="triple__row triple__row--fixed">
+          <b class="triple__b">뜻</b>
+          <span class="triple__grp">
+            1.<span class="il triple__line triple__line--h10"></span>
+          </span>
+          <span class="triple__grp">
+            2.<span class="il triple__line triple__line--h10"></span>
+          </span>
+          <span class="triple__grp">
+            3.<span class="il triple__line triple__line--h10"></span>
+          </span>
+        </p>
+        <p class="triple__row triple__row--fixed">
+          <b class="triple__b">예문</b>
+          <span class="ilf triple__linefull triple__linefull--h10"></span>
+        </p>
+      </td>
+      {% endfor %}
+    </tr>
+  </table>
+  <p style="padding: 5px;"></p>
+  <div class="warnbox" style="margin-top:5px;padding:6px 10px;">
+    <p class="b" style="font-size:8pt;">[핵심 어휘 솔루션]</p>
+    <p style="font-size:8pt;margin-top:2px;">• Step 1: 처음 학습시, <strong>지문 핵심 어휘</strong>의 뜻 위주로 학습.</p>
+    <p style="font-size:8pt;margin-top:2px;">• Step 2: 단어와 뜻이 연상되면 유의어를 참고하여 단어 연상 학습.</p>
+  </div>
+</div>
+
+{% endif %}
+{% if not levels or 2 in levels %}
+{# ==================== PAGE 3: Lv.2 ==================== #}
+<div class="page" style="font-size:9.5pt;line-height:1.4;">
+  <div class="hdr"><span class="hdr-left">레벨미업학원</span><span class="hdr-right">{{ subject }} - {{ challenge_title }}</span></div>
+  <div class="phase">수업 전</div>
+  <div class="lnav"><span class="lb">1</span><span class="lb on">2</span>{% for i in range(3,11) %}<span class="lb">{{ i }}</span>{% endfor %}</div>
+  <div class="ckl" style="padding:6px 10px;font-size:8.5pt;">
+    <div class="ckl-t" style="font-size:9pt;">[수업 전 체크리스트 - Stage 2]</div>
+    <table><tr><td></td><td class="cc">1차</td><td class="cc">2차</td><td class="cc">3차</td></tr>
+    {% for s in ["Step 1. 모르는 단어에 <mark> 형광펜 </mark> 표시","Step 2. 사전 찾아 아래에 정리하기","Step 3. 한 문장씩 해석 연습","Step 4. 해석 안 되는 문장에 <span style='color: #dc2626;'>★별표</span>"] %}
+    <tr><td><span class="sn">{{ s.split('.')[0] }}.</span> {{ s.split('. ',1)[1] }}</td>
+    <td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td><td class="cc"><span class="cb"></span></td></tr>{% endfor %}</table>
+    <p style="font-size:7.5pt;color:#4A90D9;margin-top:2px;">★별표 문장은 수업 시간에 확인합니다</p>
+  </div>
   <p style="padding: 5px;"></p>
   <div class="stitle" style="font-size:15pt;">Stage 2 해석 예습</div>
   <p style="font-size:8.5pt;color:var(--text-muted);margin-bottom:3px;">※ 모르는 단어 → 형광펜 / 해석 안 되는 문장 → ★표시</p>
-  <div class="psg" style="font-size:9.5pt;line-height:1.75;letter-spacing:-0.05em;word-spacing:-0.02em;text-align:justify;">{{ passage }}</div>
+  <div class="psg" style="font-size:9.5pt;line-height:1.75;">{{ passage }}</div>
   <div style="margin-top:8px;border-top:1px solid var(--border-light);padding-top:6px;">
     <p style="padding: 5px;"></p>
     <p class="b" style="font-size:10pt;margin-bottom:2px;">형광친 단어 사전검색 후 정리하기</p>
@@ -342,6 +429,7 @@ body { font-family: 'Noto Sans CJK KR','Noto Sans KR',sans-serif; font-size: 10p
 
 {% endif %}
 {% if not levels or 3 in levels %}
+
 {# ==================== PAGE 4: Lv.3 ==================== #}
 {# --- Lv.3: 동적 페이지 분할 --- #}
 {% set ns = namespace(offset=0) %}

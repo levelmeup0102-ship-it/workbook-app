@@ -853,9 +853,20 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     actual_error_count = len(actual_errors)
     data["grammar_error_count"] = actual_error_count
 
-    # ★ bracket_count를 실제 answers 길이로 보정 (오답박스 수 일치)
+    # ★ bracket_count를 지문 내 실제 괄호 수로 보정 (오답박스 수 = 지문 괄호 수)
     actual_brackets = data.get("grammar_bracket_answers", [])
-    data["grammar_bracket_count"] = len(actual_brackets)
+    bracket_passage = data.get("grammar_bracket_passage", "")
+    # 지문에서 실제 (N)[...] 패턴 수를 카운트
+    actual_bracket_in_text = len(re.findall(r'\(\d+\)\[', bracket_passage))
+    if actual_bracket_in_text > 0 and actual_bracket_in_text != len(actual_brackets):
+        _safe_print(f"  WARNING: 지문 괄호 {actual_bracket_in_text}개 ≠ answers {len(actual_brackets)}개 → 지문 기준으로 보정")
+        # answers가 더 많으면 지문 괄호 수에 맞춰 자름
+        if len(actual_brackets) > actual_bracket_in_text:
+            # 지문에 실제 존재하는 번호만 유지
+            text_nums = set(int(m) for m in re.findall(r'\((\d+)\)\[', bracket_passage))
+            actual_brackets = [a for a in actual_brackets if a.get("num") in text_nums]
+            data["grammar_bracket_answers"] = actual_brackets
+    data["grammar_bracket_count"] = actual_bracket_in_text if actual_bracket_in_text > 0 else len(actual_brackets)
 
     # ★ 8-1 정답 좌우 진짜 랜덤 shuffle (각 괄호 개별 50% 확률)
     import re as _re, random as _rand_sh

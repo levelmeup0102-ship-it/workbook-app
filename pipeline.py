@@ -80,7 +80,7 @@ def split_sentences(text: str) -> list:
 
     # 3단계: 문장 분리 (닫힌따옴표 뒤 열린따옴표+대문자도 분리)
     sentences = [s.strip() for s in re.split(
-        r'(?<=[.!?])\s+(?=[A-Z])(?![\u201c\u201d\u0022])|(?<=[.!?][\u201c\u201d\u0022])\s+(?=[\u201c\u201d\u0022]?[A-Z])',
+        r'(?<=[.!?])\s+(?=[A-Z])(?![“”"])|(?<=[.!?][“”"])\s+(?=[“”"]?[A-Z])',
         protected
     ) if s.strip()]
 
@@ -334,7 +334,7 @@ def step1_basic_analysis(passage: str, passage_dir: Path) -> dict:
    - 짧은 문장도 절대 합치지 마세요 (예: "That's not loyalty." 는 독립 문장)
    - 문장을 절대 분리하지 마세요 (세미콜론 ; 으로 연결된 것은 1문장)
 4. sentence_translations: 각 문장의 한국어 번역 (sentences와 정확히 같은 수, 같은 순서!)
-   - 따옴표(" " 또는 “ ”) 안의 마침표는 문장의 끝으로 처리하지 말 것
+   - 따옴표(" " 또는 " ") 안의 마침표는 문장의 끝으로 처리하지 말 것
    - 영어 sentences 배열 수와 반드시 일치해야 함 (정확히 {sent_count}개!)
 5. key_sentences: 시험 출제 가능성이 높은 핵심 문장 8개 (원문 그대로)
 6. test_a: vocab에서 뜻 쓰기 테스트용 5개 단어 (영어)
@@ -599,7 +599,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 
     sentences = split_sentences(passage)
     sent_count = len(sentences)
-    error_count = min(8, sent_count)  # 문장 수보다 많은 오류 불가
+    error_count = max(5, min(8, sent_count))  # 최소 5개, 최대 8개
     bracket_count = min(20, sent_count * 2)  # 문장당 최대 2개 괄호
     # bracket_count = sent_count * 2  # 문장당 최대 2개 괄호 / 예: 12문장이면 최대 24개 괄호 문제 + 24개 답안 박스가 생성됩니다.
     
@@ -627,12 +627,13 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 - 원문 {sent_count}개 문장 모두 포함 (출제 안 하는 문장도 원문 그대로)
 - {bracket_count}개 괄호: (N)[정답 / 오답] 형태
 - 한 문장에 여러 괄호 가능
-- 정답이 왼쪽/오른쪽에 치우치지 않게 무작위로 배치 (정답이 항상 왼쪽이거나 항상 오른쪽이면 안됨)
+- 정답이 왼쪽인 경우 50%, 오른쪽인 경우 50%가 되도록 반드시 균등 배치 (예: 10개면 5개는 정답이 왼쪽, 5개는 오른쪽)
 - 출제: 시제, 대명사, 동명사, to부정사, 형용사/부사, 관계대명사, 분사, 사역동사 등
 
 [어법 서술형 Lv.8-2]
 - 원문 {sent_count}개 문장 모두 포함
 - 실제 출제 가능한 오류만 삽입 (위 금지 유형 제외)
+- 반드시 최소 5개 이상 오류 삽입 (지문이 짧아도 최소 5개!)
 - 한 문장에 최대 1개 오류
 - 오류를 삽입한 실제 개수를 grammar_error_count에 정확히 기록할 것
 - 오류 개수 = grammar_error_answers 배열 길이와 반드시 일치
@@ -664,6 +665,49 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     # ★ 서술형 error_count를 실제 answers 길이로 보정
     actual_errors = data.get("grammar_error_answers", [])
     data["grammar_error_count"] = len(actual_errors)
+
+    # ★ bracket_count를 실제 answers 길이로 보정 (오답박스 수 일치)
+    actual_brackets = data.get("grammar_bracket_answers", [])
+    data["grammar_bracket_count"] = len(actual_brackets)
+
+    # ★ 8-1 정답 좌우 균등 shuffle
+    import re as _re
+    bracket_passage = data.get("grammar_bracket_answers", [])
+    vocab_passage_text = data.get("grammar_bracket_passage", "")
+    if bracket_passage and vocab_passage_text:
+        # 정답이 왼쪽인 괄호 vs 오른쪽인 괄호 카운트 후 균등하게 조정
+        def shuffle_bracket_sides(passage_text, answers):
+            # 각 괄호 (N)[A / B] 를 찾아서 정답이 왼쪽이면 절반은 오른쪽으로 swap
+            result = passage_text
+            left_count = 0
+            for ans in answers:
+                num = ans.get("num", 0)
+                correct = ans.get("answer", "")
+                wrong = ans.get("wrong", "")
+                if not correct or not wrong:
+                    continue
+                # 현재 해당 괄호에서 정답이 왼쪽인지 오른쪽인지 확인
+                pat = _re.compile(r'\(' + str(num) + r'\)\[([^\]]+)\]')
+                m = pat.search(result)
+                if m:
+                    inner = m.group(1)
+                    parts = [p.strip() for p in inner.split(' / ')]
+                    if len(parts) == 2 and parts[0] == correct:
+                        left_count += 1
+            # 절반 이상 왼쪽이면 홀수번 괄호들 swap
+            if left_count > len(answers) * 0.6:
+                swap_targets = [ans["num"] for i, ans in enumerate(answers) if i % 2 == 1]
+                for num in swap_targets:
+                    pat = _re.compile(r'\(' + str(num) + r'\)\[([^\]]+)\]')
+                    def do_swap(m):
+                        inner = m.group(1)
+                        parts = [p.strip() for p in inner.split(' / ')]
+                        if len(parts) == 2:
+                            return f'({num})[{parts[1]} / {parts[0]}]'
+                        return m.group(0)
+                    result = pat.sub(do_swap, result)
+            return result
+        data["grammar_bracket_passage"] = shuffle_bracket_sides(vocab_passage_text, bracket_passage)
 
     # ★ grammar_bracket_passage / grammar_error_passage 중복 제거
     # API가 지문을 2번 붙여서 반환하는 경우 방어
@@ -701,7 +745,8 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
 
 [Lv.9-1 Part A 규칙]
 - 원문의 모든 문장을 빠짐없이 포함
-- 7~9개 괄호: (N)[정답 / 반의어] 형태
+- 7~9개 괄호: (N)[정답 / 반의어] 또는 (N)[반의어 / 정답] 형태
+- 정답이 왼쪽인 경우와 오른쪽인 경우가 비슷하게 배분 (정답이 항상 왼쪽이면 안됨)
 - 한 문장에 괄호는 반드시 1개만 (한 문장에 2개 이상 절대 금지)
 - 정답과 오답은 의미가 반대인 단어 쌍으로 구성 (예: regarded/overlooked, effective/futile, mild/severe, constant/intermittent)
 - 발음 유사 단어 절대 금지. 반드시 반의어로 출제
@@ -792,6 +837,26 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
         data["content_match_en"] = [f"{_CIRCLE_NUMS[i]} {pairs[i][0]}" for i in range(len(pairs))]
         data["content_match_en_answer"] = [_CIRCLE_NUMS[i] for i in range(len(pairs)) if pairs[i][1]]
 
+    # ★ 9-1 Part A 정답 좌우 균등 shuffle
+    va_passage = data.get("vocab_advanced_passage", "")
+    va_answers = data.get("vocab_parta_answers", [])
+    if va_passage and va_answers:
+        import re as _re2
+        left_count = sum(
+            1 for ans in va_answers
+            if (m := _re2.search(r'\(' + str(ans.get("num","")) + r'\)\[([^\]]+)\]', va_passage))
+            and m.group(1).split(' / ')[0].strip() == ans.get("answer","")
+        )
+        if left_count > len(va_answers) * 0.6:
+            swap_idx = [ans["num"] for i, ans in enumerate(va_answers) if i % 2 == 1]
+            for num in swap_idx:
+                pat = _re2.compile(r'\(' + str(num) + r'\)\[([^\]]+)\]')
+                def do_swap_va(m, n=num):
+                    parts = [p.strip() for p in m.group(1).split(' / ')]
+                    return f'({n})[{parts[1]} / {parts[0]}]' if len(parts)==2 else m.group(0)
+                va_passage = pat.sub(do_swap_va, va_passage)
+            data["vocab_advanced_passage"] = va_passage
+
     save_step(passage_dir, "step6_vocab_content", data)
     return data
 
@@ -810,8 +875,8 @@ def step7_writing(sentences: list, translation: str, passage_dir: Path, sentence
         kr_sentences = sentence_translations
     else:
         # fallback: 따옴표 안의 마침표 보호 후 분리
-        protected_kr = re.sub(r'[\u201c\u0022]([^\u201c\u201d\u0022]*)\.([^\u201c\u201d\u0022]*)[\u201d\u0022]', lambda m: m.group(0).replace('.', '\uff61'), translation)
-        kr_sentences = [s.strip().replace('\uff61', '.') for s in re.split(r'(?<=[.!?다요음임])\s+', protected_kr) if s.strip()]
+        protected_kr = re.sub(r'[""""]([^""""]*)\.([^""""]*)[""""""]', lambda m: m.group(0).replace('.', '｡'), translation)
+        kr_sentences = [s.strip().replace('｡', '.') for s in re.split(r'(?<=[.!?다요음임])\s+', protected_kr) if s.strip()]
 
     writing_items = []
     for i, eng in enumerate(sentences):

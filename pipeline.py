@@ -360,36 +360,63 @@ JSON 형식:
     # 🔒 검증: API 문장 분리 대신 항상 regex 사용 (AI가 문장을 합치거나 쪼개는 것 방지)
     data["sentences"] = sentences_regex
 
-    # ★ sentence_translations 개수 보정 (sentences와 반드시 동일하게)
+    # ★ sentence_translations: 영어 sentences와 반드시 1:1 매칭 보장
+    # 핵심: API가 따옴표 안 마침표에서 잘못 분리하여 개수만 우연히 맞추는 경우 방어
     st = data.get("sentence_translations", [])
+    
+    def _protect_punct_in_quotes(t: str) -> str:
+        """따옴표가 닫히기 전까지는 .!?로 절대 분리하지 않음"""
+        quote_chars = {'"', '\u201c', '\u201d', '\u0022'}
+        in_q = False
+        out = []
+        for ch in t:
+            if ch in quote_chars:
+                in_q = not in_q
+                out.append(ch)
+                continue
+            if in_q and ch in '.!?':
+                out.append('\uff61')
+            else:
+                out.append(ch)
+        return ''.join(out)
+    
+    def _split_kr_translation(translation_text: str) -> list:
+        protected = _protect_punct_in_quotes(translation_text)
+        parts = [s.strip().replace('\uff61', '.') 
+                 for s in re.split(r'(?<=[.!?다요음임])\s+', protected) if s.strip()]
+        return parts
+    
+    # 검증 1: 개수 불일치
+    need_rebuild = False
     if len(st) != sent_count:
-        _safe_print(f"  WARNING: sentence_translations {len(st)}개 ≠ sentences {sent_count}개 → fallback 분리")
-        # fallback: translation을 문장 단위로 분리
-        # fallback: translation을 문장 단위로 분리
-        # 🔒 따옴표 규칙: 따옴표가 닫히기 전까지는 마침표/물음표/느낌표로 절대 분리하지 않음 (영/한 동일)
-        def _protect_punct_in_quotes(t: str) -> str:
-            quote_chars = {'"', '“', '”'}
-            in_q = False
-            out = []
-            for ch in t:
-                if ch in quote_chars:
-                    # 토글 (닫힘/열림을 동일 처리)
-                    in_q = not in_q
-                    out.append(ch)
-                    continue
-                if in_q and ch in '.!?':
-                    out.append('§P§')  # 임시 토큰
-                else:
-                    out.append(ch)
-            return ''.join(out)
-
-        protected_kr = _protect_punct_in_quotes(data.get("translation", "") or "")
-        st_split = [s.strip().replace('§P§', '.') for s in re.split(r'(?<=[.!?다요음임])\s+', protected_kr) if s.strip()]
-
-        # 개수 맞추기: 부족하면 더미로 채우지 말고 문장 수만 맞춤(영문과 매칭용)
-        while len(st_split) < sent_count:
-            st_split.append(f"문장 {len(st_split)+1}")
-        data["sentence_translations"] = st_split[:sent_count]
+        need_rebuild = True
+        _safe_print(f"  WARNING: sentence_translations {len(st)}개 ≠ sentences {sent_count}개 → 재생성")
+    
+    # 검증 2: 개수 맞아도 따옴표 짝 불일치 체크 (잘못 분리된 증거)
+    if not need_rebuild and st:
+        for idx_st, kr in enumerate(st):
+            open_q = kr.count('\u201c') + kr.count('"')
+            close_q = kr.count('\u201d') + kr.count('"')
+            if open_q != close_q:
+                need_rebuild = True
+                _safe_print(f"  WARNING: sentence_translations[{idx_st}] 따옴표 짝 불일치 → 재생성")
+                break
+    
+    # 검증 3: 영어에 따옴표 있는데 대응 한국어에 없으면 불일치
+    if not need_rebuild and st and len(st) == sent_count:
+        for idx_st, (eng, kr) in enumerate(zip(sentences_regex, st)):
+            eng_has_q = '"' in eng or '\u201c' in eng or '\u201d' in eng
+            kr_has_q = '"' in kr or '\u201c' in kr or '\u201d' in kr or '"' in kr
+            if eng_has_q and not kr_has_q:
+                need_rebuild = True
+                _safe_print(f"  WARNING: 영어 문장 {idx_st+1}에 따옴표 있으나 한국어에 없음 → 재생성")
+                break
+    
+    if need_rebuild:
+        kr_split = _split_kr_translation(data.get("translation", "") or "")
+        while len(kr_split) < sent_count:
+            kr_split.append(f"문장 {len(kr_split)+1}")
+        data["sentence_translations"] = kr_split[:sent_count]
     else:
         data["sentence_translations"] = st
 

@@ -335,6 +335,8 @@ def step1_basic_analysis(passage: str, passage_dir: Path) -> dict:
    - 문장을 절대 분리하지 마세요 (세미콜론 ; 으로 연결된 것은 1문장)
 4. sentence_translations: 각 문장의 한국어 번역 (sentences와 정확히 같은 수, 같은 순서!)
    - 따옴표(" " 또는 " ") 안의 마침표는 문장의 끝으로 처리하지 말 것
+   - 따옴표가 열렸으면 반드시 닫힌 후에야 다음 문장으로 넘어감
+   - 예: "연설 때문에 부끄럽습니다."라고 말했다. → 이것은 하나의 번역!
    - 영어 sentences 배열 수와 반드시 일치해야 함 (정확히 {sent_count}개!)
 5. key_sentences: 시험 출제 가능성이 높은 핵심 문장 8개 (원문 그대로)
 6. test_a: vocab에서 뜻 쓰기 테스트용 5개 단어 (영어)
@@ -361,61 +363,40 @@ JSON 형식:
     # ★ sentence_translations 개수 보정 (sentences와 반드시 동일하게)
     st = data.get("sentence_translations", [])
     if len(st) != sent_count:
-        _safe_print(f"  WARNING: sentence_translations {len(st)}개 ≠ sentences {sent_count}개 → 재요청(문장별 번역)")
-        # ✅ 안전한 방식: 영어 문장 배열(sentences_regex)을 기준으로 문장별 한국어 번역을 다시 요청하여 1:1 정렬을 보장
-        prompt_st = f"""다음 영어 문장 배열을 한국어로 자연스럽게 번역하여 JSON 배열만 출력하세요.
-- 배열 길이는 반드시 {sent_count}개로 정확히 맞추세요.
-- 각 원소는 해당 영어 문장 1개에 대응하는 한국어 번역 1개입니다.
-- 따옴표(\" \" 또는 “ ”) 안의 마침표/물음표/느낌표가 있더라도, 따옴표가 닫히기 전까지는 '한 문장'으로 취급하여 번역을 끊어 쓰지 마세요.
-- 출력은 반드시 JSON 배열만 (예: ["...", "..."]) 입니다.
+        _safe_print(f"  WARNING: sentence_translations {len(st)}개 ≠ sentences {sent_count}개 → fallback 분리")
+        # fallback: translation을 문장 단위로 분리
+        # fallback: translation을 문장 단위로 분리
+        # 🔒 따옴표 규칙: 따옴표가 닫히기 전까지는 마침표/물음표/느낌표로 절대 분리하지 않음 (영/한 동일)
+        def _protect_punct_in_quotes(t: str) -> str:
+            quote_chars = {'"', '“', '”'}
+            in_q = False
+            out = []
+            for ch in t:
+                if ch in quote_chars:
+                    # 토글 (닫힘/열림을 동일 처리)
+                    in_q = not in_q
+                    out.append(ch)
+                    continue
+                if in_q and ch in '.!?':
+                    out.append('§P§')  # 임시 토큰
+                else:
+                    out.append(ch)
+            return ''.join(out)
 
-[영어 문장 배열]
-{json.dumps(sentences_regex, ensure_ascii=False)}
-"""
-        try:
-    st2 = call_claude_json(SYS_JSON_KR, prompt_st, max_tokens=2048)
+        protected_kr = _protect_punct_in_quotes(data.get("translation", "") or "")
+        st_split = [s.strip().replace('§P§', '.') for s in re.split(r'(?<=[.!?다요음임])\s+', protected_kr) if s.strip()]
 
-    # call_claude_json은 dict를 기대할 수 있으므로, list 반환도 허용
-    if isinstance(st2, list):
-        # list면 그냥 앞에서부터 sent_count개 사용
-        data["sentence_translations"] = st2[:sent_count]
-
-    elif isinstance(st2, dict):
-        # dict면 sentence_translations 키를 우선 기대
-        val = st2.get("sentence_translations")
-
-        if isinstance(val, list):
-            data["sentence_translations"] = val[:sent_count]
-        elif isinstance(val, str):
-            # 문자열로 왔으면 "문장 단위"로 분리 시도
-            protected_kr = _protect_punct_in_quotes(val or "")
-            st_split = [
-                s.strip().replace("$P$", ".")
-                for s in re.split(r"(?<=[.!?다음음음])\s+", protected_kr)
-                if s.strip()
-            ]
-            # 부족하면 더미로 채움(형식 유지)
-            while len(st_split) < sent_count:
-                st_split.append(f"문장 {len(st_split)+1}")
-            data["sentence_translations"] = st_split[:sent_count]
-        else:
-            raise ValueError("Unexpected sentence_translations format (dict)")
-
+        # 개수 맞추기: 부족하면 더미로 채우지 말고 문장 수만 맞춤(영문과 매칭용)
+        while len(st_split) < sent_count:
+            st_split.append(f"문장 {len(st_split)+1}")
+        data["sentence_translations"] = st_split[:sent_count]
     else:
-        raise ValueError("Unexpected sentence_translations format (root)")
+        data["sentence_translations"] = st
 
-except Exception as e:
-    _safe_print(f"  ERROR: sentence_translations 재요청 실패 → 최소 보정 fallback 사용: {e}")
-    # fallback: 절대 문법 오류 없이 sent_count개 맞춰 저장
-    st_split = []
-    while len(st_split) < sent_count:
-        st_split.append(f"문장 {len(st_split)+1}")
-    data["sentence_translations"] = st_split
-
-_safe_print(f"  Sentence count: {sent_count}")
-
-save_step(passage_dir, "step1_basic", data)
-return data
+    _safe_print(f"  Sentence count: {sent_count}")
+    
+    save_step(passage_dir, "step1_basic", data)
+    return data
 
 # ============================================================
 # 순서 선지 코드 생성 유틸리티
@@ -468,26 +449,13 @@ def _generate_order_choices(data):
     
     choices = []
     answer = ""
-    answer_idx = -1
-    answer_text = ""
     for i, perm in enumerate(all_choices):
         text = f"({perm[0]})-({perm[1]})-({perm[2]})"
-        choice_line = f"{_CIRCLE_NUMS[i]} {text}"
-        choices.append(choice_line)
+        choices.append(f"{_CIRCLE_NUMS[i]} {text}")
         if perm == correct:
-            answer_idx = i
-            answer_text = text
-            answer = choice_line
-
-    # 🔒 일관성 가드: answer_idx가 가리키는 선지와 order_answer가 항상 동일하도록 강제
-    if 0 <= answer_idx < len(choices):
-        answer = choices[answer_idx]
-
+            answer = f"{_CIRCLE_NUMS[i]} {text}"
     data["order_choices"] = choices
     data["order_answer"] = answer
-    data["order_answer_idx"] = answer_idx
-    data["order_correct_perm"] = list(correct)
-
     
     # === 3. 전체 문장 배열 (심화) 셔플 ===
     blocks = data.get("full_order_blocks", [])
@@ -532,7 +500,9 @@ def step2_order(passage: str, sentences: list, passage_dir: Path) -> dict:
 3. order_choices: 5지선다 (형식: "① (A)-(C)-(B)" 등). 정답 1개 포함.
 4. order_answer: 정답 번호 (예: "④ (C)-(A)-(B)")
 5. insert_sentence: 삽입할 문장 1개 (앞뒤 문맥 단서가 명확한 것)
-6. insert_passage: 삽입 문장을 뺀 나머지 지문에 ( ① )~( ⑤ ) 위치 표시
+6. insert_passage: insert_sentence를 뺀 나머지 원문 전체에 ( ① )~( ⑤ ) 위치 표시
+   - ⚠ [절대 규칙] insert_sentence 1개만 빼고 나머지 원문의 모든 문장을 그대로 유지!
+   - 원문 축소/생략/요약 절대 금지! 삽입 문장 외의 모든 문장이 빠짐없이 포함되어야 함
 7. insert_answer: 삽입 정답 번호
 8. full_order_blocks: 전체 문장을 (A)~끝까지 개별 블록으로 분할 (각각 label, text)
 9. full_order_answer: 정답 순서 (예: "(C)→(G)→(D)→...")
@@ -756,6 +726,8 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 3. 절대 문장을 추가/삭제/분리/합치기 하지 마세요
 4. 원문 문장에 괄호나 오류만 삽입하고, 나머지는 원문 그대로 유지
 5. 문장 수가 부족하면 오류/괄호 수를 줄이세요 (문장 추가는 절대 금지!)
+6. 새로운 문장을 만들어 넣지 마세요! 원문에 있는 문장만 사용!
+7. 출력 결과의 문장을 하나씩 세어보고, {sent_count}개가 아니면 수정하세요
 
 [어법 오류 출제 금지 유형 - 아래는 오류가 아님]
 - start/continue/love/like/hate 뒤: to부정사 = ing (둘 다 허용)
@@ -1077,7 +1049,7 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
     # Lv.5
     s2 = all_data.get("step2", {})
     blocks.append(f'<div class="ablock"><p class="ast">Stage 5 순서 배열</p>'
-                   f'<p>정답: { (s2.get("order_choices") or [""])[s2.get("order_answer_idx")] if isinstance(s2.get("order_answer_idx"), int) and 0 <= s2.get("order_answer_idx") < len((s2.get("order_choices") or [])) else s2.get("order_answer","") }</p>'
+                   f'<p>정답: {s2.get("order_answer","")}</p>'
                    f'<p>삽입 정답: {s2.get("insert_answer","")}</p>'
                    f'<p>전체 배열: {s2.get("full_order_answer","")}</p></div>')
 

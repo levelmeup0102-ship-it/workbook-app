@@ -357,6 +357,24 @@ JSON 형식:
     
     # 🔒 검증: API 문장 분리 대신 항상 regex 사용 (AI가 문장을 합치거나 쪼개는 것 방지)
     data["sentences"] = sentences_regex
+
+    # ★ sentence_translations 개수 보정 (sentences와 반드시 동일하게)
+    st = data.get("sentence_translations", [])
+    if len(st) != sent_count:
+        _safe_print(f"  WARNING: sentence_translations {len(st)}개 ≠ sentences {sent_count}개 → fallback 분리")
+        # fallback: translation을 문장 단위로 분리
+        protected_kr = re.sub(
+            r'[\u201c\u0022]([^\u201c\u201d\u0022]*)\.([^\u201c\u201d\u0022]*)[\u201d\u0022]',
+            lambda m: m.group(0).replace('.', '\uff61'), data.get("translation", "")
+        )
+        st_split = [s.strip().replace('\uff61', '.') for s in re.split(r'(?<=[.!?다요음임])\s+', protected_kr) if s.strip()]
+        # 개수 맞추기: 부족하면 마지막 것 반복, 넘치면 자름
+        while len(st_split) < sent_count:
+            st_split.append(f"문장 {len(st_split)+1}")
+        data["sentence_translations"] = st_split[:sent_count]
+    else:
+        data["sentence_translations"] = st
+
     _safe_print(f"  Sentence count: {sent_count}")
     
     save_step(passage_dir, "step1_basic", data)
@@ -723,7 +741,7 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
 
 [Lv.9-1 Part A 규칙]
 - 원문의 모든 문장을 빠짐없이 포함
-- 7~9개 괄호: (N)[정답 / 반의어] 또는 (N)[반의어 / 정답] 형태
+- 5~10개 괄호: (N)[정답 / 반의어] 또는 (N)[반의어 / 정답] 형태 (최소 5개, 가능하면 8~10개)
 - 정답이 왼쪽인 경우와 오른쪽인 경우가 비슷하게 배분 (정답이 항상 왼쪽이면 안됨)
 - 한 문장에 괄호는 반드시 1개만 (한 문장에 2개 이상 절대 금지)
 - 정답과 오답은 의미가 반대인 단어 쌍으로 구성 (예: regarded/overlooked, effective/futile, mild/severe, constant/intermittent)
@@ -1023,6 +1041,7 @@ def merge_to_template_data(passage: str, meta: dict, all_steps: dict) -> dict:
         # 지문/번역
         "passage": passage,
         "translation": s1.get("translation", ""),
+        "sentence_translations": s1.get("sentence_translations", []),
         # Lv.1 어휘
         "vocab": s1.get("vocab", []),
         "test_a": s1.get("test_a", []),

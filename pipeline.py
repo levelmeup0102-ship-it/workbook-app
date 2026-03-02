@@ -363,12 +363,28 @@ JSON 형식:
     if len(st) != sent_count:
         _safe_print(f"  WARNING: sentence_translations {len(st)}개 ≠ sentences {sent_count}개 → fallback 분리")
         # fallback: translation을 문장 단위로 분리
-        protected_kr = re.sub(
-            r'[\u201c\u0022]([^\u201c\u201d\u0022]*)\.([^\u201c\u201d\u0022]*)[\u201d\u0022]',
-            lambda m: m.group(0).replace('.', '\uff61'), data.get("translation", "")
-        )
-        st_split = [s.strip().replace('\uff61', '.') for s in re.split(r'(?<=[.!?다요음임])\s+', protected_kr) if s.strip()]
-        # 개수 맞추기: 부족하면 마지막 것 반복, 넘치면 자름
+        # fallback: translation을 문장 단위로 분리
+        # 🔒 따옴표 규칙: 따옴표가 닫히기 전까지는 마침표/물음표/느낌표로 절대 분리하지 않음 (영/한 동일)
+        def _protect_punct_in_quotes(t: str) -> str:
+            quote_chars = {'"', '“', '”'}
+            in_q = False
+            out = []
+            for ch in t:
+                if ch in quote_chars:
+                    # 토글 (닫힘/열림을 동일 처리)
+                    in_q = not in_q
+                    out.append(ch)
+                    continue
+                if in_q and ch in '.!?':
+                    out.append('§P§')  # 임시 토큰
+                else:
+                    out.append(ch)
+            return ''.join(out)
+
+        protected_kr = _protect_punct_in_quotes(data.get("translation", "") or "")
+        st_split = [s.strip().replace('§P§', '.') for s in re.split(r'(?<=[.!?다요음임])\s+', protected_kr) if s.strip()]
+
+        # 개수 맞추기: 부족하면 더미로 채우지 말고 문장 수만 맞춤(영문과 매칭용)
         while len(st_split) < sent_count:
             st_split.append(f"문장 {len(st_split)+1}")
         data["sentence_translations"] = st_split[:sent_count]
@@ -399,15 +415,27 @@ def _generate_order_choices(data):
         # 현재: [[A, text1], [B, text2], [C, text3]] (원문 순서)
         # 원문 순서 기억 (인덱스 0,1,2 = 정답 순서)
         labels = ["A", "B", "C"]
-        random.shuffle(labels)
+
+        # 🔒 규칙: 정답이 ABC가 되지 않도록 라벨 셔플을 보정
+        # (사용자 요구: 가급적 ABC 정답 출제 금지)
+        for _ in range(10):
+            random.shuffle(labels)
+            if tuple(labels) != ("A", "B", "C"):
+                break
+        # 그래도 ABC면 강제 스왑 (최소 변경)
+        if tuple(labels) == ("A", "B", "C"):
+            labels = ["B", "A", "C"]
+
         # 새 라벨 부여: 첫번째 단락 → labels[0], 두번째 → labels[1], ...
         new_paras = [[labels[i], paras[i][1]] for i in range(3)]
         # 정답 = labels를 원래 순서대로 읽은 것 (labels[0] → labels[1] → labels[2])
         correct = tuple(labels)  # 예: ("C", "A", "B") = 정답
+
         # 표시할 때는 라벨 알파벳 순으로 정렬
         new_paras.sort(key=lambda x: x[0])
         data["order_paragraphs"] = new_paras
     else:
+        # 3단락이 아니면 기본값
         correct = ("A", "B", "C")
     
     # === 2. 선지 5개 생성 ===
@@ -512,6 +540,8 @@ JSON 형식:
             data["order_paragraphs"] = [[p["label"], p["text"]] for p in data["order_paragraphs"]]
         if data.get("full_order_blocks") and isinstance(data["full_order_blocks"][0], dict):
             data["full_order_blocks"] = [[b["label"], b["text"]] for b in data["full_order_blocks"]]
+        # ★ 순서 선지를 코드로 직접 생성 (재시도 후에도 반드시 재생성해야 정답/정답지 불일치가 안 생김)
+        _generate_order_choices(data)
         block_count2 = len(data.get("full_order_blocks", []))
         if block_count2 != sentence_count:
             _safe_print(f"  WARNING: still mismatch ({block_count2} vs {sentence_count}), using original")
@@ -529,6 +559,65 @@ JSON 형식:
         )
         data["insert_passage"] = insert_p
 
+    
+    # 🔒 검증: 삽입 문제는 원문을 절대 축약/변형하지 않음
+    # - insert_sentence는 원문 문장 중 하나여야 함 (요약/패러프레이즈 금지)
+    # - insert_passage에는 insert_sentence를 제외한 나머지 원문 문장이 모두 포함되어야 함
+    def _norm(s: str) -> str:
+        return re.sub(r'\s+', ' ', (s or '').strip())
+
+    orig_sents = split_sentences(passage)
+    orig_norm = [_norm(s) for s in orig_sents]
+    ins_sent = _norm(data.get("insert_sentence", ""))
+    ins_passage = _norm(data.get("insert_passage", ""))
+
+    need_retry_insert = False
+    if ins_sent and ins_sent not in orig_norm:
+        need_retry_insert = True
+
+    # 원문 문장 중 insert_sentence로 선택된 1개를 제외한 나머지가 insert_passage에 모두 포함되는지 체크
+    if not need_retry_insert and ins_sent:
+        missing = []
+        for s in orig_norm:
+            if s == ins_sent:
+                continue
+            if s and s not in ins_passage:
+                missing.append(s)
+        if missing:
+            need_retry_insert = True
+
+    if need_retry_insert:
+        _safe_print("  WARNING: insert problem changed/truncated source sentence → retrying insert generation once...")
+        cache_path = passage_dir / "step2_order.json"
+        if cache_path.exists():
+            cache_path.unlink()
+        data = call_claude_json(SYS_JSON, prompt, max_tokens=4096)
+        if data.get("order_paragraphs") and isinstance(data["order_paragraphs"][0], dict):
+            data["order_paragraphs"] = [[p["label"], p["text"]] for p in data["order_paragraphs"]]
+        if data.get("full_order_blocks") and isinstance(data["full_order_blocks"][0], dict):
+            data["full_order_blocks"] = [[b["label"], b["text"]] for b in data["full_order_blocks"]]
+        _generate_order_choices(data)
+
+        # 재검증 후에도 실패하면, 원문 기반으로 강제 구성(축약 방지)
+        ins_sent = _norm(data.get("insert_sentence", ""))
+        ins_passage = _norm(data.get("insert_passage", ""))
+        if not ins_sent or ins_sent not in orig_norm:
+            # 원문 가운데 문장을 삽입문장으로 선택
+            pick_idx = max(0, min(len(orig_sents)-1, len(orig_sents)//2))
+            data["insert_sentence"] = orig_sents[pick_idx]
+            ins_sent = _norm(data["insert_sentence"])
+
+        # insert_passage는 원문에서 insert_sentence 1개만 제거한 본문으로 강제
+        remaining = [s for s in orig_sents if _norm(s) != ins_sent]
+        # 위치표시는 간단히 5개 구간으로 균등 배치 (본문은 절대 변형하지 않기)
+        markers = ["( ① )", "( ② )", "( ③ )", "( ④ )", "( ⑤ )"]
+        rebuilt = []
+        for i, s in enumerate(remaining):
+            rebuilt.append(s)
+            # 문장 사이에 마커를 분산 삽입
+            if i < len(remaining) and i < len(markers):
+                rebuilt.append(markers[i])
+        data["insert_passage"] = " ".join(rebuilt).strip()
     save_step(passage_dir, "step2_order", data)
     return data
 
@@ -672,7 +761,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     for key in ['grammar_bracket_passage', 'grammar_error_passage']:
         gen_text = data.get(key, '')
         gen_sents = len(split_sentences(gen_text))
-        if gen_sents > sent_count + 1:
+        if gen_sents != sent_count:
             _safe_print(f"  WARNING: {key}: {gen_sents} sentences (original {sent_count}), retrying...")
             cache_path = passage_dir / "step5_grammar.json"
             if cache_path.exists():
@@ -680,7 +769,26 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
             break
     
-    # ★ 서술형 error_count를 실제 answers 길이로 보정 (문제 텍스트와 일치시키기 위해 반드시 이후에 처리)
+    
+    # 🔒 최종 가드: Lv.8-1(괄호형)에서 원문 문장 수를 초과하는 문장(스토리 추가) 절대 금지
+    bracket_text = data.get("grammar_bracket_passage", "")
+    if bracket_text:
+        gen_sents_list = split_sentences(bracket_text)
+        if len(gen_sents_list) > sent_count:
+            # 대부분 "끝에 한 문장 추가" 형태이므로, 앞에서부터 원문 문장 수만큼만 유지
+            data["grammar_bracket_passage"] = " ".join(gen_sents_list[:sent_count]).strip()
+        elif len(gen_sents_list) < sent_count:
+            # 부족한 경우는 추가 생성 대신 원문을 유지 (문장 추가/삭제 금지 원칙)
+            data["grammar_bracket_passage"] = passage
+
+    error_text = data.get("grammar_error_passage", "")
+    if error_text:
+        gen_err_list = split_sentences(error_text)
+        if len(gen_err_list) > sent_count:
+            data["grammar_error_passage"] = " ".join(gen_err_list[:sent_count]).strip()
+        elif len(gen_err_list) < sent_count:
+            data["grammar_error_passage"] = passage
+# ★ 서술형 error_count를 실제 answers 길이로 보정 (문제 텍스트와 일치시키기 위해 반드시 이후에 처리)
     actual_errors = data.get("grammar_error_answers", [])
     actual_error_count = len(actual_errors)
     data["grammar_error_count"] = actual_error_count

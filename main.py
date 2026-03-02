@@ -119,12 +119,15 @@ async def _save_db(d):
 # Cache Key / Cache Check
 # ============================================================
 def _ck(book: str, unit: str, pid: str) -> str:
-    """캐시 키: 한국어 → ASCII 해시로 변환"""
+    """캐시 키: 책이름_과_번호_hash (한국어 포함, 가독성 우선)
+    예: 공통영어1비상홈_1과_01번_26c81a4e
+    """
     raw = f"{book}_{unit}_{pid}"
-    h = hashlib.md5(raw.encode("utf-8")).hexdigest()[:12]
-    nums = re.findall(r"\d+", raw)
-    prefix = "_".join(nums) if nums else "p"
-    return f"{prefix}_{h}"
+    h = hashlib.md5(raw.encode("utf-8")).hexdigest()[:8]
+    BAD = set(' ()[]/\\:*?"<>|')
+    def safe(s: str, maxlen: int = 20) -> str:
+        return "".join(ch for ch in s if ch not in BAD)[:maxlen]
+    return f"{safe(book,15)}_{safe(unit,8)}_{safe(pid,6)}_{h}"
 
 async def _is_cached(ck: str) -> bool:
     """Check cache - local first, then Supabase (count only)"""

@@ -373,30 +373,49 @@ JSON 형식:
 {json.dumps(sentences_regex, ensure_ascii=False)}
 """
         try:
-            st2 = call_claude_json(SYS_JSON_KR, prompt_st, max_tokens=2048)
-            # call_claude_json은 dict를 기대할 수 있으므로, 배열 반환도 허용
-            if isinstance(st2, list):
-                data["sentence_translations"] = st2[:sent_count]
-            elif isinstance(st2, dict) and isinstance(st2.get("sentence_translations"), list):
-                data["sentence_translations"] = st2["sentence_translations"][:sent_count]
-            else:
-                raise ValueError("Unexpected sentence_translations format")
-        except Exception as e:
-            _safe_print(f"  ERROR: sentence_translations 재요청 실패 → 최소 보정 fallback 사용: {e}")
-            # 마지막 fallback: 절대 '분리'하지 말고 문장 수만 맞춤(정렬 유지용 더미)
-            st_split = []
+    st2 = call_claude_json(SYS_JSON_KR, prompt_st, max_tokens=2048)
+
+    # call_claude_json은 dict를 기대할 수 있으므로, list 반환도 허용
+    if isinstance(st2, list):
+        # list면 그냥 앞에서부터 sent_count개 사용
+        data["sentence_translations"] = st2[:sent_count]
+
+    elif isinstance(st2, dict):
+        # dict면 sentence_translations 키를 우선 기대
+        val = st2.get("sentence_translations")
+
+        if isinstance(val, list):
+            data["sentence_translations"] = val[:sent_count]
+        elif isinstance(val, str):
+            # 문자열로 왔으면 "문장 단위"로 분리 시도
+            protected_kr = _protect_punct_in_quotes(val or "")
+            st_split = [
+                s.strip().replace("$P$", ".")
+                for s in re.split(r"(?<=[.!?다음음음])\s+", protected_kr)
+                if s.strip()
+            ]
+            # 부족하면 더미로 채움(형식 유지)
             while len(st_split) < sent_count:
                 st_split.append(f"문장 {len(st_split)+1}")
-            data["sentence_translations"] = st_split
-    else:
-        data["sentence_translations"] = st
-    else:
-        data["sentence_translations"] = st
+            data["sentence_translations"] = st_split[:sent_count]
+        else:
+            raise ValueError("Unexpected sentence_translations format (dict)")
 
-    _safe_print(f"  Sentence count: {sent_count}")
-    
-    save_step(passage_dir, "step1_basic", data)
-    return data
+    else:
+        raise ValueError("Unexpected sentence_translations format (root)")
+
+except Exception as e:
+    _safe_print(f"  ERROR: sentence_translations 재요청 실패 → 최소 보정 fallback 사용: {e}")
+    # fallback: 절대 문법 오류 없이 sent_count개 맞춰 저장
+    st_split = []
+    while len(st_split) < sent_count:
+        st_split.append(f"문장 {len(st_split)+1}")
+    data["sentence_translations"] = st_split
+
+_safe_print(f"  Sentence count: {sent_count}")
+
+save_step(passage_dir, "step1_basic", data)
+return data
 
 # ============================================================
 # 순서 선지 코드 생성 유틸리티

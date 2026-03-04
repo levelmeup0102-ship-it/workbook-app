@@ -578,7 +578,7 @@ JSON 형식:
         if data.get("full_order_blocks") and isinstance(data["full_order_blocks"][0], dict):
             data["full_order_blocks"] = [[b["label"], b["text"]] for b in data["full_order_blocks"]]
         # ★ 순서 선지를 코드로 직접 생성 (재시도 후에도 반드시 재생성해야 정답/정답지 불일치가 안 생김)
-        _generate_order_choices(data)
+        _generate_order_choices(data, passage=passage)
         block_count2 = len(data.get("full_order_blocks", []))
         if block_count2 != sentence_count:
             _safe_print(f"  WARNING: still mismatch ({block_count2} vs {sentence_count}), using original")
@@ -1199,11 +1199,7 @@ def step7_writing(sentences: list, translation: str, passage_dir: Path, sentence
 # STEP 8: 정답 생성
 # ============================================================
 def step8_answers(all_data: dict, passage_dir: Path) -> dict:
-    cached = load_step(passage_dir, "step8_answers")
-    if cached:
-        _safe_print("  step8: using cache")
-        return cached
-
+    # 정답은 항상 최신 데이터로 재생성 (다른 step 캐시가 바뀌면 정답도 바뀌어야 함)
     _safe_print("  step8: generating answer page...")
     # 정답 HTML 생성 (레벨별 블록화)
     blocks = []

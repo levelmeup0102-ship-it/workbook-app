@@ -422,41 +422,55 @@ JSON 형식:
 # ============================================================
 _CIRCLE_NUMS = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩"]
 
-def _generate_order_choices(data):
+def _generate_order_choices(data, passage=""):
     """
-    1) order_paragraphs (A)(B)(C) 라벨을 셔플 → 정답이 항상 ABC가 아니게
-    2) order_choices 5지선다를 코드로 생성
-    3) full_order_blocks 순서도 셔플
+    1) order_paragraphs의 각 단락이 원문에서 어떤 순서인지 확인
+    2) 라벨 셔플 → 정답이 항상 ABC가 아니게
+    3) order_choices 5지선다를 코드로 생성
+    4) full_order_blocks 순서도 셔플
     """
     from itertools import permutations
     
-    # === 1. 3단락 라벨 셔플 ===
+    # === 1. 3단락의 원문 순서 파악 ===
     paras = data.get("order_paragraphs", [])
     if len(paras) == 3:
-        # 현재: [[A, text1], [B, text2], [C, text3]] (원문 순서)
-        # 원문 순서 기억 (인덱스 0,1,2 = 정답 순서)
+        # 각 단락 텍스트가 원문에서 어디에 있는지 위치로 정렬
+        def _find_pos(text):
+            # 단락 텍스트의 첫 30자로 원문에서 위치 찾기
+            snippet = re.sub(r'\s+', ' ', text.strip())[:50]
+            pos = passage.find(snippet[:30])
+            if pos == -1:
+                # 첫 단어 몇 개로 재시도
+                words = snippet.split()[:5]
+                search = ' '.join(words)
+                pos = passage.find(search)
+            return pos if pos >= 0 else 999999
+        
+        # 원문 순서대로 정렬 (위치 기반)
+        indexed = [(i, _find_pos(paras[i][1])) for i in range(3)]
+        indexed.sort(key=lambda x: x[1])
+        original_order = [idx for idx, pos in indexed]  # 원문 순서의 인덱스
+        
+        # 라벨 셔플: 정답이 ABC가 되지 않도록
         labels = ["A", "B", "C"]
-
-        # 🔒 규칙: 정답이 ABC가 되지 않도록 라벨 셔플을 보정
-        # (사용자 요구: 가급적 ABC 정답 출제 금지)
         for _ in range(10):
             random.shuffle(labels)
-            if tuple(labels) != ("A", "B", "C"):
+            # 원문 순서대로 라벨을 읽었을 때 ABC가 아니면 OK
+            correct_labels = tuple(labels[original_order.index(i)] for i in range(3))
+            if correct_labels != ("A", "B", "C"):
                 break
-        # 그래도 ABC면 강제 스왑 (최소 변경)
-        if tuple(labels) == ("A", "B", "C"):
-            labels = ["B", "A", "C"]
-
-        # 새 라벨 부여: 첫번째 단락 → labels[0], 두번째 → labels[1], ...
+        
+        # 각 단락에 새 라벨 부여
         new_paras = [[labels[i], paras[i][1]] for i in range(3)]
-        # 정답 = labels를 원래 순서대로 읽은 것 (labels[0] → labels[1] → labels[2])
-        correct = tuple(labels)  # 예: ("C", "A", "B") = 정답
+        
+        # 정답 = 원문 순서대로 라벨 읽기
+        correct = tuple(labels[original_order.index(i)] for i in range(3))
+        _safe_print(f"  순서 정답: {correct} (원문위치: {original_order})")
 
         # 표시할 때는 라벨 알파벳 순으로 정렬
         new_paras.sort(key=lambda x: x[0])
         data["order_paragraphs"] = new_paras
     else:
-        # 3단락이 아니면 기본값
         correct = ("A", "B", "C")
     
     # === 2. 선지 5개 생성 ===
@@ -547,7 +561,7 @@ JSON 형식:
         data["full_order_blocks"] = [[b["label"], b["text"]] for b in data["full_order_blocks"]]
 
     # ★ 순서 선지를 코드로 직접 생성 (AI가 다양하게 안 만드는 문제 해결)
-    _generate_order_choices(data)
+    _generate_order_choices(data, passage=passage)
 
     # 🔒 검증: 전체배열 블록 수 vs 원문 문장 수
     block_count = len(data.get("full_order_blocks", []))
@@ -588,28 +602,67 @@ JSON 형식:
             _orig_sents = split_sentences(passage)
             _ins_sent_text = data.get("insert_sentence", "")
             _ins_norm = re.sub(r'\s+', ' ', (_ins_sent_text or '').strip())
-            _remaining = [s for s in _orig_sents if re.sub(r'\s+', ' ', s.strip()) != _ins_norm]
-            if not _remaining or len(_remaining) == len(_orig_sents):
+            
+            # insert_sentence의 원문 위치 찾기
+            _ins_idx = -1
+            for _si, _s in enumerate(_orig_sents):
+                if re.sub(r'\s+', ' ', _s.strip()) == _ins_norm:
+                    _ins_idx = _si
+                    break
+            
+            if _ins_idx == -1:
                 # insert_sentence가 원문에 없으면 가운데 문장으로 선택
-                pick_idx = max(0, min(len(_orig_sents)-1, len(_orig_sents)//2))
-                data["insert_sentence"] = _orig_sents[pick_idx]
-                _remaining = [s for s in _orig_sents if s != _orig_sents[pick_idx]]
+                _ins_idx = len(_orig_sents) // 2
+                data["insert_sentence"] = _orig_sents[_ins_idx]
+                _ins_norm = re.sub(r'\s+', ' ', _orig_sents[_ins_idx].strip())
+            
+            _remaining = [s for i, s in enumerate(_orig_sents) if i != _ins_idx]
+            
+            # 마커 5개를 균등 배치하되, 정답 위치가 반드시 포함되도록
             _markers = ["( ① )", "( ② )", "( ③ )", "( ④ )", "( ⑤ )"]
+            _n = len(_remaining)
+            
+            # 마커 삽입 위치: 균등 분배 (문장 사이)
+            # 정답 위치: _ins_idx (삽입문장이 원래 있던 위치)
+            # _remaining에서 정답 마커는 _ins_idx 위치 (그 앞 문장 뒤)
+            _correct_pos = min(_ins_idx, _n)  # remaining에서의 위치
+            
+            # 5개 위치를 균등 배치
+            if _n >= 5:
+                _interval = _n / 5
+                _positions = [int(_interval * (i + 0.5)) for i in range(5)]
+            else:
+                _positions = list(range(min(5, _n + 1)))
+            
+            # 정답 위치가 포함되도록 조정
+            if _correct_pos not in _positions and _positions:
+                # 가장 가까운 위치를 정답 위치로 교체
+                _closest = min(range(len(_positions)), key=lambda x: abs(_positions[x] - _correct_pos))
+                _positions[_closest] = _correct_pos
+            
+            # 정답 번호 결정
+            _positions.sort()
+            _answer_idx = _positions.index(_correct_pos) if _correct_pos in _positions else 2
+            data["insert_answer"] = f"{_answer_idx + 1}"
+            
+            # 지문 재구성
             _rebuilt = []
-            # 마커를 균등 배치
-            _step = max(1, len(_remaining) // 5)
-            _marker_idx = 0
-            for _i, _s in enumerate(_remaining):
-                _rebuilt.append(_s)
-                if _marker_idx < 5 and (_i % _step == _step - 1 or _i == len(_remaining) - 1):
-                    _rebuilt.append(_markers[_marker_idx])
-                    _marker_idx += 1
+            _positions_set = set(_positions)
+            _marker_i = 0
+            for _si in range(_n + 1):
+                if _si in _positions_set and _marker_i < 5:
+                    _rebuilt.append(_markers[_marker_i])
+                    _marker_i += 1
+                if _si < _n:
+                    _rebuilt.append(_remaining[_si])
             # 남은 마커 추가
-            while _marker_idx < 5:
-                _rebuilt.append(_markers[_marker_idx])
-                _marker_idx += 1
+            while _marker_i < 5:
+                _rebuilt.append(_markers[_marker_i])
+                _marker_i += 1
+            
             insert_p = " ".join(_rebuilt).strip()
             data["insert_passage"] = insert_p
+            _safe_print(f"  재구성 완료: 정답 {data['insert_answer']}번, 마커 위치 {_positions}")
 
     # ★ 삽입 선지 후처리: ( ④ )와 ( ⑤ )가 연속으로 나오면 ( ⑤ ) 제거
     insert_p = data.get("insert_passage", "")

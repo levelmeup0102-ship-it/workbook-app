@@ -584,85 +584,83 @@ JSON 형식:
             _safe_print(f"  WARNING: still mismatch ({block_count2} vs {sentence_count}), using original")
             data["full_order_blocks"] = [[chr(65+i), s] for i, s in enumerate(sentences)]
 
-    # 🔒 삽입 선지 검증: ①~⑤ 마커가 5개 모두 있는지 + 정답 번호가 포함되어 있는지 확인
-    insert_p = data.get("insert_passage", "")
-    insert_answer = data.get("insert_answer", "")
-    if insert_p:
-        marker_count = sum(1 for m in ["①", "②", "③", "④", "⑤"] if m in insert_p)
-        # 정답 번호가 실제로 마커에 포함되어 있는지 확인
-        answer_marker_map = {"1": "①", "2": "②", "3": "③", "4": "④", "5": "⑤", "①": "①", "②": "②", "③": "③", "④": "④", "⑤": "⑤"}
-        answer_num = re.search(r'[①②③④⑤12345]', str(insert_answer))
-        answer_marker = answer_marker_map.get(answer_num.group(), "") if answer_num else ""
-        answer_in_passage = answer_marker in insert_p if answer_marker else True
+    # 🔒 삽입 지문: API 결과를 신뢰하지 않고 항상 코드로 재구성
+    # (API가 마커를 앞에 몰아넣거나, 정답 위치에 마커를 안 넣는 문제 방지)
+    insert_sent = data.get("insert_sentence", "")
+    if insert_sent:
+        _safe_print("  insert_passage: 코드로 재구성 중...")
+        _orig_sents = split_sentences(passage)
+        _ins_norm = re.sub(r'\s+', ' ', insert_sent.strip())
         
-        if marker_count < 5 or not answer_in_passage:
-            reason = f"마커 {marker_count}/5개" if marker_count < 5 else f"정답 {answer_marker}이 지문에 없음"
-            _safe_print(f"  WARNING: insert_passage {reason} → 강제 재구성")
-            # 원문에서 강제 재구성
-            _orig_sents = split_sentences(passage)
-            _ins_sent_text = data.get("insert_sentence", "")
-            _ins_norm = re.sub(r'\s+', ' ', (_ins_sent_text or '').strip())
-            
-            # insert_sentence의 원문 위치 찾기
-            _ins_idx = -1
+        # insert_sentence의 원문 위치 찾기
+        _ins_idx = -1
+        for _si, _s in enumerate(_orig_sents):
+            if re.sub(r'\s+', ' ', _s.strip()) == _ins_norm:
+                _ins_idx = _si
+                break
+        
+        # 정확히 일치 안 하면 부분 매칭
+        if _ins_idx == -1:
+            _ins_words = _ins_norm.split()[:8]
+            _ins_search = ' '.join(_ins_words)
             for _si, _s in enumerate(_orig_sents):
-                if re.sub(r'\s+', ' ', _s.strip()) == _ins_norm:
+                if _ins_search in re.sub(r'\s+', ' ', _s.strip()):
                     _ins_idx = _si
                     break
-            
-            if _ins_idx == -1:
-                # insert_sentence가 원문에 없으면 가운데 문장으로 선택
-                _ins_idx = len(_orig_sents) // 2
-                data["insert_sentence"] = _orig_sents[_ins_idx]
-                _ins_norm = re.sub(r'\s+', ' ', _orig_sents[_ins_idx].strip())
-            
-            _remaining = [s for i, s in enumerate(_orig_sents) if i != _ins_idx]
-            
-            # 마커 5개를 균등 배치하되, 정답 위치가 반드시 포함되도록
-            _markers = ["( ① )", "( ② )", "( ③ )", "( ④ )", "( ⑤ )"]
-            _n = len(_remaining)
-            
-            # 마커 삽입 위치: 균등 분배 (문장 사이)
-            # 정답 위치: _ins_idx (삽입문장이 원래 있던 위치)
-            # _remaining에서 정답 마커는 _ins_idx 위치 (그 앞 문장 뒤)
-            _correct_pos = min(_ins_idx, _n)  # remaining에서의 위치
-            
-            # 5개 위치를 균등 배치
-            if _n >= 5:
-                _interval = _n / 5
-                _positions = [int(_interval * (i + 0.5)) for i in range(5)]
-            else:
-                _positions = list(range(min(5, _n + 1)))
-            
-            # 정답 위치가 포함되도록 조정
-            if _correct_pos not in _positions and _positions:
-                # 가장 가까운 위치를 정답 위치로 교체
-                _closest = min(range(len(_positions)), key=lambda x: abs(_positions[x] - _correct_pos))
-                _positions[_closest] = _correct_pos
-            
-            # 정답 번호 결정
-            _positions.sort()
-            _answer_idx = _positions.index(_correct_pos) if _correct_pos in _positions else 2
-            data["insert_answer"] = f"{_answer_idx + 1}"
-            
-            # 지문 재구성
-            _rebuilt = []
-            _positions_set = set(_positions)
-            _marker_i = 0
-            for _si in range(_n + 1):
-                if _si in _positions_set and _marker_i < 5:
-                    _rebuilt.append(_markers[_marker_i])
-                    _marker_i += 1
-                if _si < _n:
-                    _rebuilt.append(_remaining[_si])
-            # 남은 마커 추가
-            while _marker_i < 5:
+        
+        if _ins_idx == -1:
+            # 그래도 못 찾으면 가운데 문장
+            _ins_idx = len(_orig_sents) // 2
+            data["insert_sentence"] = _orig_sents[_ins_idx]
+            _safe_print(f"  WARNING: insert_sentence 원문에서 못 찾음 → {_ins_idx}번째 문장 사용")
+        
+        _remaining = [s for i, s in enumerate(_orig_sents) if i != _ins_idx]
+        _n = len(_remaining)
+        _markers = ["( ① )", "( ② )", "( ③ )", "( ④ )", "( ⑤ )"]
+        
+        # 정답 위치: 삽입 문장이 원래 있던 자리
+        _correct_pos = min(_ins_idx, _n)
+        
+        # 5개 위치를 균등 배치
+        if _n >= 5:
+            _interval = _n / 5
+            _positions = [int(_interval * (i + 0.5)) for i in range(5)]
+        else:
+            _positions = list(range(min(5, _n + 1)))
+        
+        # 정답 위치가 포함되도록 조정
+        if _correct_pos not in _positions and _positions:
+            _closest = min(range(len(_positions)), key=lambda x: abs(_positions[x] - _correct_pos))
+            _positions[_closest] = _correct_pos
+        
+        # 중복 제거 및 정렬
+        _positions = sorted(set(_positions))
+        # 5개가 안 되면 빈 자리 채우기
+        _all_possible = [i for i in range(_n + 1) if i not in _positions]
+        while len(_positions) < 5 and _all_possible:
+            _positions.append(_all_possible.pop(0))
+        _positions.sort()
+        
+        # 정답 번호 결정
+        _answer_idx = _positions.index(_correct_pos) if _correct_pos in _positions else 2
+        data["insert_answer"] = f"{_answer_idx + 1}"
+        
+        # 지문 재구성
+        _rebuilt = []
+        _positions_set = set(_positions)
+        _marker_i = 0
+        for _si in range(_n + 1):
+            if _si in _positions_set and _marker_i < 5:
                 _rebuilt.append(_markers[_marker_i])
                 _marker_i += 1
-            
-            insert_p = " ".join(_rebuilt).strip()
-            data["insert_passage"] = insert_p
-            _safe_print(f"  재구성 완료: 정답 {data['insert_answer']}번, 마커 위치 {_positions}")
+            if _si < _n:
+                _rebuilt.append(_remaining[_si])
+        while _marker_i < 5:
+            _rebuilt.append(_markers[_marker_i])
+            _marker_i += 1
+        
+        data["insert_passage"] = " ".join(_rebuilt).strip()
+        _safe_print(f"  재구성 완료: 정답 {data['insert_answer']}번, 마커 위치 {_positions}")
 
     # ★ 삽입 선지 후처리: ( ④ )와 ( ⑤ )가 연속으로 나오면 ( ⑤ ) 제거
     insert_p = data.get("insert_passage", "")

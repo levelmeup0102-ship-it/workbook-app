@@ -570,6 +570,47 @@ JSON 형식:
             _safe_print(f"  WARNING: still mismatch ({block_count2} vs {sentence_count}), using original")
             data["full_order_blocks"] = [[chr(65+i), s] for i, s in enumerate(sentences)]
 
+    # 🔒 삽입 선지 검증: ①~⑤ 마커가 5개 모두 있는지 + 정답 번호가 포함되어 있는지 확인
+    insert_p = data.get("insert_passage", "")
+    insert_answer = data.get("insert_answer", "")
+    if insert_p:
+        marker_count = sum(1 for m in ["①", "②", "③", "④", "⑤"] if m in insert_p)
+        # 정답 번호가 실제로 마커에 포함되어 있는지 확인
+        answer_marker_map = {"1": "①", "2": "②", "3": "③", "4": "④", "5": "⑤", "①": "①", "②": "②", "③": "③", "④": "④", "⑤": "⑤"}
+        answer_num = re.search(r'[①②③④⑤12345]', str(insert_answer))
+        answer_marker = answer_marker_map.get(answer_num.group(), "") if answer_num else ""
+        answer_in_passage = answer_marker in insert_p if answer_marker else True
+        
+        if marker_count < 5 or not answer_in_passage:
+            reason = f"마커 {marker_count}/5개" if marker_count < 5 else f"정답 {answer_marker}이 지문에 없음"
+            _safe_print(f"  WARNING: insert_passage {reason} → 강제 재구성")
+            # 원문에서 강제 재구성
+            _orig_sents = split_sentences(passage)
+            _ins_sent_text = data.get("insert_sentence", "")
+            _ins_norm = re.sub(r'\s+', ' ', (_ins_sent_text or '').strip())
+            _remaining = [s for s in _orig_sents if re.sub(r'\s+', ' ', s.strip()) != _ins_norm]
+            if not _remaining or len(_remaining) == len(_orig_sents):
+                # insert_sentence가 원문에 없으면 가운데 문장으로 선택
+                pick_idx = max(0, min(len(_orig_sents)-1, len(_orig_sents)//2))
+                data["insert_sentence"] = _orig_sents[pick_idx]
+                _remaining = [s for s in _orig_sents if s != _orig_sents[pick_idx]]
+            _markers = ["( ① )", "( ② )", "( ③ )", "( ④ )", "( ⑤ )"]
+            _rebuilt = []
+            # 마커를 균등 배치
+            _step = max(1, len(_remaining) // 5)
+            _marker_idx = 0
+            for _i, _s in enumerate(_remaining):
+                _rebuilt.append(_s)
+                if _marker_idx < 5 and (_i % _step == _step - 1 or _i == len(_remaining) - 1):
+                    _rebuilt.append(_markers[_marker_idx])
+                    _marker_idx += 1
+            # 남은 마커 추가
+            while _marker_idx < 5:
+                _rebuilt.append(_markers[_marker_idx])
+                _marker_idx += 1
+            insert_p = " ".join(_rebuilt).strip()
+            data["insert_passage"] = insert_p
+
     # ★ 삽입 선지 후처리: ( ④ )와 ( ⑤ )가 연속으로 나오면 ( ⑤ ) 제거
     insert_p = data.get("insert_passage", "")
     if insert_p:
@@ -730,7 +771,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     sentences = split_sentences(passage)
     sent_count = len(sentences)
     error_count = max(5, min(8, sent_count))  # 최소 5개, 최대 8개
-    bracket_count = min(20, sent_count * 2)  # 문장당 최대 2개 괄호
+    bracket_count = min(14, sent_count * 2)  # 문장당 최대 2개 괄호, 최대 14개 (A4 페이지 넘침 방지)
     # bracket_count = sent_count * 2  # 문장당 최대 2개 괄호 / 예: 12문장이면 최대 24개 괄호 문제 + 24개 답안 박스가 생성됩니다.
     
     _safe_print("  step5: generating Lv.8 grammar...")
@@ -757,7 +798,8 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 
 [어법 괄호형 Lv.8-1]
 - 원문 {sent_count}개 문장 모두 포함 (출제 안 하는 문장도 원문 그대로)
-- {bracket_count}개 괄호: (N)[정답 / 오답] 형태
+- {bracket_count}개 괄호: (N)[정답 / 오답] 형태 ← 반드시 이 형식! 예: (1)[looked / look]
+- ⚠ 괄호가 없으면 출제 실패입니다! 반드시 (숫자)[A / B] 형태의 괄호를 삽입하세요!
 - 한 문장에 여러 괄호 가능
 - 정답이 왼쪽인 경우 50%, 오른쪽인 경우 50%가 되도록 반드시 균등 배치 (예: 10개면 5개는 정답이 왼쪽, 5개는 오른쪽)
 - 출제: 시제, 대명사, 동명사, to부정사, 형용사/부사, 관계대명사, 분사, 사역동사 등
@@ -804,6 +846,20 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     
     orig_len = len(re.sub(r'\s+', '', passage))
     
+    # 🔒 8-1 괄호 존재 검증: 괄호가 하나도 없으면 재시도
+    bracket_text = data.get("grammar_bracket_passage", "")
+    if bracket_text and not re.search(r'\(\d+\)\[', bracket_text):
+        _safe_print("  WARNING: grammar_bracket_passage에 괄호 없음 → 재시도")
+        cache_path = passage_dir / "step5_grammar.json"
+        if cache_path.exists():
+            cache_path.unlink()
+        data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
+        # 재시도 후에도 없으면 한번 더
+        bracket_text2 = data.get("grammar_bracket_passage", "")
+        if bracket_text2 and not re.search(r'\(\d+\)\[', bracket_text2):
+            _safe_print("  WARNING: 2차 재시도에도 괄호 없음 → 3차 재시도")
+            data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
+
     for key in ["grammar_bracket_passage", "grammar_error_passage"]:
         gen_text = data.get(key, "")
         if not gen_text:

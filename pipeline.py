@@ -931,11 +931,15 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 - start/continue/love/like/hate 뒤: to부정사 = ing (둘 다 허용)
 - 주어 자리: to부정사 = 동명사 (둘 다 허용)
 - help + 목적어 + 목적격보어: to부정사 = 동사원형 (둘 다 허용) → handle / to handle 출제 금지!
+- help + 동사원형/to부정사: help draw = help to draw (둘 다 허용) → draw / to draw 출제 금지!
 - 지각동사(see/watch/hear/feel/notice) + 목적어 + 동사원형/현재분사 (둘 다 허용) → look / looking 출제 금지!
 - 사역동사(make/let/have) + 목적어 + 동사원형 (이것만 정답, 단 have는 p.p.도 가능)
+- and/or 병렬구조에서 to 생략: to A and B = to A and to B (둘 다 허용) → to draw / draw, to label / label 출제 금지!
 - as ~ as 원급: 형용사/부사는 문맥으로 판단 (단순 형태만으로 오류 불가)
 - 목적격 관계대명사: who = whom (둘 다 허용, 단 전치사 바로 뒤는 whom만)
+- 목적격 관계대명사 생략: which/that/who(m) 생략 가능 → which we / we, that we / we 출제 금지!
 - ⚠ 위 유형으로 괄호를 만들면 둘 다 정답이 되어 문제가 성립하지 않습니다!
+- ⚠ 특히 help/지각동사/병렬구조는 가장 흔한 실수입니다. 반드시 피하세요!
 
 [어법 괄호형 Lv.8-1]
 - 원문 {sent_count}개 문장 모두 포함 (출제 안 하는 문장도 원문 그대로)

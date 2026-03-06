@@ -1133,6 +1133,8 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
         fixed_nums = {}  # {num: (new_correct, new_wrong, reason)}
         all_brackets_raw = re.findall(r'\((\d+)\)\[([^\]]+)\]', bracket_passage_val)
         
+        _ing_base_verbs = {'sing','bring','ring','sting','string','cling','fling','swing','wring','spring','king','thing'}
+        
         for num_str, content in all_brackets_raw:
             choices_raw = [c.strip() for c in content.split(' / ')]
             if len(choices_raw) != 2:

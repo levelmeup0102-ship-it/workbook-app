@@ -1162,30 +1162,27 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
                         base = b[3:]
                         fixed_nums[int(num_str)] = (b_raw, _make_ing(base), "병렬to생략 → to부정사/ing")
             
-            # 1.5. start/begin/continue/love/hate/like/prefer 뒤 to/ing → 둘다 정답이므로 다른 포인트로 교체
-            # 이 동사들 뒤에 [to V / V-ing] 또는 [V-ing / to V] 패턴이면 → 시제/수일치로 변환
+            # 1.5. start/begin/continue/love/hate/like/prefer 뒤 to/ing → 둘다 정답이므로 괄호 제거
             dual_ok_verbs = ['start', 'begin', 'continue', 'love', 'hate', 'like', 'prefer',
                              'try', 'remember', 'forget', 'stop', 'regret']
             if any(v + ' ' in context or v + 's ' in context or v + 'ed ' in context for v in dual_ok_verbs):
-                # to V / V-ing 패턴인지 확인
                 is_to_vs_ing = False
                 if a.startswith('to ') and b.endswith('ing') and b.lower() not in _ing_base_verbs:
                     is_to_vs_ing = True
-                    base_v = a[3:]
                 elif b.startswith('to ') and a.endswith('ing') and a.lower() not in _ing_base_verbs:
                     is_to_vs_ing = True
-                    base_v = b[3:]
                 if is_to_vs_ing:
-                    # 둘 다 정답 → 정답을 원문에 있는 형태로, 오답을 과거시제로 변환
-                    # 원문 확인하여 정답 결정
+                    # 둘 다 정답 → 괄호 자체를 제거하고 원문 텍스트로 복원 (REMOVE 마커)
+                    # 원문에서 해당 위치의 단어를 찾아서 복원
+                    _safe_print(f"  🚫 8-1 괄호({num_str}) 제거: [{a_raw} / {b_raw}] (둘다가능동사 뒤 to/ing)")
+                    # REMOVE 마커: 나중에 괄호를 원문 텍스트로 교체
+                    # a_raw 또는 b_raw 중 원문에 있는 형태를 정답으로 남기고 괄호 제거
                     if a_raw.lower() in passage.lower():
-                        fixed_nums[int(num_str)] = (a_raw, a_raw + 'ed' if not a_raw.endswith('e') else a_raw + 'd', f"둘다가능동사 → 원형/과거")
+                        fixed_nums[int(num_str)] = (a_raw, "__REMOVE__", "둘다가능동사 → 괄호제거")
                     elif b_raw.lower() in passage.lower():
-                        fixed_nums[int(num_str)] = (b_raw, b_raw + 'ed' if not b_raw.endswith('e') else b_raw + 'd', f"둘다가능동사 → 원형/과거")
+                        fixed_nums[int(num_str)] = (b_raw, "__REMOVE__", "둘다가능동사 → 괄호제거")
                     else:
-                        # 그냥 ing를 정답으로, was+ing를 오답으로
-                        ing_form2 = a_raw if a.endswith('ing') else b_raw
-                        fixed_nums[int(num_str)] = (ing_form2, 'to have ' + _get_base(ing_form2.lower()), f"둘다가능동사 → ing/to have V")
+                        fixed_nums[int(num_str)] = (a_raw, "__REMOVE__", "둘다가능동사 → 괄호제거")
 
             # 2. 지각동사 뒤 원형/~ing → 정답: ~ing, 오답: to부정사
             elif (a.endswith('ing') or b.endswith('ing')):
@@ -1244,19 +1241,52 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             
             for num, (correct, wrong, reason) in fixed_nums.items():
                 _safe_print(f"  🔧 8-1 괄호({num}) 교체: [{correct} / {wrong}] ({reason})")
-                # 지문에서 괄호 내용 교체
                 pat = re.compile(r'\(' + str(num) + r'\)\[[^\]]+\]')
-                result_passage = pat.sub(f'({num})[{correct} / {wrong}]', result_passage)
-                # answers 업데이트
-                for ans in new_answers:
-                    if ans.get("num") == num:
-                        ans["answer"] = correct
-                        ans["wrong"] = wrong
-                        break
+                if wrong == "__REMOVE__":
+                    # 괄호 자체를 제거하고 원문 텍스트만 남김
+                    result_passage = pat.sub(correct, result_passage)
+                    # answers에서도 제거
+                    new_answers = [a for a in new_answers if a.get("num") != num]
+                else:
+                    # 지문에서 괄호 내용 교체
+                    result_passage = pat.sub(f'({num})[{correct} / {wrong}]', result_passage)
+                    # answers 업데이트
+                    for ans in new_answers:
+                        if ans.get("num") == num:
+                            ans["answer"] = correct
+                            ans["wrong"] = wrong
+                            break
             
             data["grammar_bracket_passage"] = result_passage
             data["grammar_bracket_answers"] = new_answers
-            _safe_print(f"  ✅ 둘 다 정답 괄호 {len(fixed_nums)}개 자동 교체 완료")
+            # 괄호 제거 후 count 재보정
+            actual_after = len(re.findall(r'\(\d+\)\[', result_passage))
+            data["grammar_bracket_count"] = actual_after
+            
+            # 괄호 제거로 번호 빈칸 발생 시 재번호 매기기
+            removed_any = any(w == "__REMOVE__" for _, w, _ in fixed_nums.values())
+            if removed_any and actual_after > 0:
+                # 현재 지문에 남아있는 괄호 번호 추출 (순서대로)
+                remaining_nums = [int(m) for m in re.findall(r'\((\d+)\)\[', result_passage)]
+                if remaining_nums != list(range(1, actual_after + 1)):
+                    # 재번호 매기기
+                    renumber_map = {old: new for new, old in enumerate(remaining_nums, 1)}
+                    for old_num, new_num in renumber_map.items():
+                        if old_num != new_num:
+                            # 임시 마커로 교체 (충돌 방지)
+                            result_passage = result_passage.replace(f'({old_num})[', f'(__TMP{new_num}__)[')
+                    # 임시 마커를 최종 번호로
+                    result_passage = re.sub(r'\(__TMP(\d+)__\)\[', lambda m: f'({m.group(1)})[', result_passage)
+                    # answers도 재번호
+                    for ans in new_answers:
+                        old_n = ans.get("num", 0)
+                        if old_n in renumber_map:
+                            ans["num"] = renumber_map[old_n]
+                    data["grammar_bracket_passage"] = result_passage
+                    data["grammar_bracket_answers"] = new_answers
+                    _safe_print(f"  🔢 괄호 재번호 완료: {list(renumber_map.items())}")
+            
+            _safe_print(f"  ✅ 둘 다 정답 괄호 {len(fixed_nums)}개 처리 완료 (남은 괄호: {actual_after}개)")
     
     # ★ 8-1 정답 좌우 진짜 랜덤 shuffle (각 괄호 개별 50% 확률)
     import re as _re, random as _rand_sh

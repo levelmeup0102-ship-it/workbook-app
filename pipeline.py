@@ -987,19 +987,19 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     
     orig_len = len(re.sub(r'\s+', '', passage))
     
-    # 🔒 8-1 괄호 존재 검증: 괄호가 하나도 없으면 재시도
+    # 🔒 8-1 괄호 존재 검증: 괄호가 하나도 없으면 재시도 (최대 5회)
     bracket_text = data.get("grammar_bracket_passage", "")
-    if bracket_text and not re.search(r'\(\d+\)\[', bracket_text):
-        _safe_print("  WARNING: grammar_bracket_passage에 괄호 없음 → 재시도")
+    for _bracket_retry in range(5):
+        if bracket_text and re.search(r'\(\d+\)\[', bracket_text):
+            break
+        if _bracket_retry == 0 and not bracket_text:
+            break  # 지문 자체가 없으면 스킵
+        _safe_print(f"  WARNING: grammar_bracket_passage에 괄호 없음 → {_bracket_retry+1}차 재시도")
         cache_path = passage_dir / "step5_grammar.json"
         if cache_path.exists():
             cache_path.unlink()
         data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
-        # 재시도 후에도 없으면 한번 더
-        bracket_text2 = data.get("grammar_bracket_passage", "")
-        if bracket_text2 and not re.search(r'\(\d+\)\[', bracket_text2):
-            _safe_print("  WARNING: 2차 재시도에도 괄호 없음 → 3차 재시도")
-            data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
+        bracket_text = data.get("grammar_bracket_passage", "")
 
     for key in ["grammar_bracket_passage", "grammar_error_passage"]:
         gen_text = data.get(key, "")
@@ -1205,7 +1205,7 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
     actual_parta = data.get("vocab_parta_answers", [])
     if len(actual_parta) < 5:
         _safe_print(f"  step6: Part A {len(actual_parta)}개 < 5개 최소 기준, 재시도...")
-        for _retry in range(2):  # 최대 2회 재시도
+        for _retry in range(4):  # 최대 4회 재시도
             data2 = call_claude_json(SYS_JSON_KR, prompt, max_tokens=6000)
             parta2 = data2.get("vocab_parta_answers", [])
             if len(parta2) >= 5:
@@ -1215,6 +1215,8 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
                 _safe_print(f"  step6: Part A 재시도 성공 → {len(parta2)}개")
                 break
             _safe_print(f"  step6: Part A 재시도 {_retry+1} 실패 ({len(parta2)}개)")
+        if len(actual_parta) < 5:
+            _safe_print(f"  ⚠ Part A 최종 {len(actual_parta)}개 - 재시도 모두 실패")
     data["vocab_parta_count"] = len(actual_parta)
 
     # ★ 9-1 Part A 정답 좌우 진짜 랜덤 shuffle (각 괄호 개별 50% 확률)

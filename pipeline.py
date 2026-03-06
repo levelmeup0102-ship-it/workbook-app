@@ -847,8 +847,9 @@ def step3_blank(passage: str, passage_dir: Path) -> dict:
 - 정답: 원문 핵심 표현을 유의어/비유적 표현으로 변형
 - 오답: 지문 내용 왜곡, 반대 의미, 미언급 내용
 - 각 선지는 15단어 이내로 간결하게
-- ★중복 금지★ 선지들 간에 의미가 겹치면 안 됨 (동의어/유사표현으로 같은 뜻의 선지 2개 이상 금지)
-- 정답 선지들도 각각 서로 다른 측면/관점에서 빈칸을 설명해야 함
+- ★표현 중복 금지★ 정답 선지끼리 의미가 비슷한 건 OK, 하지만 거의 같은 문장을 단어만 바꿔 반복하면 안 됨
+- 예시(금지): "all products were designed for usability by everyone" / "all environments combined usability for everyone" → 문장 구조와 핵심어가 너무 유사
+- 정답 선지들은 같은 주제를 서로 다른 각도/표현 방식으로 설명해야 함 (예: 비유적 표현, 추상적 요약, 구체적 서술 등 다양하게)
 
 [JSON 형식]
 {{

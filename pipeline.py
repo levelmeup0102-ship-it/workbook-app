@@ -1106,6 +1106,36 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             data["grammar_bracket_answers"] = actual_brackets
     data["grammar_bracket_count"] = actual_bracket_in_text if actual_bracket_in_text > 0 else len(actual_brackets)
 
+    # ★ 빈 선택지 괄호 제거: (N)[/ text] 또는 (N)[text /] 같은 불량 괄호
+    bp = data.get("grammar_bracket_passage", "")
+    if bp:
+        bad_brackets = re.findall(r'\((\d+)\)\[([^\]]*)\]', bp)
+        removed_bad = []
+        for num_str, content in bad_brackets:
+            parts = [p.strip() for p in content.split('/')]
+            # 2개로 깔끔하게 나눠지지 않는 경우도 처리
+            if len(parts) >= 2:
+                left = parts[0].strip()
+                right = '/'.join(parts[1:]).strip()  # / 가 여러개면 오른쪽 합치기
+                if not left or not right:
+                    good_text = left if left else right
+                    bp = re.sub(r'\(' + num_str + r'\)\[[^\]]+\]', good_text, bp)
+                    removed_bad.append(int(num_str))
+                    _safe_print(f"  🚫 빈 선택지 괄호({num_str}) 제거: [{content}]")
+            elif len(parts) == 1:
+                # / 자체가 없음 → 괄호 제거
+                bp = re.sub(r'\(' + num_str + r'\)\[[^\]]+\]', content, bp)
+                removed_bad.append(int(num_str))
+                _safe_print(f"  🚫 잘못된 괄호({num_str}) 제거: [{content}]")
+        if removed_bad:
+            data["grammar_bracket_passage"] = bp
+            data["grammar_bracket_answers"] = [a for a in data.get("grammar_bracket_answers", []) if a.get("num") not in removed_bad]
+            # 재번호
+            remaining = re.findall(r'\((\d+)\)\[', bp)
+            new_count = len(remaining)
+            data["grammar_bracket_count"] = new_count
+            _safe_print(f"  ✅ 불량 괄호 {len(removed_bad)}개 제거 (남은 괄호: {new_count}개)")
+
     # ★ 8-1 괄호 자동 검증: 둘 다 정답인 괄호를 올바른 출제로 교체
     bracket_passage_val = data.get("grammar_bracket_passage", "")
     bracket_answers_val = data.get("grammar_bracket_answers", [])

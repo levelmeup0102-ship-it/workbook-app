@@ -1061,6 +1061,131 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             data["grammar_bracket_answers"] = actual_brackets
     data["grammar_bracket_count"] = actual_bracket_in_text if actual_bracket_in_text > 0 else len(actual_brackets)
 
+    # ★ 8-1 괄호 자동 검증: 둘 다 정답인 괄호를 올바른 출제로 교체
+    bracket_passage_val = data.get("grammar_bracket_passage", "")
+    bracket_answers_val = data.get("grammar_bracket_answers", [])
+    if bracket_passage_val and bracket_answers_val:
+        
+        def _make_ing(verb):
+            """동사원형 → ~ing 변환"""
+            v = verb.strip()
+            if v.endswith('e') and not v.endswith('ee'):
+                return v[:-1] + 'ing'
+            if len(v) >= 3 and v[-1] in 'bdfgklmnprst' and v[-2] in 'aeiou' and v[-3] not in 'aeiou':
+                return v + v[-1] + 'ing'
+            return v + 'ing'
+        
+        def _get_base(ing_form):
+            """~ing → 동사원형 추출"""
+            w = ing_form.strip()
+            if not w.endswith('ing') or len(w) <= 4:
+                return w[:-3] if w.endswith('ing') else w
+            stem = w[:-3]
+            if len(stem) >= 2 and stem[-1] == stem[-2]:  # running→run
+                return stem[:-1]
+            return stem + 'e' if not stem.endswith('e') else stem  # making→make
+        
+        fixed_nums = {}  # {num: (new_correct, new_wrong, reason)}
+        all_brackets_raw = re.findall(r'\((\d+)\)\[([^\]]+)\]', bracket_passage_val)
+        
+        for num_str, content in all_brackets_raw:
+            choices_raw = [c.strip() for c in content.split(' / ')]
+            if len(choices_raw) != 2:
+                continue
+            a_raw, b_raw = choices_raw
+            a, b = a_raw.lower(), b_raw.lower()
+            
+            bracket_pos = bracket_passage_val.find(f'({num_str})[')
+            context = bracket_passage_val[max(0, bracket_pos-100):bracket_pos].lower() if bracket_pos > 0 else ""
+            
+            # 1. help 뒤 to부정사/동사원형 → 정답: 원형, 오답: ~ing
+            if (a.startswith('to ') and a[3:] == b) or (b.startswith('to ') and b[3:] == a):
+                if 'help' in context:
+                    base = b if a.startswith('to ') else a  # 원형
+                    wrong = _make_ing(base)
+                    # 대소문자 보존
+                    correct_raw = b_raw if a.lower().startswith('to ') else a_raw
+                    fixed_nums[int(num_str)] = (correct_raw, wrong, "help+to/원형 → 원형/ing")
+                elif 'and' in context or 'or' in context:
+                    # 병렬구조 to 생략 → 정답: to부정사, 오답: ~ing
+                    if a.startswith('to '):
+                        base = a[3:]
+                        fixed_nums[int(num_str)] = (a_raw, _make_ing(base), "병렬to생략 → to부정사/ing")
+                    else:
+                        base = b[3:]
+                        fixed_nums[int(num_str)] = (b_raw, _make_ing(base), "병렬to생략 → to부정사/ing")
+            
+            # 2. 지각동사 뒤 원형/~ing → 정답: ~ing, 오답: to부정사
+            elif (a.endswith('ing') or b.endswith('ing')):
+                is_verb_pair = False
+                # ing로 끝나는 동사원형 예외 (sing, bring, ring, sting, string, cling, fling, swing, wring, spring, king)
+                _ing_base_verbs = {'sing','bring','ring','sting','string','cling','fling','swing','wring','spring','king','thing'}
+                # 진짜 ~ing형인지 판별
+                a_is_ing = a.endswith('ing') and a.lower() not in _ing_base_verbs
+                b_is_ing = b.endswith('ing') and b.lower() not in _ing_base_verbs
+                
+                if a_is_ing or b_is_ing:
+                    ing_form = a_raw if a_is_ing else b_raw
+                    base_form = b_raw if a_is_ing else a_raw
+                # 원형과 ing가 쌍인지 확인
+                if _make_ing(base_form.lower()) == ing_form.lower() or \
+                   a.endswith('ing') and (_get_base(a) == b or a[:-3] == b) or \
+                   b.endswith('ing') and (_get_base(b) == a or b[:-3] == a):
+                    is_verb_pair = True
+                
+                if is_verb_pair and any(v in context for v in ['see ', 'watch ', 'hear ', 'feel ', 'notice ', 'observe ']):
+                    # 지각동사: 정답=ing, 오답=to부정사
+                    fixed_nums[int(num_str)] = (ing_form, 'to ' + base_form.lower(), "지각동사 → ing/to부정사")
+                elif is_verb_pair and any(v in context for v in ['help ', 'make ', 'let ', 'have ']):
+                    # help/사역동사: 정답=원형, 오답=ing
+                    fixed_nums[int(num_str)] = (base_form, ing_form, "help/사역 → 원형/ing")
+            
+            # 3. 목적격 관계대명사 생략 → 정답: which/that, 오답: where/what
+            # 단, which/that 둘 다 관계대명사면 건드리지 않음
+            elif (a in ['which', 'that', 'whom', 'who'] or b in ['which', 'that', 'whom', 'who']):
+                rel_words = {'which', 'that', 'whom', 'who'}
+                # 양쪽 다 관계대명사면 건드리지 않음 (which/that 같은 경우)
+                if not (a in rel_words and b in rel_words):
+                    rel = a_raw if a in ['which', 'that', 'whom', 'who'] else b_raw
+                    if rel.lower() in ['which', 'that']:
+                        fixed_nums[int(num_str)] = (rel, 'where', "목적격관계대명사 → which/where")
+                    elif rel.lower() in ['whom', 'who']:
+                        fixed_nums[int(num_str)] = (rel, 'which', "목적격관계대명사 → whom/which")
+            elif any(a.startswith(rp) and a[len(rp):].strip() == b.strip() for rp in ['which ', 'that ', 'whom ']):
+                # "which we" / "we" → "which we" / "where we"
+                for rp in ['which ', 'that ', 'whom ']:
+                    if a.startswith(rp):
+                        rest = a_raw[len(rp):]
+                        fixed_nums[int(num_str)] = (a_raw, 'where ' + rest, "목적격관계대명사 생략 → which/where")
+                        break
+            elif any(b.startswith(rp) and b[len(rp):].strip() == a.strip() for rp in ['which ', 'that ', 'whom ']):
+                for rp in ['which ', 'that ', 'whom ']:
+                    if b.startswith(rp):
+                        rest = b_raw[len(rp):]
+                        fixed_nums[int(num_str)] = (b_raw, 'where ' + rest, "목적격관계대명사 생략 → which/where")
+                        break
+        
+        # 교체 적용
+        if fixed_nums:
+            result_passage = bracket_passage_val
+            new_answers = list(bracket_answers_val)
+            
+            for num, (correct, wrong, reason) in fixed_nums.items():
+                _safe_print(f"  🔧 8-1 괄호({num}) 교체: [{correct} / {wrong}] ({reason})")
+                # 지문에서 괄호 내용 교체
+                pat = re.compile(r'\(' + str(num) + r'\)\[[^\]]+\]')
+                result_passage = pat.sub(f'({num})[{correct} / {wrong}]', result_passage)
+                # answers 업데이트
+                for ans in new_answers:
+                    if ans.get("num") == num:
+                        ans["answer"] = correct
+                        ans["wrong"] = wrong
+                        break
+            
+            data["grammar_bracket_passage"] = result_passage
+            data["grammar_bracket_answers"] = new_answers
+            _safe_print(f"  ✅ 둘 다 정답 괄호 {len(fixed_nums)}개 자동 교체 완료")
+    
     # ★ 8-1 정답 좌우 진짜 랜덤 shuffle (각 괄호 개별 50% 확률)
     import re as _re, random as _rand_sh
     bracket_answers = data.get("grammar_bracket_answers", [])

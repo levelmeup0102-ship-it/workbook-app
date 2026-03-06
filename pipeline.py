@@ -78,6 +78,11 @@ def split_sentences(text: str) -> list:
             replacements[token] = ab
             protected = re.sub(pattern, token, protected)
 
+    # 2.5단계: 1글자 이니셜 마침표 보호 (G. W. Bush, J. K. Rowling 등)
+    def protect_initial(m):
+        return m.group(0).replace('.', '§DOT§')
+    protected = re.sub(r'(?<!\w)([A-Z])\.\s*(?=[A-Z][\.\s]|[A-Z][a-z])', protect_initial, protected)
+
     # 3단계: 문장 분리
     sentences = [s.strip() for s in re.split(
         r'(?<=[.!?])\s+(?=[\u201c\u201d\u0022]?[A-Z])|(?<=[.!?][\u201c\u201d\u0022])\s+(?=[\u201c\u201d\u0022]?[A-Z])',
@@ -89,6 +94,7 @@ def split_sentences(text: str) -> list:
     for s in sentences:
         for token, original in replacements.items():
             s = s.replace(token, original)
+        s = s.replace('§DOT§', '.')
         s = s.replace('§QSEP§', ' ')
         restored.append(s)
 
@@ -395,10 +401,15 @@ def step1_basic_analysis(passage: str, passage_dir: Path) -> dict:
     sent_count = len(sentences_regex)
 
     _safe_print("  step1: basic analysis...")
+    # 대화문 병합된 문장 리스트를 API에 명시적으로 전달
+    numbered_sentences = "\n".join([f"[문장{i+1}] {s}" for i, s in enumerate(sentences_regex)])
     prompt = f"""다음 영어 지문을 분석하여 JSON을 생성하세요.
 
 [지문 - 총 {sent_count}개 문장]
 {passage}
+
+[문장 분리 기준 - 반드시 이 기준을 따르세요!]
+{numbered_sentences}
 
 [생성 항목]
 1. vocab: 핵심 어휘 14개 (각각 word, meaning(한국어), synonyms(영어 유의어 4개 쉼표구분))
@@ -407,10 +418,9 @@ def step1_basic_analysis(passage: str, passage_dir: Path) -> dict:
    - 단, 주어와 핵심 동사는 정확히 반영 (met→만났다, said→말했다 등 동사 혼동 방지)
    - 한국어 화법: 나는 "~~~"라고 말했다 (O) / 나는 말했다, "~~~" (X)
    - 대화체는 자연스러운 존댓말/반말 사용
-3. sentences: 지문의 모든 문장을 개별 배열로 분리 (정확히 {sent_count}개!)
-   - 짧은 문장도 절대 합치지 마세요 (예: "That's not loyalty." 는 독립 문장)
-   - 문장을 절대 분리하지 마세요 (세미콜론 ; 으로 연결된 것은 1문장)
-4. sentence_translations: 각 문장의 한국어 번역 (sentences와 정확히 같은 수, 같은 순서!)
+3. sentences: 위 [문장 분리 기준]과 정확히 동일하게 배열 (정확히 {sent_count}개!)
+   - 위에서 제공한 문장 분리를 그대로 사용하세요
+4. sentence_translations: 위 [문장 분리 기준]의 각 문장에 대한 한국어 번역 (정확히 {sent_count}개, 같은 순서!)
    - 자연스럽고 읽기 좋은 한국어 (의역 OK, 어색한 직역 금지)
    - 단, 주어와 핵심 동사만 정확히 (met→만났다, said→말했다, prepared→준비하다 등)
    - to부정사를 동사처럼 해석하지 말 것 (학생이 영작 시 진짜 동사를 찾을 수 있게)

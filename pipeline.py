@@ -94,6 +94,78 @@ def split_sentences(text: str) -> list:
 
     return restored
 
+
+def _is_dialogue(sentences: list) -> bool:
+    """대화문 지문인지 판별: 문장의 20% 이상이 '이름:' 패턴으로 시작하면 대화문"""
+    if len(sentences) < 3:
+        return False
+    speaker_count = sum(1 for s in sentences if re.match(r'^[A-Z][a-z]+\s*:', s))
+    return speaker_count / len(sentences) >= 0.2
+
+
+def _merge_short_dialogue(sentences: list, min_words: int = 6) -> list:
+    """대화문에서 짧은 문장(6단어 이하) 합치기
+    규칙:
+    - 같은 화자의 다음 문장과 합침
+    - 화자가 바뀌면 합치지 않음
+    - 대화문이 아니면 원본 그대로 반환
+    """
+    if not _is_dialogue(sentences) or len(sentences) < 2:
+        return sentences
+
+    _safe_print(f"  대화문 감지 → 짧은 문장 병합 (≤{min_words}단어)")
+
+    # 각 문장의 화자 추적
+    def _get_speaker(sent):
+        m = re.match(r'^([A-Z][a-z]+)\s*:', sent)
+        return m.group(1) if m else None
+
+    speakers = []
+    current_sp = None
+    for s in sentences:
+        sp = _get_speaker(s)
+        if sp:
+            current_sp = sp
+        speakers.append(current_sp)
+
+    # 1차: 짧은 문장 → 같은 화자의 다음 문장과 합침
+    merged = []
+    merged_sp = []
+    i = 0
+    while i < len(sentences):
+        current = sentences[i]
+        sp = speakers[i]
+        while len(current.split()) <= min_words and i + 1 < len(sentences):
+            if speakers[i + 1] != sp:
+                break
+            i += 1
+            current = current + " " + sentences[i]
+        merged.append(current)
+        merged_sp.append(sp)
+        i += 1
+
+    # 2차: 여전히 짧은 문장 → 같은 화자의 앞 문장과 합침
+    final = [merged[0]]
+    final_sp = [merged_sp[0]]
+    for i in range(1, len(merged)):
+        current = merged[i]
+        if len(current.split()) <= min_words and final_sp[-1] == merged_sp[i]:
+            # 현재 문장이 짧으면 앞 문장에 붙임
+            final[-1] = final[-1] + " " + current
+        else:
+            final.append(current)
+            final_sp.append(merged_sp[i])
+
+    # 마지막이 짧으면 앞과 합침 (같은 화자만)
+    if len(final) >= 2 and len(final[-1].split()) <= min_words:
+        if final_sp[-1] == final_sp[-2]:
+            final[-2] = final[-2] + " " + final[-1]
+            final.pop()
+            final_sp.pop()
+
+    _safe_print(f"  병합 결과: {len(sentences)}문장 → {len(final)}문장 (-{len(sentences)-len(final)})")
+    return final
+
 # ============================================================
 # Claude API call (curl subprocess - ONLY method that bypasses Python latin-1)
 # ============================================================
@@ -319,6 +391,7 @@ def step1_basic_analysis(passage: str, passage_dir: Path) -> dict:
         return cached
 
     sentences_regex = split_sentences(passage)
+    sentences_regex = _merge_short_dialogue(sentences_regex)
     sent_count = len(sentences_regex)
 
     _safe_print("  step1: basic analysis...")
@@ -1156,6 +1229,9 @@ def step7_writing(sentences: list, translation: str, passage_dir: Path, sentence
         return cached
 
     _safe_print("  step7: generating Lv.10 writing...")
+    # 대화문 여부 확인
+    is_dialogue = _is_dialogue(sentences)
+    
     # 한국어 문장: sentence_translations 그대로 사용 (Step1에서 sentences와 개수 맞춰짐)
     # Stage2 해석예습의 번호와 Stage10 영작 번호가 완전히 동일하게
     kr_sentences = (sentence_translations or [])[:len(sentences)]
@@ -1165,24 +1241,80 @@ def step7_writing(sentences: list, translation: str, passage_dir: Path, sentence
     writing_items = []
     for i, eng in enumerate(sentences):
         words = eng.split()
-        # 대문자→소문자 변환 (첫 단어, I/고유명사 제외)
+        kr = kr_sentences[i] if i < len(kr_sentences) else f"문장 {i+1}"
+        
+        # 대화문에서 6단어 이하 문장: scramble 안 하고 원문 그대로
+        if is_dialogue and len(words) <= 6:
+            writing_items.append({
+                "korean": kr,
+                "scrambled": eng,  # 원문 그대로 (배열 불필요)
+                "answer": eng
+            })
+            continue
+        
+        if is_dialogue:
+            # 대화문: 합쳐진 문장을 원래 문장 단위로 분리
+            # "Beth: Hello, everyone. It's truly an honor..." 
+            # → ["Beth: Hello, everyone.", "It's truly an honor..."]
+            # 6단어 이하 부분은 원문 그대로, 나머지만 scramble
+            sub_sents = re.split(r'(?<=[.!?])\s+', eng)
+            scramble_parts = []
+            speaker_prefix = ""
+            speaker_match = re.match(r'^([A-Z][a-z]+\s*:\s*)', eng)
+            if speaker_match:
+                speaker_prefix = speaker_match.group(1)
+            
+            for si, sub in enumerate(sub_sents):
+                sub_words = sub.split()
+                if len(sub_words) <= 6:
+                    # 짧은 부분은 원문 그대로
+                    scramble_parts.append(sub)
+                else:
+                    # 긴 부분만 scramble
+                    # 화자 태그가 이 sub에 있으면 분리
+                    sub_prefix = ""
+                    sub_text = sub
+                    sub_speaker = re.match(r'^([A-Z][a-z]+\s*:\s*)', sub)
+                    if sub_speaker:
+                        sub_prefix = sub_speaker.group(1)
+                        sub_text = sub[len(sub_prefix):]
+                    
+                    proc = sub_text.split()
+                    # 첫 단어 소문자 변환
+                    if proc and proc[0][0].isupper() and proc[0] not in ['I', 'I,']:
+                        if not (len(proc[0]) > 1 and proc[0][1:].islower() and any(c.isupper() for c in proc[0])):
+                            proc[0] = proc[0][0].lower() + proc[0][1:]
+                    # 마지막 구두점 제거
+                    if proc and proc[-1].endswith(('.', '!', '?')):
+                        proc[-1] = proc[-1][:-1]
+                    # 셔플
+                    shuffled = proc.copy()
+                    random.shuffle(shuffled)
+                    scramble_parts.append(sub_prefix + ' / '.join(shuffled))
+            
+            scrambled = ' '.join(scramble_parts)
+            writing_items.append({
+                "korean": kr,
+                "scrambled": scrambled,
+                "answer": eng
+            })
+            continue
+        
+        # 비대화문: 기존 로직 그대로
         processed = []
         for j, w in enumerate(words):
             if j == 0 and w[0].isupper() and w not in ['I', 'I,']:
-                # 고유명사 체크 (간단히: 2글자 이상 대문자 시작)
                 if not (len(w) > 1 and w[1:].islower() and w[0].isupper() and any(c.isupper() for c in w)):
                     w = w[0].lower() + w[1:]
             processed.append(w)
-        # 마침표/느낌표/물음표 제거
-        last = processed[-1]
-        if last.endswith(('.', '!', '?')):
-            processed[-1] = last[:-1]
-        # 셔플
+        if processed:
+            last = processed[-1]
+            if last.endswith(('.', '!', '?')):
+                processed[-1] = last[:-1]
         shuffled = processed.copy()
         random.shuffle(shuffled)
         scrambled = ' / '.join(shuffled)
 
-        kr = kr_sentences[i] if i < len(kr_sentences) else f"문장 {i+1}"
         writing_items.append({
             "korean": kr,
             "scrambled": scrambled,
@@ -1414,6 +1546,8 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
     _safe_print(f"{'='*50}")
 
     sentences = split_sentences(passage)
+    # 대화문이면 짧은 문장 병합 (6단어 이하, 같은 화자만)
+    sentences = _merge_short_dialogue(sentences)
     all_steps = {}
 
     # Step 1: 기본 분석

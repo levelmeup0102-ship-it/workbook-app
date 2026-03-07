@@ -983,6 +983,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 - as ~ as 원급: 형용사/부사는 문맥으로 판단 (단순 형태만으로 오류 불가)
 - 목적격 관계대명사: who = whom (둘 다 허용, 단 전치사 바로 뒤는 whom만)
 - 목적격 관계대명사 생략: which/that/who(m) 생략 가능 → which we / we, that we / we 출제 금지!
+- 지시대명사 those/these: "those that ~", "those who ~"에서 those는 대명사(=the ones)이므로 that/where 등으로 바꿔 출제하면 안 됨! 원문에 those가 있으면 those 그대로 유지!
 - ⚠ 위 유형으로 괄호를 만들면 둘 다 정답이 되어 문제가 성립하지 않습니다!
 - ⚠ 특히 help/지각동사/병렬구조는 가장 흔한 실수입니다. 반드시 피하세요!
 
@@ -1135,6 +1136,35 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             new_count = len(remaining)
             data["grammar_bracket_count"] = new_count
             _safe_print(f"  ✅ 불량 괄호 {len(removed_bad)}개 제거 (남은 괄호: {new_count}개)")
+
+    # ★ 지시대명사 복원: 원문에 those/these가 있는데 괄호로 that/where 등으로 바뀐 경우
+    bp2 = data.get("grammar_bracket_passage", "")
+    if bp2:
+        all_br = re.findall(r'\((\d+)\)\[([^\]]+)\]', bp2)
+        removed_demo = []
+        for num_str, content in all_br:
+            parts = [p.strip().lower() for p in content.split('/')]
+            if len(parts) == 2:
+                bracket_pos = bp2.find(f'({num_str})[')
+                if bracket_pos > 0:
+                    # 원문에서 해당 위치에 those/these가 있는지
+                    if ('those' in passage.lower() and
+                        ('that' in parts[0] or 'that' in parts[1]) and
+                        ('where' in parts[0] or 'where' in parts[1] or 'which' in parts[0] or 'which' in parts[1])):
+                        # 괄호 바로 뒤에 that/who가 오는지 확인 (those that ~, those who ~ 패턴)
+                        close_bracket = bp2.find(']', bracket_pos)
+                        if close_bracket > 0:
+                            after_bracket = bp2[close_bracket+1:close_bracket+20].strip().lower()
+                            if after_bracket.startswith('that') or after_bracket.startswith('who'):
+                                bp2 = re.sub(r'\(' + num_str + r'\)\[[^\]]+\]', 'those', bp2)
+                                removed_demo.append(int(num_str))
+                                _safe_print(f"  🚫 지시대명사 복원({num_str}): [{content}] → those")
+        if removed_demo:
+            data["grammar_bracket_passage"] = bp2
+            data["grammar_bracket_answers"] = [a for a in data.get("grammar_bracket_answers", []) if a.get("num") not in removed_demo]
+            new_count2 = len(re.findall(r'\(\d+\)\[', bp2))
+            data["grammar_bracket_count"] = new_count2
+            _safe_print(f"  ✅ 지시대명사 {len(removed_demo)}개 복원 (남은 괄호: {new_count2}개)")
 
     # ★ 8-1 괄호 자동 검증: 둘 다 정답인 괄호를 올바른 출제로 교체
     bracket_passage_val = data.get("grammar_bracket_passage", "")

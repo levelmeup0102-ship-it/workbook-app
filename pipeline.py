@@ -511,49 +511,30 @@ _CIRCLE_NUMS = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩"]
 
 def _generate_order_choices(data, passage=""):
     """
-    1) order_paragraphs의 각 단락이 원문에서 어떤 순서인지 확인
+    1) AI가 보낸 order_paragraphs는 원문 순서대로라고 가정
     2) 라벨 셔플 → 정답이 항상 ABC가 아니게
     3) order_choices 5지선다를 코드로 생성
     4) full_order_blocks 순서도 셔플
     """
     from itertools import permutations
     
-    # === 1. 3단락의 원문 순서 파악 ===
+    # === 1. 3단락 라벨 셔플 ===
     paras = data.get("order_paragraphs", [])
     if len(paras) == 3:
-        # 각 단락 텍스트가 원문에서 어디에 있는지 위치로 정렬
-        def _find_pos(text):
-            # 단락 텍스트의 첫 30자로 원문에서 위치 찾기
-            snippet = re.sub(r'\s+', ' ', text.strip())[:50]
-            pos = passage.find(snippet[:30])
-            if pos == -1:
-                # 첫 단어 몇 개로 재시도
-                words = snippet.split()[:5]
-                search = ' '.join(words)
-                pos = passage.find(search)
-            return pos if pos >= 0 else 999999
-        
-        # 원문 순서대로 정렬 (위치 기반)
-        indexed = [(i, _find_pos(paras[i][1])) for i in range(3)]
-        indexed.sort(key=lambda x: x[1])
-        original_order = [idx for idx, pos in indexed]  # 원문 순서의 인덱스
-        
-        # 라벨 셔플: 정답이 ABC가 되지 않도록
+        # AI가 보낸 순서 = 원문 순서 (0, 1, 2)
+        # 새 라벨을 부여하되, 정답이 ABC가 되지 않도록
         labels = ["A", "B", "C"]
-        for _ in range(10):
+        for _ in range(20):
             random.shuffle(labels)
-            # 원문 순서대로 라벨을 읽었을 때 ABC가 아니면 OK
-            correct_labels = tuple(labels[original_order.index(i)] for i in range(3))
-            if correct_labels != ("A", "B", "C"):
+            if tuple(labels) != ("A", "B", "C"):
                 break
         
-        # 각 단락에 새 라벨 부여
-        new_paras = [[labels[i], paras[i][1]] for i in range(3)]
-        
-        # 정답 = 원문 순서대로 라벨 읽기
-        correct = tuple(labels[original_order.index(i)] for i in range(3))
-        _safe_print(f"  순서 정답: {correct} (원문위치: {original_order})")
+        # 정답 = 원문 순서대로 라벨 읽기 = labels 자체
+        correct = tuple(labels)
+        _safe_print(f"  순서 정답: {correct}")
 
+        # 각 단락에 새 라벨 부여 (원문 i번째 단락 → labels[i])
+        new_paras = [[labels[i], paras[i][1]] for i in range(3)]
         # 표시할 때는 라벨 알파벳 순으로 정렬
         new_paras.sort(key=lambda x: x[0])
         data["order_paragraphs"] = new_paras
@@ -580,18 +561,12 @@ def _generate_order_choices(data, passage=""):
     # === 3. 전체 문장 배열 (심화) 셔플 ===
     blocks = data.get("full_order_blocks", [])
     if len(blocks) >= 2:
-        # 원문 순서 기억 (정답)
-        original_labels = [b[0] for b in blocks]
-        # 새 라벨 부여 + 셔플
         n = len(blocks)
-        alpha = [chr(65+i) for i in range(n)]  # A, B, C, D, E, ...
+        alpha = [chr(65+i) for i in range(n)]
         random.shuffle(alpha)
-        # 각 원문 문장에 새 라벨
         new_blocks = [[alpha[i], blocks[i][1]] for i in range(n)]
-        # 정답 순서 = alpha[0] → alpha[1] → ... (원문 순서대로 라벨 읽기)
         correct_order = "→".join([f"({alpha[i]})" for i in range(n)])
         data["full_order_answer"] = correct_order
-        # 표시는 라벨 알파벳 순으로 정렬 (셔플 효과!)
         new_blocks.sort(key=lambda x: x[0])
         data["full_order_blocks"] = new_blocks
 

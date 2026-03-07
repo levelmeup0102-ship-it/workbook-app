@@ -1137,34 +1137,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             data["grammar_bracket_count"] = new_count
             _safe_print(f"  ✅ 불량 괄호 {len(removed_bad)}개 제거 (남은 괄호: {new_count}개)")
 
-    # ★ 지시대명사 복원: 원문에 those/these가 있는데 괄호로 that/where 등으로 바뀐 경우
-    bp2 = data.get("grammar_bracket_passage", "")
-    if bp2:
-        all_br = re.findall(r'\((\d+)\)\[([^\]]+)\]', bp2)
-        removed_demo = []
-        for num_str, content in all_br:
-            parts = [p.strip().lower() for p in content.split('/')]
-            if len(parts) == 2:
-                bracket_pos = bp2.find(f'({num_str})[')
-                if bracket_pos > 0:
-                    # 원문에서 해당 위치에 those/these가 있는지
-                    if ('those' in passage.lower() and
-                        ('that' in parts[0] or 'that' in parts[1]) and
-                        ('where' in parts[0] or 'where' in parts[1] or 'which' in parts[0] or 'which' in parts[1])):
-                        # 괄호 바로 뒤에 that/who가 오는지 확인 (those that ~, those who ~ 패턴)
-                        close_bracket = bp2.find(']', bracket_pos)
-                        if close_bracket > 0:
-                            after_bracket = bp2[close_bracket+1:close_bracket+20].strip().lower()
-                            if after_bracket.startswith('that') or after_bracket.startswith('who'):
-                                bp2 = re.sub(r'\(' + num_str + r'\)\[[^\]]+\]', 'those', bp2)
-                                removed_demo.append(int(num_str))
-                                _safe_print(f"  🚫 지시대명사 복원({num_str}): [{content}] → those")
-        if removed_demo:
-            data["grammar_bracket_passage"] = bp2
-            data["grammar_bracket_answers"] = [a for a in data.get("grammar_bracket_answers", []) if a.get("num") not in removed_demo]
-            new_count2 = len(re.findall(r'\(\d+\)\[', bp2))
-            data["grammar_bracket_count"] = new_count2
-            _safe_print(f"  ✅ 지시대명사 {len(removed_demo)}개 복원 (남은 괄호: {new_count2}개)")
+
 
     # ★ 8-1 괄호 자동 검증: 둘 다 정답인 괄호를 올바른 출제로 교체
     bracket_passage_val = data.get("grammar_bracket_passage", "")
@@ -1379,6 +1352,36 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
                 if similarity > 0.7:
                     _safe_print(f"  WARNING: {key} appears duplicated, trimming...")
                     data[key] = first_half
+
+    # ★ 최종 지시대명사(those/these) 복원 — 모든 괄호 처리 후 마지막에 실행
+    # AI가 those를 [that/where], [where/that], [those/that] 등으로 만든 뒤
+    # do_swap_81이 추가 변환해도 여기서 최종 잡음
+    final_bp = data.get("grammar_bracket_passage", "")
+    if final_bp and ('those' in passage.lower() or 'these' in passage.lower()):
+        all_final_br = re.findall(r'\((\d+)\)\[([^\]]+)\]', final_bp)
+        removed_demo = []
+        for num_str, bracket_content in all_final_br:
+            bracket_pos = final_bp.find(f'({num_str})[')
+            close_pos = final_bp.find(']', bracket_pos)
+            if bracket_pos < 0 or close_pos < 0:
+                continue
+            after_text = final_bp[close_pos+1:close_pos+25].strip().lower()
+            # 괄호 바로 뒤에 "that " 또는 "who "가 오면 → those/these 자리일 가능성
+            if after_text.startswith('that ') or after_text.startswith('who '):
+                # 원문에 "those that" 또는 "those who" 패턴이 있는지 확인
+                if 'those that' in passage.lower() or 'those who' in passage.lower():
+                    final_bp = re.sub(r'\(' + num_str + r'\)\[[^\]]+\]', 'those', final_bp)
+                    removed_demo.append(int(num_str))
+                    _safe_print(f"  🚫 지시대명사 복원({num_str}): [{bracket_content}] → those")
+                elif 'these that' in passage.lower() or 'these who' in passage.lower():
+                    final_bp = re.sub(r'\(' + num_str + r'\)\[[^\]]+\]', 'these', final_bp)
+                    removed_demo.append(int(num_str))
+                    _safe_print(f"  🚫 지시대명사 복원({num_str}): [{bracket_content}] → these")
+        if removed_demo:
+            data["grammar_bracket_passage"] = final_bp
+            data["grammar_bracket_answers"] = [a for a in data.get("grammar_bracket_answers", []) if a.get("num") not in removed_demo]
+            data["grammar_bracket_count"] = len(re.findall(r'\(\d+\)\[', final_bp))
+            _safe_print(f"  ✅ 지시대명사 {len(removed_demo)}개 복원 완료")
 
     save_step(passage_dir, "step5_grammar", data)
     return data

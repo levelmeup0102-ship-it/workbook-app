@@ -98,17 +98,44 @@ def _fix_typo_스스로(html: str) -> str:
     return html
 
 
-def fix_single_html(html: str) -> str:
-    """단건 HTML 전체 검증 + 수정 (파이프라인 render_pdf에서 호출)"""
+def _check_bracket_passage(html: str) -> list:
+    """8-1 괄호형 지문에 실제 괄호가 있는지 감지
+    
+    문제: 파이프라인에서 Claude가 괄호 없는 원문을 그대로 출력
+    반환: 재생성 필요한 이슈 목록
+    """
+    issues = []
+    sections_8_1 = list(re.finditer(r'Stage 8-1', html))
+    for i, m in enumerate(sections_8_1):
+        psg_match = re.search(r'<div class="psg[^"]*"[^>]*>(.*?)</div>', html[m.start():m.start()+5000], re.DOTALL)
+        if psg_match:
+            psg_text = psg_match.group(1)
+            bracket_count = len(re.findall(r'\(\d+\)\[', psg_text))
+            if bracket_count == 0:
+                _log(f"[내용오류-심각] 섹션 {i+1} Stage 8-1: 괄호(N)[A/B] 없음! 재생성 필요")
+                issues.append("bracket_missing")
+    return issues
+
+
+def fix_single_html(html: str) -> tuple:
+    """단건 HTML 전체 검증 + 수정 (파이프라인 render_pdf에서 호출)
+    
+    반환: (수정된 html, 재생성필요 이슈 목록)
+      이슈 목록이 비어있으면 → 정상
+      "bracket_missing" 포함 → step5 재생성 필요
+    """
     _log(f"단건 검증 시작 (QA {QA_VERSION})")
+    
+    issues = []
     
     html = _fix_error_count_mismatch(html)
     html = _fix_bracket_count_mismatch(html)
     html = _fix_answer_bogus_entries(html)
     html = _fix_answer_format(html)
+    issues.extend(_check_bracket_passage(html))
     
-    _log("단건 검증 완료")
-    return html
+    _log(f"단건 검증 완료 (이슈 {len(issues)}건)")
+    return html, issues
 
 
 # ============================================================
@@ -203,7 +230,7 @@ def _fix_naming_consistency(html: str) -> str:
     
     문제1: 01과는 "01과 01", 02과는 "02과 01번" (번 접미사 불일치)
     문제2: "1과" vs "02과" (0-패딩 불일치)
-    수정: "번" 접미사 통일 제거 + 0-패딩 통일
+    수정: 불일치 시에만 "번" 접미사 제거 + 0-패딩 통일
     """
     # 0-패딩 불일치: "1과" → "01과" (앞에 다른 숫자가 없는 경우만)
     pad_count = [0]
@@ -216,14 +243,22 @@ def _fix_naming_consistency(html: str) -> str:
     if pad_count[0] > 0:
         _log(f"[내용오류] 과번호 0-패딩 불일치: {pad_count[0]}건 수정")
     
-    # "NN과 NN번" → "NN과 NN" (번 접미사 제거)
-    pattern = r'(\d{2}과\s*\d{2})번'
-    matches = re.findall(pattern, html)
-    if matches:
-        unique = set(matches)
-        _log(f"[내용오류] 네이밍 불일치: '번' 접미사 {len(unique)}종 제거")
-        for m in unique:
-            html = html.replace(f'{m}번', m)
+    # "번" 접미사: 섞여 있을 때만 제거 (전부 "번"이면 건드리지 않음)
+    covers = re.findall(r'font-size:18pt;font-weight:bold;color:var\(--green\).*?>(.*?)</div>', html)
+    # 숫자로 끝나는 커버 중 "번" 유무 확인
+    numeric_covers = [c for c in covers if re.search(r'\d+번?\s*$', c)]
+    if numeric_covers:
+        with_번 = sum(1 for c in numeric_covers if c.rstrip().endswith('번'))
+        without_번 = len(numeric_covers) - with_번
+        
+        if with_번 > 0 and without_번 > 0:
+            # 섞여 있을 때만 "번" 제거
+            _log(f"[내용오류] 네이밍 불일치: '번' 있음 {with_번}개 / 없음 {without_번}개 → '번' 제거")
+            pattern = r'(\d{2}과\s*\d{2})번'
+            for m in set(re.findall(pattern, html)):
+                html = html.replace(f'{m}번', m)
+        elif with_번 > 0 and without_번 == 0:
+            _log(f"[검증] 네이밍: 전부 '번' 포함 ({with_번}개) → 유지")
     
     return html
 
@@ -275,6 +310,9 @@ def fix_merged_html(html: str) -> str:
     html = _fix_error_count_mismatch(html)
     html = _fix_answer_bogus_entries(html)
     html = _fix_answer_format(html)
+    bracket_issues = _check_bracket_passage(html)
+    if bracket_issues:
+        _log(f"  ⚠️ 합본에서 괄호 누락 감지 — 해당 섹션 데이터 재생성 필요")
     
     _log("합본 검증 완료")
     return html
@@ -291,7 +329,7 @@ def check_file(filepath: str):
         return
     
     html = p.read_text(encoding='utf-8')
-    original_len = len(html)
+    original = html
     
     # 합본인지 단건인지 판단
     page_count = html.count('class="page"')
@@ -303,18 +341,29 @@ def check_file(filepath: str):
     if section_count > 1:
         html = fix_merged_html(html)
     else:
-        html = fix_single_html(html)
+        html, issues = fix_single_html(html)
+        if issues:
+            print(f"  ⚠️ 재생성 필요 이슈: {issues}")
     
     # 변경사항 있으면 저장
-    if len(html) != original_len or html != p.read_text(encoding='utf-8'):
+    if html != original:
         # 원본 백업
         backup = p.with_suffix('.bak.html')
         if not backup.exists():
-            p.rename(backup)
-            _log(f"원본 백업: {backup.name}")
+            try:
+                p.rename(backup)
+                _log(f"원본 백업: {backup.name}")
+            except OSError:
+                pass  # read-only filesystem 등
         
-        p.write_text(html, encoding='utf-8')
-        _log(f"수정 완료: {p.name}")
+        try:
+            p.write_text(html, encoding='utf-8')
+            _log(f"수정 완료: {p.name}")
+        except OSError:
+            # read-only면 같은 폴더에 _fixed 파일 생성
+            fixed_path = p.with_stem(p.stem + '_fixed')
+            fixed_path.write_text(html, encoding='utf-8')
+            _log(f"수정 완료: {fixed_path.name}")
     else:
         _log("수정사항 없음")
 

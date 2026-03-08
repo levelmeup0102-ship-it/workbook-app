@@ -227,7 +227,7 @@ async def list_passages(request: Request):
     # unit(숫자 기준), pid(숫자 기준) 정렬
     def _sort_key(p):
         unit_num = int(re.search(r'\d+', p["unit"]).group()) if re.search(r'\d+', p["unit"]) else 0
-        pid_num = int(re.search(r'\d+', p["id"]).group()) if re.search(r'\d+', p["id"]) else 0
+        pid_num = int(re.search(r'\d+', p["id"]).group()) if re.search(r'\d+', p["id"]) else 999
         return (unit_num, pid_num)
     result.sort(key=_sort_key)
     return result

@@ -105,6 +105,7 @@ def fix_single_html(html: str) -> str:
     html = _fix_error_count_mismatch(html)
     html = _fix_bracket_count_mismatch(html)
     html = _fix_answer_bogus_entries(html)
+    html = _fix_answer_format(html)
     
     _log("단건 검증 완료")
     return html
@@ -200,10 +201,22 @@ def _fix_duplicate_scripts(html: str) -> str:
 def _fix_naming_consistency(html: str) -> str:
     """네이밍 불일치 정규화
     
-    문제: 01과는 "01과 01", 02과는 "02과 01번" (번 접미사 불일치)
-    수정: "번" 접미사 통일 제거 (과 + 숫자만)
+    문제1: 01과는 "01과 01", 02과는 "02과 01번" (번 접미사 불일치)
+    문제2: "1과" vs "02과" (0-패딩 불일치)
+    수정: "번" 접미사 통일 제거 + 0-패딩 통일
     """
-    # 커버 + 헤더에서 "NN과 NN번" → "NN과 NN"
+    # 0-패딩 불일치: "1과" → "01과" (앞에 다른 숫자가 없는 경우만)
+    pad_count = [0]
+    def _pad_lesson(m):
+        pad_count[0] += 1
+        num = m.group(2)
+        return f'{m.group(1)}{num.zfill(2)}과{m.group(3)}'
+    
+    html = re.sub(r'([>\s-])(\d)과(\s)', _pad_lesson, html)
+    if pad_count[0] > 0:
+        _log(f"[내용오류] 과번호 0-패딩 불일치: {pad_count[0]}건 수정")
+    
+    # "NN과 NN번" → "NN과 NN" (번 접미사 제거)
     pattern = r'(\d{2}과\s*\d{2})번'
     matches = re.findall(pattern, html)
     if matches:
@@ -211,6 +224,41 @@ def _fix_naming_consistency(html: str) -> str:
         _log(f"[내용오류] 네이밍 불일치: '번' 접미사 {len(unique)}종 제거")
         for m in unique:
             html = html.replace(f'{m}번', m)
+    
+    return html
+
+
+def _fix_answer_format(html: str) -> str:
+    """서술형 정답 포맷 수정: 'error->original' → '(N) original'
+    
+    문제: 정답에 오류 표현이 같이 나옴 (sweated->sweat)
+    수정: 번호 + 정답만 (1) sweat
+    """
+    def _fix_block(match):
+        block = match.group(0)
+        counter = [0]
+        def _replace_answer(m):
+            parts = m.group(1).split('->')
+            if len(parts) == 2:
+                counter[0] += 1
+                return f'<p>({counter[0]}) {parts[1].strip()}</p>'
+            return m.group(0)
+        
+        new_block = re.sub(r'<p>([^<]+?->(?!<)[^<]+?)</p>', _replace_answer, block)
+        if counter[0] > 0:
+            return new_block
+        return block
+    
+    original = html
+    html = re.sub(
+        r'<div class="ablock"><p class="ast">Stage 8 서술형</p>.*?</div>',
+        _fix_block,
+        html,
+        flags=re.DOTALL
+    )
+    
+    if html != original:
+        _log("[내용오류] 서술형 정답 포맷: error->original → (N) original")
     
     return html
 
@@ -226,6 +274,7 @@ def fix_merged_html(html: str) -> str:
     # 합본에도 단건 검증 적용
     html = _fix_error_count_mismatch(html)
     html = _fix_answer_bogus_entries(html)
+    html = _fix_answer_format(html)
     
     _log("합본 검증 완료")
     return html

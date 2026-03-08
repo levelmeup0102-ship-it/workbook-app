@@ -511,30 +511,49 @@ _CIRCLE_NUMS = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩"]
 
 def _generate_order_choices(data, passage=""):
     """
-    1) AI가 보낸 order_paragraphs는 원문 순서대로라고 가정
+    1) order_paragraphs의 각 단락이 원문에서 어떤 순서인지 확인
     2) 라벨 셔플 → 정답이 항상 ABC가 아니게
     3) order_choices 5지선다를 코드로 생성
     4) full_order_blocks 순서도 셔플
     """
     from itertools import permutations
     
-    # === 1. 3단락 라벨 셔플 ===
+    # === 1. 3단락의 원문 순서 파악 ===
     paras = data.get("order_paragraphs", [])
     if len(paras) == 3:
-        # AI가 보낸 순서 = 원문 순서 (0, 1, 2)
-        # 새 라벨을 부여하되, 정답이 ABC가 되지 않도록
+        # 각 단락 텍스트가 원문에서 어디에 있는지 위치로 정렬
+        def _find_pos(text):
+            # 단락 텍스트의 첫 30자로 원문에서 위치 찾기
+            snippet = re.sub(r'\s+', ' ', text.strip())[:50]
+            pos = passage.find(snippet[:30])
+            if pos == -1:
+                # 첫 단어 몇 개로 재시도
+                words = snippet.split()[:5]
+                search = ' '.join(words)
+                pos = passage.find(search)
+            return pos if pos >= 0 else 999999
+        
+        # 원문 순서대로 정렬 (위치 기반)
+        indexed = [(i, _find_pos(paras[i][1])) for i in range(3)]
+        indexed.sort(key=lambda x: x[1])
+        original_order = [idx for idx, pos in indexed]  # 원문 순서의 인덱스
+        
+        # 라벨 셔플: 정답이 ABC가 되지 않도록
         labels = ["A", "B", "C"]
-        for _ in range(20):
+        for _ in range(10):
             random.shuffle(labels)
-            if tuple(labels) != ("A", "B", "C"):
+            # 원문 순서대로 라벨을 읽었을 때 ABC가 아니면 OK
+            correct_labels = tuple(labels[original_order.index(i)] for i in range(3))
+            if correct_labels != ("A", "B", "C"):
                 break
         
-        # 정답 = 원문 순서대로 라벨 읽기 = labels 자체
-        correct = tuple(labels)
-        _safe_print(f"  순서 정답: {correct}")
-
-        # 각 단락에 새 라벨 부여 (원문 i번째 단락 → labels[i])
+        # 각 단락에 새 라벨 부여
         new_paras = [[labels[i], paras[i][1]] for i in range(3)]
+        
+        # 정답 = 원문 순서대로 라벨 읽기
+        correct = tuple(labels[original_order.index(i)] for i in range(3))
+        _safe_print(f"  순서 정답: {correct} (원문위치: {original_order})")
+
         # 표시할 때는 라벨 알파벳 순으로 정렬
         new_paras.sort(key=lambda x: x[0])
         data["order_paragraphs"] = new_paras
@@ -561,12 +580,18 @@ def _generate_order_choices(data, passage=""):
     # === 3. 전체 문장 배열 (심화) 셔플 ===
     blocks = data.get("full_order_blocks", [])
     if len(blocks) >= 2:
+        # 원문 순서 기억 (정답)
+        original_labels = [b[0] for b in blocks]
+        # 새 라벨 부여 + 셔플
         n = len(blocks)
-        alpha = [chr(65+i) for i in range(n)]
+        alpha = [chr(65+i) for i in range(n)]  # A, B, C, D, E, ...
         random.shuffle(alpha)
+        # 각 원문 문장에 새 라벨
         new_blocks = [[alpha[i], blocks[i][1]] for i in range(n)]
+        # 정답 순서 = alpha[0] → alpha[1] → ... (원문 순서대로 라벨 읽기)
         correct_order = "→".join([f"({alpha[i]})" for i in range(n)])
         data["full_order_answer"] = correct_order
+        # 표시는 라벨 알파벳 순으로 정렬 (셔플 효과!)
         new_blocks.sort(key=lambda x: x[0])
         data["full_order_blocks"] = new_blocks
 
@@ -959,6 +984,8 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 - 목적격 관계대명사: who = whom (둘 다 허용, 단 전치사 바로 뒤는 whom만)
 - 목적격 관계대명사 생략: which/that/who(m) 생략 가능 → which we / we, that we / we 출제 금지!
 - 지시대명사 those/these: "those that ~", "those who ~"에서 those는 대명사(=the ones)이므로 that/where 등으로 바꿔 출제하면 안 됨! 원문에 those가 있으면 those 그대로 유지!
+- 관계부사 자리: "the reason(s) why/that", "the place where", "the time when"에서 why/that/where/when을 서로 바꿔 출제 금지! 원문 그대로 유지!
+- whom / who 선택 문제: [whom / who], [who / whom] 출제 절대 금지! (둘 다 허용되므로)
 - ⚠ 위 유형으로 괄호를 만들면 둘 다 정답이 되어 문제가 성립하지 않습니다!
 - ⚠ 특히 help/지각동사/병렬구조는 가장 흔한 실수입니다. 반드시 피하세요!
 
@@ -1066,6 +1093,20 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     actual_errors = data.get("grammar_error_answers", [])
     actual_error_count = len(actual_errors)
     data["grammar_error_count"] = actual_error_count
+
+    # ★ 8-2 오류 0개면 재시도 (원문 그대로 나온 경우)
+    if actual_error_count == 0:
+        _safe_print("  ⚠️ 8-2 오류 0개! 원문 그대로 출력됨 → 재시도...")
+        for _err_retry in range(3):
+            data3 = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
+            errs3 = data3.get("grammar_error_answers", [])
+            if len(errs3) >= 3:
+                data["grammar_error_passage"] = data3.get("grammar_error_passage", data.get("grammar_error_passage", ""))
+                data["grammar_error_answers"] = errs3
+                data["grammar_error_count"] = len(errs3)
+                _safe_print(f"  ✅ 8-2 재시도 성공: {len(errs3)}개 오류")
+                break
+            _safe_print(f"  ⚠ 8-2 재시도 {_err_retry+1} 실패 ({len(errs3)}개)")
 
     # ★ bracket_count를 지문 내 실제 괄호 수로 보정 (오답박스 수 = 지문 괄호 수)
     actual_brackets = data.get("grammar_bracket_answers", [])
@@ -1357,6 +1398,44 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             data["grammar_bracket_answers"] = [a for a in data.get("grammar_bracket_answers", []) if a.get("num") not in removed_demo]
             data["grammar_bracket_count"] = len(re.findall(r'\(\d+\)\[', final_bp))
             _safe_print(f"  ✅ 지시대명사 {len(removed_demo)}개 복원 완료")
+
+    # ★ whom/who 둘다정답 괄호 제거
+    final_bp3 = data.get("grammar_bracket_passage", "")
+    if final_bp3:
+        all_br3 = re.findall(r'\((\d+)\)\[([^\]]+)\]', final_bp3)
+        removed_ww = []
+        for num_str, bracket_content in all_br3:
+            parts = [p.strip().lower() for p in bracket_content.split('/')]
+            if len(parts) == 2:
+                pair = set(parts)
+                if pair == {'whom', 'who'}:
+                    # 원문에서 해당 단어 확인
+                    if 'whom' in passage.lower():
+                        final_bp3 = re.sub(r'\(' + num_str + r'\)\[[^\]]+\]', 'whom', final_bp3)
+                    else:
+                        final_bp3 = re.sub(r'\(' + num_str + r'\)\[[^\]]+\]', 'who', final_bp3)
+                    removed_ww.append(int(num_str))
+                    _safe_print(f"  🚫 whom/who 괄호 제거({num_str})")
+        if removed_ww:
+            data["grammar_bracket_passage"] = final_bp3
+            data["grammar_bracket_answers"] = [a for a in data.get("grammar_bracket_answers", []) if a.get("num") not in removed_ww]
+            data["grammar_bracket_count"] = len(re.findall(r'\(\d+\)\[', final_bp3))
+
+    # ★ 최종 괄호 수 체크: 모든 제거 후 8개 미만이면 재생성
+    final_bracket_count = data.get("grammar_bracket_count", 0)
+    if 0 < final_bracket_count < 8:
+        _safe_print(f"  ⚠️ 최종 괄호 {final_bracket_count}개 < 8개 → 재생성 시도...")
+        data_retry = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
+        retry_bp = data_retry.get("grammar_bracket_passage", "")
+        retry_count = len(re.findall(r'\(\d+\)\[', retry_bp))
+        if retry_count >= 8:
+            data["grammar_bracket_passage"] = retry_bp
+            data["grammar_bracket_answers"] = data_retry.get("grammar_bracket_answers", [])
+            data["grammar_bracket_count"] = retry_count
+            data["grammar_error_passage"] = data_retry.get("grammar_error_passage", data.get("grammar_error_passage", ""))
+            data["grammar_error_answers"] = data_retry.get("grammar_error_answers", data.get("grammar_error_answers", []))
+            data["grammar_error_count"] = len(data["grammar_error_answers"])
+            _safe_print(f"  ✅ 재생성 성공: 괄호 {retry_count}개")
 
     save_step(passage_dir, "step5_grammar", data)
     return data

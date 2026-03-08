@@ -1903,8 +1903,9 @@ def render_pdf(template_data: dict, output_path: Path, levels=None):
     html = tmpl.render(**template_data)
 
     # QA 자동 검증
+    qa_issues = []
     if _QA_AVAILABLE:
-        html = fix_single_html(html)
+        html, qa_issues = fix_single_html(html)
 
     # WeasyPrint 시도, 없으면 HTML로 저장
     try:
@@ -1917,6 +1918,8 @@ def render_pdf(template_data: dict, output_path: Path, levels=None):
             f.write(html)
         _safe_print(f"  HTML created: {html_path.name}")
         _safe_print(f"  Open in Chrome -> Ctrl+P -> Save as PDF")
+    
+    return qa_issues
 
 # ============================================================
 # 메인: 단일 지문 처리
@@ -1987,7 +1990,34 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     base_name = f"{meta.get('lesson_num','')}과_{meta.get('challenge_title','워크북')}_워크북"
     pdf_path = _unique_path(OUTPUT_DIR, base_name, ".pdf")
-    render_pdf(template_data, pdf_path, levels=levels)
+    qa_issues = render_pdf(template_data, pdf_path, levels=levels)
+
+    # 🔑 QA 재생성: 괄호 누락 등 심각한 이슈 감지 시 step5 재생성
+    if qa_issues and "bracket_missing" in qa_issues:
+        _safe_print("  🔄 QA 감지: 8-1 괄호 누락 → step5 캐시 삭제 후 재생성...")
+        cache_path = passage_dir / "step5_grammar.json"
+        if cache_path.exists():
+            cache_path.unlink()
+        # step5 재생성
+        all_steps["step5"] = step5_grammar(passage, passage_dir)
+        # step8 정답도 재생성 (step5 결과가 바뀌었으므로)
+        cache_path8 = passage_dir / "step8_answers.json"
+        if cache_path8.exists():
+            cache_path8.unlink()
+        all_steps["step8"] = step8_answers(all_steps, passage_dir)
+        # 재렌더링
+        template_data = merge_to_template_data(passage, meta, all_steps)
+        pdf_path2 = _unique_path(OUTPUT_DIR, base_name, ".pdf")
+        qa_issues2 = render_pdf(template_data, pdf_path2, levels=levels)
+        if "bracket_missing" in qa_issues2:
+            _safe_print("  ⚠️ QA 재생성 후에도 괄호 누락 — 수동 확인 필요")
+        else:
+            _safe_print("  ✅ QA 재생성 성공")
+            # 이전 파일 삭제
+            old_html = pdf_path.with_suffix('.html')
+            if old_html.exists():
+                old_html.unlink()
+            pdf_path = pdf_path2
 
     _safe_print(f"Done: {pdf_path.name}")
     return pdf_path

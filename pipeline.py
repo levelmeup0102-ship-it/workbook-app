@@ -9,6 +9,13 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger("pipeline")
 from pathlib import Path
 
+# QA 검증 모듈 (qa_check.py)
+try:
+    from qa_check import fix_single_html, fix_merged_html
+    _QA_AVAILABLE = True
+except ImportError:
+    _QA_AVAILABLE = False
+
 # ============================================================
 # 설정
 # ============================================================
@@ -1089,6 +1096,16 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
                 _safe_print(f"  ✅ {key} retry successful (length {retry_len})")
             else:
                 _safe_print(f"  ⚠ {key} retry still too long ({retry_len}), keeping best version")
+# ★ 서술형: 무의미 항목 제거 (error == original인 경우 = 변경 없는 항목)
+    raw_errors = data.get("grammar_error_answers", [])
+    valid_errors = [a for a in raw_errors if isinstance(a, dict) and a.get("error", "").strip() != a.get("original", "").strip()]
+    if len(valid_errors) != len(raw_errors):
+        removed = len(raw_errors) - len(valid_errors)
+        _safe_print(f"  ⚠️ 서술형: 무의미 항목 {removed}개 제거 (error==original)")
+        for i, a in enumerate(valid_errors):
+            a["num"] = i + 1
+        data["grammar_error_answers"] = valid_errors
+
 # ★ 서술형 error_count를 실제 answers 길이로 보정 (문제 텍스트와 일치시키기 위해 반드시 이후에 처리)
     actual_errors = data.get("grammar_error_answers", [])
     actual_error_count = len(actual_errors)
@@ -1737,7 +1754,7 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
     lv8_error = ['<div class="ablock"><p class="ast">Stage 8 서술형</p>']
     for a in s5.get("grammar_error_answers", []):
         if isinstance(a, dict):
-            lv8_error.append(f'<p>{a.get("error","")}->{a.get("original","")}</p>')
+            lv8_error.append(f'<p>({a.get("num","")}) {a.get("original","")}</p>')
     lv8_error.append('</div>')
     blocks.append(''.join(lv8_error))
 
@@ -1884,6 +1901,10 @@ def render_pdf(template_data: dict, output_path: Path, levels=None):
     tmpl = env.get_template("template.html")
     template_data["levels"] = levels  # None이면 전체 출력
     html = tmpl.render(**template_data)
+
+    # QA 자동 검증
+    if _QA_AVAILABLE:
+        html = fix_single_html(html)
 
     # WeasyPrint 시도, 없으면 HTML로 저장
     try:
@@ -2118,6 +2139,10 @@ def merge_html_files(output_dir=None):
 </body>
 </html>"""
     
+    # QA 자동 검증 (합본)
+    if _QA_AVAILABLE:
+        merged = fix_merged_html(merged)
+
     merged_path.write_text(merged, encoding='utf-8')
     _safe_print(f"  Merged: {merged_path.name}")
     _safe_print(f"  Open in Chrome -> Ctrl+P -> Save as PDF")

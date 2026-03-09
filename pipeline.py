@@ -1,3 +1,4 @@
+# cache clear
 #!/usr/bin/env python3
 """Workbook generation pipeline"""
 PIPELINE_VERSION = "v10"

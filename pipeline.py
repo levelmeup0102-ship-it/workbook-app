@@ -1,6 +1,18 @@
 #!/usr/bin/env python3
 """Workbook generation pipeline"""
-PIPELINE_VERSION = "v9-curl-final"
+PIPELINE_VERSION = "v10"
+
+# Step별 버전 관리: 해당 step 코드 수정 시 버전만 올리면 캐시 자동 무효화
+STEP_VERSIONS = {
+    "step1_basic": "v1",
+    "step2_order": "v1",
+    "step3_blank": "v1",
+    "step4_topic": "v1",
+    "step5_grammar": "v1",
+    "step6_vocab_content": "v1",
+    "step7_writing": "v1",
+    "step8_answers": "v1",
+}
 import asyncio, json, os, sys, time, random, re, math, logging
 
 logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s] %(message)s")
@@ -9,7 +21,7 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger("pipeline")
 from pathlib import Path
 
-# QA 검증 모듈 (qa_check.py)
+# QA 검증 모듈
 try:
     from qa_check import fix_single_html, fix_merged_html
     _QA_AVAILABLE = True
@@ -344,12 +356,14 @@ def _run_async(coro):
         return asyncio.run(coro)
 
 def save_step(passage_dir: Path, step_name: str, data: dict):
+    # 버전 태그 삽입
+    data["_step_version"] = STEP_VERSIONS.get(step_name, "v0")
     # Save locally
     passage_dir.mkdir(parents=True, exist_ok=True)
     path = passage_dir / f"{step_name}.json"
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    _safe_print(f"  Saved: {step_name}.json")
+    _safe_print(f"  Saved: {step_name}.json (ver={data['_step_version']})")
     # Save to Supabase
     try:
         import supa
@@ -361,11 +375,19 @@ def save_step(passage_dir: Path, step_name: str, data: dict):
         _safe_print(f"  [supa] save error: {str(e)[:80]}")
 
 def load_step(passage_dir: Path, step_name: str) -> dict | None:
+    expected_ver = STEP_VERSIONS.get(step_name, "v0")
     # Try local first
     path = passage_dir / f"{step_name}.json"
     if path.exists():
         with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            data = json.load(f)
+        # 버전 체크: 다르면 캐시 무효
+        cached_ver = data.get("_step_version", "")
+        if cached_ver != expected_ver:
+            _safe_print(f"  Cache outdated: {step_name} (cached={cached_ver}, need={expected_ver}) → regenerate")
+            path.unlink()
+            return None
+        return data
     # Try Supabase
     try:
         import supa
@@ -373,11 +395,20 @@ def load_step(passage_dir: Path, step_name: str) -> dict | None:
             cache_key = passage_dir.name
             data = _run_async(supa.get_step(cache_key, step_name))
             if data:
+                # 버전 체크
+                cached_ver = data.get("_step_version", "")
+                if cached_ver != expected_ver:
+                    _safe_print(f"  Supabase cache outdated: {step_name} (cached={cached_ver}, need={expected_ver}) → regenerate")
+                    try:
+                        _run_async(supa.delete_step(cache_key, step_name))
+                    except:
+                        pass
+                    return None
                 # Save locally for future use
                 passage_dir.mkdir(parents=True, exist_ok=True)
                 with open(path, 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
-                _safe_print(f"  Loaded from Supabase: {step_name}")
+                _safe_print(f"  Loaded from Supabase: {step_name} (ver={cached_ver})")
                 return data
     except Exception as e:
         _safe_print(f"  [supa] load error: {str(e)[:80]}")
@@ -1046,45 +1077,19 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     
     orig_len = len(re.sub(r'\s+', '', passage))
     
-    # 🔒 8-1 괄호 존재 검증: 괄호가 하나도 없으면 괄호만 단독 생성 (최대 3회)
+    # 🔒 8-1 괄호 존재 검증: 괄호가 하나도 없으면 재시도 (최대 5회)
     bracket_text = data.get("grammar_bracket_passage", "")
-    for _bracket_retry in range(3):
+    for _bracket_retry in range(5):
         if bracket_text and re.search(r'\(\d+\)\[', bracket_text):
             break
         if _bracket_retry == 0 and not bracket_text:
             break  # 지문 자체가 없으면 스킵
-        _safe_print(f"  ⚠️ grammar_bracket_passage에 괄호 없음 → 괄호 단독 생성 {_bracket_retry+1}차")
-        # 괄호만 단독 생성 (서술형 제외 → 토큰 여유 확보)
-        bracket_only_prompt = f"""아래 영어 지문에 어법 괄호를 삽입하세요. 괄호 삽입만 하면 됩니다.
-
-[원문 - 총 {sent_count}개 문장]
-{passage}
-
-[필수 규칙]
-1. 원문의 모든 {sent_count}개 문장을 빠짐없이 포함
-2. 각 문장에서 어법 포인트를 찾아 (N)[정답 / 오답] 형태로 괄호 삽입
-3. 최소 {min(10, sent_count)}개 이상의 괄호 삽입
-4. 괄호 예시: She (1)[walked / walks] to the store and (2)[bought / buying] some food.
-
-[출제 포인트]
-시제, 태(능동/수동), to부정사/동명사, 형용사/부사, 관계대명사/관계부사, 분사(현재/과거), 가정법, 병렬구조 등
-
-[JSON - 이것만 반환]
-{{
-  "grammar_bracket_passage": "괄호 포함 전체 지문",
-  "grammar_bracket_count": 숫자,
-  "grammar_bracket_answers": [{{"num":1, "answer":"walked", "wrong":"walks"}}, ...]
-}}"""
-        data_retry = call_claude_json(SYS_JSON, bracket_only_prompt, max_tokens=4096)
-        bracket_text = data_retry.get("grammar_bracket_passage", "")
-        if bracket_text and re.search(r'\(\d+\)\[', bracket_text):
-            bracket_count_new = len(re.findall(r'\(\d+\)\[', bracket_text))
-            _safe_print(f"  ✅ 괄호 단독 생성 성공! ({bracket_count_new}개 괄호)")
-            data["grammar_bracket_passage"] = bracket_text
-            data["grammar_bracket_count"] = data_retry.get("grammar_bracket_count", bracket_count_new)
-            data["grammar_bracket_answers"] = data_retry.get("grammar_bracket_answers", [])
-            break
-        _safe_print(f"  ⚠ 괄호 단독 생성 {_bracket_retry+1}차 실패")
+        _safe_print(f"  WARNING: grammar_bracket_passage에 괄호 없음 → {_bracket_retry+1}차 재시도")
+        cache_path = passage_dir / "step5_grammar.json"
+        if cache_path.exists():
+            cache_path.unlink()
+        data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
+        bracket_text = data.get("grammar_bracket_passage", "")
 
     for key in ["grammar_bracket_passage", "grammar_error_passage"]:
         gen_text = data.get(key, "")
@@ -1122,7 +1127,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
                 _safe_print(f"  ✅ {key} retry successful (length {retry_len})")
             else:
                 _safe_print(f"  ⚠ {key} retry still too long ({retry_len}), keeping best version")
-# ★ 서술형: 무의미 항목 제거 (error == original인 경우 = 변경 없는 항목)
+# ★ 서술형: 무의미 항목 제거 (error == original인 경우)
     raw_errors = data.get("grammar_error_answers", [])
     valid_errors = [a for a in raw_errors if isinstance(a, dict) and a.get("error", "").strip() != a.get("original", "").strip()]
     if len(valid_errors) != len(raw_errors):
@@ -1944,7 +1949,7 @@ def render_pdf(template_data: dict, output_path: Path, levels=None):
             f.write(html)
         _safe_print(f"  HTML created: {html_path.name}")
         _safe_print(f"  Open in Chrome -> Ctrl+P -> Save as PDF")
-    
+
     return qa_issues
 
 # ============================================================
@@ -2018,31 +2023,24 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
     pdf_path = _unique_path(OUTPUT_DIR, base_name, ".pdf")
     qa_issues = render_pdf(template_data, pdf_path, levels=levels)
 
-    # 🔑 QA 재생성: 괄호 누락 등 심각한 이슈 감지 시 step5 재생성
+    # QA 재생성: 괄호 누락 등 심각한 이슈 감지 시 step5 캐시 삭제 후 재생성
     if qa_issues and "bracket_missing" in qa_issues:
-        _safe_print("  🔄 QA 감지: 8-1 괄호 누락 → step5 캐시 삭제 후 재생성...")
-        cache_path = passage_dir / "step5_grammar.json"
-        if cache_path.exists():
-            cache_path.unlink()
-        # step5 재생성
+        _safe_print("  QA: 8-1 bracket missing → step5 cache delete + regenerate...")
+        cache5 = passage_dir / "step5_grammar.json"
+        cache8 = passage_dir / "step8_answers.json"
+        if cache5.exists(): cache5.unlink()
+        if cache8.exists(): cache8.unlink()
         all_steps["step5"] = step5_grammar(passage, passage_dir)
-        # step8 정답도 재생성 (step5 결과가 바뀌었으므로)
-        cache_path8 = passage_dir / "step8_answers.json"
-        if cache_path8.exists():
-            cache_path8.unlink()
         all_steps["step8"] = step8_answers(all_steps, passage_dir)
-        # 재렌더링
         template_data = merge_to_template_data(passage, meta, all_steps)
         pdf_path2 = _unique_path(OUTPUT_DIR, base_name, ".pdf")
         qa_issues2 = render_pdf(template_data, pdf_path2, levels=levels)
         if "bracket_missing" in qa_issues2:
-            _safe_print("  ⚠️ QA 재생성 후에도 괄호 누락 — 수동 확인 필요")
+            _safe_print("  QA: still missing after retry — manual check needed")
         else:
-            _safe_print("  ✅ QA 재생성 성공")
-            # 이전 파일 삭제
+            _safe_print("  QA: regeneration success")
             old_html = pdf_path.with_suffix('.html')
-            if old_html.exists():
-                old_html.unlink()
+            if old_html.exists(): old_html.unlink()
             pdf_path = pdf_path2
 
     _safe_print(f"Done: {pdf_path.name}")

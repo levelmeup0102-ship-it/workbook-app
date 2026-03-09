@@ -13,7 +13,6 @@ STEP_VERSIONS = {
     "step7_writing": "v3",
     "step8_answers": "v4",
 }
-}
 import asyncio, json, os, sys, time, random, re, math, logging
 
 logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s] %(message)s")

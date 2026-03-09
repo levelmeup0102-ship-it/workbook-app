@@ -4,14 +4,15 @@ PIPELINE_VERSION = "v10"
 
 # Step별 버전 관리: 해당 step 코드 수정 시 버전만 올리면 캐시 자동 무효화
 STEP_VERSIONS = {
-    "step1_basic": "v2",
-    "step2_order": "v2",
-    "step3_blank": "v1",
-    "step4_topic": "v1",
-    "step5_grammar": "v2",
-    "step6_vocab_content": "v1",
-    "step7_writing": "v2",
-    "step8_answers": "v3",
+    "step1_basic": "v3",
+    "step2_order": "v3",
+    "step3_blank": "v2",
+    "step4_topic": "v2",
+    "step5_grammar": "v3",
+    "step6_vocab_content": "v2",
+    "step7_writing": "v3",
+    "step8_answers": "v4",
+}
 }
 import asyncio, json, os, sys, time, random, re, math, logging
 

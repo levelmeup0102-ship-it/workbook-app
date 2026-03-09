@@ -1985,6 +1985,16 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
         if passage_dir.exists():
             shutil.rmtree(passage_dir)
 
+    # ★ passage_text 안에 ###해석### 이 포함되어 있으면 분리
+    if '###해석###' in passage:
+        parts = passage.split('###해석###', 1)
+        passage = parts[0].strip()
+        kr_text = parts[1].strip()
+        kr_lines = [l.strip() for l in kr_text.split('\n') if l.strip()]
+        if 'user_translations' not in meta:
+            meta['user_translations'] = kr_lines
+            _safe_print(f"  passage_text에서 해석 {len(kr_lines)}줄 추출")
+
     _safe_print(f"\n{'='*50}")
     _safe_print(f"Processing: {passage_id} ({meta.get('challenge_title','')})")
     _safe_print(f"{'='*50}")

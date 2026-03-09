@@ -251,11 +251,21 @@ async def upload_passages(request: Request):
     db["books"].setdefault(book, {"units": {}})
 
     count = 0
+    last_unit = None
+    last_pid = None
 
     for i in range(1, len(parts), 2):
         title = parts[i].strip()
         passage = parts[i + 1].strip() if i + 1 < len(parts) else ""
         if not passage:
+            continue
+
+        # ★ ###해석### → 이전 지문의 passage_text에 합침
+        if title == '해석' and last_unit and last_pid:
+            prev = db["books"][book]["units"][last_unit]["passages"].get(last_pid)
+            if prev:
+                prev["text"] = prev["text"] + "\n###해석###\n" + passage
+                print(f"[upload] 해석 → {last_unit}/{last_pid} 에 합침")
             continue
 
         # 다양한 교재 형식 매칭
@@ -269,6 +279,8 @@ async def upload_passages(request: Request):
 
         db["books"][book]["units"].setdefault(unit_name, {"passages": {}})
         db["books"][book]["units"][unit_name]["passages"][pid] = {"title": title, "text": passage}
+        last_unit = unit_name
+        last_pid = pid
         count += 1
 
     await _save_db(db)

@@ -8,10 +8,10 @@ STEP_VERSIONS = {
     "step2_order": "v1",
     "step3_blank": "v1",
     "step4_topic": "v1",
-    "step5_grammar": "v1",
+    "step5_grammar": "v2",
     "step6_vocab_content": "v1",
     "step7_writing": "v1",
-    "step8_answers": "v1",
+    "step8_answers": "v2",
 }
 import asyncio, json, os, sys, time, random, re, math, logging
 
@@ -2025,11 +2025,23 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
 
     # QA 재생성: 괄호 누락 등 심각한 이슈 감지 시 step5 캐시 삭제 후 재생성
     if qa_issues and "bracket_missing" in qa_issues:
-        _safe_print("  QA: 8-1 bracket missing → step5 cache delete + regenerate...")
+        _safe_print("  QA: 8-1 bracket missing → step5+step8 cache delete (local+Supabase)...")
+        # 로컬 삭제
         cache5 = passage_dir / "step5_grammar.json"
         cache8 = passage_dir / "step8_answers.json"
         if cache5.exists(): cache5.unlink()
         if cache8.exists(): cache8.unlink()
+        # Supabase도 삭제
+        try:
+            import supa
+            if supa._enabled():
+                cache_key = passage_dir.name
+                _run_async(supa.delete_step(cache_key, "step5_grammar"))
+                _run_async(supa.delete_step(cache_key, "step8_answers"))
+                _safe_print(f"  Supabase cache deleted: {cache_key}/step5_grammar, step8_answers")
+        except Exception as e:
+            _safe_print(f"  [supa] delete error: {str(e)[:80]}")
+        # 재생성
         all_steps["step5"] = step5_grammar(passage, passage_dir)
         all_steps["step8"] = step8_answers(all_steps, passage_dir)
         template_data = merge_to_template_data(passage, meta, all_steps)

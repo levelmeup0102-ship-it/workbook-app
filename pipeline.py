@@ -1046,19 +1046,45 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     
     orig_len = len(re.sub(r'\s+', '', passage))
     
-    # 🔒 8-1 괄호 존재 검증: 괄호가 하나도 없으면 재시도 (최대 5회)
+    # 🔒 8-1 괄호 존재 검증: 괄호가 하나도 없으면 괄호만 단독 생성 (최대 3회)
     bracket_text = data.get("grammar_bracket_passage", "")
-    for _bracket_retry in range(5):
+    for _bracket_retry in range(3):
         if bracket_text and re.search(r'\(\d+\)\[', bracket_text):
             break
         if _bracket_retry == 0 and not bracket_text:
             break  # 지문 자체가 없으면 스킵
-        _safe_print(f"  WARNING: grammar_bracket_passage에 괄호 없음 → {_bracket_retry+1}차 재시도")
-        cache_path = passage_dir / "step5_grammar.json"
-        if cache_path.exists():
-            cache_path.unlink()
-        data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
-        bracket_text = data.get("grammar_bracket_passage", "")
+        _safe_print(f"  ⚠️ grammar_bracket_passage에 괄호 없음 → 괄호 단독 생성 {_bracket_retry+1}차")
+        # 괄호만 단독 생성 (서술형 제외 → 토큰 여유 확보)
+        bracket_only_prompt = f"""아래 영어 지문에 어법 괄호를 삽입하세요. 괄호 삽입만 하면 됩니다.
+
+[원문 - 총 {sent_count}개 문장]
+{passage}
+
+[필수 규칙]
+1. 원문의 모든 {sent_count}개 문장을 빠짐없이 포함
+2. 각 문장에서 어법 포인트를 찾아 (N)[정답 / 오답] 형태로 괄호 삽입
+3. 최소 {min(10, sent_count)}개 이상의 괄호 삽입
+4. 괄호 예시: She (1)[walked / walks] to the store and (2)[bought / buying] some food.
+
+[출제 포인트]
+시제, 태(능동/수동), to부정사/동명사, 형용사/부사, 관계대명사/관계부사, 분사(현재/과거), 가정법, 병렬구조 등
+
+[JSON - 이것만 반환]
+{{
+  "grammar_bracket_passage": "괄호 포함 전체 지문",
+  "grammar_bracket_count": 숫자,
+  "grammar_bracket_answers": [{{"num":1, "answer":"walked", "wrong":"walks"}}, ...]
+}}"""
+        data_retry = call_claude_json(SYS_JSON, bracket_only_prompt, max_tokens=4096)
+        bracket_text = data_retry.get("grammar_bracket_passage", "")
+        if bracket_text and re.search(r'\(\d+\)\[', bracket_text):
+            bracket_count_new = len(re.findall(r'\(\d+\)\[', bracket_text))
+            _safe_print(f"  ✅ 괄호 단독 생성 성공! ({bracket_count_new}개 괄호)")
+            data["grammar_bracket_passage"] = bracket_text
+            data["grammar_bracket_count"] = data_retry.get("grammar_bracket_count", bracket_count_new)
+            data["grammar_bracket_answers"] = data_retry.get("grammar_bracket_answers", [])
+            break
+        _safe_print(f"  ⚠ 괄호 단독 생성 {_bracket_retry+1}차 실패")
 
     for key in ["grammar_bracket_passage", "grammar_error_passage"]:
         gen_text = data.get(key, "")

@@ -127,6 +127,20 @@ async def delete_steps_by_cache_key(cache_key):
     q = f"step_cache?cache_key=eq.{quote(cache_key, safe='')}"
     return await _request("DELETE", q)
 
+async def delete_step(cache_key, step_name):
+    """Delete a single step cache entry"""
+    q = (
+        "step_cache?"
+        f"cache_key=eq.{quote(cache_key, safe='')}&"
+        f"step_name=eq.{quote(step_name, safe='')}"
+    )
+    return await _request("DELETE", q)
+
+# pipeline.py에서 호출하는 이름
+async def delete_all_steps(cache_key):
+    """Alias for delete_steps_by_cache_key (pipeline.py 호환)"""
+    return await delete_steps_by_cache_key(cache_key)
+
 # ========================
 # Delete passages
 # ========================

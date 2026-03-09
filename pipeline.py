@@ -428,10 +428,23 @@ SYS_JSON_KR = """당신은 한국 고등학생을 위한 영어 시험 콘텐츠
 # ============================================================
 # STEP 1: 기본 분석 (어휘 + 번역 + 핵심문장)
 # ============================================================
-def step1_basic_analysis(passage: str, passage_dir: Path) -> dict:
+def step1_basic_analysis(passage: str, passage_dir: Path, user_translations: list = None) -> dict:
     cached = load_step(passage_dir, "step1_basic")
     if cached:
-        _safe_print("  step1: using cache")
+        # 캐시가 있어도 user_translations가 새로 제공되면 덮어쓰기
+        if user_translations:
+            sentences_regex = split_sentences(passage)
+            sentences_regex = _merge_short_dialogue(sentences_regex)
+            sent_count = len(sentences_regex)
+            if len(user_translations) == sent_count:
+                cached["sentence_translations"] = user_translations
+                cached["translation"] = ' '.join(user_translations)
+                save_step(passage_dir, "step1_basic", cached)
+                _safe_print(f"  step1: cache + 사용자 해석 {sent_count}줄 적용")
+            else:
+                _safe_print(f"  step1: ⚠️ 사용자 해석 {len(user_translations)}줄 ≠ 영어 {sent_count}문장 → 사용자 해석 무시")
+        else:
+            _safe_print("  step1: using cache")
         return cached
 
     sentences_regex = split_sentences(passage)
@@ -538,6 +551,15 @@ JSON 형식:
         data["sentence_translations"] = st
 
     _safe_print(f"  Sentence count: {sent_count}")
+    
+    # ★ 사용자 해석이 있으면 Claude 번역을 덮어쓰기
+    if user_translations:
+        if len(user_translations) == sent_count:
+            data["sentence_translations"] = user_translations
+            data["translation"] = ' '.join(user_translations)
+            _safe_print(f"  ✅ 사용자 해석 {sent_count}줄 적용 (Claude 번역 대체)")
+        else:
+            _safe_print(f"  ⚠️ 사용자 해석 {len(user_translations)}줄 ≠ 영어 {sent_count}문장 → Claude 번역 사용")
     
     save_step(passage_dir, "step1_basic", data)
     return data
@@ -1973,7 +1995,8 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
     all_steps = {}
 
     # Step 1: 기본 분석
-    all_steps["step1"] = step1_basic_analysis(passage, passage_dir)
+    user_tr = meta.get("user_translations", None)
+    all_steps["step1"] = step1_basic_analysis(passage, passage_dir, user_translations=user_tr)
     sentences_from_api = all_steps["step1"].get("sentences", sentences)
 
     # Step 2: Lv.5 순서/삽입
@@ -2115,6 +2138,14 @@ def split_and_run(filepath: str, lesson_num: str = "5", levels=None):
     for i in range(1, len(parts), 2):
         title = parts[i].strip()
         text = parts[i+1].strip() if i+1 < len(parts) else ""
+        
+        # ###해석### → 이전 지문에 한국어 해석 연결
+        if title == '해석' and passages:
+            kr_lines = [l.strip() for l in text.split('\n') if l.strip()]
+            passages[-1]["meta"]["user_translations"] = kr_lines
+            _safe_print(f"  해석 {len(kr_lines)}줄 → {passages[-1]['meta']['challenge_title']}")
+            continue
+        
         if text:
             # 제목에서 과번호 + 번호 추출
             lesson_match = re.search(r'(\d+)강', title)

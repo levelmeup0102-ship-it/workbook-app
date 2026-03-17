@@ -1049,6 +1049,11 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 - whom / who 선택 문제: [whom / who], [who / whom] 출제 절대 금지! (둘 다 허용되므로)
 - ⚠ 위 유형으로 괄호를 만들면 둘 다 정답이 되어 문제가 성립하지 않습니다!
 - ⚠ 특히 help/지각동사/병렬구조는 가장 흔한 실수입니다. 반드시 피하세요!
+- 과거 vs 과거진행: 문맥상 둘 다 자연스러운 경우 출제 금지! (예: practiced / was practicing — 기간 부사와 함께 쓰이면 둘 다 가능)
+- 성별 불명확: 지문에서 성별 특정 불가능한 경우 his/her, him/her 출제 금지! (사람 이름이 명확할 때만 가능)
+- 고유명사+s: 고유명사 뒤에 -s 붙이는 문제 출제 금지! (예: Walthamstow / Walthamstows)
+- 선택지에 정답 반드시 포함: 정답이 선택지에 없으면 문제 성립 불가! (예: 정답이 those인데 [that / where] 제시 → 절대 금지!)
+- 관계부사 why/where/when 선택지: 정답이 why인데 [which / where]를 제시하면 안 됨! 반드시 정답이 선택지에 포함되어야 함!
 
 [어법 괄호형 Lv.8-1]
 - 원문 {sent_count}개 문장 모두 포함 (출제 안 하는 문장도 원문 그대로)
@@ -1065,6 +1070,8 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 - 한 문장에 최대 1개 오류
 - 오류를 삽입한 실제 개수를 grammar_error_count에 정확히 기록할 것
 - 오류 개수 = grammar_error_answers 배열 길이와 반드시 일치
+- ⚠ 8-2 오류 삽입 부분 외의 텍스트는 원문과 100% 동일해야 함! AI가 주변 단어를 무의식적으로 바꾸지 말 것!
+- ⚠ 8-1, 8-2 모두 원문에 없는 문장을 절대 추가하지 말 것! 원문 문장 수 = 출력 문장 수 반드시 일치!
 
 [JSON 형식]
 {{

@@ -2038,7 +2038,15 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
         step7_cache = passage_dir / "step7_writing.json"
         if step7_cache.exists():
             step7_cache.unlink()
-            _safe_print("  step7: 사용자 해석 변경 → 캐시 삭제")
+            _safe_print("  step7: 사용자 해석 변경 → 로컬 캐시 삭제")
+        # Supabase 캐시도 삭제
+        try:
+            import supa
+            if supa._enabled():
+                _run_async(supa.delete_step(passage_dir.name, "step7_writing"))
+                _safe_print("  step7: Supabase 캐시도 삭제")
+        except:
+            pass
     translation = all_steps["step1"].get("translation", "")
     sentence_translations = all_steps["step1"].get("sentence_translations", [])
     all_steps["step7"] = step7_writing(sentences_from_api, translation, passage_dir, sentence_translations)

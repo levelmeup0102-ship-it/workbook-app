@@ -2033,6 +2033,12 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
     all_steps["step6"] = step6_vocab_content(passage, passage_dir)
 
     # Step 7: Stage 10 영작 (로컬)
+    # ★ 사용자 해석이 있으면 step7 캐시 무효화 (한국어 문장이 바뀌므로)
+    if user_tr:
+        step7_cache = passage_dir / "step7_writing.json"
+        if step7_cache.exists():
+            step7_cache.unlink()
+            _safe_print("  step7: 사용자 해석 변경 → 캐시 삭제")
     translation = all_steps["step1"].get("translation", "")
     sentence_translations = all_steps["step1"].get("sentence_translations", [])
     all_steps["step7"] = step7_writing(sentences_from_api, translation, passage_dir, sentence_translations)

@@ -607,19 +607,26 @@ async def secret_note(request: Request):
         except Exception:
             continue
 
-        passage_text = pinfo.get("text", "")
+        raw_text = pinfo.get("text", "")
         label = f"{unit} {pid}"
         ck = _ck(book, unit, pid)
         passage_dir = DATA_DIR / ck
 
-        # 기존 step1 캐시에서 번역 가져오기 (유형A용)
-        translation = ""
-        try:
-            s1 = pl.load_step(passage_dir, "step1_basic")
-            if s1:
-                translation = s1.get("translation", "")
-        except Exception:
-            pass
+        # ###해석### 구분자로 영어/한국어 분리 (Supabase에 함께 저장된 경우)
+        if "###해석###" in raw_text:
+            parts = raw_text.split("###해석###", 1)
+            passage_text = parts[0].strip()
+            translation = "\n".join(l.strip() for l in parts[1].strip().splitlines() if l.strip())
+        else:
+            passage_text = raw_text.strip()
+            # step1 캐시에서 번역 가져오기
+            translation = ""
+            try:
+                s1 = pl.load_step(passage_dir, "step1_basic")
+                if s1:
+                    translation = s1.get("translation", "")
+            except Exception:
+                pass
 
         if note_type == "A":
             note_data = pl.generate_secret_note_a(passage_text, translation, passage_dir)

@@ -574,5 +574,71 @@ async def set_notice(request: Request):
     (DATA_DIR / "notice.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     return {"ok": True}
 
+# ============================================================
+# ★ 비밀노트 엔드포인트 - 추가 코드
+# ============================================================
+@app.post("/api/secret-note")
+async def secret_note(request: Request):
+    """비밀노트 생성: type A (한국어 종합) / type B (영어 중심)"""
+    _verify(request)
+    body = await request.json()
+
+    note_type   = (body.get("type") or "B").upper()          # "A" or "B"
+    school_name = (body.get("school_name") or "레벨미업학원").strip()
+    passages_in = body.get("passages") or []
+    # passages_in: [{"book":"...", "unit":"...", "id":"..."}]
+
+    if not passages_in:
+        raise HTTPException(400, "passages 필요")
+
+    db = await _load_db()
+
+    import pipeline as pl
+    pl.DATA_DIR = DATA_DIR
+    pl.TEMPLATE_DIR = Path(".")
+
+    passages_data = []
+    for p in passages_in:
+        book, unit, pid = p.get("book"), p.get("unit"), p.get("id")
+        if not all([book, unit, pid]):
+            continue
+        try:
+            pinfo = db["books"][book]["units"][unit]["passages"][pid]
+        except Exception:
+            continue
+
+        passage_text = pinfo.get("text", "")
+        label = f"{unit} {pid}"
+        ck = _ck(book, unit, pid)
+        passage_dir = DATA_DIR / ck
+
+        # 기존 step1 캐시에서 번역 가져오기 (유형A용)
+        translation = ""
+        try:
+            s1 = pl.load_step(passage_dir, "step1_basic")
+            if s1:
+                translation = s1.get("translation", "")
+        except Exception:
+            pass
+
+        if note_type == "A":
+            note_data = pl.generate_secret_note_a(passage_text, translation, passage_dir)
+        else:
+            note_data = pl.generate_secret_note_b(passage_text, passage_dir)
+
+        passages_data.append({
+            "label":       label,
+            "passage":     passage_text,
+            "translation": translation,
+            "data":        note_data,
+        })
+
+    if not passages_data:
+        raise HTTPException(404, "처리 가능한 지문 없음")
+
+    html = pl.render_secret_note(passages_data, note_type, school_name)
+    return {"ok": True, "html": html, "filename": f"비밀노트_유형{note_type}.html"}
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))

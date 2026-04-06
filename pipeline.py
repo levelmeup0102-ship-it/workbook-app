@@ -2473,3 +2473,110 @@ def render_secret_note(passages_data: list, note_type: str, school_name: str) ->
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)))
     tmpl = env.get_template(template_file)
     return tmpl.render(passages=passages_data, school_name=school_name)
+
+
+# ============================================================
+# ★ 비밀노트 Type C (어휘+주제/제목/요지+흐름+요약)
+# ============================================================
+
+SYS_SECRET_NOTE_C = """You are an expert English teacher preparing Korean high school students for their FINAL EXAM.
+Analyze the passage and return structured study materials.
+
+=== CRITICAL RULES ===
+1. VOCABULARY: Select 10 key words. Each must have:
+   - English definition (clear, concise, 8-15 words)
+   - 5 synonyms
+   - 5 antonyms
+   
+2. TOPICS (주제): 5 different topic statements in ENGLISH
+   - Express what the passage is ABOUT
+   - Complete phrases, not single words
+   - Example: "Fear of public speaking and neglect of preparation"
+
+3. TITLES (제목): 5 creative, catchy titles in ENGLISH
+   - Like a newspaper headline or book chapter title
+   - Engaging and memorable
+   - Example: "From Excitement to Anxiety: The Night Before the Speech"
+
+4. MAIN_POINTS (요지): 5 statements in KOREAN
+   - State the key message/lesson of the passage
+   - Complete sentences in natural Korean
+   - What the reader should take away
+   - Example: "발표 준비보다 청중의 반응을 지나치게 의식한 '나'는 제대로 된 준비를 하지 못했다."
+
+5. FLOW (글의 흐름): Exactly 10 steps in KOREAN
+   - Trace the logical progression of the passage
+   - Each step is one sentence
+   - Together they tell the complete story
+
+6. SUMMARY: Both English (60-100 words) and Korean versions
+
+=== JSON FORMAT ===
+Return ONLY valid JSON:
+{
+  "vocabulary": [
+    {"word": "admire", "definition": "to respect or look up to someone greatly", "synonyms": ["respect", "esteem", "revere", "honor", "appreciate"], "antonyms": ["despise", "scorn", "disrespect", "loathe", "disregard"]},
+    {"word": "word2", "definition": "...", "synonyms": [...], "antonyms": [...]}
+  ],
+  "topics": [
+    "Topic statement 1 in English",
+    "Topic statement 2 in English",
+    "Topic statement 3 in English",
+    "Topic statement 4 in English",
+    "Topic statement 5 in English"
+  ],
+  "titles": [
+    "Creative Title 1 in English",
+    "Creative Title 2 in English", 
+    "Creative Title 3 in English",
+    "Creative Title 4 in English",
+    "Creative Title 5 in English"
+  ],
+  "main_points": [
+    "요지 1 - 완전한 한국어 문장",
+    "요지 2 - 완전한 한국어 문장",
+    "요지 3 - 완전한 한국어 문장",
+    "요지 4 - 완전한 한국어 문장",
+    "요지 5 - 완전한 한국어 문장"
+  ],
+  "flow": [
+    "1단계 설명 (한국어)",
+    "2단계 설명 (한국어)",
+    "3단계 설명 (한국어)",
+    "4단계 설명 (한국어)",
+    "5단계 설명 (한국어)",
+    "6단계 설명 (한국어)",
+    "7단계 설명 (한국어)",
+    "8단계 설명 (한국어)",
+    "9단계 설명 (한국어)",
+    "10단계 설명 (한국어)"
+  ],
+  "summary_en": "English summary of 60-100 words...",
+  "summary_kr": "한국어 요약..."
+}
+
+IMPORTANT:
+- vocabulary: exactly 10 words
+- topics: exactly 5 items (English)
+- titles: exactly 5 items (English)
+- main_points: exactly 5 items (Korean)
+- flow: exactly 10 items (Korean)
+- Return ONLY valid JSON. No markdown, no backticks."""
+
+
+def generate_secret_note_c(passage: str, passage_dir: Path, translation: str = "") -> dict:
+    """유형 C 비밀노트 (어휘+주제/제목/요지+흐름+요약)"""
+    cached = load_step(passage_dir, "secret_note_c")
+    if cached:
+        _safe_print("  ✅ secret_note_c 캐시 사용")
+        return cached
+    _safe_print("  🔐 secret_note_c 생성 중...")
+    
+    prompt = f"Analyze this English passage:\n\n{passage}"
+    
+    if translation:
+        prompt += f"\n\n[Korean translation for reference]:\n{translation}"
+    
+    data = call_claude_json(SYS_SECRET_NOTE_C, prompt, max_tokens=5000)
+    save_step(passage_dir, "secret_note_c", data)
+    return data

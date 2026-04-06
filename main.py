@@ -579,11 +579,11 @@ async def set_notice(request: Request):
 # ============================================================
 @app.post("/api/secret-note")
 async def secret_note(request: Request):
-    """비밀노트 생성: type A (한국어 종합) / type B (영어 중심)"""
+    """비밀노트 생성: type A (한국어 종합) / type B (영어 중심) / type C (어휘+분석)"""
     _verify(request)
     body = await request.json()
 
-    note_type   = (body.get("type") or "B").upper()          # "A" or "B"
+    note_type   = (body.get("type") or "B").upper()          # "A", "B", or "C"
     school_name = (body.get("school_name") or "레벨미업학원").strip()
     passages_in = body.get("passages") or []
     # passages_in: [{"book":"...", "unit":"...", "id":"..."}]
@@ -630,8 +630,10 @@ async def secret_note(request: Request):
 
         if note_type == "A":
             note_data = pl.generate_secret_note_a(passage_text, translation, passage_dir)
-        else:
-            note_data = pl.generate_secret_note_b(passage_text, passage_dir)
+        elif note_type == "C":
+            note_data = pl.generate_secret_note_c(passage_text, passage_dir, translation)
+        else:  # B가 기본
+            note_data = pl.generate_secret_note_b(passage_text, passage_dir, translation)
 
         passages_data.append({
             "label":       label,

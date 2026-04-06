@@ -2326,3 +2326,71 @@ if __name__ == "__main__":
             "challenge_title": title
         }
         process_passage(passage, meta, f"passage_{lesson_num}_{title}", levels=levels)
+
+
+# ============================================================
+# ★ 비밀노트 (Secret Note) - 추가 코드
+# ============================================================
+
+SYS_SECRET_NOTE_A = """You are an English passage analyzer for Korean high school students.
+Return ONLY valid JSON with NO markdown, NO backticks, NO explanation.
+{
+  "flow": "지문의 논리적 흐름을 한국어로 서술 (핵심 단계를 →로 연결, 1-2문장)",
+  "summary_kr": "지문 전체 내용을 한국어 2-3문장으로 요약",
+  "summary_en": "One English sentence summary of 50-70 words including key claims and results",
+  "background": ["배경지식1(한국어)","배경지식2","배경지식3","배경지식4","배경지식5"],
+  "analogies": ["비유나 예시1(한국어)","비유나 예시2(한국어)"],
+  "related_topics": ["연관주제1: 설명(한국어)","연관주제2","연관주제3","연관주제4","연관주제5"],
+  "proverbs": [{"en":"English proverb","kr":"한국어 뜻"},{"en":"English proverb2","kr":"한국어 뜻2"}],
+  "main_points": [{"en":"Main point 1 in English","kr":"한국어 번역"},{"en":"MP2","kr":"번역2"},{"en":"MP3","kr":"번역3"}],
+  "titles": [{"en":"English title 1","kr":"한국어 번역"},{"en":"Title2","kr":"번역2"},{"en":"Title3","kr":"번역3"}],
+  "figurative_phrases": [{"phrase":"figurative expression","explanation":"수사적 특징과 효과(한국어)"},{"phrase":"phrase2","explanation":"설명2"},{"phrase":"phrase3","explanation":"설명3"}],
+  "vocabulary": [{"word":"word1","synonyms":["s1","s2","s3","s4","s5"],"antonyms":["a1","a2","a3","a4","a5"]}]
+}
+Rules: vocabulary must have 10 words. Return ONLY valid JSON."""
+
+SYS_SECRET_NOTE_B = """You are an English passage analyzer for Korean students.
+Return ONLY valid JSON with NO markdown, NO backticks, NO explanation.
+{
+  "titles": ["title1","title2","title3"],
+  "summary": "One English sentence summary of 50-70 words",
+  "key_arguments": ["arg1","arg2","arg3","arg4","arg5"],
+  "vocabulary": [{"word":"example","easy":["s1","s2","s3","s4","s5"],"hard":["h1","h2","h3","h4","h5"]}]
+}
+Rules: vocabulary must have 10 words. easy=middle/high school level. hard=college entrance level. Return ONLY valid JSON."""
+
+
+def generate_secret_note_a(passage: str, translation: str, passage_dir: Path) -> dict:
+    """유형 A 비밀노트 (한국어 종합 분석)"""
+    cached = load_step(passage_dir, "secret_note_a")
+    if cached:
+        _safe_print("  ✅ secret_note_a 캐시 사용")
+        return cached
+    _safe_print("  🔐 secret_note_a 생성 중...")
+    prompt = f"Analyze this passage:\n\n{passage}"
+    if translation:
+        prompt += f"\n\nKorean translation reference:\n{translation}"
+    data = call_claude_json(SYS_SECRET_NOTE_A, prompt, max_tokens=5000)
+    save_step(passage_dir, "secret_note_a", data)
+    return data
+
+
+def generate_secret_note_b(passage: str, passage_dir: Path) -> dict:
+    """유형 B 비밀노트 (영어 중심 분석)"""
+    cached = load_step(passage_dir, "secret_note_b")
+    if cached:
+        _safe_print("  ✅ secret_note_b 캐시 사용")
+        return cached
+    _safe_print("  🔐 secret_note_b 생성 중...")
+    data = call_claude_json(SYS_SECRET_NOTE_B, f"Analyze this passage:\n\n{passage}", max_tokens=4000)
+    save_step(passage_dir, "secret_note_b", data)
+    return data
+
+
+def render_secret_note(passages_data: list, note_type: str, school_name: str) -> str:
+    """비밀노트 HTML 렌더링 (Jinja2)"""
+    from jinja2 import Environment, FileSystemLoader
+    template_file = f"secret_note_type_{note_type.lower()}.html"
+    env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)))
+    tmpl = env.get_template(template_file)
+    return tmpl.render(passages=passages_data, school_name=school_name)

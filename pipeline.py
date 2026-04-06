@@ -2447,8 +2447,8 @@ def generate_secret_note_a(passage: str, translation: str, passage_dir: Path) ->
     return data
 
 
-def generate_secret_note_b(passage: str, translation: str, passage_dir: Path) -> dict:
-    """유형 B 비밀노트 (영어 중심 분석) - translation 파라미터 추가됨"""
+def generate_secret_note_b(passage: str, passage_dir: Path, translation: str = "") -> dict:
+    """유형 B 비밀노트 (영어 중심 분석) - translation은 선택적"""
     cached = load_step(passage_dir, "secret_note_b")
     if cached:
         _safe_print("  ✅ secret_note_b 캐시 사용")

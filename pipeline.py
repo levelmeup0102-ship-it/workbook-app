@@ -2329,10 +2329,12 @@ if __name__ == "__main__":
 
 
 # ============================================================
-# ★ 비밀노트 (Secret Note) - 추가 코드
+# ★ 비밀노트 (Secret Note) - 수정된 코드
 # ============================================================
 
-SYS_SECRET_NOTE_A = """You are an English passage analyzer for Korean high school students (grades 10-12).
+SYS_SECRET_NOTE_A = """You are an English passage analyzer for Korean high school students preparing for exams in ONE WEEK.
+Your analysis must be precise, academic, and exam-ready. Every output should look like a correct answer choice on a standardized test.
+
 Return ONLY valid JSON with NO markdown, NO backticks, NO explanation.
 {
   "flow": "지문의 논리적 흐름을 한국어로 서술. 핵심 단계를 → 로 연결. 예: 문제 제기 → 사례 제시 → 해결책 → 결론",
@@ -2366,37 +2368,68 @@ Rules:
 - proverbs must have exactly 3 items.
 - Return ONLY valid JSON."""
 
-SYS_SECRET_NOTE_B = """You are an English passage analyzer for Korean high school students (grades 10-12).
-Return ONLY valid JSON with NO markdown, NO backticks, NO explanation.
+
+SYS_SECRET_NOTE_B = """You are an expert English teacher preparing Korean high school students for their FINAL EXAM in ONE WEEK.
+Your analysis must be precise, academic, and exam-ready.
+
+=== CRITICAL: TITLE RULES ===
+The titles are THE MOST IMPORTANT part. Students will memorize these as potential exam answers.
+Each title MUST be a COMPLETE THESIS STATEMENT that:
+1. States WHAT the author ARGUES or CLAIMS (not just the topic)
+2. Includes the MECHANISM or REASONING (how/why)
+3. Could appear as the CORRECT answer in a 주제/요지/제목 찾기 question
+
+❌ TERRIBLE (instant fail - these are just topics, not arguments):
+- "Microclimate Control in Outdoor Gardening"
+- "Vancouver's Weather Advantage"
+- "The Power of Music"
+- "Benefits of Reading"
+- "Importance of Communication"
+- "Local Temperature Management"
+
+✓ EXCELLENT (these state actual claims with reasoning):
+- "Strategic manipulation of garden orientation and thermal mass materials can override regional climate limitations for successful cultivation"
+- "The deliberate creation of localized growing conditions enables year-round agriculture even in regions with harsh winters"
+- "Human intervention in microclimate factors demonstrates that effective gardening depends more on technique than on geographic location"
+
+Notice the difference:
+- BAD titles are 3-6 word topic labels
+- GOOD titles are 15-25 word thesis statements that make a CLAIM
+
+=== JSON FORMAT ===
+Return ONLY valid JSON with this exact structure:
 {
   "titles": [
-    {"en": "Title 1", "kr": "한국어 번역"},
-    {"en": "Title 2", "kr": "한국어 번역"},
-    {"en": "Title 3", "kr": "한국어 번역"}
+    {"en": "Full thesis statement 15-25 words stating the author's actual argument", "kr": "저자의 주장을 담은 완전한 한국어 문장"},
+    {"en": "Same thesis from a different angle", "kr": "한국어 번역"},
+    {"en": "Third perspective on the same core argument", "kr": "한국어 번역"}
   ],
-  "summary_en": "One English sentence of 50-70 words capturing the main argument and conclusion",
-  "summary_kr": "위 영어 요약의 자연스러운 한국어 번역",
+  "summary_en": "Comprehensive summary 50-80 words covering: main argument + key evidence + conclusion",
+  "summary_kr": "위 영어 요약의 자연스러운 한국어 번역 (번역투 금지, 자연스러운 한국어로)",
   "key_arguments": [
-    {"en": "Key argument 1 as a complete English sentence", "kr": "한국어 번역"},
-    {"en": "Key argument 2", "kr": "한국어 번역"},
-    {"en": "Key argument 3", "kr": "한국어 번역"},
-    {"en": "Key argument 4", "kr": "한국어 번역"},
-    {"en": "Key argument 5", "kr": "한국어 번역"}
+    {"en": "First key point as a complete sentence", "kr": "한국어 번역"},
+    {"en": "Second key point", "kr": "한국어 번역"},
+    {"en": "Third key point", "kr": "한국어 번역"},
+    {"en": "Fourth key point", "kr": "한국어 번역"},
+    {"en": "Fifth key point", "kr": "한국어 번역"}
   ],
   "vocabulary": [
-    {"word": "word1", "easy": ["s1","s2","s3","s4","s5"], "hard": ["h1","h2","h3","h4","h5"]}
+    {"word": "word1", "easy": ["syn1","syn2","syn3","syn4","syn5"], "hard": ["h1","h2","h3","h4","h5"]},
+    {"word": "word2", "easy": ["syn1","syn2","syn3","syn4","syn5"], "hard": ["h1","h2","h3","h4","h5"]}
   ]
 }
-CRITICAL rules for titles:
-- Titles must capture the ACTUAL central argument of the passage, not just the topic keyword.
-- Ask: what does the author CLAIM or ARGUE? The title must state that claim.
-- BAD: "Vancouver's Weather Advantage" (just a topic)
-- GOOD: "How Microclimate Control Enables Effective Gardening Despite Harsh Regional Climate"
-- Each title must be specific, definitive, and reflect the main thesis like a correct exam answer choice.
-- All three titles from different angles, all expressing the core argument.
-- key_arguments: 5 complete sentences, each stating a distinct main point from the passage.
-- vocabulary: exactly 10 words. easy=middle/high school level. hard=수능~편입 level.
-- Return ONLY valid JSON."""
+
+=== VOCABULARY RULES ===
+- Select exactly 10 important words from the passage
+- "easy": 5 synonyms at middle/high school level (중고등 수준)
+- "hard": 5 synonyms at 수능~편입 level (고급 어휘)
+
+=== KEY ARGUMENTS RULES ===
+- Extract 5 distinct logical points from the passage
+- Each must be a complete, standalone sentence
+- Together they should cover the entire argument of the passage
+
+Return ONLY valid JSON. No markdown, no backticks, no explanation."""
 
 
 def generate_secret_note_a(passage: str, translation: str, passage_dir: Path) -> dict:
@@ -2414,14 +2447,21 @@ def generate_secret_note_a(passage: str, translation: str, passage_dir: Path) ->
     return data
 
 
-def generate_secret_note_b(passage: str, passage_dir: Path) -> dict:
-    """유형 B 비밀노트 (영어 중심 분석)"""
+def generate_secret_note_b(passage: str, translation: str, passage_dir: Path) -> dict:
+    """유형 B 비밀노트 (영어 중심 분석) - translation 파라미터 추가됨"""
     cached = load_step(passage_dir, "secret_note_b")
     if cached:
         _safe_print("  ✅ secret_note_b 캐시 사용")
         return cached
     _safe_print("  🔐 secret_note_b 생성 중...")
-    data = call_claude_json(SYS_SECRET_NOTE_B, f"Analyze this passage:\n\n{passage}", max_tokens=4000)
+    
+    prompt = f"Analyze this passage for Korean high school exam preparation:\n\n{passage}"
+    
+    # translation이 있으면 참고용으로 제공 (번역 품질 향상)
+    if translation:
+        prompt += f"\n\n[Reference Korean translation - use this to ensure accurate Korean translations]:\n{translation}"
+    
+    data = call_claude_json(SYS_SECRET_NOTE_B, prompt, max_tokens=4000)
     save_step(passage_dir, "secret_note_b", data)
     return data
 

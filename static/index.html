@@ -102,6 +102,8 @@ textarea:focus { border-color: #4A90D9; outline: none; }
 .sn-type-a:hover { background:linear-gradient(135deg,#1e40af,#2563eb); transform:translateY(-1px); }
 .sn-type-b { background:linear-gradient(135deg,#7c3aed,#a855f7); color:white; }
 .sn-type-b:hover { background:linear-gradient(135deg,#6d28d9,#9333ea); transform:translateY(-1px); }
+.sn-type-c { background:linear-gradient(135deg,#0369a1,#0ea5e9); color:white; }
+.sn-type-c:hover { background:linear-gradient(135deg,#075985,#0284c7); transform:translateY(-1px); }
 .sn-type-btn:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
 .sn-card { background:linear-gradient(135deg,#ede9fe,#faf5ff); border:1.5px solid #c4b5fd; border-radius:12px; padding:14px; margin-bottom:12px; }
 .sn-card .card-title { color:#6d28d9; }
@@ -266,9 +268,13 @@ textarea:focus { border-color: #4A90D9; outline: none; }
               <div style="font-size:11px;font-weight:700;color:#6d28d9;margin-bottom:2px;">유형 A — 한국어 종합 분석</div>
               <div style="font-size:11px;color:#666;">지문흐름·요약·배경지식·비유·연관주제·속담·요지·제목·비유구문·어휘(동의어+반의어)</div>
             </div>
-            <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:10px;">
+            <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:10px;margin-bottom:6px;">
               <div style="font-size:11px;font-weight:700;color:#7c3aed;margin-bottom:2px;">유형 B — 영어 중심 분석</div>
               <div style="font-size:11px;color:#666;">Titles · Summary · Key Arguments · Vocabulary (easy/hard synonyms)</div>
+            </div>
+            <div style="background:#e0f2fe;border:1px solid #7dd3fc;border-radius:8px;padding:10px;">
+              <div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:2px;">유형 C — 어휘+주제/제목/요지 분석</div>
+              <div style="font-size:11px;color:#666;">핵심어휘(의미+유반의어) · 주제/제목/요지(각5개) · 흐름(10단계) · 요약</div>
             </div>
           </div>
           <div style="display:flex;gap:8px;">
@@ -277,6 +283,9 @@ textarea:focus { border-color: #4A90D9; outline: none; }
             </button>
             <button class="sn-type-btn sn-type-b" id="sn-btn-b" onclick="doSecretNote('B')" disabled>
               유형 B<br><span style="font-size:10px;font-weight:400;">영어 중심</span>
+            </button>
+            <button class="sn-type-btn sn-type-c" id="sn-btn-c" onclick="doSecretNote('C')" disabled>
+              유형 C<br><span style="font-size:10px;font-weight:400;">어휘+분석</span>
             </button>
           </div>
           <div class="progress hidden" id="sn-progress">
@@ -295,7 +304,8 @@ textarea:focus { border-color: #4A90D9; outline: none; }
           <p style="font-size:12px;color:#555;line-height:1.7;">
             HTML로 다운로드 후 브라우저에서 <b>인쇄(Ctrl+P) → PDF 저장</b>하세요.<br><br>
             <b>유형 A</b>: 2페이지/지문 (한국어 심층 분석)<br>
-            <b>유형 B</b>: 1페이지/지문 (영어 간결 분석)
+            <b>유형 B</b>: 1페이지/지문 (영어 간결 분석)<br>
+            <b>유형 C</b>: 2페이지/지문 (어휘+주제/제목/요지)
           </p>
         </div>
       </div>
@@ -775,6 +785,7 @@ function snUpdateBtns() {
   const has = snSelectedPassages.size > 0;
   document.getElementById('sn-btn-a').disabled = !has;
   document.getElementById('sn-btn-b').disabled = !has;
+  document.getElementById('sn-btn-c').disabled = !has;
 }
 
 async function doSecretNote(type) {
@@ -784,13 +795,14 @@ async function doSecretNote(type) {
 
   const btnA = document.getElementById('sn-btn-a');
   const btnB = document.getElementById('sn-btn-b');
+  const btnC = document.getElementById('sn-btn-c');
   const progress = document.getElementById('sn-progress');
   const progressFill = document.getElementById('sn-progress-fill');
   const progressText = document.getElementById('sn-progress-text');
   const resultsSection = document.getElementById('sn-results-section');
   const resultsList = document.getElementById('sn-results-list');
 
-  btnA.disabled = true; btnB.disabled = true;
+  btnA.disabled = true; btnB.disabled = true; btnC.disabled = true;
   progress.classList.remove('hidden');
   resultsSection.classList.add('hidden'); resultsList.innerHTML = '';
 
@@ -828,7 +840,7 @@ async function doSecretNote(type) {
     </div>`
   ).join('');
 
-  btnA.disabled = false; btnB.disabled = false;
+  btnA.disabled = false; btnB.disabled = false; btnC.disabled = false;
 }
 
 function snDownloadMerged(type, schoolName) {

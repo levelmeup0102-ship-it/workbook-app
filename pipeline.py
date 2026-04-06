@@ -2341,7 +2341,7 @@ Return ONLY valid JSON with NO markdown, NO backticks, NO explanation.
   "background": ["배경지식1: 한 줄 설명","배경지식2","배경지식3","배경지식4","배경지식5"],
   "analogies": ["비유나 예시1 (한국어, 지문 내용과 직접 연결)","비유나 예시2"],
   "related_topics": ["연관주제1: 한 줄 설명","연관주제2","연관주제3","연관주제4","연관주제5"],
-  "proverbs": [{"en":"English proverb","kr":"한국어 의미"},{"en":"English proverb2","kr":"한국어 의미2"}],
+  "proverbs": [{"en":"English proverb1","kr":"한국어 의미"},{"en":"English proverb2","kr":"한국어 의미2"},{"en":"English proverb3","kr":"한국어 의미3"}],
   "main_points": [
     {"en":"Complete English sentence stating the main claim clearly and definitively (exam-style answer)","kr":"핵심 주장을 명확하게 서술한 완전한 한국어 문장 (수능 선택지 스타일)"},
     {"en":"MP2","kr":"번역2"},
@@ -2363,17 +2363,40 @@ Rules:
 - main_points: 수능 시험 선택지처럼 명확하고 단정적인 문장. 모호한 표현 금지.
 - titles: 수능 주제·제목 찾기 정답처럼 핵심 주장이 뚜렷하게 드러나야 함.
 - vocabulary must have exactly 10 words.
+- proverbs must have exactly 3 items.
 - Return ONLY valid JSON."""
 
-SYS_SECRET_NOTE_B = """You are an English passage analyzer for Korean students.
+SYS_SECRET_NOTE_B = """You are an English passage analyzer for Korean high school students (grades 10-12).
 Return ONLY valid JSON with NO markdown, NO backticks, NO explanation.
 {
-  "titles": ["title1","title2","title3"],
-  "summary": "One English sentence summary of 50-70 words",
-  "key_arguments": ["arg1","arg2","arg3","arg4","arg5"],
-  "vocabulary": [{"word":"example","easy":["s1","s2","s3","s4","s5"],"hard":["h1","h2","h3","h4","h5"]}]
+  "titles": [
+    {"en": "Title 1", "kr": "한국어 번역"},
+    {"en": "Title 2", "kr": "한국어 번역"},
+    {"en": "Title 3", "kr": "한국어 번역"}
+  ],
+  "summary_en": "One English sentence of 50-70 words capturing the main argument and conclusion",
+  "summary_kr": "위 영어 요약의 자연스러운 한국어 번역",
+  "key_arguments": [
+    {"en": "Key argument 1 as a complete English sentence", "kr": "한국어 번역"},
+    {"en": "Key argument 2", "kr": "한국어 번역"},
+    {"en": "Key argument 3", "kr": "한국어 번역"},
+    {"en": "Key argument 4", "kr": "한국어 번역"},
+    {"en": "Key argument 5", "kr": "한국어 번역"}
+  ],
+  "vocabulary": [
+    {"word": "word1", "easy": ["s1","s2","s3","s4","s5"], "hard": ["h1","h2","h3","h4","h5"]}
+  ]
 }
-Rules: vocabulary must have 10 words. easy=middle/high school level. hard=college entrance level. Return ONLY valid JSON."""
+CRITICAL rules for titles:
+- Titles must capture the ACTUAL central argument of the passage, not just the topic keyword.
+- Ask: what does the author CLAIM or ARGUE? The title must state that claim.
+- BAD: "Vancouver's Weather Advantage" (just a topic)
+- GOOD: "How Microclimate Control Enables Effective Gardening Despite Harsh Regional Climate"
+- Each title must be specific, definitive, and reflect the main thesis like a correct exam answer choice.
+- All three titles from different angles, all expressing the core argument.
+- key_arguments: 5 complete sentences, each stating a distinct main point from the passage.
+- vocabulary: exactly 10 words. easy=middle/high school level. hard=수능~편입 level.
+- Return ONLY valid JSON."""
 
 
 def generate_secret_note_a(passage: str, translation: str, passage_dir: Path) -> dict:

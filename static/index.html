@@ -95,6 +95,20 @@ textarea:focus { border-color: #4A90D9; outline: none; }
 /* 토스트 */
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 8px; font-size: 14px; z-index: 1000; animation: fadeIn 0.3s; }
 @keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(10px); } }
+
+/* ★ 비밀노트 탭 스타일 */
+.sn-type-btn { flex:1; padding:12px 8px; border:none; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; transition:all 0.2s; }
+.sn-type-a { background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:white; }
+.sn-type-a:hover { background:linear-gradient(135deg,#1e40af,#2563eb); transform:translateY(-1px); }
+.sn-type-b { background:linear-gradient(135deg,#7c3aed,#a855f7); color:white; }
+.sn-type-b:hover { background:linear-gradient(135deg,#6d28d9,#9333ea); transform:translateY(-1px); }
+.sn-type-btn:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+.sn-card { background:linear-gradient(135deg,#ede9fe,#faf5ff); border:1.5px solid #c4b5fd; border-radius:12px; padding:14px; margin-bottom:12px; }
+.sn-card .card-title { color:#6d28d9; }
+.sn-progress { margin-top:10px; }
+.sn-result-item { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border:1px solid #ddd8fe; border-radius:8px; margin-bottom:6px; font-size:13px; background:white; }
+.btn-purple { background:#7c3aed; color:white; }
+.btn-purple:hover { background:#6d28d9; }
 </style>
 </head>
 <body>
@@ -125,6 +139,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
     <div class="header-tabs">
       <div class="header-tab active" onclick="switchTab('generate', this)">📄 워크북 생성</div>
       <div class="header-tab" onclick="switchTab('upload', this)">📤 지문 관리</div>
+      <div class="header-tab" onclick="switchTab('secret', this)">🔐 비밀노트</div>
     </div>
   </div>
 
@@ -209,6 +224,81 @@ textarea:focus { border-color: #4A90D9; outline: none; }
         </div>
       </div>
 
+    </div>
+  </div>
+
+
+  <!-- ★ 비밀노트 탭 -->
+  <div id="tab-secret" class="hidden">
+    <div class="three-col">
+      <div>
+        <div class="card">
+          <div class="card-title">📚 교재 선택</div>
+          <select id="sn-sel-book" onchange="snOnBookChange()" style="margin-bottom:0;">
+            <option value="">교재를 선택하세요</option>
+          </select>
+        </div>
+        <div class="card">
+          <div class="card-title">
+            📄 지문 선택
+            <span style="margin-left:auto;font-size:12px;color:#666;" id="sn-sel-count">0개 선택</span>
+          </div>
+          <div style="display:flex;gap:5px;margin-bottom:7px;">
+            <button class="btn btn-sm" onclick="snSelectAll()" style="background:#eee;color:#333;">전체 선택</button>
+            <button class="btn btn-sm" onclick="snSelectNone()" style="background:#eee;color:#333;">선택 해제</button>
+          </div>
+          <div class="passage-list" id="sn-passage-list">
+            <div style="padding:20px;text-align:center;color:#999;">교재를 먼저 선택하세요</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="sn-card card">
+          <div class="card-title">🔐 비밀노트 설정</div>
+          <div style="margin-bottom:10px;">
+            <label style="font-size:12px;color:#555;display:block;margin-bottom:4px;">학교명</label>
+            <input type="text" id="sn-school-name" placeholder="레벨미업학원" value="레벨미업학원"
+              style="width:100%;padding:9px 12px;border:2px solid #c4b5fd;border-radius:8px;font-size:13px;outline:none;">
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:12px;color:#555;display:block;margin-bottom:6px;">유형 선택</label>
+            <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:10px;margin-bottom:6px;">
+              <div style="font-size:11px;font-weight:700;color:#6d28d9;margin-bottom:2px;">유형 A — 한국어 종합 분석</div>
+              <div style="font-size:11px;color:#666;">지문흐름·요약·배경지식·비유·연관주제·속담·요지·제목·비유구문·어휘(동의어+반의어)</div>
+            </div>
+            <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:10px;">
+              <div style="font-size:11px;font-weight:700;color:#7c3aed;margin-bottom:2px;">유형 B — 영어 중심 분석</div>
+              <div style="font-size:11px;color:#666;">Titles · Summary · Key Arguments · Vocabulary (easy/hard synonyms)</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="sn-type-btn sn-type-a" id="sn-btn-a" onclick="doSecretNote('A')" disabled>
+              유형 A<br><span style="font-size:10px;font-weight:400;">한국어 종합</span>
+            </button>
+            <button class="sn-type-btn sn-type-b" id="sn-btn-b" onclick="doSecretNote('B')" disabled>
+              유형 B<br><span style="font-size:10px;font-weight:400;">영어 중심</span>
+            </button>
+          </div>
+          <div class="progress hidden" id="sn-progress">
+            <div class="progress-bar" style="margin-top:8px;"><div class="progress-fill" id="sn-progress-fill" style="width:0%"></div></div>
+            <div class="progress-text" id="sn-progress-text">생성 중...</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-right">
+        <div class="card hidden" id="sn-results-section">
+          <div class="card-title">✅ 비밀노트 생성 완료</div>
+          <div id="sn-results-list"></div>
+        </div>
+        <div class="card" style="background:#f5f3ff;border:1.5px solid #ddd6fe;">
+          <div class="card-title" style="color:#6d28d9;">💡 비밀노트 안내</div>
+          <p style="font-size:12px;color:#555;line-height:1.7;">
+            HTML로 다운로드 후 브라우저에서 <b>인쇄(Ctrl+P) → PDF 저장</b>하세요.<br><br>
+            <b>유형 A</b>: 2페이지/지문 (한국어 심층 분석)<br>
+            <b>유형 B</b>: 1페이지/지문 (영어 간결 분석)
+          </p>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -581,6 +671,8 @@ function switchTab(tab, el) {
   if(el) el.classList.add('active');
   document.getElementById('tab-generate').classList.toggle('hidden', tab!=='generate');
   document.getElementById('tab-upload').classList.toggle('hidden', tab!=='upload');
+  document.getElementById('tab-secret').classList.toggle('hidden', tab!=='secret');
+  if(tab==='secret') snRefreshBooks();
 }
 
 function toast(msg) {
@@ -599,6 +691,157 @@ document.getElementById('pw-input').addEventListener('keypress', e => { if(e.key
   }
   document.getElementById('login-screen').classList.remove('hidden');
 })();
+
+// ============================================================
+// ★ 비밀노트 - 추가 코드
+// ============================================================
+let snSelectedPassages = new Map();
+
+function snRefreshBooks() {
+  if (!PASSAGES_DATA) return;
+  const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
+  const sel = document.getElementById('sn-sel-book');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">교재를 선택하세요</option>';
+  books.forEach(b => { sel.innerHTML += `<option value="${b}">${b}</option>`; });
+  if (prev && books.includes(prev)) { sel.value = prev; snOnBookChange(); }
+}
+
+function snOnBookChange() {
+  const book = document.getElementById('sn-sel-book').value;
+  snSelectedPassages.clear();
+  const list = document.getElementById('sn-passage-list');
+  if (!book) { list.innerHTML = '<div style="padding:20px;text-align:center;color:#999;">교재를 먼저 선택하세요</div>'; snUpdateCount(); snUpdateBtns(); return; }
+  const passages = PASSAGES_DATA.filter(p => p.book === book);
+  const units = [...new Set(passages.map(p => p.unit))];
+  units.sort((a, b) => (parseInt(a)||0) - (parseInt(b)||0));
+  let html = '';
+  for (const unit of units) {
+    const up = passages.filter(p => p.unit === unit);
+    html += `<div class="unit-header" onclick="snToggleUnit('${book}','${unit}')">📁 ${unit} (${up.length}개)<span class="unit-select">단원 전체선택</span></div>`;
+    for (const p of up) {
+      const key = `${p.book}|${p.unit}|${p.id}`;
+      html += `<div class="passage-item" onclick="snTogglePassage('${p.book}','${p.unit}','${p.id}',this)">
+        <input type="checkbox" data-sn-key="${key}">
+        <span class="title">${p.title}</span>
+      </div>`;
+    }
+  }
+  list.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
+  snUpdateCount(); snUpdateBtns();
+}
+
+function snTogglePassage(book, unit, id, el) {
+  const key = `${book}|${unit}|${id}`;
+  const cb = el.querySelector('input[type="checkbox"]');
+  if (snSelectedPassages.has(key)) { snSelectedPassages.delete(key); cb.checked = false; }
+  else { snSelectedPassages.set(key, {book,unit,id}); cb.checked = true; }
+  snUpdateCount(); snUpdateBtns();
+}
+
+function snToggleUnit(book, unit) {
+  const up = PASSAGES_DATA.filter(p => p.book===book && p.unit===unit);
+  const allSel = up.every(p => snSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  up.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    const cb = document.querySelector(`input[data-sn-key="${key}"]`);
+    if (allSel) { snSelectedPassages.delete(key); if(cb) cb.checked=false; }
+    else { snSelectedPassages.set(key,{book:p.book,unit:p.unit,id:p.id}); if(cb) cb.checked=true; }
+  });
+  snUpdateCount(); snUpdateBtns();
+}
+
+function snSelectAll() {
+  const book = document.getElementById('sn-sel-book').value;
+  if (!book) return;
+  PASSAGES_DATA.filter(p => p.book===book).forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    snSelectedPassages.set(key, {book:p.book,unit:p.unit,id:p.id});
+    const cb = document.querySelector(`input[data-sn-key="${key}"]`);
+    if (cb) cb.checked = true;
+  });
+  snUpdateCount(); snUpdateBtns();
+}
+
+function snSelectNone() {
+  snSelectedPassages.clear();
+  document.querySelectorAll('[data-sn-key]').forEach(cb => cb.checked = false);
+  snUpdateCount(); snUpdateBtns();
+}
+
+function snUpdateCount() { document.getElementById('sn-sel-count').textContent = `${snSelectedPassages.size}개 선택`; }
+
+function snUpdateBtns() {
+  const has = snSelectedPassages.size > 0;
+  document.getElementById('sn-btn-a').disabled = !has;
+  document.getElementById('sn-btn-b').disabled = !has;
+}
+
+async function doSecretNote(type) {
+  const passages = [...snSelectedPassages.values()];
+  if (!passages.length) { toast('지문을 선택하세요'); return; }
+  const schoolName = document.getElementById('sn-school-name').value.trim() || '레벨미업학원';
+
+  const btnA = document.getElementById('sn-btn-a');
+  const btnB = document.getElementById('sn-btn-b');
+  const progress = document.getElementById('sn-progress');
+  const progressFill = document.getElementById('sn-progress-fill');
+  const progressText = document.getElementById('sn-progress-text');
+  const resultsSection = document.getElementById('sn-results-section');
+  const resultsList = document.getElementById('sn-results-list');
+
+  btnA.disabled = true; btnB.disabled = true;
+  progress.classList.remove('hidden');
+  resultsSection.classList.add('hidden'); resultsList.innerHTML = '';
+
+  let completed = 0; const results = [];
+  for (const p of passages) {
+    progressText.textContent = `생성 중... ${completed+1}/${passages.length} — ${p.unit} ${p.id}`;
+    progressFill.style.width = `${(completed/passages.length)*100}%`;
+    try {
+      const res = await fetch(API+'/api/secret-note', {
+        method: 'POST', headers: headers(),
+        body: JSON.stringify({type, school_name: schoolName, passages:[{book:p.book,unit:p.unit,id:p.id}]})
+      });
+      const data = await res.json();
+      if (data.ok) results.push({id:`${p.unit} ${p.id}`,status:'success',html:data.html,filename:data.filename});
+      else results.push({id:`${p.unit} ${p.id}`,status:'error',error:data.detail});
+    } catch(e) { results.push({id:`${p.unit} ${p.id}`,status:'error',error:e.message}); }
+    completed++;
+    progressFill.style.width = `${(completed/passages.length)*100}%`;
+  }
+
+  progressText.textContent = `완료! ${results.filter(r=>r.status==='success').length}/${passages.length} 성공`;
+  resultsSection.classList.remove('hidden');
+  const successResults = results.filter(r=>r.status==='success');
+  window._lastSnResults = successResults;
+
+  let mergeBtn = successResults.length > 1
+    ? `<div style="margin-bottom:8px;"><button class="btn btn-purple" style="width:100%;" onclick="snDownloadMerged('${type}','${schoolName}')">📦 합본 다운로드 (${successResults.length}개)</button></div>`
+    : '';
+  resultsList.innerHTML = mergeBtn + results.map(r =>
+    `<div class="sn-result-item">
+      <span>${r.status==='success'?'✅':'❌'} ${r.id}</span>
+      ${r.status==='success'
+        ? `<button class="btn btn-sm btn-purple" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')">📥 다운로드</button>`
+        : `<span style="color:#dc2626;font-size:12px;">${r.error}</span>`}
+    </div>`
+  ).join('');
+
+  btnA.disabled = false; btnB.disabled = false;
+}
+
+function snDownloadMerged(type, schoolName) {
+  if (!window._lastSnResults || !window._lastSnResults.length) return;
+  const css = (window._lastSnResults[0].html.match(/<style[^>]*>([\s\S]*?)<\/style>/) || ['',''])[1];
+  const bodies = window._lastSnResults.map(r => (r.html.match(/<body[^>]*>([\s\S]*?)<\/body>/) || ['',r.html])[1]);
+  const merged = `<!DOCTYPE html>\n<html lang="ko">\n<head>\n<meta charset="UTF-8">\n<title>${schoolName} 비밀노트 합본</title>\n<style>\n${css}\n</style>\n</head>\n<body>\n${bodies.join('\n')}\n</body>\n</html>`;
+  const blob = new Blob([merged], {type:'text/html; charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=`${schoolName}_비밀노트_유형${type}_합본.html`; a.click();
+  URL.revokeObjectURL(url);
+}
+
 </script>
 </body>
 </html>

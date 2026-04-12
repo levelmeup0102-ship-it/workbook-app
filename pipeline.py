@@ -13,6 +13,9 @@ STEP_VERSIONS = {
     "step6_vocab_content": "v2",
     "step7_writing": "v3",
     "step8_answers": "v4",
+    "secret_note_a": "v1",
+    "secret_note_b": "v1",
+    "secret_note_c": "v2",  # v2: 1페이지 버전, flow 제거, topics/titles에 한글 추가
 }
 import asyncio, json, os, sys, time, random, re, math, logging
 
@@ -2476,7 +2479,7 @@ def render_secret_note(passages_data: list, note_type: str, school_name: str) ->
 
 
 # ============================================================
-# ★ 비밀노트 Type C (어휘+주제/제목/요지+흐름+요약)
+# ★ 비밀노트 Type C (어휘+주제/제목/요지+요약) - 1페이지 버전
 # ============================================================
 
 SYS_SECRET_NOTE_C = """You are an expert English teacher preparing Korean high school students for their FINAL EXAM.
@@ -2488,28 +2491,22 @@ Analyze the passage and return structured study materials.
    - 5 synonyms
    - 5 antonyms
    
-2. TOPICS (주제): 5 different topic statements in ENGLISH
+2. TOPICS (주제): 5 different topic statements with Korean translation
    - Express what the passage is ABOUT
    - Complete phrases, not single words
-   - Example: "Fear of public speaking and neglect of preparation"
+   - Each item has "en" (English) and "kr" (Korean translation)
 
-3. TITLES (제목): 5 creative, catchy titles in ENGLISH
+3. TITLES (제목): 5 creative, catchy titles with Korean translation
    - Like a newspaper headline or book chapter title
    - Engaging and memorable
-   - Example: "From Excitement to Anxiety: The Night Before the Speech"
+   - Each item has "en" (English) and "kr" (Korean translation)
 
-4. MAIN_POINTS (요지): 5 statements in KOREAN
+4. MAIN_POINTS (요지): 5 statements in KOREAN only
    - State the key message/lesson of the passage
    - Complete sentences in natural Korean
    - What the reader should take away
-   - Example: "발표 준비보다 청중의 반응을 지나치게 의식한 '나'는 제대로 된 준비를 하지 못했다."
 
-5. FLOW (글의 흐름): Exactly 10 steps in KOREAN
-   - Trace the logical progression of the passage
-   - Each step is one sentence
-   - Together they tell the complete story
-
-6. SUMMARY: Both English (60-100 words) and Korean versions
+5. SUMMARY: Both English (60-100 words) and Korean versions
 
 === JSON FORMAT ===
 Return ONLY valid JSON:
@@ -2519,18 +2516,18 @@ Return ONLY valid JSON:
     {"word": "word2", "definition": "...", "synonyms": [...], "antonyms": [...]}
   ],
   "topics": [
-    "Topic statement 1 in English",
-    "Topic statement 2 in English",
-    "Topic statement 3 in English",
-    "Topic statement 4 in English",
-    "Topic statement 5 in English"
+    {"en": "Topic statement 1 in English", "kr": "영어 주제의 한국어 번역"},
+    {"en": "Topic statement 2 in English", "kr": "한국어 번역"},
+    {"en": "Topic statement 3 in English", "kr": "한국어 번역"},
+    {"en": "Topic statement 4 in English", "kr": "한국어 번역"},
+    {"en": "Topic statement 5 in English", "kr": "한국어 번역"}
   ],
   "titles": [
-    "Creative Title 1 in English",
-    "Creative Title 2 in English", 
-    "Creative Title 3 in English",
-    "Creative Title 4 in English",
-    "Creative Title 5 in English"
+    {"en": "Creative Title 1 in English", "kr": "한국어 번역"},
+    {"en": "Creative Title 2 in English", "kr": "한국어 번역"}, 
+    {"en": "Creative Title 3 in English", "kr": "한국어 번역"},
+    {"en": "Creative Title 4 in English", "kr": "한국어 번역"},
+    {"en": "Creative Title 5 in English", "kr": "한국어 번역"}
   ],
   "main_points": [
     "요지 1 - 완전한 한국어 문장",
@@ -2539,33 +2536,20 @@ Return ONLY valid JSON:
     "요지 4 - 완전한 한국어 문장",
     "요지 5 - 완전한 한국어 문장"
   ],
-  "flow": [
-    "1단계 설명 (한국어)",
-    "2단계 설명 (한국어)",
-    "3단계 설명 (한국어)",
-    "4단계 설명 (한국어)",
-    "5단계 설명 (한국어)",
-    "6단계 설명 (한국어)",
-    "7단계 설명 (한국어)",
-    "8단계 설명 (한국어)",
-    "9단계 설명 (한국어)",
-    "10단계 설명 (한국어)"
-  ],
   "summary_en": "English summary of 60-100 words...",
   "summary_kr": "한국어 요약..."
 }
 
 IMPORTANT:
 - vocabulary: exactly 10 words
-- topics: exactly 5 items (English)
-- titles: exactly 5 items (English)
-- main_points: exactly 5 items (Korean)
-- flow: exactly 10 items (Korean)
+- topics: exactly 5 items (each with "en" and "kr")
+- titles: exactly 5 items (each with "en" and "kr")
+- main_points: exactly 5 items (Korean only)
 - Return ONLY valid JSON. No markdown, no backticks."""
 
 
 def generate_secret_note_c(passage: str, passage_dir: Path, translation: str = "") -> dict:
-    """유형 C 비밀노트 (어휘+주제/제목/요지+흐름+요약)"""
+    """유형 C 비밀노트 (어휘+주제/제목/요지+요약) - 1페이지"""
     cached = load_step(passage_dir, "secret_note_c")
     if cached:
         _safe_print("  ✅ secret_note_c 캐시 사용")
@@ -2580,3 +2564,4 @@ def generate_secret_note_c(passage: str, passage_dir: Path, translation: str = "
     data = call_claude_json(SYS_SECRET_NOTE_C, prompt, max_tokens=5000)
     save_step(passage_dir, "secret_note_c", data)
     return data
+

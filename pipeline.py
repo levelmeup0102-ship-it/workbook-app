@@ -15,7 +15,7 @@ STEP_VERSIONS = {
     "step8_answers": "v4",
     "secret_note_a": "v1",
     "secret_note_b": "v1",
-    "secret_note_c": "v2",  # v2: 1페이지 버전, flow 제거, topics/titles에 한글 추가
+    "secret_note_c": "v3",  # v3: 1페이지, 영영풀이/반의어 제거, 고난이도유의어 추가
 }
 import asyncio, json, os, sys, time, random, re, math, logging
 
@@ -2487,24 +2487,20 @@ Analyze the passage and return structured study materials.
 
 === CRITICAL RULES ===
 1. VOCABULARY: Select 10 key words. Each must have:
-   - English definition (clear, concise, 8-15 words)
-   - 5 synonyms
-   - 5 antonyms
+   - 5 synonyms (middle/high school level, 중고등 수준)
+   - 2-3 hard_synonyms (편입/고급 수준) with Korean meaning in parentheses
    
 2. TOPICS (주제): 5 different topic statements with Korean translation
    - Express what the passage is ABOUT
    - Complete phrases, not single words
-   - Each item has "en" (English) and "kr" (Korean translation)
 
 3. TITLES (제목): 5 creative, catchy titles with Korean translation
    - Like a newspaper headline or book chapter title
    - Engaging and memorable
-   - Each item has "en" (English) and "kr" (Korean translation)
 
 4. MAIN_POINTS (요지): 5 statements in KOREAN only
    - State the key message/lesson of the passage
    - Complete sentences in natural Korean
-   - What the reader should take away
 
 5. SUMMARY: Both English (60-100 words) and Korean versions
 
@@ -2512,8 +2508,16 @@ Analyze the passage and return structured study materials.
 Return ONLY valid JSON:
 {
   "vocabulary": [
-    {"word": "admire", "definition": "to respect or look up to someone greatly", "synonyms": ["respect", "esteem", "revere", "honor", "appreciate"], "antonyms": ["despise", "scorn", "disrespect", "loathe", "disregard"]},
-    {"word": "word2", "definition": "...", "synonyms": [...], "antonyms": [...]}
+    {
+      "word": "localized",
+      "synonyms": ["regional", "local", "confined", "restricted", "specific"],
+      "hard_synonyms": ["circumscribed (제한된)", "parochial (지역적인)", "demarcated (경계가 정해진)"]
+    },
+    {
+      "word": "maximize",
+      "synonyms": ["increase", "boost", "enhance", "amplify", "expand"],
+      "hard_synonyms": ["optimize (최적화하다)", "augment (증대시키다)"]
+    }
   ],
   "topics": [
     {"en": "Topic statement 1 in English", "kr": "영어 주제의 한국어 번역"},
@@ -2541,7 +2545,7 @@ Return ONLY valid JSON:
 }
 
 IMPORTANT:
-- vocabulary: exactly 10 words
+- vocabulary: exactly 10 words, each with 5 synonyms and 2-3 hard_synonyms (with Korean meaning)
 - topics: exactly 5 items (each with "en" and "kr")
 - titles: exactly 5 items (each with "en" and "kr")
 - main_points: exactly 5 items (Korean only)

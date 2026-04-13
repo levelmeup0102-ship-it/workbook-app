@@ -15,7 +15,7 @@ STEP_VERSIONS = {
     "step8_answers": "v4",
     "secret_note_a": "v1",
     "secret_note_b": "v1",
-    "secret_note_c": "v3",  # v3: 1페이지, 영영풀이/반의어 제거, 고난이도유의어 추가
+    "secret_note_c": "v4",  # v4: 해석+paraphrase, 주제/제목/요지 3개, 수능 스타일 긴 제목
 }
 import asyncio, json, os, sys, time, random, re, math, logging
 
@@ -2490,65 +2490,62 @@ Analyze the passage and return structured study materials.
    - 5 synonyms (middle/high school level, 중고등 수준)
    - 2-3 hard_synonyms (편입/고급 수준) with Korean meaning in parentheses
    
-2. TOPICS (주제): 5 different topic statements with Korean translation
+2. TOPICS (주제): 3 different topic statements with Korean translation
    - Express what the passage is ABOUT
-   - Complete phrases, not single words
+   - LONG complete phrases (15-25 words), like 수능 format
+   - Example: "The essential role of accumulated agricultural knowledge in transforming solar energy into consumable food"
 
-3. TITLES (제목): 5 creative, catchy titles with Korean translation
-   - Like a newspaper headline or book chapter title
-   - Engaging and memorable
+3. TITLES (제목): 3 creative titles - 수능 24번 STYLE with Korean translation
+   - MUST BE LONG with subtitle (콜론 사용)
+   - Example: "From Sunlight to Supper: The Knowledge Revolution in Food Production"
+   - Example: "Harvesting Wisdom: How Centuries of Agricultural Knowledge Feed Humanity"
+   - NOT short titles like "Food and Knowledge" - TOO SHORT!
 
-4. MAIN_POINTS (요지): 5 statements in KOREAN only
+4. MAIN_POINTS (요지): 3 statements in KOREAN only
    - State the key message/lesson of the passage
-   - Complete sentences in natural Korean
+   - Complete sentences in natural Korean (20-40 characters)
 
-5. SUMMARY: Both English (60-100 words) and Korean versions
+5. PARAPHRASE: Rewrite the ENTIRE passage in different words
+   - SAME number of sentences as original
+   - SIMILAR word count as original
+   - COMPLETELY different vocabulary and sentence structures
+   - SAME meaning, different expression
+   - This is for students to see the same content expressed differently
 
 === JSON FORMAT ===
 Return ONLY valid JSON:
 {
   "vocabulary": [
     {
-      "word": "localized",
-      "synonyms": ["regional", "local", "confined", "restricted", "specific"],
-      "hard_synonyms": ["circumscribed (제한된)", "parochial (지역적인)", "demarcated (경계가 정해진)"]
-    },
-    {
-      "word": "maximize",
-      "synonyms": ["increase", "boost", "enhance", "amplify", "expand"],
-      "hard_synonyms": ["optimize (최적화하다)", "augment (증대시키다)"]
+      "word": "flourish",
+      "synonyms": ["thrive", "prosper", "bloom", "succeed", "grow"],
+      "hard_synonyms": ["burgeon (번성하다)", "proliferate (확산하다)", "effloresce (개화하다)"]
     }
   ],
   "topics": [
-    {"en": "Topic statement 1 in English", "kr": "영어 주제의 한국어 번역"},
-    {"en": "Topic statement 2 in English", "kr": "한국어 번역"},
-    {"en": "Topic statement 3 in English", "kr": "한국어 번역"},
-    {"en": "Topic statement 4 in English", "kr": "한국어 번역"},
-    {"en": "Topic statement 5 in English", "kr": "한국어 번역"}
+    {"en": "The essential role of accumulated agricultural knowledge in transforming solar energy into consumable food", "kr": "축적된 농업 지식이 태양 에너지를 먹을 수 있는 음식으로 변환하는 데 있어서의 핵심적인 역할"},
+    {"en": "How human civilization has flourished by developing sophisticated methods to capture solar energy", "kr": "인류 문명이 태양 에너지를 포착하는 정교한 방법을 개발하여 번성한 방식"},
+    {"en": "The relationship between information accumulation and converting natural resources into sustenance", "kr": "정보 축적과 자연 자원을 식량으로 전환하는 능력 간의 관계"}
   ],
   "titles": [
-    {"en": "Creative Title 1 in English", "kr": "한국어 번역"},
-    {"en": "Creative Title 2 in English", "kr": "한국어 번역"}, 
-    {"en": "Creative Title 3 in English", "kr": "한국어 번역"},
-    {"en": "Creative Title 4 in English", "kr": "한국어 번역"},
-    {"en": "Creative Title 5 in English", "kr": "한국어 번역"}
+    {"en": "From Sunlight to Supper: The Knowledge Revolution in Food Production", "kr": "햇빛에서 저녁 식사까지: 식량 생산의 지식 혁명"},
+    {"en": "Harvesting Wisdom: How Centuries of Agricultural Knowledge Feed Humanity", "kr": "지혜를 수확하다: 수세기의 농업 지식이 인류를 먹여 살리는 방법"},
+    {"en": "The Solar Energy Diet: Thousands of Years of Knowledge in Every Bite", "kr": "태양 에너지 식단: 한 입에 담긴 수천 년의 지식"}
   ],
   "main_points": [
-    "요지 1 - 완전한 한국어 문장",
-    "요지 2 - 완전한 한국어 문장",
-    "요지 3 - 완전한 한국어 문장",
-    "요지 4 - 완전한 한국어 문장",
-    "요지 5 - 완전한 한국어 문장"
+    "우리가 먹는 음식은 수천 년간 축적된 농업 지식의 결과물이다.",
+    "인류가 번성할 수 있었던 것은 태양 에너지를 활용하는 지식이 발전했기 때문이다.",
+    "지식의 발전으로 활용 가능한 에너지의 양이 증가했지만 여전히 극히 일부에 불과하다."
   ],
-  "summary_en": "English summary of 60-100 words...",
-  "summary_kr": "한국어 요약..."
+  "paraphrase": "People often claim that information cannot be consumed..."
 }
 
 IMPORTANT:
-- vocabulary: exactly 10 words, each with 5 synonyms and 2-3 hard_synonyms (with Korean meaning)
-- topics: exactly 5 items (each with "en" and "kr")
-- titles: exactly 5 items (each with "en" and "kr")
-- main_points: exactly 5 items (Korean only)
+- vocabulary: exactly 10 words, each with 5 synonyms and 2-3 hard_synonyms
+- topics: exactly 3 items (LONG phrases, 15-25 words each)
+- titles: exactly 3 items (수능 24번 style with colon, 10-15 words)
+- main_points: exactly 3 items (Korean only)
+- paraphrase: FULL passage rewritten, same length as original
 - Return ONLY valid JSON. No markdown, no backticks."""
 
 

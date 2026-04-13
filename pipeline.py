@@ -15,7 +15,7 @@ STEP_VERSIONS = {
     "step8_answers": "v4",
     "secret_note_a": "v1",
     "secret_note_b": "v1",
-    "secret_note_c": "v4",  # v4: 해석+paraphrase, 주제/제목/요지 3개, 수능 스타일 긴 제목
+    "secret_note_c": "v5",  # v5: 유의어 6-7개, 고난도 4-5개, 요지 2배 길이, 가로 배치
 }
 import asyncio, json, os, sys, time, random, re, math, logging
 
@@ -2487,8 +2487,8 @@ Analyze the passage and return structured study materials.
 
 === CRITICAL RULES ===
 1. VOCABULARY: Select 10 key words. Each must have:
-   - 5 synonyms (middle/high school level, 중고등 수준)
-   - 2-3 hard_synonyms (편입/고급 수준) with Korean meaning in parentheses
+   - 6-7 synonyms (middle/high school level, 중고등 수준)
+   - 4-5 hard_synonyms (편입/고급 수준) with Korean meaning in parentheses
    
 2. TOPICS (주제): 3 different topic statements with Korean translation
    - Express what the passage is ABOUT
@@ -2503,7 +2503,8 @@ Analyze the passage and return structured study materials.
 
 4. MAIN_POINTS (요지): 3 statements in KOREAN only
    - State the key message/lesson of the passage
-   - Complete sentences in natural Korean (20-40 characters)
+   - LONG complete sentences in natural Korean (40-60 characters, 2배 길이)
+   - Must be detailed and comprehensive, not short summaries
 
 5. PARAPHRASE: Rewrite the ENTIRE passage in different words
    - SAME number of sentences as original
@@ -2518,8 +2519,8 @@ Return ONLY valid JSON:
   "vocabulary": [
     {
       "word": "flourish",
-      "synonyms": ["thrive", "prosper", "bloom", "succeed", "grow"],
-      "hard_synonyms": ["burgeon (번성하다)", "proliferate (확산하다)", "effloresce (개화하다)"]
+      "synonyms": ["thrive", "prosper", "bloom", "succeed", "grow", "blossom", "expand"],
+      "hard_synonyms": ["burgeon (번성하다)", "proliferate (확산하다)", "effloresce (개화하다)", "fructify (결실을 맺다)", "luxuriate (무성하게 자라다)"]
     }
   ],
   "topics": [
@@ -2533,18 +2534,18 @@ Return ONLY valid JSON:
     {"en": "The Solar Energy Diet: Thousands of Years of Knowledge in Every Bite", "kr": "태양 에너지 식단: 한 입에 담긴 수천 년의 지식"}
   ],
   "main_points": [
-    "우리가 먹는 음식은 수천 년간 축적된 농업 지식의 결과물이다.",
-    "인류가 번성할 수 있었던 것은 태양 에너지를 활용하는 지식이 발전했기 때문이다.",
-    "지식의 발전으로 활용 가능한 에너지의 양이 증가했지만 여전히 극히 일부에 불과하다."
+    "우리가 오늘날 먹는 음식은 단순한 칼로리가 아니라, 수천 년에 걸쳐 축적된 농업 지식과 기술의 결정체이다.",
+    "인류가 번성할 수 있었던 것은 태양 에너지를 음식으로 변환하는 방법에 대한 지식이 점점 더 정교해졌기 때문이다.",
+    "지식의 발전으로 우리가 활용할 수 있는 에너지의 양이 증가했지만, 여전히 태양 에너지의 극히 일부에 불과하다."
   ],
   "paraphrase": "People often claim that information cannot be consumed..."
 }
 
 IMPORTANT:
-- vocabulary: exactly 10 words, each with 5 synonyms and 2-3 hard_synonyms
+- vocabulary: exactly 10 words, each with 6-7 synonyms and 4-5 hard_synonyms
 - topics: exactly 3 items (LONG phrases, 15-25 words each)
 - titles: exactly 3 items (수능 24번 style with colon, 10-15 words)
-- main_points: exactly 3 items (Korean only)
+- main_points: exactly 3 items (Korean only, LONG 40-60 characters each)
 - paraphrase: FULL passage rewritten, same length as original
 - Return ONLY valid JSON. No markdown, no backticks."""
 

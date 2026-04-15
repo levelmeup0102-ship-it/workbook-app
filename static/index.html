@@ -348,6 +348,13 @@ textarea:focus { border-color: #4A90D9; outline: none; }
           <input type="text" id="ext-school-name" placeholder="예: 정명고2" style="width:100%;padding:10px 12px;border:2px solid #e5e7eb;border-radius:8px;font-size:14px;">
         </div>
         <div class="card">
+          <div class="card-title">⚙️ 옵션</div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+            <input type="checkbox" id="ext-include-translation" style="width:16px;height:16px;">
+            해석 포함
+          </label>
+        </div>
+        <div class="card">
           <div class="card-title">📤 HTML 추출</div>
           <button class="btn btn-primary" style="width:100%;" onclick="extExtractHTML()">HTML 추출 (새 창) ↗</button>
           <p style="font-size:12px;color:#666;margin-top:8px;text-align:center;">
@@ -359,10 +366,8 @@ textarea:focus { border-color: #4A90D9; outline: none; }
           <p style="font-size:12px;color:#555;line-height:1.7;">
             여러 교재의 지문을 <b>중복 선택</b>하여<br>
             한 번에 추출할 수 있습니다.<br><br>
-            <b>출력 형식:</b><br>
-            학교명/정독하며 모르는 단어 체크/...<br><br>
-            <b>수능특강 light 3강 01번</b><br>
-            [지문 내용...]
+            <b>해석 포함</b> 체크 시<br>
+            영문 아래 한글 해석 표시
           </p>
         </div>
       </div>
@@ -1050,6 +1055,7 @@ function extExtractHTML() {
   }
 
   const schoolName = document.getElementById('ext-school-name').value.trim() || '학교명';
+  const includeTranslation = document.getElementById('ext-include-translation').checked;
   const header = `${schoolName}/정독하며 모르는 단어 체크/ 기억 안나는 지문 체크/ 체크한 곳 리뷰/ 그리고는 3번 정독 (1회), (2회), (3회)`;
 
   // 선택된 지문들을 book, unit, id 순으로 정렬
@@ -1065,9 +1071,22 @@ function extExtractHTML() {
   let content = '';
   for (const p of selectedList) {
     const label = `${p.book} ${p.unit} ${p.id}`;
-    content += `<div style="margin-bottom: 28px; page-break-inside: avoid;">
-  <p style="font-weight: bold; color: #333; margin-bottom: 10px; font-size: 11pt;">${label}</p>
-  <p style="line-height: 2.0; text-align: justify; font-size: 11pt;">${p.text || ''}</p>
+    let rawText = p.text || '';
+    
+    // ###해석### 기준으로 영문/한글 분리
+    let englishText = rawText;
+    let koreanText = '';
+    const splitMarker = '###해석###';
+    if (rawText.includes(splitMarker)) {
+      const parts = rawText.split(splitMarker);
+      englishText = parts[0].trim();
+      koreanText = parts[1] ? parts[1].trim() : '';
+    }
+    
+    content += `<div class="passage-block">
+  <p class="passage-label">${label}</p>
+  <p class="passage-text">${englishText}</p>
+  ${includeTranslation && koreanText ? `<p class="passage-translation">${koreanText}</p>` : ''}
 </div>\n`;
   }
 
@@ -1077,10 +1096,49 @@ function extExtractHTML() {
 <meta charset="UTF-8">
 <title>원문 정독 - ${schoolName}</title>
 <style>
-@page { size: A4; margin: 15mm 18mm; }
-@media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-body { font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif; font-size: 11pt; line-height: 1.6; color: #000; max-width: 210mm; margin: 0 auto; padding: 20px; }
-.header { border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 24px; font-size: 10pt; color: #333; font-weight: 500; }
+@page { size: A4; margin: 12mm 15mm 14mm 15mm; }
+@media print { 
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .passage-block { page-break-inside: avoid; }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { 
+  font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif; 
+  font-size: 10pt; 
+  line-height: 1.5; 
+  color: #000; 
+}
+.header { 
+  border-bottom: 2px solid #333; 
+  padding-bottom: 8px; 
+  margin-bottom: 16px; 
+  font-size: 9pt; 
+  color: #333; 
+  font-weight: 500; 
+}
+.passage-block {
+  margin-bottom: 20px;
+}
+.passage-label {
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 6px;
+  font-size: 10pt;
+}
+.passage-text {
+  line-height: 1.75;
+  text-align: justify;
+  font-size: 10pt;
+}
+.passage-translation {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #f5f5f5;
+  border-left: 3px solid #4A90D9;
+  font-size: 9pt;
+  line-height: 1.6;
+  color: #333;
+}
 </style>
 </head>
 <body>

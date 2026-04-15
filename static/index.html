@@ -96,6 +96,18 @@ textarea:focus { border-color: #4A90D9; outline: none; }
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 8px; font-size: 14px; z-index: 1000; animation: fadeIn 0.3s; }
 @keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(10px); } }
 
+/* ★ 원문 추출 탭 스타일 */
+.ext-book-item { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--color-bg, #f8fafc); border-bottom: 1px solid #e5e7eb; cursor: pointer; }
+.ext-book-item:hover { background: #f0f4f8; }
+.ext-book-item.expanded { background: #EBF4FB; }
+.ext-unit-row { padding: 8px 12px 8px 32px; background: white; border-bottom: 1px solid #f0f0f0; }
+.ext-unit-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.ext-pid-list { display: flex; flex-wrap: wrap; gap: 5px; padding-left: 20px; }
+.ext-pid-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all 0.15s; border: 1px solid #e5e7eb; background: #f8fafc; }
+.ext-pid-chip:hover { background: #f0f4f8; }
+.ext-pid-chip.selected { background: #EBF4FB; border-color: #4A90D9; color: #4A90D9; }
+.ext-count-badge { font-size: 11px; color: #666; margin-left: auto; }
+
 /* ★ 비밀노트 탭 스타일 */
 .sn-type-btn { flex:1; padding:12px 8px; border:none; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; transition:all 0.2s; }
 .sn-type-a { background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:white; }
@@ -142,6 +154,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       <div class="header-tab active" onclick="switchTab('generate', this)">📄 워크북 생성</div>
       <div class="header-tab" onclick="switchTab('upload', this)">📤 지문 관리</div>
       <div class="header-tab" onclick="switchTab('secret', this)">🔐 비밀노트</div>
+      <div class="header-tab" onclick="switchTab('extract', this)">📖 원문 추출</div>
     </div>
   </div>
 
@@ -306,6 +319,50 @@ textarea:focus { border-color: #4A90D9; outline: none; }
             <b>유형 A</b>: 2페이지/지문 (한국어 심층 분석)<br>
             <b>유형 B</b>: 1페이지/지문 (영어 간결 분석)<br>
             <b>유형 C</b>: 2페이지/지문 (어휘+주제/제목/요지)
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ★ 원문 추출 탭 -->
+  <div id="tab-extract" class="hidden">
+    <div class="three-col">
+      <div style="grid-column: span 2;">
+        <div class="card">
+          <div class="card-title">📚 지문 선택 (중복 선택 가능)</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <button class="btn btn-sm" onclick="extExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
+            <button class="btn btn-sm" onclick="extCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
+            <button class="btn btn-sm" onclick="extClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
+            <span style="margin-left:auto;font-size:13px;color:#666;" id="ext-sel-count">0개 선택</span>
+          </div>
+          <div id="ext-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
+            <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-right">
+        <div class="card">
+          <div class="card-title">🏫 학교 이름</div>
+          <input type="text" id="ext-school-name" placeholder="예: 정명고2" style="width:100%;padding:10px 12px;border:2px solid #e5e7eb;border-radius:8px;font-size:14px;">
+        </div>
+        <div class="card">
+          <div class="card-title">📤 HTML 추출</div>
+          <button class="btn btn-primary" style="width:100%;" onclick="extExtractHTML()">HTML 추출 (새 창) ↗</button>
+          <p style="font-size:12px;color:#666;margin-top:8px;text-align:center;">
+            새 창에서 <b>Ctrl+P</b> → PDF 저장
+          </p>
+        </div>
+        <div class="card" style="background:#EBF4FB;border:1.5px solid #4A90D9;">
+          <div class="card-title" style="color:#4A90D9;">💡 원문 추출 안내</div>
+          <p style="font-size:12px;color:#555;line-height:1.7;">
+            여러 교재의 지문을 <b>중복 선택</b>하여<br>
+            한 번에 추출할 수 있습니다.<br><br>
+            <b>출력 형식:</b><br>
+            학교명/정독하며 모르는 단어 체크/...<br><br>
+            <b>수능특강 light 3강 01번</b><br>
+            [지문 내용...]
           </p>
         </div>
       </div>
@@ -682,7 +739,9 @@ function switchTab(tab, el) {
   document.getElementById('tab-generate').classList.toggle('hidden', tab!=='generate');
   document.getElementById('tab-upload').classList.toggle('hidden', tab!=='upload');
   document.getElementById('tab-secret').classList.toggle('hidden', tab!=='secret');
+  document.getElementById('tab-extract').classList.toggle('hidden', tab!=='extract');
   if(tab==='secret') snRefreshBooks();
+  if(tab==='extract') extRefreshBooks();
 }
 
 function toast(msg) {
@@ -852,6 +911,187 @@ function snDownloadMerged(type, schoolName) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href=url; a.download=`${schoolName}_비밀노트_유형${type}_합본.html`; a.click();
   URL.revokeObjectURL(url);
+}
+
+// ============================================================
+// ★ 원문 추출 - 추가 코드
+// ============================================================
+let extSelectedPassages = new Map();
+let extExpandedBooks = new Set();
+
+function extRefreshBooks() {
+  if (!PASSAGES_DATA) return;
+  extRenderBookList();
+}
+
+function extRenderBookList() {
+  const books = {};
+  PASSAGES_DATA.forEach(p => {
+    if (!books[p.book]) books[p.book] = {};
+    if (!books[p.book][p.unit]) books[p.book][p.unit] = [];
+    books[p.book][p.unit].push(p);
+  });
+
+  const bookNames = Object.keys(books).sort();
+  const container = document.getElementById('ext-book-list');
+  
+  let html = '';
+  for (const book of bookNames) {
+    const units = Object.keys(books[book]).sort((a,b) => {
+      const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
+      const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
+      return numA - numB || a.localeCompare(b);
+    });
+    const bookPassages = Object.values(books[book]).flat();
+    const selectedCount = bookPassages.filter(p => extSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+    const isExpanded = extExpandedBooks.has(book);
+    const allSelected = selectedCount === bookPassages.length && bookPassages.length > 0;
+
+    html += `<div class="ext-book-item ${isExpanded?'expanded':''}" onclick="extToggleExpand('${book}')">
+      <span style="color:#666;font-size:12px;">${isExpanded?'▼':'▶'}</span>
+      <input type="checkbox" ${allSelected?'checked':''} onclick="event.stopPropagation();extToggleBook('${book}')" style="width:15px;height:15px;">
+      <span style="flex:1;font-size:13px;font-weight:500;">${book}</span>
+      <span class="ext-count-badge">${selectedCount}/${bookPassages.length}</span>
+    </div>`;
+
+    if (isExpanded) {
+      for (const unit of units) {
+        const unitPassages = books[book][unit];
+        const unitSelectedCount = unitPassages.filter(p => extSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+        const unitAllSelected = unitSelectedCount === unitPassages.length;
+
+        html += `<div class="ext-unit-row">
+          <div class="ext-unit-header">
+            <input type="checkbox" ${unitAllSelected?'checked':''} onclick="extToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
+            <span style="font-size:13px;font-weight:600;color:#4A90D9;">${unit}</span>
+            <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
+          </div>
+          <div class="ext-pid-list">`;
+        
+        for (const p of unitPassages) {
+          const key = `${p.book}|${p.unit}|${p.id}`;
+          const isSelected = extSelectedPassages.has(key);
+          html += `<label class="ext-pid-chip ${isSelected?'selected':''}">
+            <input type="checkbox" ${isSelected?'checked':''} onchange="extTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
+            ${p.id}
+          </label>`;
+        }
+        html += '</div></div>';
+      }
+    }
+  }
+  container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
+  extUpdateSelCount();
+}
+
+function extToggleExpand(book) {
+  if (extExpandedBooks.has(book)) extExpandedBooks.delete(book);
+  else extExpandedBooks.add(book);
+  extRenderBookList();
+}
+
+function extExpandAll() {
+  const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
+  books.forEach(b => extExpandedBooks.add(b));
+  extRenderBookList();
+}
+
+function extCollapseAll() {
+  extExpandedBooks.clear();
+  extRenderBookList();
+}
+
+function extToggleBook(book) {
+  const bookPassages = PASSAGES_DATA.filter(p => p.book === book);
+  const allSelected = bookPassages.every(p => extSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  bookPassages.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    if (allSelected) extSelectedPassages.delete(key);
+    else extSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id, text:p.passage_text});
+  });
+  extRenderBookList();
+}
+
+function extToggleUnit(book, unit) {
+  const unitPassages = PASSAGES_DATA.filter(p => p.book === book && p.unit === unit);
+  const allSelected = unitPassages.every(p => extSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  unitPassages.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    if (allSelected) extSelectedPassages.delete(key);
+    else extSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id, text:p.passage_text});
+  });
+  extRenderBookList();
+}
+
+function extTogglePassage(book, unit, id) {
+  const key = `${book}|${unit}|${id}`;
+  if (extSelectedPassages.has(key)) {
+    extSelectedPassages.delete(key);
+  } else {
+    const p = PASSAGES_DATA.find(x => x.book===book && x.unit===unit && x.id===id);
+    if (p) extSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id, text:p.passage_text});
+  }
+  extRenderBookList();
+}
+
+function extClearSelection() {
+  extSelectedPassages.clear();
+  extRenderBookList();
+}
+
+function extUpdateSelCount() {
+  document.getElementById('ext-sel-count').textContent = `${extSelectedPassages.size}개 선택`;
+}
+
+function extExtractHTML() {
+  if (extSelectedPassages.size === 0) {
+    toast('지문을 선택해주세요!');
+    return;
+  }
+
+  const schoolName = document.getElementById('ext-school-name').value.trim() || '학교명';
+  const header = `${schoolName}/정독하며 모르는 단어 체크/ 기억 안나는 지문 체크/ 체크한 곳 리뷰/ 그리고는 3번 정독 (1회), (2회), (3회)`;
+
+  // 선택된 지문들을 book, unit, id 순으로 정렬
+  const selectedList = [...extSelectedPassages.values()].sort((a, b) => {
+    if (a.book !== b.book) return a.book.localeCompare(b.book);
+    const unitNumA = parseInt(a.unit.match(/\d+/)?.[0]) || 0;
+    const unitNumB = parseInt(b.unit.match(/\d+/)?.[0]) || 0;
+    if (unitNumA !== unitNumB) return unitNumA - unitNumB;
+    if (a.unit !== b.unit) return a.unit.localeCompare(b.unit);
+    return a.id.localeCompare(b.id);
+  });
+
+  let content = '';
+  for (const p of selectedList) {
+    const label = `${p.book} ${p.unit} ${p.id}`;
+    content += `<div style="margin-bottom: 28px; page-break-inside: avoid;">
+  <p style="font-weight: bold; color: #333; margin-bottom: 10px; font-size: 11pt;">${label}</p>
+  <p style="line-height: 2.0; text-align: justify; font-size: 11pt;">${p.text || ''}</p>
+</div>\n`;
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>원문 정독 - ${schoolName}</title>
+<style>
+@page { size: A4; margin: 15mm 18mm; }
+@media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+body { font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif; font-size: 11pt; line-height: 1.6; color: #000; max-width: 210mm; margin: 0 auto; padding: 20px; }
+.header { border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 24px; font-size: 10pt; color: #333; font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="header">${header}</div>
+${content}
+</body>
+</html>`;
+
+  const newWindow = window.open('', '_blank');
+  newWindow.document.write(html);
+  newWindow.document.close();
 }
 
 </script>

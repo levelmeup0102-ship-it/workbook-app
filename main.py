@@ -222,6 +222,7 @@ async def list_passages(request: Request):
                     "unit": unit,
                     "id": pid,  # 프론트에서 p.id 로 씀
                     "title": pi.get("title", pid),
+                    "passage_text": pi.get("text", ""),  # ★ 원문 추출용 추가
                     "cache_status": "ready" if await _is_cached(ck) else "not_ready",
                 })
     # unit(숫자 기준), pid(숫자 기준) 정렬

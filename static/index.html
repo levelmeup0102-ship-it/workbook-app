@@ -1122,20 +1122,11 @@ function extExtractHTML() {
 <style>
 @page { 
   size: A4; 
-  margin: 12mm 10mm 8mm 10mm;
+  margin: 10mm 10mm 10mm 10mm;
 }
 @media print { 
   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .passage-block { page-break-inside: avoid; }
-  .header { 
-    position: fixed;
-    top: -10mm;
-    left: 0;
-    right: 0;
-    background: white;
-    padding: 0 10mm 2mm 10mm;
-    border-bottom: 1px solid #333;
-  }
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { 
@@ -1149,6 +1140,8 @@ body {
   color: #333; 
   font-weight: 500;
   margin-bottom: 3mm;
+  padding-bottom: 2mm;
+  border-bottom: 1px solid #333;
 }
 .passage-block {
   margin-bottom: 10px;

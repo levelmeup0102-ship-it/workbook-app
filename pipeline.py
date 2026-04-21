@@ -1837,13 +1837,16 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
         if isinstance(a, dict):
             correct_list = ', '.join(a.get("correct", []))
             lv9b.append(f'<p>{a.get("num","")}: {correct_list}</p>')
-    kr_ans = ', '.join(s6.get("content_match_kr_answer", []))
-    en_ans = ', '.join(s6.get("content_match_en_answer", []))
-    lv9b.append(f'<p class="ast">Lv.9-2 내용일치</p>')
-    lv9b.append(f'<p>한국어: {kr_ans}</p>')
-    lv9b.append(f'<p>영어: {en_ans}</p>')
     lv9b.append('</div>')
     blocks.append(''.join(lv9b))
+
+    kr_ans = ', '.join(s6.get("content_match_kr_answer", []))
+    en_ans = ', '.join(s6.get("content_match_en_answer", []))
+    lv92 = ['<div class="ablock"><p class="ast">Stage 9-2 내용일치</p>']
+    lv92.append(f'<p>한국어: {kr_ans}</p>')
+    lv92.append(f'<p>영어: {en_ans}</p>')
+    lv92.append('</div>')
+    blocks.append(''.join(lv92))
 
     # Lv.10
     s7 = all_data.get("step7", {})
@@ -1938,6 +1941,7 @@ def merge_to_template_data(passage: str, meta: dict, all_steps: dict) -> dict:
         "content_match_en": s6.get("content_match_en", []),
         # Stage 10 영작
         "writing_items": s7.get("writing_items", []),
+        "writing_chunks": _split_sentences_chunks(s7.get("writing_items", []), max_per_page=8),
         # 정답
         "answers_html": s8.get("answers_html", ""),
     }

@@ -148,6 +148,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       <div class="header-notice-box">
         <span id="header-notice-text" class="notice-empty">공지사항 없음</span>
       </div>
+      <button class="logout-btn" style="margin-right:4px;" onclick="refreshTemplate()" title="템플릿 재생성">🔄</button>
       <button class="logout-btn" onclick="doLogout()">로그아웃</button>
     </div>
     <div class="header-tabs">
@@ -1181,6 +1182,15 @@ ${content}
   newWindow.document.close();
 }
 
+function refreshTemplate() {
+  if (selectedPassages.size > 0) {
+    doGenerate();
+  } else {
+    toast('선택된 지문이 없습니다');
+  }
+}
+
+if (TOKEN) showMain();
 </script>
 </body>
 </html>

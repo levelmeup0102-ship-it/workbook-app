@@ -433,7 +433,7 @@ SYS_JSON_KR = """당신은 한국 고등학생을 위한 영어 시험 콘텐츠
 # ============================================================
 # STEP 1: 기본 분석 (어휘 + 번역 + 핵심문장)
 # ============================================================
-def step1_basic_analysis(passage: str, passage_dir: Path, user_translations: list = []) -> dict:
+def step1_basic_analysis(passage: str, passage_dir: Path, full_translation: str, user_translations: list = []) -> dict:
     cached = load_step(passage_dir, "step1_basic")
     if cached:
         # 캐시가 있어도 user_translations가 새로 제공되면 덮어쓰기
@@ -498,12 +498,11 @@ JSON 형식:
 }}"""
 
     data = call_claude_json(SYS_JSON_KR, prompt, max_tokens=4096)
-    data["translation"] = user_translations
 
     logger.debug(f"DEBUG | step1_basic_analysis | 한국어 해석 추가 data check\ndata\n> {data}")
 
 #     # 🔒 검증: API 문장 분리 대신 항상 regex 사용 (AI가 문장을 합치거나 쪼개는 것 방지)
-#     data["sentences"] = sentences_regex
+    data["sentences"] = sentences_regex
 
 #     # ★ sentence_translations: API 결과 개수 검증 → 불일치시 개별 번역 API 호출
 #     # 한국어 코드 분리는 불완전하므로, 개수 불일치시 API에 문장별 번역을 다시 요청
@@ -557,7 +556,7 @@ JSON 형식:
     if user_translations:
         if len(user_translations) == sent_count:
             data["sentence_translations"] = user_translations
-            data["translation"] = ' '.join(user_translations)
+            data["translation"] = full_translation
             # _safe_print(f"  ✅ 사용자 해석 {sent_count}줄 적용 (Claude 번역 대체)")
         else:
             _safe_print(f"  ⚠️ 사용자 해석 {len(user_translations)}줄 ≠ 영어 {sent_count}문장 → Claude 번역 사용")
@@ -680,7 +679,7 @@ def step2_order(passage: str, sentences: list, passage_dir: Path) -> dict:
    - 모든 문장이 빠짐없이 포함되어야 함
 3. order_choices: 5지선다 (형식: "① (A)-(C)-(B)" 등). 정답 1개 포함.
 4. order_answer: 정답 번호 (예: "④ (C)-(A)-(B)")
-5. insert_sentence: 삽입할 문장 1개 (앞뒤 문맥 단서가 명확한 것)
+5. insert_sentence: 삽입할 문장 1개 (앞뒤 문맥 단서가 명확한 것, [지문]의 문장으로 변형하지 않고 그대로 반환.)
 6. insert_passage: insert_sentence를 뺀 나머지 원문 전체에 ( ① )~( ⑤ ) 위치 표시
 6.1 (중요)5번으로 지정된 문장을 제외하고 나머지 [지문]의 모든 문장의 내용을 그대로 반환한다.(변형 금지. 원문 축소/생략/요약 절대 금지! 삽입 문장 외의 모든 문장이 빠짐없이 포함되어야 함)
 7. insert_answer: 삽입 정답 번호
@@ -863,26 +862,27 @@ JSON 형식:
             data["full_order_blocks"] = [[b["label"], b["text"]] for b in data["full_order_blocks"]]
         _generate_order_choices(data)
 
-        # 재검증 후에도 실패하면, 원문 기반으로 강제 구성(축약 방지)
-        ins_sent = _norm(data.get("insert_sentence", ""))
-        ins_passage = _norm(data.get("insert_passage", ""))
-        if not ins_sent or ins_sent not in orig_norm:
-            # 원문 가운데 문장을 삽입문장으로 선택
-            pick_idx = max(0, min(len(orig_sents)-1, len(orig_sents)//2))
-            data["insert_sentence"] = orig_sents[pick_idx]
-            ins_sent = _norm(data["insert_sentence"])
+        # 내용 수동 구성이라 일단 주석처리
+        # # 재검증 후에도 실패하면, 원문 기반으로 강제 구성(축약 방지)
+        # ins_sent = _norm(data.get("insert_sentence", ""))
+        # ins_passage = _norm(data.get("insert_passage", ""))
+        # if not ins_sent or ins_sent not in orig_norm:
+        #     # 원문 가운데 문장을 삽입문장으로 선택
+        #     pick_idx = max(0, min(len(orig_sents)-1, len(orig_sents)//2))
+        #     data["insert_sentence"] = orig_sents[pick_idx]
+        #     ins_sent = _norm(data["insert_sentence"])
 
-        # insert_passage는 원문에서 insert_sentence 1개만 제거한 본문으로 강제
-        remaining = [s for s in orig_sents if _norm(s) != ins_sent]
-        # 위치표시는 간단히 5개 구간으로 균등 배치 (본문은 절대 변형하지 않기)
-        markers = ["( ① )", "( ② )", "( ③ )", "( ④ )", "( ⑤ )"]
-        rebuilt = []
-        for i, s in enumerate(remaining):
-            rebuilt.append(s)
-            # 문장 사이에 마커를 분산 삽입
-            if i < len(remaining) and i < len(markers):
-                rebuilt.append(markers[i])
-        data["insert_passage"] = " ".join(rebuilt).strip()
+        # # insert_passage는 원문에서 insert_sentence 1개만 제거한 본문으로 강제
+        # remaining = [s for s in orig_sents if _norm(s) != ins_sent]
+        # # 위치표시는 간단히 5개 구간으로 균등 배치 (본문은 절대 변형하지 않기)
+        # markers = ["( ① )", "( ② )", "( ③ )", "( ④ )", "( ⑤ )"]
+        # rebuilt = []
+        # for i, s in enumerate(remaining):
+        #     rebuilt.append(s)
+        #     # 문장 사이에 마커를 분산 삽입
+        #     if i < len(remaining) and i < len(markers):
+        #         rebuilt.append(markers[i])
+        # data["insert_passage"] = " ".join(rebuilt).strip()
     save_step(passage_dir, "step2_order", data)
     return data
 
@@ -2019,9 +2019,11 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
     sentences = _merge_short_dialogue(sentences)
     all_steps = {}
 
-    # Step 1: 기본 분석
-    user_tr = meta.get("user_translations", None)
-    all_steps["step1"] = step1_basic_analysis(passage, passage_dir, user_translations=user_tr)
+    # Step 1: 기본 분석xx
+    user_tr = meta.get("user_translations")
+    all_steps["step1"] = step1_basic_analysis(passage, passage_dir, full_translation=kr_text, user_translations=kr_lines)
+
+    # 지문을 한문장씩 나눈 list -> sentences_from_api
     sentences_from_api = all_steps["step1"].get("sentences", sentences)
 
     # Step 2: Lv.5 순서/삽입

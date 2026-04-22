@@ -53,9 +53,10 @@ OUTPUT_DIR = TEMPLATE_DIR / "output" / TODAY
 # ============================================================
 def _safe_print(msg):
     try:
-        print(str(msg))
+        print(msg)
     except Exception:
-        pass
+        print(str(msg))
+        # pass
 
 # ============================================================
 # 문장 분리 (Dr. Mr. Ms. Mrs. Prof. etc. 경칭 보호)
@@ -142,7 +143,7 @@ def _merge_short_dialogue(sentences: list, min_words: int = 6) -> list:
     if not _is_dialogue(sentences) or len(sentences) < 2:
         return sentences
 
-    _safe_print(f"  대화문 감지 → 짧은 문장 병합 (≤{min_words}단어)")
+    # _safe_print(f"  대화문 감지 → 짧은 문장 병합 (≤{min_words}단어)")
 
     # 각 문장의 화자 추적
     def _get_speaker(sent):
@@ -192,7 +193,7 @@ def _merge_short_dialogue(sentences: list, min_words: int = 6) -> list:
             final.pop()
             final_sp.pop()
 
-    _safe_print(f"  병합 결과: {len(sentences)}문장 → {len(final)}문장 (-{len(sentences)-len(final)})")
+    # _safe_print(f"  병합 결과: {len(sentences)}문장 → {len(final)}문장 (-{len(sentences)-len(final)})")
     return final
 
 # ============================================================
@@ -249,7 +250,7 @@ def call_claude(system_prompt: str, user_prompt: str, max_retries=2, max_tokens=
             if tmp_path:
                 try: os.unlink(tmp_path)
                 except: pass
-            _safe_print(f"  [WARN] API attempt {attempt+1} failed: {str(e)[:100]}")
+            # _safe_print(f"  [WARN] API attempt {attempt+1} failed: {str(e)[:100]}")
             if attempt < max_retries:
                 time.sleep(3 * (attempt + 1))
             else:
@@ -367,14 +368,14 @@ def save_step(passage_dir: Path, step_name: str, data: dict):
     path = passage_dir / f"{step_name}.json"
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    _safe_print(f"  Saved: {step_name}.json (ver={data['_step_version']})")
+    # _safe_print(f"  Saved: {step_name}.json (ver={data['_step_version']})")
     # Save to Supabase
     try:
         import supa
         if supa._enabled():
             cache_key = passage_dir.name
             _run_async(supa.save_step_supa(cache_key, step_name, data))
-            _safe_print(f"  Saved to Supabase: {cache_key}/{step_name}")
+            # _safe_print(f"  Saved to Supabase: {cache_key}/{step_name}")
     except Exception as e:
         _safe_print(f"  [supa] save error: {str(e)[:80]}")
 
@@ -388,7 +389,7 @@ def load_step(passage_dir: Path, step_name: str) -> dict | None:
         # 버전 체크: 다르면 캐시 무효
         cached_ver = data.get("_step_version", "")
         if cached_ver != expected_ver:
-            _safe_print(f"  Cache outdated: {step_name} (cached={cached_ver}, need={expected_ver}) → regenerate")
+            # _safe_print(f"  Cache outdated: {step_name} (cached={cached_ver}, need={expected_ver}) → regenerate")
             path.unlink()
             return None
         return data
@@ -402,7 +403,7 @@ def load_step(passage_dir: Path, step_name: str) -> dict | None:
                 # 버전 체크
                 cached_ver = data.get("_step_version", "")
                 if cached_ver != expected_ver:
-                    _safe_print(f"  Supabase cache outdated: {step_name} (cached={cached_ver}, need={expected_ver}) → regenerate")
+                    # _safe_print(f"  Supabase cache outdated: {step_name} (cached={cached_ver}, need={expected_ver}) → regenerate")
                     try:
                         _run_async(supa.delete_step(cache_key, step_name))
                     except:
@@ -412,7 +413,7 @@ def load_step(passage_dir: Path, step_name: str) -> dict | None:
                 passage_dir.mkdir(parents=True, exist_ok=True)
                 with open(path, 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
-                _safe_print(f"  Loaded from Supabase: {step_name} (ver={cached_ver})")
+                # _safe_print(f"  Loaded from Supabase: {step_name} (ver={cached_ver})")
                 return data
     except Exception as e:
         _safe_print(f"  [supa] load error: {str(e)[:80]}")
@@ -444,7 +445,7 @@ def step1_basic_analysis(passage: str, passage_dir: Path, user_translations: lis
                 cached["sentence_translations"] = user_translations
                 cached["translation"] = ' '.join(user_translations)
                 save_step(passage_dir, "step1_basic", cached)
-                _safe_print(f"  step1: cache + 사용자 해석 {sent_count}줄 적용")
+                # _safe_print(f"  step1: cache + 사용자 해석 {sent_count}줄 적용")
             else:
                 _safe_print(f"  step1: ⚠️ 사용자 해석 {len(user_translations)}줄 ≠ 영어 {sent_count}문장 → 사용자 해석 무시")
         else:
@@ -455,7 +456,7 @@ def step1_basic_analysis(passage: str, passage_dir: Path, user_translations: lis
     sentences_regex = _merge_short_dialogue(sentences_regex)
     sent_count = len(sentences_regex)
 
-    _safe_print("  step1: basic analysis...")
+    # _safe_print("  step1: basic analysis...")
     # 대화문 병합된 문장 리스트를 API에 명시적으로 전달
     numbered_sentences = "\n".join([f"[문장{i+1}] {s}" for i, s in enumerate(sentences_regex)])
     prompt = f"""다음 영어 지문을 분석하여 JSON을 생성하세요.
@@ -499,7 +500,7 @@ JSON 형식:
     data = call_claude_json(SYS_JSON_KR, prompt, max_tokens=4096)
     data["translation"] = user_translations
 
-    _safe_print(f"DEBUG | step1_basic_analysis | 한국어 해석 추가 data check\ndata\n> {data}")
+    logger.debug(f"DEBUG | step1_basic_analysis | 한국어 해석 추가 data check\ndata\n> {data}")
 
 #     # 🔒 검증: API 문장 분리 대신 항상 regex 사용 (AI가 문장을 합치거나 쪼개는 것 방지)
 #     data["sentences"] = sentences_regex
@@ -557,7 +558,7 @@ JSON 형식:
         if len(user_translations) == sent_count:
             data["sentence_translations"] = user_translations
             data["translation"] = ' '.join(user_translations)
-            _safe_print(f"  ✅ 사용자 해석 {sent_count}줄 적용 (Claude 번역 대체)")
+            # _safe_print(f"  ✅ 사용자 해석 {sent_count}줄 적용 (Claude 번역 대체)")
         else:
             _safe_print(f"  ⚠️ 사용자 해석 {len(user_translations)}줄 ≠ 영어 {sent_count}문장 → Claude 번역 사용")
     
@@ -612,7 +613,7 @@ def _generate_order_choices(data, passage: str = ""):
         
         # 정답 = 원문 순서대로 라벨 읽기
         correct = tuple(labels[original_order.index(i)] for i in range(3))
-        _safe_print(f"  순서 정답: {correct} (원문위치: {original_order})")
+        # _safe_print(f"  순서 정답: {correct} (원문위치: {original_order})")
 
         # 표시할 때는 라벨 알파벳 순으로 정렬
         new_paras.sort(key=lambda x: x[0])
@@ -701,7 +702,7 @@ JSON 형식:
 
     data = call_claude_json(SYS_JSON, prompt, max_tokens=4096)
 
-    _safe_print(f"DEBUG | Stage 2 | CALL CLAUDE DATA CHECKD\n> {data}")
+    logger.debug(f"DEBUG | Stage 2 | CALL CLAUDE DATA CHECKD\n> {data}")
     
     # 변환: order_paragraphs를 [label, text] 형태로
     if data.get("order_paragraphs") and isinstance(data["order_paragraphs"][0], dict):
@@ -984,7 +985,6 @@ def step4_topic(passage: str, passage_dir: Path) -> dict:
 {passage}
 
 [규칙]
-- 지문은 원문 그대로 (생략/변형 금지)
 - 선지 12개: 정답 5개 + 오답 7개
 - 선지는 반드시 영어로 작성 (한국어 금지)
 - 정답: 주제문 키워드를 유의어로 치환한 영어 표현
@@ -994,13 +994,13 @@ def step4_topic(passage: str, passage_dir: Path) -> dict:
 
 [JSON 형식]
 {{
-  "topic_passage": "원문 전문 (그대로)",
   "topic_options": ["① the importance of...", "② how to...", ... "⑫ ..."],
   "topic_correct": ["②", "④", ...],
   "topic_wrong": ["①", "③", ...]
 }}"""
 
     data = call_claude_json(SYS_JSON, prompt, max_tokens=3000)
+    data["topic_passage"] = passage
     save_step(passage_dir, "step4_topic", data)
     return data
 
@@ -2008,7 +2008,7 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
             meta['user_translations'] = kr_lines
             _safe_print(f"  passage_text에서 해석 {len(kr_lines)}줄 추출")
 
-    _safe_print(f"DEBUG | process_passage | 한국어 해석 후처리 CHECK\n1. 문장분리 풀번역\n> {kr_lines}\n2. meta data check\n> {meta['user_translations']}")
+    logger.debug(f"DEBUG | process_passage | 한국어 해석 후처리 CHECK\n1. 문장분리 풀번역\n> {kr_lines}\n2. meta data check\n> {meta['user_translations']}")
 
     _safe_print(f"\n{'='*50}")
     _safe_print(f"Processing: {passage_id} ({meta.get('challenge_title','')})")
@@ -2057,7 +2057,7 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
     translation = all_steps["step1"].get("translation", "")
     sentence_translations = all_steps["step1"].get("sentence_translations", [])
     
-    _safe_print(f"DEBUG | translation와 sentence_translations 비교\ntranslation> {translation}\nsentence_translations> {sentence_translations}")
+    logger.debug(f"DEBUG | translation와 sentence_translations 비교\ntranslation> {translation}\nsentence_translations> {sentence_translations}")
 
     all_steps["step7"] = step7_writing(sentences_from_api, translation, passage_dir, sentence_translations)
 

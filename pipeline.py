@@ -432,7 +432,7 @@ SYS_JSON_KR = """당신은 한국 고등학생을 위한 영어 시험 콘텐츠
 # ============================================================
 # STEP 1: 기본 분석 (어휘 + 번역 + 핵심문장)
 # ============================================================
-def step1_basic_analysis(passage: str, passage_dir: Path, user_translations: list = None) -> dict:
+def step1_basic_analysis(passage: str, passage_dir: Path, user_translations: list = []) -> dict:
     cached = load_step(passage_dir, "step1_basic")
     if cached:
         # 캐시가 있어도 user_translations가 새로 제공되면 덮어쓰기
@@ -463,19 +463,13 @@ def step1_basic_analysis(passage: str, passage_dir: Path, user_translations: lis
 [지문 - 총 {sent_count}개 문장]
 {passage}
 
-[문장 분리 기준 - 반드시 이 기준을 따르세요!]
+[문장 분리 기준 - 반드시 하단의 내용 준수]
 {numbered_sentences}
 
 [생성 항목]
 1. vocab: 핵심 어휘 14개 (각각 word, meaning(한국어), synonyms(영어 유의어 4개 쉼표구분))
-2. translation: 지문 전체의 자연스러운 한국어 번역
-   - 자연스럽고 읽기 좋은 한국어로 번역 (의역 OK)
-   - 단, 주어와 핵심 동사는 정확히 반영 (met→만났다, said→말했다 등 동사 혼동 방지)
-   - 한국어 화법: 나는 "~~~"라고 말했다 (O) / 나는 말했다, "~~~" (X)
-   - 대화체는 자연스러운 존댓말/반말 사용
-3. sentences: 위 [문장 분리 기준]과 정확히 동일하게 배열 (정확히 {sent_count}개!)
-   - 위에서 제공한 문장 분리를 그대로 사용하세요
-4. sentence_translations: 위 [문장 분리 기준]의 각 문장에 대한 한국어 번역 (정확히 {sent_count}개, 같은 순서!)
+2.sentences: 위 [문장 분리 기준]과 정확히 동일하게 배열 (정확히 {sent_count}개!, [문장 분리 기준]의 내용 반드시 사용.)
+3. sentence_translations: 위 [문장 분리 기준]의 각 문장에 대한 한국어 번역 (정확히 {sent_count}개, 같은 순서!)
    - ⚠ 영어 1문장 = 한국어 1문장! 영어가 긴 문장이어도 한국어 번역을 절대 2개로 나누지 마세요!
    - 한국어 번역 중간에 마침표(.)를 찍어 문장을 나누면 안 됩니다. 쉼표(,)로 이어주세요.
    - 자연스럽고 읽기 좋은 한국어 (의역 OK, 어색한 직역 금지)
@@ -486,15 +480,14 @@ def step1_basic_analysis(passage: str, passage_dir: Path, user_translations: lis
    - 따옴표가 열렸으면 반드시 닫힌 후에야 다음 문장으로 넘어감
    - 예: "연설 때문에 부끄럽습니다."라고 말했다. → 이것은 하나의 번역!
    - 영어 sentences 배열 수와 반드시 일치해야 함 (정확히 {sent_count}개!)
-5. key_sentences: 시험 출제 가능성이 높은 핵심 문장 8개 (원문 그대로)
-6. test_a: vocab에서 뜻 쓰기 테스트용 5개 단어 (영어)
-7. test_b: vocab에서 유의어 테스트용 5개 단어 (test_a와 겹치지 않게, 영어)
-8. test_c: vocab에서 철자 테스트용 5개 (한국어 뜻)
+4. key_sentences: 시험 출제 가능성이 높은 핵심 문장 8개 (원문 그대로)
+5. test_a: vocab에서 뜻 쓰기 테스트용 5개 단어 (영어)
+6. test_b: vocab에서 유의어 테스트용 5개 단어 (test_a와 겹치지 않게, 영어)
+7. test_c: vocab에서 철자 테스트용 5개 (한국어 뜻)
 
 JSON 형식:
 {{
   "vocab": [{{"word":"...", "meaning":"...", "synonyms":"..."}}],
-  "translation": "...",
   "sentences": ["...", "..."],
   "sentence_translations": ["첫째 문장 해석...", "둘째 문장 해석...", ...],
   "key_sentences": ["...", "..."],
@@ -504,57 +497,60 @@ JSON 형식:
 }}"""
 
     data = call_claude_json(SYS_JSON_KR, prompt, max_tokens=4096)
+    data["translation"] = user_translations
+
+    _safe_print(f"DEBUG | step1_basic_analysis | 한국어 해석 추가 data check\ndata\n> {data}")
+
+#     # 🔒 검증: API 문장 분리 대신 항상 regex 사용 (AI가 문장을 합치거나 쪼개는 것 방지)
+#     data["sentences"] = sentences_regex
+
+#     # ★ sentence_translations: API 결과 개수 검증 → 불일치시 개별 번역 API 호출
+#     # 한국어 코드 분리는 불완전하므로, 개수 불일치시 API에 문장별 번역을 다시 요청
+#     st = data.get("sentence_translations", [])
     
-    # 🔒 검증: API 문장 분리 대신 항상 regex 사용 (AI가 문장을 합치거나 쪼개는 것 방지)
-    data["sentences"] = sentences_regex
+#     # 지문에 따옴표가 포함되어 있으면 무조건 재요청 (잘못 분리 위험 높음)
+#     passage_has_quotes = any('"' in s or '\u201c' in s or '\u201d' in s for s in sentences_regex)
+#     if len(st) != sent_count or (passage_has_quotes and len(st) == sent_count):
+#         reason = f"{len(st)}개 ≠ {sent_count}개" if len(st) != sent_count else "지문에 따옴표 포함 → 안전 재요청"
+#         _safe_print(f"  WARNING: sentence_translations {reason} → 문장별 번역 재요청")
+#         # 영어 문장 리스트를 넘겨서 1:1 번역 요청
+#         numbered_sents = "\n".join([f"{i+1}. {s}" for i, s in enumerate(sentences_regex)])
+#         retry_prompt = f"""다음 영어 문장들을 각각 한국어로 번역하세요.
 
-    # ★ sentence_translations: API 결과 개수 검증 → 불일치시 개별 번역 API 호출
-    # 한국어 코드 분리는 불완전하므로, 개수 불일치시 API에 문장별 번역을 다시 요청
-    st = data.get("sentence_translations", [])
-    
-    # 지문에 따옴표가 포함되어 있으면 무조건 재요청 (잘못 분리 위험 높음)
-    passage_has_quotes = any('"' in s or '\u201c' in s or '\u201d' in s for s in sentences_regex)
-    if len(st) != sent_count or (passage_has_quotes and len(st) == sent_count):
-        reason = f"{len(st)}개 ≠ {sent_count}개" if len(st) != sent_count else "지문에 따옴표 포함 → 안전 재요청"
-        _safe_print(f"  WARNING: sentence_translations {reason} → 문장별 번역 재요청")
-        # 영어 문장 리스트를 넘겨서 1:1 번역 요청
-        numbered_sents = "\n".join([f"{i+1}. {s}" for i, s in enumerate(sentences_regex)])
-        retry_prompt = f"""다음 영어 문장들을 각각 한국어로 번역하세요.
+# [필수 규칙]
+# - 반드시 정확히 {sent_count}개의 번역을 배열로 반환
+# - ⚠ 영어 1문장 = 한국어 1번역! 긴 문장이어도 한국어를 2개로 나누지 마세요!
+# - 한국어 번역 중간에 마침표를 찍어 문장을 분리하지 마세요. 쉼표로 이어주세요.
+# - 따옴표 안의 내용도 하나의 문장에 포함 (절대 분리하지 말 것)
+# - 자연스럽고 읽기 좋은 한국어로 번역 (의역 OK, 어색한 직역 금지)
+# - 단, 주어와 핵심 동사만 정확히 반영 (met→만났다, said→말했다 등)
+# - to부정사를 동사처럼 해석하지 말 것 (학생이 영작 시 진짜 동사를 찾을 수 있게)
+# - 한국어 화법: 나는 "~~~"라고 말했다 (O) / 나는 말했다, "~~~" (X)
 
-[필수 규칙]
-- 반드시 정확히 {sent_count}개의 번역을 배열로 반환
-- ⚠ 영어 1문장 = 한국어 1번역! 긴 문장이어도 한국어를 2개로 나누지 마세요!
-- 한국어 번역 중간에 마침표를 찍어 문장을 분리하지 마세요. 쉼표로 이어주세요.
-- 따옴표 안의 내용도 하나의 문장에 포함 (절대 분리하지 말 것)
-- 자연스럽고 읽기 좋은 한국어로 번역 (의역 OK, 어색한 직역 금지)
-- 단, 주어와 핵심 동사만 정확히 반영 (met→만났다, said→말했다 등)
-- to부정사를 동사처럼 해석하지 말 것 (학생이 영작 시 진짜 동사를 찾을 수 있게)
-- 한국어 화법: 나는 "~~~"라고 말했다 (O) / 나는 말했다, "~~~" (X)
+# [영어 문장 - 총 {sent_count}개]
+# {numbered_sents}
 
-[영어 문장 - 총 {sent_count}개]
-{numbered_sents}
-
-JSON 형식:
-{{"translations": ["1번 문장 번역", "2번 문장 번역", ...]}}"""
-        try:
-            retry_data = call_claude_json(SYS_JSON_KR, retry_prompt, max_tokens=3000)
-            retry_st = retry_data.get("translations", [])
-            if len(retry_st) == sent_count:
-                st = retry_st
-                _safe_print(f"  ✅ 문장별 번역 성공: {len(st)}개")
-            else:
-                _safe_print(f"  ⚠ 문장별 번역도 {len(retry_st)}개, 원본 사용 후 보정")
-        except Exception as e:
-            _safe_print(f"  ⚠ 문장별 번역 실패: {str(e)[:80]}")
+# JSON 형식:
+# {{"translations": ["1번 문장 번역", "2번 문장 번역", ...]}}"""
+#         try:
+#             retry_data = call_claude_json(SYS_JSON_KR, retry_prompt, max_tokens=3000)
+#             retry_st = retry_data.get("translations", [])
+#             if len(retry_st) == sent_count:
+#                 st = retry_st
+#                 _safe_print(f"  ✅ 문장별 번역 성공: {len(st)}개")
+#             else:
+#                 _safe_print(f"  ⚠ 문장별 번역도 {len(retry_st)}개, 원본 사용 후 보정")
+#         except Exception as e:
+#             _safe_print(f"  ⚠ 문장별 번역 실패: {str(e)[:80]}")
         
-        # 최종 보정
-        while len(st) < sent_count:
-            st.append(f"문장 {len(st)+1}")
-        data["sentence_translations"] = st[:sent_count]
-    else:
-        data["sentence_translations"] = st
+#         # 최종 보정
+#         while len(st) < sent_count:
+#             st.append(f"문장 {len(st)+1}")
+#         data["sentence_translations"] = st[:sent_count]
+#     else:
+#         data["sentence_translations"] = st
 
-    _safe_print(f"  Sentence count: {sent_count}")
+#     _safe_print(f"  Sentence count: {sent_count}")
     
     # ★ 사용자 해석이 있으면 Claude 번역을 덮어쓰기
     if user_translations:
@@ -573,7 +569,7 @@ JSON 형식:
 # ============================================================
 _CIRCLE_NUMS = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩"]
 
-def _generate_order_choices(data, passage=""):
+def _generate_order_choices(data, passage: str = ""):
     """
     1) order_paragraphs의 각 단락이 원문에서 어떤 순서인지 확인
     2) 라벨 셔플 → 정답이 항상 ABC가 아니게
@@ -685,8 +681,7 @@ def step2_order(passage: str, sentences: list, passage_dir: Path) -> dict:
 4. order_answer: 정답 번호 (예: "④ (C)-(A)-(B)")
 5. insert_sentence: 삽입할 문장 1개 (앞뒤 문맥 단서가 명확한 것)
 6. insert_passage: insert_sentence를 뺀 나머지 원문 전체에 ( ① )~( ⑤ ) 위치 표시
-   - ⚠ [절대 규칙] insert_sentence 1개만 빼고 나머지 원문의 모든 문장을 그대로 유지!
-   - 원문 축소/생략/요약 절대 금지! 삽입 문장 외의 모든 문장이 빠짐없이 포함되어야 함
+6.1 (중요)5번으로 지정된 문장을 제외하고 나머지 [지문]의 모든 문장의 내용을 그대로 반환한다.(변형 금지. 원문 축소/생략/요약 절대 금지! 삽입 문장 외의 모든 문장이 빠짐없이 포함되어야 함)
 7. insert_answer: 삽입 정답 번호
 8. full_order_blocks: 전체 문장을 (A)~끝까지 개별 블록으로 분할 (각각 label, text)
 9. full_order_answer: 정답 순서 (예: "(C)→(G)→(D)→...")
@@ -705,6 +700,9 @@ JSON 형식:
 }}"""
 
     data = call_claude_json(SYS_JSON, prompt, max_tokens=4096)
+
+    _safe_print(f"DEBUG | Stage 2 | CALL CLAUDE DATA CHECKD\n> {data}")
+    
     # 변환: order_paragraphs를 [label, text] 형태로
     if data.get("order_paragraphs") and isinstance(data["order_paragraphs"][0], dict):
         data["order_paragraphs"] = [[p["label"], p["text"]] for p in data["order_paragraphs"]]
@@ -2010,6 +2008,8 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
             meta['user_translations'] = kr_lines
             _safe_print(f"  passage_text에서 해석 {len(kr_lines)}줄 추출")
 
+    _safe_print(f"DEBUG | process_passage | 한국어 해석 후처리 CHECK\n1. 문장분리 풀번역\n> {kr_lines}\n2. meta data check\n> {meta['user_translations']}")
+
     _safe_print(f"\n{'='*50}")
     _safe_print(f"Processing: {passage_id} ({meta.get('challenge_title','')})")
     _safe_print(f"{'='*50}")
@@ -2056,6 +2056,9 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
             pass
     translation = all_steps["step1"].get("translation", "")
     sentence_translations = all_steps["step1"].get("sentence_translations", [])
+    
+    _safe_print(f"DEBUG | translation와 sentence_translations 비교\ntranslation> {translation}\nsentence_translations> {sentence_translations}")
+
     all_steps["step7"] = step7_writing(sentences_from_api, translation, passage_dir, sentence_translations)
 
     # Step 8: 정답

@@ -469,27 +469,25 @@ def step1_basic_analysis(passage: str, passage_dir: Path, full_translation: str,
 
 [생성 항목]
 1. vocab: 핵심 어휘 14개 (각각 word, meaning(한국어), synonyms(영어 유의어 4개 쉼표구분))
-2.sentences: 위 [문장 분리 기준]과 정확히 동일하게 배열 (정확히 {sent_count}개!, [문장 분리 기준]의 내용 반드시 사용.)
-3. sentence_translations: 위 [문장 분리 기준]의 각 문장에 대한 한국어 번역 (정확히 {sent_count}개, 같은 순서!)
-   - ⚠ 영어 1문장 = 한국어 1문장! 영어가 긴 문장이어도 한국어 번역을 절대 2개로 나누지 마세요!
-   - 한국어 번역 중간에 마침표(.)를 찍어 문장을 나누면 안 됩니다. 쉼표(,)로 이어주세요.
-   - 자연스럽고 읽기 좋은 한국어 (의역 OK, 어색한 직역 금지)
-   - 단, 주어와 핵심 동사만 정확히 (met→만났다, said→말했다, prepared→준비하다 등)
-   - to부정사를 동사처럼 해석하지 말 것 (학생이 영작 시 진짜 동사를 찾을 수 있게)
-   - 한국어 화법: 나는 "~~~"라고 말했다 형태로 (나는 말했다, "~~~" 금지)
-   - 따옴표(" " 또는 " ") 안의 마침표는 문장의 끝으로 처리하지 말 것
-   - 따옴표가 열렸으면 반드시 닫힌 후에야 다음 문장으로 넘어감
-   - 예: "연설 때문에 부끄럽습니다."라고 말했다. → 이것은 하나의 번역!
-   - 영어 sentences 배열 수와 반드시 일치해야 함 (정확히 {sent_count}개!)
-4. key_sentences: 시험 출제 가능성이 높은 핵심 문장 8개 (원문 그대로)
-5. test_a: vocab에서 뜻 쓰기 테스트용 5개 단어 (영어)
-6. test_b: vocab에서 유의어 테스트용 5개 단어 (test_a와 겹치지 않게, 영어)
-7. test_c: vocab에서 철자 테스트용 5개 (한국어 뜻)
+2. sentence_translations: 위 [문장 분리 기준]의 각 문장에 대한 한국어 번역 (정확히 {sent_count}개, 같은 순서!)
+  - ⚠ 영어 1문장 = 한국어 1문장! 영어가 긴 문장이어도 한국어 번역을 절대 2개로 나누지 마세요!
+  - 한국어 번역 중간에 마침표(.)를 찍어 문장을 나누면 안 됩니다. 쉼표(,)로 이어주세요.
+  - 자연스럽고 읽기 좋은 한국어 (의역 OK, 어색한 직역 금지)
+  - 단, 주어와 핵심 동사만 정확히 (met→만났다, said→말했다, prepared→준비하다 등)
+  - to부정사를 동사처럼 해석하지 말 것 (학생이 영작 시 진짜 동사를 찾을 수 있게)
+  - 한국어 화법: 나는 "~~~"라고 말했다 형태로 (나는 말했다, "~~~" 금지)
+  - 따옴표(" " 또는 " ") 안의 마침표는 문장의 끝으로 처리하지 말 것
+  - 따옴표가 열렸으면 반드시 닫힌 후에야 다음 문장으로 넘어감
+  - 예: "연설 때문에 부끄럽습니다."라고 말했다. → 이것은 하나의 번역!
+  - 영어 sentences 배열 수와 반드시 일치해야 함 (정확히 {sent_count}개!)
+3. key_sentences: 시험 출제 가능성이 높은 핵심 문장 8개 (원문 그대로)
+4. test_a: vocab에서 뜻 쓰기 테스트용 5개 단어 (영어)
+5. test_b: vocab에서 유의어 테스트용 5개 단어 (test_a와 겹치지 않게, 영어)
+6. test_c: vocab에서 철자 테스트용 5개 (한국어 뜻)
 
 JSON 형식:
 {{
   "vocab": [{{"word":"...", "meaning":"...", "synonyms":"..."}}],
-  "sentences": ["...", "..."],
   "sentence_translations": ["첫째 문장 해석...", "둘째 문장 해석...", ...],
   "key_sentences": ["...", "..."],
   "test_a": ["...", "..."],
@@ -501,7 +499,8 @@ JSON 형식:
 
     logger.debug(f"DEBUG | step1_basic_analysis | 한국어 해석 추가 data check\ndata\n> {data}")
 
-#     # 🔒 검증: API 문장 분리 대신 항상 regex 사용 (AI가 문장을 합치거나 쪼개는 것 방지)
+    # 🔒 검증: API 문장 분리 대신 항상 regex 사용 (AI가 문장을 합치거나 쪼개는 것 방지)
+    # 영어 지문 문장 분리(알고리즘)
     data["sentences"] = sentences_regex
 
 #     # ★ sentence_translations: API 결과 개수 검증 → 불일치시 개별 번역 API 호출
@@ -676,11 +675,12 @@ def step2_order(passage: str, sentences: list, passage_dir: Path) -> dict:
 [생성 항목]
 1. order_intro: 제시문 (첫 1~2문장)
 2. order_paragraphs: (A)(B)(C) 3개 단락 (각각 label과 text). 정답 순서는 원문 순서대로.
+   - 지문 내용에 대한 변형/변경 절대 금지. [지문]의 내용을 그저 3개의 part로 나누는 것만 가능.
    - 모든 문장이 빠짐없이 포함되어야 함
 3. order_choices: 5지선다 (형식: "① (A)-(C)-(B)" 등). 정답 1개 포함.
 4. order_answer: 정답 번호 (예: "④ (C)-(A)-(B)")
 5. insert_sentence: 삽입할 문장 1개 (앞뒤 문맥 단서가 명확한 것, [지문]의 문장으로 변형하지 않고 그대로 반환.)
-6. insert_passage: insert_sentence를 뺀 나머지 원문 전체에 ( ① )~( ⑤ ) 위치 표시
+6. insert_passage: insert_sentence를 뺀 [지문]에서의 나머지 문장들에 ( ① )~( ⑤ ) 위치 표시
 6.1 (중요)5번으로 지정된 문장을 제외하고 나머지 [지문]의 모든 문장의 내용을 그대로 반환한다.(변형 금지. 원문 축소/생략/요약 절대 금지! 삽입 문장 외의 모든 문장이 빠짐없이 포함되어야 함)
 7. insert_answer: 삽입 정답 번호
 8. full_order_blocks: 전체 문장을 (A)~끝까지 개별 블록으로 분할 (각각 label, text)
@@ -695,7 +695,6 @@ JSON 형식:
   "insert_sentence": "...",
   "insert_passage": "...",
   "insert_answer": "...",
-  "full_order_blocks": [{{"label":"A","text":"..."}}, ...],
   "full_order_answer": "..."
 }}"""
 
@@ -706,32 +705,42 @@ JSON 형식:
     # 변환: order_paragraphs를 [label, text] 형태로
     if data.get("order_paragraphs") and isinstance(data["order_paragraphs"][0], dict):
         data["order_paragraphs"] = [[p["label"], p["text"]] for p in data["order_paragraphs"]]
-    if data.get("full_order_blocks") and isinstance(data["full_order_blocks"][0], dict):
-        data["full_order_blocks"] = [[b["label"], b["text"]] for b in data["full_order_blocks"]]
+    # if data.get("full_order_blocks") and isinstance(data["full_order_blocks"][0], dict):
+        # data["full_order_blocks"] = [[b["label"], b["text"]] for b in data["full_order_blocks"]]
 
     # ★ 순서 선지를 코드로 직접 생성 (AI가 다양하게 안 만드는 문제 해결)
     _generate_order_choices(data, passage=passage)
 
-    # 🔒 검증: 전체배열 블록 수 vs 원문 문장 수
-    block_count = len(data.get("full_order_blocks", []))
-    sentence_count = len(sentences)
-    if block_count != sentence_count:
-        _safe_print(f"  WARNING: sentence mismatch! original {sentence_count} vs generated {block_count}, retrying...")
-        # 캐시 삭제 후 재시도 (1회)
-        cache_path = passage_dir / "step2_order.json"
-        if cache_path.exists():
-            cache_path.unlink()
-        data = call_claude_json(SYS_JSON, prompt, max_tokens=4096)
-        if data.get("order_paragraphs") and isinstance(data["order_paragraphs"][0], dict):
-            data["order_paragraphs"] = [[p["label"], p["text"]] for p in data["order_paragraphs"]]
-        if data.get("full_order_blocks") and isinstance(data["full_order_blocks"][0], dict):
-            data["full_order_blocks"] = [[b["label"], b["text"]] for b in data["full_order_blocks"]]
-        # ★ 순서 선지를 코드로 직접 생성 (재시도 후에도 반드시 재생성해야 정답/정답지 불일치가 안 생김)
-        _generate_order_choices(data, passage=passage)
-        block_count2 = len(data.get("full_order_blocks", []))
-        if block_count2 != sentence_count:
-            _safe_print(f"  WARNING: still mismatch ({block_count2} vs {sentence_count}), using original")
-            data["full_order_blocks"] = [[chr(65+i), s] for i, s in enumerate(sentences)]
+    # full_order_blocks 데이터 알고리즘으로 생성
+    # 예시
+    # data["full_order_blocks"] = [
+    #   ["A", "Sent A."],
+    #   ["B", "Sent B."],
+    #   ["C", "Sent C."],
+    #   ]
+    for i, s in enumerate(sentences):
+        data["full_order_blocks"].append([chr(ord('A')+i), s])
+
+    # 🔒 검증: 전체배열 블록 수 vs 원문 문장 수 -> 알고리즘으로 생성했기에 필요X
+    # block_count = len(data.get("full_order_blocks", []))
+    # sentence_count = len(sentences)
+    # if block_count != sentence_count:
+    #     _safe_print(f"  WARNING: sentence mismatch! original {sentence_count} vs generated {block_count}, retrying...")
+    #     # 캐시 삭제 후 재시도 (1회)
+    #     cache_path = passage_dir / "step2_order.json"
+    #     if cache_path.exists():
+    #         cache_path.unlink()
+    #     data = call_claude_json(SYS_JSON, prompt, max_tokens=4096)
+    #     if data.get("order_paragraphs") and isinstance(data["order_paragraphs"][0], dict):
+    #         data["order_paragraphs"] = [[p["label"], p["text"]] for p in data["order_paragraphs"]]
+    #     if data.get("full_order_blocks") and isinstance(data["full_order_blocks"][0], dict):
+    #         data["full_order_blocks"] = [[b["label"], b["text"]] for b in data["full_order_blocks"]]
+    #     # ★ 순서 선지를 코드로 직접 생성 (재시도 후에도 반드시 재생성해야 정답/정답지 불일치가 안 생김)
+    #     _generate_order_choices(data, passage=passage)
+    #     block_count2 = len(data.get("full_order_blocks", []))
+    #     if block_count2 != sentence_count:
+    #         _safe_print(f"  WARNING: still mismatch ({block_count2} vs {sentence_count}), using original")
+    #         data["full_order_blocks"] = [[chr(65+i), s] for i, s in enumerate(sentences)]
 
     # 🔒 삽입 지문: API 결과를 신뢰하지 않고 항상 코드로 재구성
     # (API가 마커를 앞에 몰아넣거나, 정답 위치에 마커를 안 넣는 문제 방지)
@@ -1671,10 +1680,10 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
 def step7_writing(sentences: list, translation: str, passage_dir: Path, sentence_translations: list = None) -> dict:
     cached = load_step(passage_dir, "step7_writing")
     if cached:
-        _safe_print("  step7: using cache")
+        _safe_print("  Stage 10 영작: using cache")
         return cached
 
-    _safe_print("  step7: generating Lv.10 writing...")
+    _safe_print("  Stage 10 영작 | Lv.10 writing...")
     # 대화문 여부 확인
     is_dialogue = _is_dialogue(sentences)
     

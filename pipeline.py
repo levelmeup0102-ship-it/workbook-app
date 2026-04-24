@@ -636,6 +636,8 @@ def _generate_order_choices(data, passage: str = ""):
     data["order_choices"] = choices
     data["order_answer"] = answer
     
+def _generate_order_block_shuffled(data: dict):
+
     # === 3. 전체 문장 배열 (심화) 셔플 ===
     blocks = data.get("full_order_blocks", [])
     if len(blocks) >= 2:
@@ -683,8 +685,7 @@ def step2_order(passage: str, sentences: list, passage_dir: Path) -> dict:
 6. insert_passage: insert_sentence를 뺀 [지문]에서의 나머지 문장들에 ( ① )~( ⑤ ) 위치 표시
 6.1 (중요)5번으로 지정된 문장을 제외하고 나머지 [지문]의 모든 문장의 내용을 그대로 반환한다.(변형 금지. 원문 축소/생략/요약 절대 금지! 삽입 문장 외의 모든 문장이 빠짐없이 포함되어야 함)
 7. insert_answer: 삽입 정답 번호
-8. full_order_blocks: 전체 문장을 (A)~끝까지 개별 블록으로 분할 (각각 label, text)
-9. full_order_answer: 정답 순서 (예: "(C)→(G)→(D)→...")
+8. full_order_answer: 정답 순서 (예: "(C)→(G)→(D)→...")
 
 JSON 형식:
 {{
@@ -708,18 +709,12 @@ JSON 형식:
     # if data.get("full_order_blocks") and isinstance(data["full_order_blocks"][0], dict):
         # data["full_order_blocks"] = [[b["label"], b["text"]] for b in data["full_order_blocks"]]
 
-    # ★ 순서 선지를 코드로 직접 생성 (AI가 다양하게 안 만드는 문제 해결)
-    _generate_order_choices(data, passage=passage)
-
-    # full_order_blocks 데이터 알고리즘으로 생성
-    # 예시
-    # data["full_order_blocks"] = [
-    #   ["A", "Sent A."],
-    #   ["B", "Sent B."],
-    #   ["C", "Sent C."],
-    #   ]
     for i, s in enumerate(sentences):
         data["full_order_blocks"].append([chr(ord('A')+i), s])
+
+    # ★ 순서 선지를 코드로 직접 생성 (AI가 다양하게 안 만드는 문제 해결)
+    _generate_order_block_shuffled(data)
+
 
     # 🔒 검증: 전체배열 블록 수 vs 원문 문장 수 -> 알고리즘으로 생성했기에 필요X
     # block_count = len(data.get("full_order_blocks", []))
@@ -915,9 +910,9 @@ def step3_blank(passage: str, passage_dir: Path) -> dict:
 - 빈칸은 15단어 이내로 (너무 긴 빈칸 금지)
 - 빈칸 문장 외의 다른 문장은 원문 그대로 유지 (생략/축약/변형 절대 금지)
 - 빈칸을 제외한 나머지 문장 부분도 절대 변형하지 말 것
-- 선지 12개: 정답 6~7개 + 오답 5~6개
+- 선지 12개: 정답의 개수를 전체의 50-60%로 구성. 나머지(12개에서 정답의 개수를 뺀) 개수가 오답의 개수.
 - 정답: 원문 핵심 표현을 유의어/비유적 표현으로 변형
-- 오답: 지문 내용 왜곡, 반대 의미, 미언급 내용
+- 오답: 정답과 반대 의미의 내용, 지문에서 미언급 내용
 - 각 선지는 15단어 이내로 간결하게
 - ★표현 중복 금지★ 정답 선지끼리 의미가 비슷한 건 OK, 하지만 거의 같은 문장을 단어만 바꿔 반복하면 안 됨
 - 예시(금지): "all products were designed for usability by everyone" / "all environments combined usability for everyone" → 문장 구조와 핵심어가 너무 유사
@@ -929,7 +924,7 @@ def step3_blank(passage: str, passage_dir: Path) -> dict:
   "blank_answer_korean": "빈칸 정답 내용 한국어",
   "blank_options": ["① ...", "② ...", ... "⑫ ..."],
   "blank_correct": ["②", "③", "⑤", ...],
-  "blank_wrong": ["①", "④", ...]
+  "blank_wrong": ["① ...(①에 대한 한글 해석 문장)", "④ ...(④에 대한 한글 해석 문장)", ...]
 }}"""
 
     data = call_claude_json(SYS_JSON, prompt, max_tokens=3000)
@@ -1796,21 +1791,29 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
     # Lv.5
     s2 = all_data.get("step2", {})
     blocks.append(f'<div class="ablock"><p class="ast">Stage 5 순서 배열</p>'
-                   f'<p>정답: {s2.get("order_answer","")}</p>'
-                   f'<p>삽입 정답: {s2.get("insert_answer","")}</p>'
-                   f'<p>전체 배열: {s2.get("full_order_answer","")}</p></div>')
+                   f'<p>[A. 순서 배열]\n> 정답: {s2.get("order_answer","")}</p>'
+                   f'<p>[B. 문장 삽입]\n> 정답: {s2.get("insert_answer","")}</p>'
+                   f'<p>[심화 - 문장 순서 배열]\n> 정답: {s2.get("full_order_answer")}</p></div>')
 
     # Lv.6
     s3 = all_data.get("step3", {})
     correct = ', '.join(s3.get("blank_correct", []))
+    wrong = '\n'.join(s3.get("blank_wrong", []))
+
     blocks.append(f'<div class="ablock"><p class="ast">Stage 6 빈칸 추론</p>'
-                   f'<p>정답: {correct}</p></div>')
+                   f'<p>[STEP 2]\n> 정답: {correct}</p>'
+                   f'<p>오답 선지 해석\n{wrong}</p></div>')
 
     # Lv.7
     s4 = all_data.get("step4", {})
-    correct = ', '.join(s4.get("topic_correct", []))
-    blocks.append(f'<div class="ablock"><p class="ast">Stage 7 주제 찾기</p>'
-                   f'<p>정답: {correct}</p></div>')
+    step1_correct = ', '.join(s4.get("topic_correct", []))
+    
+    s5 = all_data.get("step5", {}).get
+    step2_correct = s4.get("topic_correct", [])
+    blocks.append(f'<div class="ablock"><p class="ast">Stage 7-1 어법</p>'
+                   f'<p>STEP 1.\n> 정답: {step1_correct}</p><p>STEP 2.\n> 정답: {step2_correct}</p></div>')
+    blocks.append(f'<div class="ablock"><p class="ast">Stage 7-2 어법 최종 체크</p>'
+                   f'<p>STEP 1.\n정답: {step2_correct}</p></div>')
 
     # Lv.8 괄호
     s5 = all_data.get("step5", {})

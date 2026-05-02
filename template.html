@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ko">
 
 <head>
@@ -1616,8 +1616,7 @@
             </div>
             {{ stage_nav(1, 'stage-phase-before', '수업 전') }}
             <div class="checklist">
-                <div class="checklist-title"><span>☑ 수업 전 체크리스트 - Stage 1</span><span class="color-primary">★별표 문장은 수업
-                        시간에 확인합니다</span></div>
+                <div class="checklist-title"><span>☑ 수업 전 체크리스트 - Stage 1</span></div>
                 <table class="checklist-table">
                     <tr>
                         <td class="checklist-step"><span class="step-number">Step 1.</span> 지문 핵심 어휘 암기</td>
@@ -1726,10 +1725,11 @@
         </div>
         <div class="page-foot">
             <div class="sol">
-                <p class="sol-title">[핵심 어휘 솔루션]</p>
+                <p class="sol-title">[핵심 어휘 학습 솔루션]</p>
                 <div class="sol-steps">
-                    <div class="sol-step">① 처음 학습 시, 지문 핵심 어휘의 뜻 위주로 학습하세요.</div>
-                    <div class="sol-step">② 단어와 뜻이 연상되면 유의어를 참고하여 단어 연상 학습을 하세요.</div>
+                    <div class="sol-step">① 영어 가리고 뜻 암기 → 막힌 단어 표시 후 다시 암기</div>
+                    <div class="sol-step">② 외운 어휘는 유의어 4개까지 묶어 추가 암기</div>
+                    <div class="sol-step">③ STEP 2 테스트 → 틀린 단어만 STEP 3 사전 정리</div>
                 </div>
             </div>
         </div>
@@ -1832,10 +1832,10 @@
             <div class="page-header"><span class="page-header-left">레벨미업학원</span><span class="page-header-right">{{
                     subject }}
                     - {{ challenge_title }}</span></div>
-            {{ stage_nav(3, 'stage-phase-before', '수업 전') }}
+            {{ stage_nav(3, 'stage-phase-class', '수업 중') }}
             {% if loop.first %}
             <div class="checklist">
-                <div class="checklist-title"><span>☑ 수업 전 체크리스트 - Stage 3</span><span class="color-primary">★별표 문장은 수업
+                <div class="checklist-title"><span>☑ 수업 중 체크리스트 - Stage 3</span><span class="color-primary">★별표 문장은 수업
                         시간에 확인합니다</span></div>
                 <table class="checklist-table">
                     <tr>
@@ -1997,30 +1997,10 @@
                         endfor %}
                     </div>
                     <p class="fs-85 mt2">①(C)-(A)-(B) ②(A)-(C)-(B) ③(B)-(A)-(C) ④(A)-(B)-(C) ⑤(B)-(C)-(A)</p>
-                    <table class="flow-meta-row">
-                        <tr>
-                            <td class="flow-meta-hd">1차</td>
-                            <td class="flow-meta-td">메모:</td>
-                        </tr>
-                        <tr>
-                            <td class="flow-meta-hd">2차</td>
-                            <td class="flow-meta-td">메모:</td>
-                        </tr>
-                    </table>
                     <p class="flow-section-label-sep">B. 문장 삽입</p>
                     <p class="mb2">주어진 문장이 들어가기에 가장 적절한 곳을 고르시오.</p>
                     <div class="passage flow-pass-insert p-dense">{{ insert_sentence }}</div>
                     <div class="passage flow-pass-intro p-dense mt2">{{ insert_passage }}</div>
-                    <table class="flow-meta-row">
-                        <tr>
-                            <td class="flow-meta-hd">1차</td>
-                            <td class="flow-meta-td">메모:</td>
-                        </tr>
-                        <tr>
-                            <td class="flow-meta-hd">2차</td>
-                            <td class="flow-meta-td">메모:</td>
-                        </tr>
-                    </table>
                     <p class="flow-section-label-sep">(심화) 전체 문장 순서 배열</p>
                     <p class="text-muted mb4 fs-75">지문의 모든 문장을 정확한 순서로 배열하여 글의 흐름을 완벽히 체화합니다.</p>
                     {% for label, text in full_order_blocks %}
@@ -2035,22 +2015,20 @@
                     {% endfor %}
                     <div class="sol">
                         <p class="sol-title">[글의 흐름 솔루션]</p>
-                        <p class="fs-8 mb2">• 순서/삽입이 틀렸다면 <strong>Stage 4 구조 정리로
-                                돌아가세요.</strong>
-                        </p>
+                        <p class="fs-8 mb2">• 순서/삽입이 틀렸다면 <strong>Stage 4 주제문 정리로 돌아가세요.</strong></p>
                         <table class="sol-step-tbl">
                             <tr>
                                 <td class="sol-step-label">[순서]</td>
                                 <td>
-                                    <span class="sol-step-line">① 첫 문장 찾기 → 지문 인식 → 핵심내용 상기</span>
-                                    <span class="sol-step-line">② 연결 단서(관사·지시어·접속사)로 순서 연결 → 전체 흐름 확인</span>
+                                    <span class="sol-step-line">① 첫 문장 찾기 → 지문 전체 흐름 상기</span>
+                                    <span class="sol-step-line">② 연결 단서로 한문장씩 순서 연결</span>
                                 </td>
                             </tr>
                             <tr>
                                 <td class="sol-step-label">[삽입]</td>
                                 <td>
                                     <span class="sol-step-line">① 삽입 문장의 핵심어·연결사 파악</span>
-                                    <span class="sol-step-line">② 앞뒤 문장 논리 흐름 확인 → 삽입 위치 결정</span>
+                                    <span class="sol-step-line">② 앞뒤 문장 논리 확인 → 삽입 위치 결정</span>
                                 </td>
                             </tr>
                         </table>
@@ -2315,8 +2293,9 @@
             <div class="sol">
                 <p class="sol-title">[어휘 유형 솔루션]</p>
                 <div class="sol-steps">
-                    <div class="sol-step">① 원문에 쓰인 단어를 확인하세요.</div>
-                    <div class="sol-step">② 원문과 변형되어 출제되었는지 확인하세요.</div>
+                    <div class="sol-step">① 본문 흐름으로 괄호 자리 단어의 의미 방향 파악</div>
+                    <div class="sol-step">② 파악한 방향과 맞는 선지 선택</div>
+                    <div class="sol-step">③ 틀렸거나 헷갈린 단어는 오답 정리 칸에 사전 찾아 기록</div>
                 </div>
             </div>
         </div>

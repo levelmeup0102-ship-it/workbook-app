@@ -7,10 +7,10 @@ PIPELINE_VERSION = "v10"
 STEP_VERSIONS = {
     "step1_basic": "v3",
     "step2_order": "v7",
-    "step3_blank": "v3",
+    "step3_blank": "v4",
     "step4_topic": "v3",
     "step5_grammar": "v9",
-    "step6_vocab_content": "v3",
+    "step6_vocab_content": "v4",
     "step7_writing": "v3",
     "step8_answers": "v9",
     "secret_note_a": "v1",
@@ -898,6 +898,13 @@ def step3_blank(passage: str, passage_dir: Path) -> dict:
 - ★표현 중복 금지★ 정답 선지끼리 의미가 비슷한 건 OK, 하지만 거의 같은 문장을 단어만 바꿔 반복하면 안 됨
 - 예시(금지): "all products were designed for usability by everyone" / "all environments combined usability for everyone" → 문장 구조와 핵심어가 너무 유사
 - 정답 선지들은 같은 주제를 서로 다른 각도/표현 방식으로 설명해야 함 (예: 비유적 표현, 추상적 요약, 구체적 서술 등 다양하게)
+
+[blank_wrong_translation에 대한 지침]
+- blank_wrong의 값에 대한 한글 해석 내용(topic_wrong의 값들에 대한 한글 해석)
+    - 양식: "번호(blank_wrong에 넣어진 값) 번호에 해당하는 영어문장의 한글 해석"
+    - 예시
+        - blank_wrong: ["①", "③", "④"]
+        - blank_wrong_translation: ["① ①번 내용으로 출제된 영어 문장의 한글 해석 내용", "③ ③번 내용으로 출제된 영어 문장의 한글 해석 내용", "④ ④번 내용으로 출제된 영어 문장의 한글 해석 내용"]
 
 [JSON 형식]
 {{
@@ -2245,13 +2252,26 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
 - 10개 미만이면 실패로 간주됨. 반드시 ①②③④⑤⑥⑦⑧⑨⑩ 10개 모두 작성할 것
 
 [content_match_kr_wrong, content_match_en_wrong에 대한 지침]
+- 각 content_match_kr_wrong과 content_match_en_wrong은 오답의 번호에 대해 올바른 원래 정답인 string값들을 가진 list이다.
 - 오답으로 출제된 문제에 대해 원래 정답인 내용을 말한다.(한글에는 한글 내용, 영어에는 영어 내용)
-    - content_match_kr_wrong의 예시
-        - 문제로 작성된 내용: "① 화산 진흙이나 남극의 얼음 아래에서는 생물체를 찾을 수 없다."
-        - content_match_kr_wrong에 들어갈 내용: "① 화산 진흙이나 남극의 얼음 아래에서는 생물체를 발견될 수 있다." (실제 옳은 해석)
-    - content_match_en_wrong의 예시
-        - 문제로 작성된 내용: "④ Guests must select 'Travel Packages' in the reservation form."
-        - content_match_en_wrong에 들어갈 내용: "④ Select "Vacation Packages" in the reservation form." (문제가 되는 내용을 만들기 위해 사용한 원래 문장)
+    - 예시(content_match_kr_wrong)
+        - 정답(content_match_kr_answer): ["②", "③", "⑤", ...]
+        - content_match_kr_wrong에 들어갈 값: content_match_kr에서 content_match_kr_answer의 값들을 제외한 번호들에 대한 올바른 정답의 문장(틀린 내용이 아니라 원래 문장이 들어가야 함/한글).
+        - 예시 데이터 형식
+            - 정답: ["②", "③", "⑤", ...]
+            - content_match_kr_wrong: ["① 원문의 한글 해석에서 ①번에 해당하는 오답이 아닌 원래 정답의 문장", "④ 원문의 한글 해석에서 ④번에 해당하는 오답이 아닌 원래 정답의 문장", "⑥ 원문의 한글 해석에서 ⑥번에 해당하는 오답이 아닌 원래 정답의 문장", ...]
+                - content_match_kr_wrong의 실제 데이터 예시
+                    - 문제로 작성된 내용: "① 화산 진흙이나 남극의 얼음 아래에서는 생물체를 찾을 수 없다."
+                    - content_match_kr_wrong에 들어갈 내용: "① 화산 진흙이나 남극의 얼음 아래에서는 생물체를 발견될 수 있다." (실제 옳은 해석)
+    - 예시(content_match_en_wrong에)
+        - 정답(content_match_en_answer): ["②", "④", ...]
+        - content_match_en_wrong에 들어갈 값: content_match_en에서 content_match_en_answer의 값들을 제외한 번호들에 대해 올바른 정답의 문장(틀린 내용이 아니라 원래 문장이 들어가야 함/영어)
+        - 예시 데이터 형식
+            - 정답: ["②", "④", ...]
+            - content_match_kr_wrong: ["① 원문(영어)에서 ①번에 해당하는 오답이 아닌 원래 정답의 문장", "③ 원문(영어)에서 ③번에 해당하는 오답이 아닌 원래 정답의 문장", ...]
+                - content_match_en_wrong의 실제 데이터 예시
+                    - 문제로 작성된 내용: "④ Guests must select 'Travel Packages' in the reservation form."
+                    - content_match_en_wrong에 들어갈 내용: "④ Select "Vacation Packages" in the reservation form." (문제가 되는 내용을 만들기 위해 사용한 원래 문장)
 
 [JSON 형식]
 {{

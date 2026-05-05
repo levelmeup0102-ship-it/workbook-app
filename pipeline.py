@@ -1472,10 +1472,16 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 - 예: Harold Gatty (N)[confirms / confirm] → Gatty 바로 앞 → 금지!
 - 예: Our dominant hand (N)[factor / factors] → hand 바로 앞 → 금지!
 - 출제하려면 반드시 주어와 동사 사이가 5단어 이상 떨어진 자리만!
-
 → (제일 중요)학생이 1초 안에 풀 수 있는 자리는 무조건 피하세요.
+
 [어법 괄호형 Lv.8-1]
 - (제일 중요)정답을 고르는 기준은 위의 문법 규칙에 대한 내용들을 반드시 따를 것.
+    - 정답으로 고르는 부분 우선순위(동사가 아닌 것을 우선출제)
+        - 관계사
+        - That vs what
+        - 형용사 vs 부사
+        - It vs them
+    - 우선 순위의 문법들로만 채우기에 부족한 부분이 있다면, 동사 문제도 포함하여 문제로 출제
 - ⚠️⚠️⚠️ {bracket_count} 개수 절대 규칙: 반드시 {min_brackets}개 이상! 지문 길이별 강제:
    - 짧은 지문(80단어 이하) → 최소 2개 (그 이상도 가능)
    - 중간 지문(81~120단어) → 최소 3개

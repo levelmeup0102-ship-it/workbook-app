@@ -1303,6 +1303,7 @@
             column-gap: 6mm;
             column-fill: auto;
             column-rule: 0.2mm solid var(--border-light);
+            height: 210mm;
             font-size: 8pt;
             line-height: 1.4;
             overflow-wrap: break-word;
@@ -1324,6 +1325,7 @@
 
         .answer-block,
         .ablock {
+            break-inside: avoid;
             margin-bottom: 3mm;
             padding-bottom: 2.5mm;
             border-bottom: 0.2mm dashed var(--border-light);
@@ -2573,8 +2575,7 @@
         }
 
         function paginateAll() {
-            // .answer-page는 CSS multi-column으로 자연스럽게 흐르게 두기 (강제 분할 X)
-            // paginate('.answer-page');
+            paginate('.answer-page');
             paginate('.flow-2col');
             ensurePageLast();
         }

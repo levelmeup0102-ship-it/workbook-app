@@ -9,7 +9,7 @@ STEP_VERSIONS = {
     "step2_order": "v7",
     "step3_blank": "v5",
     "step4_topic": "v3",
-    "step5_grammar": "v10",
+    "step5_grammar": "v11",
     "step6_vocab_content": "v5",
     "step7_writing": "v3",
     "step8_answers": "v9",

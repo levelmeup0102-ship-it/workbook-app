@@ -2775,9 +2775,9 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
     # Lv.9 - step2 정답 (정답: 번호만 / 오답: 번호+한글해석문장)
     stage9_data = all_data.get("step6") or {}
     correct_numbers_kor = ', '.join(stage9_data.get("content_match_kr_answer") or [])
-    wrong_kr_list = stage9_data.get("content_match_kr_wrong") or []
+    wrong_kr_list = stage9_data.get("content_match_kr_wrong_trans") or []
     correct_numbers_eng = ', '.join(stage9_data.get("content_match_en_answer") or [])
-    wrong_eng_list = stage9_data.get("content_match_en_wrong") or []
+    wrong_eng_list = stage9_data.get("content_match_en_wrong_trans") or []
 
     kor_items = []
     for i in wrong_kr_list:

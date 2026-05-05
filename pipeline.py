@@ -7,10 +7,10 @@ PIPELINE_VERSION = "v10"
 STEP_VERSIONS = {
     "step1_basic": "v3",
     "step2_order": "v7",
-    "step3_blank": "v4",
+    "step3_blank": "v5",
     "step4_topic": "v3",
-    "step5_grammar": "v9",
-    "step6_vocab_content": "v4",
+    "step5_grammar": "v10",
+    "step6_vocab_content": "v5",
     "step7_writing": "v3",
     "step8_answers": "v9",
     "secret_note_a": "v1",
@@ -902,9 +902,9 @@ def step3_blank(passage: str, passage_dir: Path) -> dict:
 [blank_wrong_translation에 대한 지침]
 - blank_wrong의 값에 대한 한글 해석 내용(topic_wrong의 값들에 대한 한글 해석)
     - 양식: "번호(blank_wrong에 넣어진 값) 번호에 해당하는 영어문장의 한글 해석"
-    - 예시
-        - blank_wrong: ["①", "③", "④"]
-        - blank_wrong_translation: ["① ①번 내용으로 출제된 영어 문장의 한글 해석 내용", "③ ③번 내용으로 출제된 영어 문장의 한글 해석 내용", "④ ④번 내용으로 출제된 영어 문장의 한글 해석 내용"]
+    - 예시 데이터
+        - blank_wrong: blank_correct에서 blank_wrong의 값을 제외한 번호들
+        - blank_wrong_translation: ["① ①번 내용으로 출제된 영어 문장의 한글 해석", "③ ③번 내용으로 출제된 영어 문장의 한글 해석 내용", "④ ④번 내용으로 출제된 영어 문장의 한글 해석 내용"]
 
 [JSON 형식]
 {{
@@ -922,42 +922,68 @@ def step3_blank(passage: str, passage_dir: Path) -> dict:
     options = data.get("blank_options", [])
     correct_set = set(data.get("blank_correct", []))
     wrong_set = set(data.get("blank_wrong", []))
+    ai_wrong_labels = data.get("blank_wrong", [])             # 셔플 전 AI 라벨
+    ai_wrong_translations = data.get("blank_wrong_translation", [])
+
     if options and len(options) >= 2:
         CIRCLE_NUMS = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫"]
         import re as _re_blank
-        # 선지 텍스트만 추출 (번호 제거)
-        texts = []
+        import random as _rand_blank
+
+        # 선지 텍스트만 추출 (번호 제거) - 셔플 전 순서 보존
+        original_texts = [_re_blank.sub(r'^[①-⑫]\s*', '', opt).strip() for opt in options]
+
+        # 정답/오답 텍스트 스냅샷
         old_correct_texts = []
         old_wrong_texts = []
-        for opt in options:
-            text = _re_blank.sub(r'^[①-⑫]\s*', '', opt).strip()
-            texts.append(text)
         for c in correct_set:
             idx_c = CIRCLE_NUMS.index(c) if c in CIRCLE_NUMS else -1
-            if 0 <= idx_c < len(texts):
-                old_correct_texts.append(texts[idx_c])
+            if 0 <= idx_c < len(original_texts):
+                old_correct_texts.append(original_texts[idx_c])
         for w in wrong_set:
             idx_w = CIRCLE_NUMS.index(w) if w in CIRCLE_NUMS else -1
-            if 0 <= idx_w < len(texts):
-                old_wrong_texts.append(texts[idx_w])
-        # 셔플
-        import random as _rand_blank
-        _rand_blank.shuffle(texts)
-        # 새 번호 부여 + 정답/오답 재매핑
-        new_options = []
-        new_correct = []
-        new_wrong = []
-        for i, text in enumerate(texts):
+            if 0 <= idx_w < len(original_texts):
+                old_wrong_texts.append(original_texts[idx_w])
+
+        # 셔플: 원본 copy해서 사용
+        shuffled = original_texts.copy()
+        _rand_blank.shuffle(shuffled)
+
+        # 새 번호 부여 + 정답/오답 다시 매핑
+        new_options, new_correct, new_wrong = [], [], []
+        for i, text in enumerate(shuffled):
             label = CIRCLE_NUMS[i]
             new_options.append(f"{label} {text}")
             if text in old_correct_texts:
                 new_correct.append(label)
             elif text in old_wrong_texts:
                 new_wrong.append(label)
+
+        # 오답 한글 해석 -> 셔플된 라벨로 매핑
+        trans_by_new_label = {}
+        for old_label, trans in zip(ai_wrong_labels, ai_wrong_translations):
+            if old_label not in CIRCLE_NUMS:
+                continue
+            old_idx = CIRCLE_NUMS.index(old_label)
+            if not (0 <= old_idx < len(original_texts)):
+                continue
+            text = original_texts[old_idx]
+            new_idx = shuffled.index(text)
+            new_label = CIRCLE_NUMS[new_idx]
+            body = _re_blank.sub(r'^[①-⑫]\s*', '', trans).strip()
+            trans_by_new_label[new_label] = body
+
+        new_wrong_translation = [
+            f"{lbl} {trans_by_new_label[lbl]}"
+            for lbl in new_wrong
+            if lbl in trans_by_new_label
+        ]
+
         data["blank_options"] = new_options
         data["blank_correct"] = new_correct
         data["blank_wrong"] = new_wrong
-        _safe_print(f"  🔀 빈칸 선지 셔플 완료: 정답 위치 {new_correct}")
+        data["blank_wrong_translation"] = new_wrong_translation
+        logger.info(f"INFO | STAGE 6 | 빈칸 선지 셔플: 정답 {new_correct} / 오답해석 {len(new_wrong_translation)}건 매핑")
 
     save_step(passage_dir, "step3_blank", data)
     return data
@@ -1136,6 +1162,68 @@ def _apply_critical_grammar_filters(data: dict) -> dict:
     return data
 
 
+# ============================================================
+# 어법 괄호형 (Lv.8-1) 분배 + 조립 헬퍼
+# ============================================================
+def _distribute_brackets(sent_count: int, total: int, max_per: int = 2) -> list:
+    """각 문장에 0~max_per개 무작위 분배. counts[i] 합계 = min(total, sent_count*max_per)."""
+    counts = [0] * sent_count
+    pool = list(range(sent_count)) * max_per
+    random.shuffle(pool)
+    for i in pool[:min(total, len(pool))]:
+        counts[i] += 1
+    return counts
+
+
+def _assemble_bracket_passage(triples, sentences):
+    """
+    AI가 반환한 [[원문장, 정답, 오답], ...] 를 받아
+    grammar_bracket_passage 문자열 + grammar_bracket_answers 리스트로 변환.
+    50% 확률로 정답 좌우 swap.
+
+    Returns: (bracket_passage_str, bracket_answers_list)
+    """
+    if not isinstance(triples, list) or not sentences:
+        return "", []
+
+    bracketed = list(sentences)
+    answers = []
+    n = 0
+
+    for triple in triples:
+        if not (isinstance(triple, (list, tuple)) and len(triple) >= 3):
+            continue
+        src_sent, ans, wrong = triple[0], triple[1], triple[2]
+        if not (isinstance(src_sent, str) and isinstance(ans, str) and isinstance(wrong, str)):
+            continue
+        if not (ans.strip() and wrong.strip()):
+            continue
+        # 매칭: 정확히 일치하는 문장 우선, 실패 시 strip 후 비교
+        idx = -1
+        if src_sent in sentences:
+            idx = sentences.index(src_sent)
+        else:
+            stripped = src_sent.strip()
+            for i, s in enumerate(sentences):
+                if s.strip() == stripped:
+                    idx = i
+                    break
+        if idx == -1:
+            continue
+        if ans not in bracketed[idx]:
+            continue
+        n += 1
+        # 50% 확률로 정답 좌우 swap
+        if random.random() < 0.5:
+            bracket_form = f"({n})[{wrong} / {ans}]"
+        else:
+            bracket_form = f"({n})[{ans} / {wrong}]"
+        bracketed[idx] = bracketed[idx].replace(ans, bracket_form, 1)
+        answers.append({"num": n, "answer": ans, "wrong": wrong})
+
+    return " ".join(bracketed), answers
+
+
 def step5_grammar(passage: str, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step5_grammar")
     if cached:
@@ -1157,10 +1245,15 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
         min_brackets = 8
 
     bracket_count = min(14, sent_count * 2)  # 문장당 최대 2개 괄호, 최대 14개 (A4 페이지 넘침 방지)
-    _safe_print(f"  step5: 지문 {word_count}단어 / {sent_count}문장 → 최소 {min_brackets}개, 권장 {bracket_count}개")
-    # bracket_count = sent_count * 2  # 문장당 최대 2개 괄호 / 예: 12문장이면 최대 24개 괄호 문제 + 24개 답안 박스가 생성됩니다.
+    # ★ 8-1 괄호 분배: AI 호출 전에 어느 문장에 몇 개 출제할지 코드가 결정
+    bracket_dist = _distribute_brackets(sent_count, bracket_count, max_per=2)
+    bracket_dist_lines = "\n".join(
+        f"- 문장 {i}번 (\"{sentences[i][:60]}{'...' if len(sentences[i])>60 else ''}\") → {bracket_dist[i]}개"
+        for i in range(sent_count)
+    )
+    logger.debug(f"  step5: 지문 {word_count}단어 / {sent_count}문장 → 최소 {min_brackets}개, 권장 {bracket_count}개, 분배 {bracket_dist}")
     
-    _safe_print("  step5: generating Lv.8 grammar...")
+    logger.debug("  step5: generating Lv.8 grammar...")
     prompt = f"""다음 영어 지문으로 어법 문제 2종류를 생성하세요.
 
 [원문 - 총 {sent_count}개 문장]
@@ -1171,6 +1264,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 2. 출력 지문도 반드시 정확히 {sent_count}개 문장이어야 합니다
 3. 절대 문장을 추가/삭제/분리/합치기 하지 마세요
 4. 원문 문장에 괄호나 오류만 삽입하고, 나머지는 원문 그대로 유지
+4-1. [어법 괄호형 Lv.8-1] 내부에서 괄호 규칙을 엄격하게 지킬 것.
 5. 문장 수가 부족하면 오류/괄호 수를 줄이세요 (문장 추가는 절대 금지!)
 6. 새로운 문장을 만들어 넣지 마세요! 원문에 있는 문장만 사용!
 7. 출력 결과의 문장을 하나씩 세어보고, {sent_count}개가 아니면 수정하세요
@@ -1387,10 +1481,18 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
    - 중간 지문(81~120단어) → 최소 3개
    - 긴 지문(121단어 이상) → ⚠ 반드시 7~10개 이상! 절대 2~3개로 끝내지 말 것!
 - 우선순위 자리가 부족해도 위에 명시한 19~22번 자리(분사구문, couldn't help but, recommend ing, be 형용사)를 활용해서 충분히 채우세요
-- 괄호 형식: (N)[정답 / 오답] (N: 문제 번호 숫자)
-- 예시: (1)[looked / look]
+- 괄호 규칙
+    - 괄호 형식: (N)[정답 / 오답]  (N: 문제 번호 숫자)
+    - ⚠ 절대 위반 금지 — 모든 (N) 뒤에는 반드시 [ ... / ... ] 형태가 와야 함
+    - 올바른 예: (1)[looked / look]
+    - ❌ 절대 금지 예시:
+        - (1) looked / look          ← [ ] 둘 다 누락
+        - (1)[looked / look          ← ] 누락
+        - (1) looked / look]         ← [ 누락
+        - (1)[looked look]           ← / 누락
+  - 위 형태가 단 하나라도 발생하면 출제 실패로 간주됨. (N) 뒤는 무조건 [...] 으로 시작·종결.
 - ⚠ 괄호가 너무 적으면(긴 지문에서 5개 미만) 출제 실패!
-- 한 문장에 여러 괄호 가능
+- 한 문장에 여러 문제 삽입 가능
 - 정답이 왼쪽인 경우 50%, 오른쪽인 경우 50%가 되도록 반드시 균등 배치 (예: 10개면 5개는 정답이 왼쪽, 5개는 오른쪽)
 - 출제: 시제, 대명사, 동명사, to부정사, 형용사/부사, 관계대명사, 분사, 사역동사 등
 
@@ -1403,18 +1505,41 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 - 오류 개수 = grammar_error_answers 배열 길이와 반드시 일치
 - ⚠ 8-2 오류 삽입 부분 외의 텍스트는 원문과 100% 동일해야 함! AI가 주변 단어를 무의식적으로 바꾸지 말 것!
 
+[★ 8-1 출제 분배 — 반드시 이대로 개수 맞출 것]
+{bracket_dist_lines}
+- 합계: {bracket_count}개
+- 0개로 지정된 문장은 8-1에서 출제하지 말 것 (8-2와는 무관)
+
+[★ 8-1 출력 형식 (매우 중요)]
+- grammar_bracket_passage 필드는 ★list of triples★. 문자열 아님!
+- 형식: [[원문 문장(sentences[i] 그대로), 정답 단어/구, 오답 단어/구], ...]
+- 각 triple의 [0]은 원문 문장과 글자 단위로 정확히 동일해야 함 (변형/축약 금지)
+- 각 triple의 [1] (정답)은 [0] 안에 ★유일하게 한 번만★ 등장하는 단어/구여야 함
+  (코드가 첫 등장 자리만 괄호로 치환하므로, 같은 단어가 여러 번 나오면 의도 외 자리가 괄호로 감싸짐)
+- 한 문장에 분배 개수가 2면 같은 [0]을 가진 triple을 2개 만들되, [1]은 서로 다른 단어여야 함
+- 괄호 번호 (N), 좌우 정답 위치는 코드가 결정 — AI는 정답/오답 단어만 제공
+- grammar_bracket_count, grammar_bracket_answers 필드는 출력 ★불필요★ (코드가 생성)
+
 [JSON 형식]
 {{
-  "grammar_bracket_passage": "괄호 포함 전체 지문 (정확히 {sent_count}문장)",
-  "grammar_bracket_count": {bracket_count},
-  "grammar_bracket_answers": [{{"num":1, "answer":"go", "wrong":"will go"}}, ...],
+  "grammar_bracket_passage": [["원문 문장 1", "정답 단어", "오답 단어"], ...],
   "grammar_error_passage": "오류 포함 전체 지문 (정확히 {sent_count}문장)",
   "grammar_error_count": 실제삽입개수,
   "grammar_error_answers": [{{"num":1, "original":"watch", "error":"watching"}}, ...]
 }}"""
 
-    data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
-    
+    def _ai_call():
+        """call_claude_json + 8-1 triples → string 조립을 한 번에."""
+        d = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
+        triples = d.get("grammar_bracket_passage", [])
+        bracket_str, bracket_answers = _assemble_bracket_passage(triples, sentences)
+        d["grammar_bracket_passage"] = bracket_str
+        d["grammar_bracket_answers"] = bracket_answers
+        d["grammar_bracket_count"] = len(bracket_answers)
+        return d
+
+    data = _ai_call()
+
     # 🔒 검증: 문장 수 체크
     for key in ['grammar_bracket_passage', 'grammar_error_passage']:
         gen_text = data.get(key, '')
@@ -1424,7 +1549,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             cache_path = passage_dir / "step5_grammar.json"
             if cache_path.exists():
                 cache_path.unlink()
-            data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
+            data = _ai_call()
             break
     
     
@@ -1448,7 +1573,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
         cache_path = passage_dir / "step5_grammar.json"
         if cache_path.exists():
             cache_path.unlink()
-        data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
+        data = _ai_call()
         bracket_text = data.get("grammar_bracket_passage", "")
 
     for key in ["grammar_bracket_passage", "grammar_error_passage"]:
@@ -1473,7 +1598,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             cache_path = passage_dir / "step5_grammar.json"
             if cache_path.exists():
                 cache_path.unlink()
-            retry_data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
+            retry_data = _ai_call()
             retry_text = retry_data.get(key, "")
             retry_stripped = _strip_brackets(retry_text)
             retry_len = len(re.sub(r'\s+', '', retry_stripped))
@@ -1506,7 +1631,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     if actual_error_count == 0:
         _safe_print("  ⚠️ 8-2 오류 0개! 원문 그대로 출력됨 → 재시도...")
         for _err_retry in range(3):
-            data3 = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
+            data3 = _ai_call()
             errs3 = data3.get("grammar_error_answers", [])
             if len(errs3) >= 3:
                 data["grammar_error_passage"] = data3.get("grammar_error_passage", data.get("grammar_error_passage", ""))
@@ -2151,7 +2276,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             data["grammar_bracket_answers"] = [a for a in data.get("grammar_bracket_answers", []) if a.get("num") not in removed_ww]
             data["grammar_bracket_count"] = len(re.findall(r'\(\d+\)\[', final_bp3))
 
-    # ★ 최종 재번호 매기기: 모든 자동 제거 후 (1)부터 시작하도록 번호 정리
+    # 최종 번호 재정의: (1)부터 시작하도록 번호 정리
     final_bp_renum = data.get("grammar_bracket_passage", "")
     if final_bp_renum:
         remaining_nums = [int(m) for m in re.findall(r'\((\d+)\)\[', final_bp_renum)]
@@ -2159,12 +2284,12 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
         if remaining_nums and remaining_nums != expected_nums:
             renumber_map = dict(zip(remaining_nums, expected_nums))
             new_passage = final_bp_renum
-            # 1단계: 임시 마커로 교체 (충돌 방지)
+            # 1단계: 임시 마커 선언
             for old_num in remaining_nums:
                 new_num = renumber_map[old_num]
                 if old_num != new_num:
                     new_passage = new_passage.replace(f'({old_num})[', f'(__TMP{new_num}__)[', 1)
-            # 2단계: 임시 마커를 최종 번호로
+            # 2단계: 임시 마커 -> 최종 번호
             new_passage = re.sub(r'\(__TMP(\d+)__\)\[', lambda m: f'({m.group(1)})[', new_passage)
             # answers도 재번호
             new_answers = []
@@ -2176,14 +2301,14 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             data["grammar_bracket_passage"] = new_passage
             data["grammar_bracket_answers"] = new_answers
             data["grammar_bracket_count"] = len(new_answers)
-            _safe_print(f"  🔢 최종 재번호 매기기 완료: {dict(list(renumber_map.items())[:5])}...")
+            logger.info(f"INFO | STAGE 8 | 최종 번호 매기기 완료: {dict(list(renumber_map.items())[:5])}...")
 
-  # ★ 최종 괄호 수 체크: 모든 제거 후 min_brackets 미만이면 재생성 (최대 3회)
+  # 최종 괄호 수 체크: 모든 제거 후 min_brackets 미만이면 재생성 (최대 3회)
     final_bracket_count = data.get("grammar_bracket_count", 0)
     if 0 < final_bracket_count < min_brackets:
         for _retry_n in range(3):
-            _safe_print(f"  ⚠️ 최종 괄호 {final_bracket_count}개 < {min_brackets}개 → 재생성 시도 {_retry_n+1}/3...")
-            data_retry = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
+            logger.info(f"INFO | STAGE 8 | 최종 괄호 {final_bracket_count}개 < {min_brackets}개 → 재생성 시도 {_retry_n+1}/3...")
+            data_retry = _ai_call()
             retry_bp = data_retry.get("grammar_bracket_passage", "")
             retry_count = len(re.findall(r'\(\d+\)\[', retry_bp))
             if retry_count >= min_brackets:
@@ -2193,19 +2318,66 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
                 data["grammar_error_passage"] = data_retry.get("grammar_error_passage", data.get("grammar_error_passage", ""))
                 data["grammar_error_answers"] = data_retry.get("grammar_error_answers", data.get("grammar_error_answers", []))
                 data["grammar_error_count"] = len(data["grammar_error_answers"])
-                _safe_print(f"  ✅ 재생성 성공: 괄호 {retry_count}개")
+                logger.info(f"  ✅ 재생성 성공: 괄호 {retry_count}개")
                 # ★★ 재생성 결과에도 핵심 차단 다시 적용 (시제/주어동명사/that-which 등)
                 data = _apply_critical_grammar_filters(data)
-                _safe_print(f"  🔒 재생성 후 차단 적용 → 최종 {data.get('grammar_bracket_count', 0)}개")
+                logger.info(f"INFO | STAGE 8 | 재생성 후 차단 적용 → 최종 {data.get('grammar_bracket_count', 0)}개")
                 break
             final_bracket_count = retry_count
-            _safe_print(f"  ⚠ 재생성 {_retry_n+1}회 실패 ({retry_count}개)")
+            logger.info(f"  ⚠ 재생성 {_retry_n+1}회 실패 ({retry_count}개)")
 
     # ★★ 최종 안전장치: 항상 핵심 차단 한 번 더 (캐시되기 전)
     data = _apply_critical_grammar_filters(data)
 
     save_step(passage_dir, "step5_grammar", data)
     return data
+
+# ============================================================
+# 내용일치 part: 셔플 후 데이터 매칭 (kr/en 공용)
+# ============================================================
+def _shuffle_content_match(items, answers, ai_wrong, ai_wrong_trans):
+    """
+    content_match_{kr|en}을 셔플하면서 answer/wrong/wrong_trans 라벨을 동시 동기화.
+
+    Returns:
+        (new_items, new_answer, new_wrong, new_wrong_trans)
+    """
+    if not items:
+        return list(items), list(answers), list(ai_wrong), list(ai_wrong_trans)
+
+    label_strip = re.compile(r'^[①②③④⑤⑥⑦⑧⑨⑩]\s*')
+    answers_set = set(answers)
+
+    original_texts = [label_strip.sub('', it).strip() for it in items]
+    correct_flags = [_CIRCLE_NUMS[i] in answers_set for i in range(len(original_texts))]
+
+    # 셔플
+    pairs = list(zip(original_texts, correct_flags))
+    random.shuffle(pairs)
+    shuffled = [p[0] for p in pairs]
+
+    # {새 라벨: 오답 본문} dict
+    trans_by_new = {}
+    for old_label, trans in zip(ai_wrong, ai_wrong_trans):
+        if old_label not in _CIRCLE_NUMS:
+            continue
+        old_idx = _CIRCLE_NUMS.index(old_label)
+        if not (0 <= old_idx < len(original_texts)):
+            continue
+        text = original_texts[old_idx]
+        new_idx = shuffled.index(text)
+        body = label_strip.sub('', trans).strip()
+        trans_by_new[_CIRCLE_NUMS[new_idx]] = body
+
+    new_wrong = [_CIRCLE_NUMS[i] for i in range(len(pairs)) if not pairs[i][1]]
+
+    return (
+        [f"{_CIRCLE_NUMS[i]} {shuffled[i]}" for i in range(len(pairs))],
+        [_CIRCLE_NUMS[i] for i in range(len(pairs)) if pairs[i][1]],
+        new_wrong,
+        [f"{lbl} {trans_by_new[lbl]}" for lbl in new_wrong if lbl in trans_by_new],
+    )
+
 
 # ============================================================
 # STEP 6: Lv.9 어휘심화 + 내용일치
@@ -2217,7 +2389,7 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
         _safe_print("  step6: using cache")
         return cached
 
-    _safe_print("  step6: generating Lv.9 vocab...")
+    logger.info("INFO | STAGE 6 | generating Lv.9 vocab...")
     prompt = f"""다음 영어 지문으로 어휘 심화 + 내용 일치 문제를 생성하세요.
 
 [지문]
@@ -2251,27 +2423,23 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
 - 한국어와 영어 선지의 순서는 서로 다르게 랜덤 배치
 - 10개 미만이면 실패로 간주됨. 반드시 ①②③④⑤⑥⑦⑧⑨⑩ 10개 모두 작성할 것
 
-[content_match_kr_wrong, content_match_en_wrong에 대한 지침]
-- 각 content_match_kr_wrong과 content_match_en_wrong은 오답의 번호에 대해 올바른 원래 정답인 string값들을 가진 list이다.
+[content_match_kr_wrong_trans, content_match_en_wrong_trans에 대한 지침]
+- 각 content_match_kr_wrong_trans과 content_match_en_wrong_trans은 오답의 번호에 대해 올바른 원래 정답인 string값들을 가진 list이다.
 - 오답으로 출제된 문제에 대해 원래 정답인 내용을 말한다.(한글에는 한글 내용, 영어에는 영어 내용)
-    - 예시(content_match_kr_wrong)
-        - 정답(content_match_kr_answer): ["②", "③", "⑤", ...]
-        - content_match_kr_wrong에 들어갈 값: content_match_kr에서 content_match_kr_answer의 값들을 제외한 번호들에 대한 올바른 정답의 문장(틀린 내용이 아니라 원래 문장이 들어가야 함/한글).
+    - 설명(content_match_kr_wrong_trans)
         - 예시 데이터 형식
-            - 정답: ["②", "③", "⑤", ...]
-            - content_match_kr_wrong: ["① 원문의 한글 해석에서 ①번에 해당하는 오답이 아닌 원래 정답의 문장", "④ 원문의 한글 해석에서 ④번에 해당하는 오답이 아닌 원래 정답의 문장", "⑥ 원문의 한글 해석에서 ⑥번에 해당하는 오답이 아닌 원래 정답의 문장", ...]
-                - content_match_kr_wrong의 실제 데이터 예시
-                    - 문제로 작성된 내용: "① 화산 진흙이나 남극의 얼음 아래에서는 생물체를 찾을 수 없다."
-                    - content_match_kr_wrong에 들어갈 내용: "① 화산 진흙이나 남극의 얼음 아래에서는 생물체를 발견될 수 있다." (실제 옳은 해석)
-    - 예시(content_match_en_wrong에)
-        - 정답(content_match_en_answer): ["②", "④", ...]
-        - content_match_en_wrong에 들어갈 값: content_match_en에서 content_match_en_answer의 값들을 제외한 번호들에 대해 올바른 정답의 문장(틀린 내용이 아니라 원래 문장이 들어가야 함/영어)
+            - content_match_kr_wrong: ["②", "③", "⑤", ...]
+            - content_match_kr_wrong_trans: ["① 원문의 한글 해석에서 ①번에 해당하는 오답이 아닌 원래 정답의 문장", "④ 원문의 한글 해석에서 ④번에 해당하는 오답이 아닌 원래 정답의 문장", "⑥ 원문의 한글 해석에서 ⑥번에 해당하는 오답이 아닌 원래 정답의 문장", ...]
+        - content_match_kr_wrong_trans의 실제 데이터 예시
+            - 문제로 작성된 내용: "① 화산 진흙이나 남극의 얼음 아래에서는 생물체를 찾을 수 없다."
+            - content_match_kr_wrong_trans에 들어갈 내용: "① 화산 진흙이나 남극의 얼음 아래에서는 생물체를 발견될 수 있다." (실제 옳은 해석)
+    - 설명(content_match_en_wrong_trans)
         - 예시 데이터 형식
-            - 정답: ["②", "④", ...]
-            - content_match_kr_wrong: ["① 원문(영어)에서 ①번에 해당하는 오답이 아닌 원래 정답의 문장", "③ 원문(영어)에서 ③번에 해당하는 오답이 아닌 원래 정답의 문장", ...]
-                - content_match_en_wrong의 실제 데이터 예시
-                    - 문제로 작성된 내용: "④ Guests must select 'Travel Packages' in the reservation form."
-                    - content_match_en_wrong에 들어갈 내용: "④ Select "Vacation Packages" in the reservation form." (문제가 되는 내용을 만들기 위해 사용한 원래 문장)
+            - content_match_en_wrong: ["②", "④", ...]
+            - content_match_en_wrong_trans: ["① 원문(영어)에서 ①번에 해당하는 오답이 아닌 원래 정답의 문장", "③ 원문(영어)에서 ③번에 해당하는 오답이 아닌 원래 정답의 문장", ...]
+        - content_match_en_wrong_trans의 실제 데이터 예시
+            - 문제로 작성된 내용: "④ Guests must select 'Travel Packages' in the reservation form."
+            - content_match_en_wrong_trans에 들어갈 내용: "④ Select "Vacation Packages" in the reservation form." (문제가 되는 내용을 만들기 위해 사용한 원래 문장)
 
 [JSON 형식]
 {{
@@ -2281,10 +2449,12 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
   "vocab_partb_answers": [{{"num":1, "correct":["considered", "perceived"], "wrong":["overlooked", "neglected", "dismissed"]}}, ...],
   "content_match_kr": ["① ...", "② ...", "③ ...", "④ ...", "⑤ ...", "⑥ ...", "⑦ ...", "⑧ ...", "⑨ ...", "⑩ ..."],
   "content_match_kr_answer": ["②", "③", "⑤", ...],
-  "content_match_kr_wrong": ["① ...", "④ ...", "⑥ ...", ...],
+  "content_match_kr_wrong": ["①", "④", "⑥", ...],
+  "content_match_kr_wrong_trans": ["① ...", "④ ...", "⑥ ...", ...],
   "content_match_en": ["① ...", "② ...", "③ ...", "④ ...", "⑤ ...", "⑥ ...", "⑦ ...", "⑧ ...", "⑨ ...", "⑩ ..."],
   "content_match_en_answer": ["②", "④", ...],
-  "content_match_en_wrong": ["① ...", "③ ...", ...]
+  "content_match_en_wrong": ["①", "③", ...],
+  "content_match_en_wrong_trans": ["① ...", "③ ...", ...]
 }}"""
 
     data = call_claude_json(SYS_JSON_KR, prompt, max_tokens=6000)
@@ -2301,15 +2471,15 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
         if len(data2.get("content_match_en", [])) >= en_count:
             data["content_match_en"] = data2.get("content_match_en", data.get("content_match_en", []))
             data["content_match_en_answer"] = data2.get("content_match_en_answer", data.get("content_match_en_answer", []))
-    kr_items = data.get("content_match_kr", [])
-    kr_answers = set(data.get("content_match_kr_answer", []))
-    if kr_items:
-        kr_texts = [re.sub(r'^[①②③④⑤⑥⑦⑧⑨⑩]\s*', '', item) for item in kr_items]
-        kr_correct = [_CIRCLE_NUMS[i] in kr_answers for i in range(len(kr_texts))]
-        kr_pairs = list(zip(kr_texts, kr_correct))
-        random.shuffle(kr_pairs)
-        data["content_match_kr"] = [f"{_CIRCLE_NUMS[i]} {kr_pairs[i][0]}" for i in range(len(kr_pairs))]
-        data["content_match_kr_answer"] = [_CIRCLE_NUMS[i] for i in range(len(kr_pairs)) if kr_pairs[i][1]]
+    (data["content_match_kr"],
+     data["content_match_kr_answer"],
+     data["content_match_kr_wrong"],
+     data["content_match_kr_wrong_trans"]) = _shuffle_content_match(
+        data.get("content_match_kr", []),
+        data.get("content_match_kr_answer", []),
+        data.get("content_match_kr_wrong", []),
+        data.get("content_match_kr_wrong_trans", []),
+    )
 
     # ★ Part B choices 안에서 정답 위치 랜덤화
     vocab_partb = data.get("vocab_partb", [])
@@ -2327,19 +2497,16 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
     data["vocab_partb"] = vocab_partb
     data["vocab_partb_answers"] = vocab_partb_answers
 
-    # Part B 영어 선지 셔플 (번호는 오름차순 유지, 문장만 랜덤)
-    en_items = data.get("content_match_en", [])
-    en_answers = set(data.get("content_match_en_answer", []))
-    if en_items:
-        # 번호와 문장 분리
-        texts = [re.sub(r'^[①②③④⑤⑥⑦⑧⑨⑩]\s*', '', item) for item in en_items]
-        is_correct = [_CIRCLE_NUMS[i] in en_answers for i in range(len(texts))]
-        # 문장+정답 쌍을 셔플
-        pairs = list(zip(texts, is_correct))
-        random.shuffle(pairs)
-        # 번호 재부여 + 정답 갱신
-        data["content_match_en"] = [f"{_CIRCLE_NUMS[i]} {pairs[i][0]}" for i in range(len(pairs))]
-        data["content_match_en_answer"] = [_CIRCLE_NUMS[i] for i in range(len(pairs)) if pairs[i][1]]
+    # 내용일치 영어 선지 셔플 (번호 재부여 + answer/wrong/wrong_trans 동기화)
+    (data["content_match_en"],
+     data["content_match_en_answer"],
+     data["content_match_en_wrong"],
+     data["content_match_en_wrong_trans"]) = _shuffle_content_match(
+        data.get("content_match_en", []),
+        data.get("content_match_en_answer", []),
+        data.get("content_match_en_wrong", []),
+        data.get("content_match_en_wrong_trans", []),
+    )
 
     # ★ 9-1 Part A 5개 미만이면 재시도 (최소 5개 강제)
     actual_parta = data.get("vocab_parta_answers", [])
@@ -2360,22 +2527,21 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
     data["vocab_parta_count"] = len(actual_parta)
 
     # ★ 9-1 Part A 정답 좌우 진짜 랜덤 shuffle (각 괄호 개별 50% 확률)
-    import re as _re2, random as _rand_va
     va_passage = data.get("vocab_advanced_passage", "")
     va_answers = data.get("vocab_parta_answers", [])
     if va_passage and va_answers:
         result_va = va_passage
         for ans in va_answers:
             num = ans.get("num", "")
-            if _rand_va.random() < 0.5:  # 50% 확률로 각각 독립적으로 swap
-                pat = _re2.compile(r'\(' + str(num) + r'\)\[([^\]]+)\]')
+            if random.random() < 0.5:  # 50% 확률로 각각 독립적으로 swap
+                pat = re.compile(r'\(' + str(num) + r'\)\[([^\]]+)\]')
                 def do_swap_va(m, n=num):
                     parts = [p.strip() for p in m.group(1).split(' / ')]
                     return f'({n})[{parts[1]} / {parts[0]}]' if len(parts)==2 else m.group(0)
                 result_va = pat.sub(do_swap_va, result_va)
         data["vocab_advanced_passage"] = result_va
 
-        save_step(passage_dir, "step6_vocab_content", data)
+    save_step(passage_dir, "step6_vocab_content", data)
     return data
 
 # ============================================================

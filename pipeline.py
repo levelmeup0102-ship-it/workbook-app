@@ -6,7 +6,7 @@ PIPELINE_VERSION = "v10"
 # Step별 버전 관리: 해당 step 코드 수정 시 버전만 올리면 캐시 자동 무효화
 STEP_VERSIONS = {
     "step1_basic": "v3",
-    "step2_order": "v6",
+    "step2_order": "v7",
     "step3_blank": "v3",
     "step4_topic": "v3",
     "step5_grammar": "v9",
@@ -568,76 +568,54 @@ JSON 형식:
 # ============================================================
 _CIRCLE_NUMS = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩"]
 
+# 학생용 5개 선지(template.html:2060)와 정확히 일치해야 함
+ORDER_TABLE = [
+    ("① (C)-(A)-(B)", ("C", "A", "B")),
+    ("② (A)-(C)-(B)", ("A", "C", "B")),
+    ("③ (B)-(A)-(C)", ("B", "A", "C")),
+    ("④ (A)-(B)-(C)", ("A", "B", "C")),
+    ("⑤ (B)-(C)-(A)", ("B", "C", "A")),
+]
+
+
 def _generate_order_choices(data, passage: str = ""):
     """
-    1) order_paragraphs의 각 단락이 원문에서 어떤 순서인지 확인
-    2) 라벨 셔플 → 정답이 항상 ABC가 아니게
-    3) order_choices 5지선다를 코드로 생성
-    4) full_order_blocks 순서도 셔플
+    1) order_paragraphs 3단락의 원문 위치를 파악
+    2) ORDER_TABLE의 5개 선지 중 하나를 무작위로 정답으로 선택
+    3) 그 정답이 되도록 단락에 라벨(A/B/C)을 역산 부여
     """
-    from itertools import permutations
-    
-    # === 1. 3단락의 원문 순서 파악 ===
     paras = data.get("order_paragraphs", [])
-    if len(paras) == 3:
-        # 각 단락 텍스트가 원문에서 어디에 있는지 위치로 정렬
-        def _find_pos(text):
-            # 단락 텍스트의 첫 30자로 원문에서 위치 찾기
-            snippet = re.sub(r'\s+', ' ', text.strip())[:50]
-            pos = passage.find(snippet[:30])
-            if pos == -1:
-                # 첫 단어 몇 개로 재시도
-                words = snippet.split()[:5]
-                search = ' '.join(words)
-                pos = passage.find(search)
-            return pos if pos >= 0 else 999999
-        
-        # 원문 순서대로 정렬 (위치 기반)
-        indexed = [(i, _find_pos(paras[i][1])) for i in range(3)]
-        indexed.sort(key=lambda x: x[1])
-        original_order = [idx for idx, pos in indexed]  # 원문 순서의 인덱스
-        
-        # 라벨 셔플: 정답이 ABC가 되지 않도록
-        labels = ["A", "B", "C"]
-        for _ in range(10):
-            random.shuffle(labels)
-            # 원문 순서대로 라벨을 읽었을 때 ABC가 아니면 OK
-            correct_labels = tuple(labels[original_order.index(i)] for i in range(3))
-            if correct_labels != ("A", "B", "C"):
-                break
-        
-        # 각 단락에 새 라벨 부여
-        new_paras = [[labels[i], paras[i][1]] for i in range(3)]
-        
-        # 정답 = 원문 순서대로 라벨 읽기
-        correct = tuple(labels[original_order.index(i)] for i in range(3))
-        # _safe_print(f"  순서 정답: {correct} (원문위치: {original_order})")
+    if len(paras) != 3:
+        raise ValueError(f"STAGE 5 | 단락 개수 이상(3개 필요): {len(paras)}개")
 
-        # 표시할 때는 라벨 알파벳 순으로 정렬
-        new_paras.sort(key=lambda x: x[0])
-        data["order_paragraphs"] = new_paras
-    else:
-        correct = ("A", "B", "C")
-    
-    # === 2. 선지 5개 고정 순서로 생성 (사용자 명시 요구) ===
-    # 1번부터 항상: ACB, BAC, BCA, CAB, CBA (ABC 제외)
-    # 정답은 라벨 셔플로 ABC가 절대 안 됨이 보장됨 → 항상 5개 중 하나
-    fixed_choices = [
-        ("A", "C", "B"),  # ① ACB
-        ("B", "A", "C"),  # ② BAC
-        ("B", "C", "A"),  # ③ BCA
-        ("C", "A", "B"),  # ④ CAB
-        ("C", "B", "A"),  # ⑤ CBA
-    ]
-    choices = []
-    answer = ""
-    for i, perm in enumerate(fixed_choices):
-        text = f"({perm[0]})-({perm[1]})-({perm[2]})"
-        choices.append(f"{_CIRCLE_NUMS[i]} {text}")
-        if perm == correct:
-            answer = f"{_CIRCLE_NUMS[i]} {text}"
-    data["order_choices"] = choices
-    data["order_answer"] = answer
+    def _find_pos(text):
+        snippet = re.sub(r'\s+', ' ', text.strip())[:50]
+        pos = passage.find(snippet[:30])
+        if pos == -1:
+            pos = passage.find(' '.join(snippet.split()[:5]))
+        return pos
+
+    positions = [_find_pos(paras[i][1]) for i in range(3)]
+    if -1 in positions or len(set(positions)) != 3:
+        raise ValueError(f"STAGE 5 | 단락 위치 매칭 실패: {positions}")
+
+    # 원문에서 k번째인 단락의 paras 인덱스
+    original_order = sorted(range(3), key=lambda i: positions[i])
+
+    # 5개 중 하나를 정답으로 직접 선택
+    answer_str, correct = random.choice(ORDER_TABLE)
+
+    # labels[paras 인덱스] = 그 단락이 가질 라벨
+    # 원문 k번째 단락 = paras[original_order[k]] → 라벨 = correct[k]
+    labels = [None] * 3
+    for k in range(3):
+        labels[original_order[k]] = correct[k]
+
+    new_paras = [[labels[i], paras[i][1]] for i in range(3)]
+    new_paras.sort(key=lambda x: x[0])  # 표시 순서 A→B→C
+
+    data["order_paragraphs"] = new_paras
+    data["order_answer"] = answer_str
     
 def _generate_order_block_shuffled(data: dict):
 
@@ -682,19 +660,16 @@ def step2_order(passage: str, sentences: list, passage_dir: Path) -> dict:
 2. order_paragraphs: (A)(B)(C) 3개 단락 (각각 label과 text). 정답 순서는 원문 순서대로.
    - 지문 내용에 대한 변형/변경 절대 금지. [지문]의 내용을 그저 3개의 part로 나누는 것만 가능.
    - 모든 문장이 빠짐없이 포함되어야 함
-3. order_answer: 정답 번호 (예: "④")
-4. insert_sentence: 삽입할 문장 1개 (앞뒤 문맥 단서가 명확한 것, [지문]의 문장으로 변형하지 않고 그대로 반환.)
-5. insert_passage: insert_sentence를 뺀 [지문]에서의 나머지 문장들에 ( ① )~( ⑤ ) 위치 표시
-5.1 (중요)5번으로 지정된 문장을 제외하고 나머지 [지문]의 모든 문장의 내용을 그대로 반환한다.(변형 금지. 원문 축소/생략/요약 절대 금지! 삽입 문장 외의 모든 문장이 빠짐없이 포함되어야 함)
-6. insert_answer: 삽입 정답 번호
-7. full_order_answer: 정답 순서 (예: "(C)→(G)→(D)→...")
+3. insert_sentence: 삽입할 문장 1개 (앞뒤 문맥 단서가 명확한 것, [지문]의 문장으로 변형하지 않고 그대로 반환.)
+4. insert_passage: insert_sentence를 뺀 [지문]에서의 나머지 문장들에 ( ① )~( ⑤ ) 위치 표시
+4.1 (중요)4번으로 지정된 문장을 제외하고 나머지 [지문]의 모든 문장의 내용을 그대로 반환한다.(변형 금지. 원문 축소/생략/요약 절대 금지! 삽입 문장 외의 모든 문장이 빠짐없이 포함되어야 함)
+5. insert_answer: 삽입 정답 번호
+6. full_order_answer: 정답 순서 (예: "(C)→(G)→(D)→...")
 
 JSON 형식:
 {{
   "order_intro": "...",
   "order_paragraphs": [{{"label":"A","text":"..."}}, ...],
-  "order_choices": ["① ...", "② ...", ...],
-  "order_answer": "...",
   "insert_sentence": "...",
   "insert_passage": "...",
   "insert_answer": "...",
@@ -703,24 +678,9 @@ JSON 형식:
     
     data = call_claude_json(SYS_JSON, prompt, max_tokens=4096)
     data.setdefault("full_order_blocks", [])
-    
-    # 5지 선다 고정 -> 정답의 번호에 선지 내용 붙이기
-    order_answer_dict = {
-            "①": "① (C)-(A)-(B)",
-            "②": "② (A)-(C)-(B)",
-            "③": "③ (B)-(A)-(C)",
-            "④": "④ (A)-(B)-(C)",
-            "⑤": "⑤ (B)-(C)-(A)"
-        }
-    
-    order_answer_value = data.get("order_answer")
-    logger.debug(f"\nDEBUG | 고정 선지 답 CHECK\n{order_answer_value}\n")
-    if order_answer_value is None:
-        raise ValueError(f"Stage 5 - A 정답값에 오류 발생 | 오류로 return된 값: {str(data['order_answer'])}")
-    
 
-    data["order_answer"] = order_answer_dict.get(data["order_answer"])
-    
+    # ※ order_answer / order_choices는 _generate_order_choices에서 결정·세팅됨
+
     # 변환: order_paragraphs를 [label, text] 형태로
     if data.get("order_paragraphs") and isinstance(data["order_paragraphs"][0], dict):
         data["order_paragraphs"] = [[p["label"], p["text"]] for p in data["order_paragraphs"]]
@@ -733,7 +693,7 @@ JSON 형식:
     # ★ 순서 선지를 코드로 직접 생성 (AI가 다양하게 안 만드는 문제 해결)
     _generate_order_block_shuffled(data)
 
-    # ★★ 3단락 순서 배열 ABC 라벨 셔플 + 5지선다 생성 (정답이 ABC가 안 되도록)
+    # ★★ 3단락에 라벨 부여 + 정답 결정 (ORDER_TABLE 5개 중 무작위)
     _generate_order_choices(data, passage=passage)
 
 
@@ -1018,12 +978,20 @@ def step4_topic(passage: str, passage_dir: Path) -> dict:
 - 추론적 사고 금지: 글에서 직접 언급된 내용만 정답
 - 각 선지는 30단어 이내로 간결하게
 
+[topic_wrong_translation에 대한 지침]
+- topic_wrong의 값에 대한 한글 해석 내용(topic_wrong의 값의 순서와 같음)
+    - 양식: "번호(topic_wrong에 넣어진 값) 번호에 해당하는 영어문장의 한글 해석"
+    - 예시
+        - topic_wrong: ["①", "③", "④"]
+        - topic_wrong_translation: ["① ①번 내용으로 출제된 영어 문장의 한글 해석 내용", "③ ③번 내용으로 출제된 영어 문장의 한글 해석 내용", "④ ④번 내용으로 출제된 영어 문장의 한글 해석 내용"]
+
+
 [JSON 형식]
 {{
   "topic_options": ["① the importance of...", "② how to...", ... "⑫ ..."],
   "topic_correct": ["②", "④", ...],
   "topic_wrong": ["①", "③", ...],
-  "topic_wrong_translation": ["① ①의 한글 해석 내용", "③ ③의 한글 해석 내용", ...]
+  "topic_wrong_translation": ["① ①번에 해당하는 영어 문장의 한글 해석 내용", "③ ③번에 해당하는 영어 문장의 한글 해석 내용", ...]
 }}"""
 
     data = call_claude_json(SYS_JSON, prompt, max_tokens=3000)
@@ -2234,7 +2202,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 
 # ============================================================
 # STEP 6: Lv.9 어휘심화 + 내용일치
-# => Stage 8: 어휘 심화 | Stage 9: 내용 일치
+# => (변경) Stage 8: 어휘 심화 | Stage 9: 내용 일치
 # ============================================================
 def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step6_vocab_content")

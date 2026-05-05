@@ -9,7 +9,7 @@ STEP_VERSIONS = {
     "step2_order": "v7",
     "step3_blank": "v5",
     "step4_topic": "v3",
-    "step5_grammar": "v11",
+    "step5_grammar": "v12",
     "step6_vocab_content": "v5",
     "step7_writing": "v3",
     "step8_answers": "v9",
@@ -18,6 +18,7 @@ STEP_VERSIONS = {
     "secret_note_c": "v5",  # v5: 유의어 6-7개, 고난도 4-5개, 요지 2배 길이, 가로 배치
 }
 import asyncio, json, os, sys, time, random, re, math, logging
+from stage7_1_step1_prompt import PROMPT_TEMPLATE
 
 logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s] %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -1244,9 +1245,9 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     else:
         min_brackets = 8
 
-    bracket_count = min(14, sent_count * 2)  # 문장당 최대 2개 괄호, 최대 14개 (A4 페이지 넘침 방지)
+    bracket_count = sent_count  # 문장당 1개 → 합계 = 총 문장 수
     # ★ 8-1 괄호 분배: AI 호출 전에 어느 문장에 몇 개 출제할지 코드가 결정
-    bracket_dist = _distribute_brackets(sent_count, bracket_count, max_per=2)
+    bracket_dist = _distribute_brackets(sent_count, bracket_count, max_per=1)
     bracket_dist_lines = "\n".join(
         f"- 문장 {i}번 (\"{sentences[i][:60]}{'...' if len(sentences[i])>60 else ''}\") → {bracket_dist[i]}개"
         for i in range(sent_count)
@@ -1254,269 +1255,12 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     logger.debug(f"  step5: 지문 {word_count}단어 / {sent_count}문장 → 최소 {min_brackets}개, 권장 {bracket_count}개, 분배 {bracket_dist}")
     
     logger.debug("  step5: generating Lv.8 grammar...")
-    prompt = f"""다음 영어 지문으로 어법 문제 2종류를 생성하세요.
-
-[원문 - 총 {sent_count}개 문장]
-{passage}
-
-[⚠️ 가장 중요한 규칙]
-1. 원문은 정확히 {sent_count}개 문장입니다
-2. 출력 지문도 반드시 정확히 {sent_count}개 문장이어야 합니다
-3. 절대 문장을 추가/삭제/분리/합치기 하지 마세요
-4. 원문 문장에 괄호나 오류만 삽입하고, 나머지는 원문 그대로 유지
-4-1. [어법 괄호형 Lv.8-1] 내부에서 괄호 규칙을 엄격하게 지킬 것.
-5. 문장 수가 부족하면 오류/괄호 수를 줄이세요 (문장 추가는 절대 금지!)
-6. 새로운 문장을 만들어 넣지 마세요! 원문에 있는 문장만 사용!
-7. 출력 결과의 문장을 하나씩 세어보고, {sent_count}개가 아니면 수정하세요
-8. 8-1, 8-2 모두 원문에 없는 문장을 절대 추가하지 말 것. 원문 문장 수 = 출력 문장 수 반드시 일치!
-
-[어법 오류 출제 금지 유형 - 아래는 오류가 아님, 절대 괄호로 출제하지 마세요!]
-- start/continue/love/like/hate 뒤: to부정사 = ing (둘 다 허용)
-- 주어 자리: to부정사 = 동명사 (둘 다 허용)
-- help + 목적어 + 목적격보어: to부정사 = 동사원형 (둘 다 허용) → handle / to handle 출제 금지!
-- help + 동사원형/to부정사: help draw = help to draw (둘 다 허용) → draw / to draw 출제 금지!
-- 지각동사(see/watch/hear/feel/notice) + 목적어 + 동사원형/현재분사 (둘 다 허용) → look / looking 출제 금지!
-- 사역동사(make/let/have) + 목적어 + 동사원형 (이것만 정답, 단 have는 p.p.도 가능)
-- and/or 병렬구조에서 to 생략: to A and B = to A and to B (둘 다 허용) → to draw / draw, to label / label 출제 금지!
-- as ~ as 원급: 형용사/부사는 문맥으로 판단 (단순 형태만으로 오류 불가)
-- 목적격 관계대명사: who = whom (둘 다 허용, 단 전치사 바로 뒤는 whom만)
-- 목적격 관계대명사 생략: which/that/who(m) 생략 가능 → which we / we, that we / we 출제 금지!
-- 지시대명사 those/these: "those that ~", "those who ~"에서 those는 대명사(=the ones)이므로 that/where 등으로 바꿔 출제하면 안 됨! 원문에 those가 있으면 those 그대로 유지!
-- 관계부사 자리: "the reason(s) why/that", "the place where", "the time when"에서 why/that/where/when을 서로 바꿔 출제 금지! 원문 그대로 유지!
-- whom / who 선택 문제: [whom / who], [who / whom] 출제 절대 금지! (둘 다 허용되므로)
-- ⚠ 위 유형으로 괄호를 만들면 둘 다 정답이 되어 문제가 성립하지 않습니다!
-- ⚠ 특히 help/지각동사/병렬구조는 가장 흔한 실수입니다. 반드시 피하세요!
-- 과거 vs 과거진행: 문맥상 둘 다 자연스러운 경우 출제 금지! (예: practiced / was practicing — 기간 부사와 함께 쓰이면 둘 다 가능)
-- 현재 vs 현재진행: 진행시제와 일반시제는 학자/문법서 따라 거의 같이 쓰이는 경우가 많음. 출제 금지! (예: functions / is functioning, works / is working, runs / is running — 둘 다 자연스럽게 허용됨)
-- 성별 불명확: 지문에서 성별 특정 불가능한 경우 his/her, him/her 출제 금지! (사람 이름이 명확할 때만 가능)
-- 고유명사+s: 고유명사 뒤에 -s 붙이는 문제 출제 금지! (예: Walthamstow / Walthamstows)
-- 선택지에 정답 반드시 포함: 정답이 선택지에 없으면 문제 성립 불가! (예: 정답이 those인데 [that / where] 제시 → 절대 금지!)
-- 관계부사 why/where/when 선택지: 정답이 why인데 [which / where]를 제시하면 안 됨! 반드시 정답이 선택지에 포함되어야 함!
-- 동의어 형용사/부사 출제 금지: varied/various, different/diverse, big/large, small/little, fast/quick, many/numerous 등 의미가 거의 같은 단어 쌍은 둘 다 정답이 되어 출제 불가!
-- 어법이 아닌 어휘 차이는 출제 금지: 두 단어가 모두 같은 문법 기능(둘 다 형용사, 둘 다 부사, 둘 다 명사)이고 의미만 비슷하면 어법 문제가 아닌 어휘 문제 — 출제 금지!
-- 같은 어근 + 접두사(in-/un-/im-/dis-/non-) 차이 출제 금지: accurate/inaccurate, possible/impossible, legal/illegal, regular/irregular, fair/unfair, like/unlike, agree/disagree 등은 의미가 반대인 어휘 차이일 뿐, 어법 문제가 아님! 학생이 문맥 이해로 푸는 어휘 문제 → 출제 금지!
-- 의미가 반대인 어휘 쌍은 어법 출제 불가: accurate/inaccurate처럼 둘 다 형용사이고 의미만 반대면 어법 문제 성립 안 됨!
-- ⚠ 조동사/동사의 부정형 vs 긍정형 출제 절대 금지: could/couldn't, can/cannot, will/won't, has/hasn't, do/don't, is/isn't, are/aren't 등은 의미 차이일 뿐 어법 차이 아님! 학생이 문맥 이해로 푸는 어휘 문제 → 출제 금지!
-   - 예: This (N)[couldn't / could] be more wrong. ← 절대 금지! 의미 차이임
-   - 예: He (N)[has / hasn't] finished. ← 절대 금지!
-- ⚠ 추상명사/불가산명사 + s 출제 금지: well-being/well-beings, advice/advices, information/informations, knowledge/knowledges, equipment/equipments, furniture/furnitures, research/researches 같은 자리는 어휘 문제이지 어법 문제 아님!
-   - 예: our (N)[well-being / well-beings] ← 절대 금지! well-being은 추상명사로 단수형이 정상
-- ⚠ 너무 쉬운 분사 자리 출제 금지: "is/was/were + 부사 + 분사" 같이 be동사 바로 옆 + 부사 1개 + 분사는 너무 쉬움. 학생이 1초만에 정답 보임 → 출제 금지!
-   - 예: is too often (N)[considered / considering] ← 금지! (be + 부사 + 분사 패턴 명백)
-   - 예: is rarely (N)[asked / asking] ← 금지!
-   - 분사 능/수동을 출제하려면 반드시 "본동사 vs 준동사 구별"이나 "분사 후치수식 능/수동" 같이 학생이 분석해야 보이는 자리만!
-- ⚠⚠⚠ 시제 차이 출제 절대 금지 (★ 사용자 강력 요청): 같은 동사의 시제만 다른 쌍은 의미 차이일 뿐 어법 차이 아님!
-   - 현재 vs 과거: is/was, are/were, has/had, do/did, go/went 등 ← 절대 금지!
-   - 현재 vs 현재진행: studies/is studying, runs/is running ← 절대 금지! (둘 다 정답)
-   - 과거 vs 과거진행: studied/was studying, ran/was running ← 절대 금지! (둘 다 정답)
-   - 예: it (N)[is / was] famous ← 절대 금지! (시제 차이)
-   - 예: she (N)[hid / was hiding] ← 절대 금지! (둘 다 정답)
-- ⚠⚠⚠ 주어 자리 동명사 vs to부정사 출제 절대 금지 (★ 사용자 강력 요청): 주어 위치에서는 동명사와 to부정사 둘 다 정답!
-   - 예: (N)[Seeing / To see] is believing. ← 절대 금지! (둘 다 정답)
-   - 예: Overall, (N)[seeing / to see] the artworks was great. ← 절대 금지!
-   - ⚠ 단, 동사 뒤 to부정사/동명사 출제는 OK: decide (N)[to study / studying] 같은 자리 (특정 동사가 to부정사/동명사 강제하는 경우)
-- ⚠⚠⚠ 관계대명사 자리 that vs which 출제 절대 금지 (★ 사용자 강력 요청): 주격/목적격 관계대명사 자리에서는 that과 which가 둘 다 정답!
-   - 예: museums (N)[that / which] attract visitors ← 절대 금지! (둘 다 정답)
-   - 예: the book (N)[that / which] I read ← 절대 금지! (둘 다 정답)
-   - ⚠ 차라리 ★★★ 권장 자리: 관계대명사 자리에서 what vs that(또는 which) 출제 (선행사 유무로 구별!)
-     - 예: I know (N)[what / that] he said. (뒤 절 불완전, 선행사 X → what)
-     - 예: the thing (N)[that / what] he said. (선행사 thing 있음 → that)
-     - 예: (N)[What / That] he said is true. (선행사 X → What이 주어, 'What he said' = 명사절)
-     - 학생이 선행사 유무 + 절 완전성으로 구별 → 진짜 어법 출제!
-
-
-[⚠️ 핵심 원칙: "바로 옆 자리"는 모두 출제 금지 — 가장 중요!]
-두 단어가 바로 옆에 붙어있어서 어법 규칙이 한눈에 보이는 자리는 모두 출제 금지!
-학생이 공식만 알면 즉답이라 어법 이해도 평가 불가. 자리 유형(조동사/시제/수일치 등)과 무관하게 "바로 옆"이라는 위치 자체가 문제.
-
-❌ 금지 사례 (모두 같은 원리 - 출제 포인트와 근거 단어가 "바로 옆"):
-- 조동사 바로 옆: must (N)[obey / obeying], will not (N)[solve / solves], should (N)[go / going]
-- 완료시제 has/have/had 바로 옆: has (N)[finished / finish], have (N)[gone / go], had (N)[lost / lose], nothing has (N)[revolutionized / revolutionize]
-- 진행시제 is/are/was/were 바로 옆: is (N)[studying / study], were (N)[playing / play], are (N)[running / run]
-- 수동태 be 바로 옆: was (N)[eaten / eat], is (N)[broken / break], were (N)[written / write]
-- 주어 바로 옆 수일치: the fire (N)[doesn't / don't], the rate (N)[increases / increase], the heat (N)[has / have]
-- 인칭대명사+동사 바로 옆 수일치: he (N)[gets / get], she (N)[is / are], it (N)[works / work]
-- until/when/if + 주어 바로 옆: until he (N)[gets / get] tired, when she (N)[arrives / arrive]
-- 능동/수동 문제 뒤에 by 행위자가 있으면 금지: (N)[replace / are replaced] by ~, (N)[causing / caused] by ~ → by가 있으면 수동태가 1초 컷! 출제 금지!
-- 학생이 괄호 앞이든 뒤든 1초만에 풀 수 있으면 모두 출제 금지! "앞 힌트" 못지않게 "뒤 힌트"도 금지!
-
-✓ 출제 가능 (사이에 거리가 있어 학생이 분석해야 함):
-- 주어-동사 사이에 관계절/전치사구/삽입구가 있는 수일치
-  예: The approach, a technique which gardeners have relied on, (N)[remain / remains] effective.
-  예: Books on the shelves that gather dust (N)[need / needs] cleaning.
-- 분사 후치수식 능/수동: the book (N)[written / writing] by him is famous
-- 본동사 vs 준동사 구별: The animation (N)[creating / creates] vivid images
-- 분사구문 능동/수동: (N)[Compared / Comparing] with the old one, this is better
-- 조동사 + have p.p. vs 원형 (시제 차이): He must (N)[have done / do] it before yesterday
-
-검증 절차: 출제 후보 자리에서 반드시 자문 → "출제 포인트와 근거 단어가 바로 옆에 붙어있는가?"
-→ YES면 출제 금지! NO(사이에 관계절/전치사구/삽입구 있음)이면 출제 가능
-※ "바로 옆"의 정의: 사이에 부사 1개만 있어도 "바로 옆"으로 간주 (예: it also (N)[meets/meet] → 금지!)
-
-[한국 고등학교 내신 출제 우선순위 - 가능하면 이런 자리 위주로]
-가능하면 아래 유형 위주로 출제하세요. 단, 지문에 적합한 자리가 없으면 다른 유형도 OK (괄호 수 채우는 게 우선):
-1. 본동사 vs 준동사 구별 (한 문장에 본동사 분석 필요)
-2. 분사 능동/수동 (수식 대상 명사와의 관계 분석)
-3. 관계사 구별 (뒤에 오는 절의 완전성 분석)
-4. 거리가 있는 수일치 (주어-동사 사이 5단어 이상)
-   - 특히 ★ 주격관계대명사(who/which/that) 뒤 동사 수일치 (★ 내신 최빈출!): 선행사가 단수/복수에 따라 동사 형태 결정
-   - 예: people who (N)[think / thinks] differently (선행사 people 복수 → think)
-   - 예: a person who (N)[think / thinks] differently (선행사 person 단수 → thinks)
-   - 예: an operating process, which consciously (N)[attempt / attempts] to locate thoughts (선행사 process 단수 → attempts)
-5. 분사구문 능/수동
-6. 형용사 vs 부사 (★ 내신 빈출): 같은 어근의 품사 차이로 출제 — 진짜 어법 문제!
-   - 예: This formula is (N)[accurate / accurately]. (be동사 보어 → 형용사)
-   - 예: She spoke (N)[clear / clearly] to the audience. (동사 수식 → 부사)
-   - 예: The book is surprisingly (N)[interesting / interestingly]. (be동사 보어 → 형용사)
-   - 핵심: 같은 어근 (accurate/accurately, clear/clearly, careful/carefully) 형태로 출제!
-   - ⚠ accurate/inaccurate 같은 의미 반대 어휘는 절대 어법 문제 아님!
-7. 혼동 수일치 (★ 내신 빈출): 부분/수량 표현, 도치문, 등위접속사 주어
-   - 예: A number of students (N)[is / are] late. (= many students, 복수 취급)
-   - 예: The number of students (N)[is / are] increasing. (= 학생들의 수, 단수 취급)
-   - 예: Either A or B (N)[is / are] correct. (B에 일치)
-   - 예: Not only A but also B (N)[has / have] arrived. (B에 일치)
-   - 예: Among the trees (N)[stood / standing] a small house. (도치 - 본동사 필요)
-8. 동격 that vs 관계대명사 which (★ 내신 빈출): 뒤에 오는 절의 완전성으로 구별
-   - 동격 that: 추상명사(fact, idea, news, belief, opinion 등) 뒤 + 완전한 절 → that
-   - 관계대명사 which: 명사 뒤 + 불완전한 절 → which
-   - 예: The fact (N)[that / which] he is honest impressed everyone. (완전한 절 → that)
-   - 예: The fact (N)[that / which] he revealed impressed everyone. (불완전한 절 → which)
-9. ★★ 전치사 + 목적격 관계대명사 vs 목적격 관계대명사 (★★ 내신 최최빈출! 이런 자리 있으면 무조건 출제!): 뒤 절의 완전성으로 구별
-   - 전치사 + 목적격 관계대명사 (in which/on which/to which/by which/for which/at which/of which 등) + 완전한 절
-     → 전치사+which는 부사 역할이라 뒤 절이 완전함 (주어, 동사, 목적어 다 있음)
-   - 그냥 목적격 관계대명사 (which/that) + 불완전한 절
-     → which/that이 목적어 역할이라 뒤 절에서 목적어 자리 빔
-   - 예: The house (N)[in which / which] he lives is old. (lives는 자동사+부사구 → 완전한 절 → in which)
-   - 예: The house (N)[in which / which] he bought is old. (bought 뒤 목적어 자리 빔 → which)
-   - 예: many ways (N)[in which / which] insect bodies are structured (are structured는 완전한 절 → in which)
-   - ⚠ 지문에 "in which", "on which", "by which", "for which" 같은 패턴이 있으면 무조건 우선 출제!
-10. ★ that vs what 구별 (★ 내신 최빈출!): 선행사 유무 + 뒤 절의 완전성으로 구별
-   - that: 선행사 명사 있음 + 뒤 절은 완전 또는 불완전
-   - what: 선행사 명사 없음 + 뒤 절은 불완전 (= the thing that)
-   - 예: The most important thing (N)[that / what] he said was honesty. (선행사 thing → that)
-   - 예: The most important is (N)[what / that] he said. (선행사 없음, 'what he said'가 보어 → what)
-   - 예: I believe (N)[that / what] he is honest. (뒤에 완전한 절 → that, 동격절)
-   - 예: I believe (N)[what / that] he said. (뒤에 said의 목적어 빠짐 → what)
-11. ★ to부정사만 받는 동사 vs 동명사만 받는 동사 (★ 내신 빈출): 동사 종류로 정답 결정
-   - to부정사만 받음: decide, agree, hope, want, plan, promise, refuse, expect, manage, fail, choose, learn, offer
-   - 동명사만 받음: enjoy, finish, mind, avoid, suggest, deny, postpone, give up, consider, admit, recommend
-   - 예: We decided (N)[to study / studying] hard. (decide → to부정사)
-   - 예: I enjoyed (N)[playing / to play] the piano. (enjoy → 동명사)
-   - 예: She finished (N)[writing / to write] the report. (finish → 동명사)
-12. ★ 멀리 있는 주어-동사 수일치 (★ 내신 최빈출!): 주어와 동사 사이가 5단어 이상 떨어져서 학생이 분석해야 정답이 보이는 자리
-   - 예: people who are lost will always (N)[walk / walking] in a circle (주어 'people', 사이에 7단어 → 어려움)
-   - 예: a process which consciously attempts to locate thoughts (N)[remain / remains] effective (주어 'process')
-   - 예: The question of how its design affects human beings (N)[is / are] rarely asked. (주어 question, 사이에 7단어 → 어려움)
-   - ⚠ 주어가 괄호 바로 앞에 있으면 절대 출제 금지! 예: this (N)[causes / causing] ← 금지!, hand (N)[factor / factors] ← 금지!, Gatty (N)[confirms / confirm] ← 금지!
-13. ★★ 학문명 -ics 단수 취급 (★★ 내신 최빈출! 의외 출제!): -s로 끝나는 학문명은 단수 취급
-   - 학문명 리스트: aesthetics, mathematics, physics, statistics, economics, politics, ethics, electronics, linguistics, athletics, gymnastics, acoustics
-   - 예: The aesthetics of a new project (N)[is / are] too often considered irrelevant. (aesthetics 단수 → is)
-   - 예: Mathematics (N)[is / are] my favorite subject. (단수 → is)
-   - 예: Physics (N)[explains / explain] the laws of nature. (단수 → explains)
-   - 학생이 -s 보고 복수로 착각하기 쉬워서 좋은 출제!
-14. ★★ so/such ~ that 구문의 결과 접속사 that (★★ 내신 빈출): so~that의 that은 관계대명사가 아니라 결과 접속사 → which 안 됨!
-   - 예: The book is so good (N)[that / which] everyone loves it. (so~that 결과 → that, which 불가!)
-   - 예: It matters so profoundly (N)[that / which] safety must not be our only priority. (so~that 결과 → that)
-   - 예: She was such a kind person (N)[that / which] we all admired her. (such~that → that)
-   - ⚠ 학생이 that을 무조건 관계대명사로 착각하기 쉬워서 좋은 출제!
-15. ★★ 명사절 접속사 that vs 관계대명사 which (★★ 내신 최빈출!): think/believe/say/know 등 동사 뒤 명사절의 that → which 불가
-   - 명사절 접속사 that: 동사(think/believe/say/know/feel/find/realize 등) + that + 완전한 절 → 목적어절
-   - 관계대명사 which: 명사 + which + 불완전한 절
-   - 예: People think (N)[that / which] design makes architecture. (think 뒤 명사절 → that)
-   - 예: I believe (N)[that / which] he is honest. (believe 뒤 → that)
-   - 예: He said (N)[that / which] she would come. (said 뒤 → that)
-   - 핵심: that 앞이 동사(타동사)면 명사절 접속사. 학생이 관계대명사 which와 헷갈림 → 좋은 출제!
-16. ★ 1형식/2형식 동사 + 형용사/부사 구별 (★ 내신 빈출): 동사가 1형식 자동사이면 부사가 와야 함
-   - 1형식 자동사: matter, function, work, exist, happen, occur, appear (보어 X)
-   - 2형식 동사: be, become, seem, look, feel, taste, smell, sound, get (형용사 보어)
-   - 예: The design matters so (N)[profoundly / profound]. (matter 1형식 → 부사)
-   - 예: Insects function (N)[differently / different] from humans. (function 1형식 → 부사)
-   - 예: She looks (N)[happy / happily]. (look 2형식 → 형용사)
-   - 학생이 동사 형식 모르면 틀림 → 좋은 출제!
-17. ★★ one of + 복수명사 (★ 내신 빈출, 출제 자리 부족할 때 무조건 활용!): one of 뒤는 복수명사
-   - 예: one of the (N)[museums / museum] → 복수명사 (museums)
-   - 예: one of his (N)[friends / friend] → 복수명사 (friends)
-   - 예: one of the most popular (N)[dishes / dish] → 복수명사 (dishes)
-   - ⚠ 지문이 짧아서 출제 자리가 부족할 때 반드시 활용하세요!
-18. ★ 분사 능/수동 후치수식 (★ 내신 빈출): 명사 뒤 수식 분사의 능동/수동 구별
-   - 예: I ordered the dish (N)[called / calling] kibbeling. (수동 → called)
-   - 예: the children (N)[playing / played] in the park. (능동 → playing)
-   - 핵심: 수식 대상(명사)이 행위의 주체이면 능동(-ing), 대상이면 수동(p.p.)
-19. ★★★ 문장 시작 분사구문 vs 명령문 (★★★ 사용자 강력 요청, 헷갈리는 자리!): 문장 시작에 V-ing/V 형태가 오면 분사구문 vs 명령문 헷갈림
-   - 예: (N)[Reading / Read] those letters, I found out... (분사구문 → Reading, 명령문 아님)
-   - 예: (N)[Walking / Walk] down the street, she met her friend. (분사구문 → Walking)
-   - 예: (N)[Looking / Look] at the sky, I felt peaceful. (분사구문 → Looking)
-   - 핵심: 뒤에 콤마 + 주어+동사 절이 오면 분사구문 (V-ing), 명령문이면 단독 절
-   - ⚠ 지문에 "V-ing, S+V" 패턴이 있으면 무조건 출제 권장!
-20. ★★ 관용구문 couldn't help but + 동사원형 (★★ 사용자 강력 요청): couldn't help but 뒤에는 동사원형!
-   - 예: I couldn't help but (N)[admire / admiring] the view. (couldn't help but → 동사원형 admire)
-   - 예: She couldn't help but (N)[laugh / laughing]. (couldn't help but → 동사원형 laugh)
-   - 비교: cannot help + V-ing (couldn't help admiring) — 같은 의미지만 형태 다름
-   - 지문에 "couldn't help but" 또는 "can't help but" 패턴 있으면 반드시 출제!
-21. ★★ recommend/suggest/consider + 동명사 (★★ 사용자 강력 요청, 11번 강화): 이 동사들 뒤에는 반드시 동명사!
-   - 예: I recommend (N)[visiting / to visit] the museum. (recommend → 동명사 visiting)
-   - 예: She suggested (N)[going / to go] to the park. (suggest → 동명사 going)
-   - 예: He considered (N)[changing / to change] jobs. (consider → 동명사 changing)
-   - to부정사만 받는 동사 (decide, want, hope, plan)와 명확히 구별!
-22. ★★ be + 형용사 vs 부사 (★★ 사용자 강력 요청, 16번 강화): be동사 뒤는 형용사 (보어), 부사가 오면 안 됨
-   - 예: A trip wouldn't be (N)[complete / completely] without it. (be 뒤 보어 → 형용사 complete)
-   - 예: She is (N)[happy / happily]. (be 뒤 → 형용사 happy)
-   - 예: The work is (N)[perfect / perfectly]. (be 뒤 → 형용사 perfect)
-   - 단, 'be + 부사 + 형용사/분사' 형태 (예: is completely correct)일 때 부사는 OK
-
-[⚠️ 추가 핵심 금지 — 명사 주어 바로 옆 수일치]
-단복수 차이 쌍 (X / Xs 형태: confirm/confirms, factor/factors, cause/causes 등)은 주어가 멀리 있을 때만 출제 가능!
-- 괄호 바로 앞 5단어 안에 명사/대명사가 있으면 그게 주어 → 학생이 1초만에 단복수 판단 → 절대 출제 금지!
-- 인칭대명사(he/she/it/they/we/you/I/one)뿐 아니라 일반 명사(Harold/this/the hand/the book/people/students 등)도 모두 동일하게 금지!
-- 예: this (N)[causes / causing] → this 바로 앞 → 금지!
-- 예: Harold Gatty (N)[confirms / confirm] → Gatty 바로 앞 → 금지!
-- 예: Our dominant hand (N)[factor / factors] → hand 바로 앞 → 금지!
-- 출제하려면 반드시 주어와 동사 사이가 5단어 이상 떨어진 자리만!
-→ (제일 중요)학생이 1초 안에 풀 수 있는 자리는 무조건 피하세요.
-
-[어법 괄호형 Lv.8-1]
-- (제일 중요)정답을 고르는 기준은 위의 문법 규칙에 대한 내용들을 반드시 따를 것.
-    - 정답으로 고르는 부분 우선순위(동사가 아닌 것을 우선출제)
-        - 관계사
-        - That vs what
-        - 형용사 vs 부사
-        - It vs them
-    - 우선 순위의 문법들로만 채우기에 부족한 부분이 있다면, 동사 문제도 포함하여 문제로 출제
-- ⚠️⚠️⚠️ {bracket_count} 개수 절대 규칙: 반드시 {min_brackets}개 이상! 지문 길이별 강제:
-   - 짧은 지문(80단어 이하) → 최소 2개 (그 이상도 가능)
-   - 중간 지문(81~120단어) → 최소 3개
-   - 긴 지문(121단어 이상) → ⚠ 반드시 7~10개 이상! 절대 2~3개로 끝내지 말 것!
-- 우선순위 자리가 부족해도 위에 명시한 19~22번 자리(분사구문, couldn't help but, recommend ing, be 형용사)를 활용해서 충분히 채우세요
-- ⚠ 괄호가 너무 적으면(긴 지문에서 5개 미만) 출제 실패!
-- 한 문장에 여러 문제 삽입 가능
-- 출제: 시제, 대명사, 동명사, to부정사, 형용사/부사, 관계대명사, 분사, 사역동사 등
-- 8-1 출제 분배(반드시 이대로 개수 맞출 것)
-{bracket_dist_lines}
-    - 합계: {bracket_count}개
-    - 0개로 지정된 문장은 그냥 문장만 응답함. (8-2와는 무관)
-- 8-1의 grammar_bracket_passage 응답 형식(매우 중요)
-    - grammar_bracket_passage 필드는 ★list of triples★. 문자열 아님!
-    - 형식: [[원문 문장(sentences[i] 그대로), 정답 단어/구, 오답 단어/구], ...]
-    - 각 triple의 [0]은 원문 문장과 글자 단위로 정확히 동일해야 함 (변형/축약 금지)
-    - 한 문장에 분배 개수가 2면 같은 [0]을 가진 triple을 2개 만들되, [1]은 서로 다른 단어여야 함
-    - 괄호 번호 (N), 좌우 정답 위치는 코드가 결정 — AI는 정답/오답 단어만 제공
-
-[어법 서술형 Lv.8-2]
-- 원문 {sent_count}개 문장 모두 포함
-- 실제 출제 가능한 오류만 삽입 (위 금지 유형 제외)
-- 반드시 최소 5개 이상 오류 삽입 (지문이 짧아도 최소 5개!)
-- 한 문장에 최대 1개 오류
-- 오류를 삽입한 실제 개수를 grammar_error_count에 정확히 기록할 것
-- 오류 개수 = grammar_error_answers 배열 길이와 반드시 일치
-- ⚠ 8-2 오류 삽입 부분 외의 텍스트는 원문과 100% 동일해야 함! AI가 주변 단어를 무의식적으로 바꾸지 말 것!
-
-[JSON 형식]
-{{
-  "grammar_bracket_passage": [["원문 문장 1", "정답 단어", "오답 단어"], ...],
-  "grammar_error_passage": "오류 포함 전체 지문 (정확히 {sent_count}문장)",
-  "grammar_error_count": 실제삽입개수,
-  "grammar_error_answers": [{{"num":1, "original":"watch", "error":"watching"}}, ...]
-}}"""
+    prompt = PROMPT_TEMPLATE.format(
+        sent_count=sent_count,
+        passage=passage,
+        bracket_count=bracket_count,
+        bracket_dist_lines=bracket_dist_lines,
+    )
 
     def _ai_call():
         """call_claude_json + 8-1 triples → string 조립을 한 번에."""

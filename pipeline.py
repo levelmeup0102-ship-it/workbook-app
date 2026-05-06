@@ -697,28 +697,6 @@ JSON 형식:
     # ★★ 3단락에 라벨 부여 + 정답 결정 (ORDER_TABLE 5개 중 무작위)
     _generate_order_choices(data, passage=passage)
 
-
-    # 🔒 검증: 전체배열 블록 수 vs 원문 문장 수 -> 알고리즘으로 생성했기에 필요X
-    # block_count = len(data.get("full_order_blocks", []))
-    # sentence_count = len(sentences)
-    # if block_count != sentence_count:
-    #     _safe_print(f"  WARNING: sentence mismatch! original {sentence_count} vs generated {block_count}, retrying...")
-    #     # 캐시 삭제 후 재시도 (1회)
-    #     cache_path = passage_dir / "step2_order.json"
-    #     if cache_path.exists():
-    #         cache_path.unlink()
-    #     data = call_claude_json(SYS_JSON, prompt, max_tokens=4096)
-    #     if data.get("order_paragraphs") and isinstance(data["order_paragraphs"][0], dict):
-    #         data["order_paragraphs"] = [[p["label"], p["text"]] for p in data["order_paragraphs"]]
-    #     if data.get("full_order_blocks") and isinstance(data["full_order_blocks"][0], dict):
-    #         data["full_order_blocks"] = [[b["label"], b["text"]] for b in data["full_order_blocks"]]
-    #     # ★ 순서 선지를 코드로 직접 생성 (재시도 후에도 반드시 재생성해야 정답/정답지 불일치가 안 생김)
-    #     _generate_order_choices(data, passage=passage)
-    #     block_count2 = len(data.get("full_order_blocks", []))
-    #     if block_count2 != sentence_count:
-    #         _safe_print(f"  WARNING: still mismatch ({block_count2} vs {sentence_count}), using original")
-    #         data["full_order_blocks"] = [[chr(65+i), s] for i, s in enumerate(sentences)]
-
     # 🔒 삽입 지문: API 결과를 신뢰하지 않고 항상 코드로 재구성
     # (API가 마커를 앞에 몰아넣거나, 정답 위치에 마커를 안 넣는 문제 방지)
     insert_sent = data.get("insert_sentence", "")
@@ -1164,7 +1142,7 @@ def _apply_critical_grammar_filters(data: dict) -> dict:
 
 
 # ============================================================
-# 어법 괄호형 (Lv.8-1) 분배 + 조립 헬퍼
+# 어법 괄호형 (현재 Lv.7-1) 분배 + 조립 헬퍼
 # ============================================================
 def _distribute_brackets(sent_count: int, total: int, max_per: int = 2) -> list:
     """각 문장에 0~max_per개 무작위 분배. counts[i] 합계 = min(total, sent_count*max_per)."""
@@ -1253,7 +1231,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
         f"- 문장 {i}번 (\"{sentences[i][:60]}{'...' if len(sentences[i])>60 else ''}\") → {bracket_dist[i]}개"
         for i in range(sent_count)
     )
-    logger.debug(f"  step5: 지문 {word_count}단어 / {sent_count}문장 → 최소 {min_brackets}개, 권장 {bracket_count}개, 분배 {bracket_dist}")
+    logger.debug(f"STAGE 7-1 | STEP 1 | 지문 {word_count}단어 / {sent_count}문장 → 최소 {min_brackets}개, 권장 {bracket_count}개, 분배 {bracket_dist}")
     
     logger.debug("  step5: generating Lv.8 grammar...")
     prompt = PROMPT_TEMPLATE.format(
@@ -1273,7 +1251,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
         d["grammar_bracket_passage"] = bracket_str
         d["grammar_bracket_answers"] = bracket_answers
         d["grammar_bracket_count"] = len(bracket_answers)
-        return d
+        return d    
 
     data = _ai_call()
 
@@ -1945,6 +1923,29 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 
     # ★★ 최종 안전장치: 항상 핵심 차단 한 번 더 (캐시되기 전)
     data = _apply_critical_grammar_filters(data)
+
+    # 🔒 8-1 괄호 누락 최종 검증: 후처리로 일부 문장에서 괄호가 빠진 경우
+    # bracket_dist + grammar_bracket_answers 동기화
+    final_passage = data.get("grammar_bracket_passage", "")
+    if final_passage:
+        result_sentences = split_sentences(final_passage)
+        if len(result_sentences) == sent_count:
+            bracket_pat = re.compile(r'\(\d+\)\[')
+            for i, sentence in enumerate(result_sentences):
+                if bracket_dist[i] == 1 and not bracket_pat.search(sentence):
+                    logger.debug(
+                        f"STAGE 7-1 | STEP 1 | AI의 답변에서 추출한 지문에서 "
+                        f"{i+1}번째 문장({sentence})이 괄호 없이 나옴. "
+                        f"괄호 없는 문장으로 수정 -> 답안지 데이터도 삭제."
+                    )
+                    bracket_dist[i] = 0
+            # 답안지 동기화: 지문에 실제 존재하는 num만 유지
+            existing_nums = set(int(m) for m in re.findall(r'\((\d+)\)\[', final_passage))
+            data["grammar_bracket_answers"] = [
+                a for a in data.get("grammar_bracket_answers", [])
+                if a.get("num") in existing_nums
+            ]
+            data["grammar_bracket_count"] = len(data["grammar_bracket_answers"])
 
     save_step(passage_dir, "step5_grammar", data)
     return data

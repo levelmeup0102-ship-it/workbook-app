@@ -1220,6 +1220,7 @@ def _assemble_bracket_passage(triples, sentences):
         else:
             bracket_form = f"({n})[{ans} / {wrong}]"
         bracketed[idx] = bracketed[idx].replace(ans, bracket_form, 1)
+        logger.debug(f"STAGE 7-1 | STEP 1 | 괄호 추가한 문장 확인: {bracketed[idx]}")
         answers.append({"num": n, "answer": ans, "wrong": wrong})
 
     return " ".join(bracketed), answers
@@ -1266,86 +1267,52 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
         """call_claude_json + 8-1 triples → string 조립을 한 번에."""
         d = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
         triples = d.get("grammar_bracket_passage", [])
+        logger.debug(f"STAGE 7-1 | STEP 1 | AI 응답의 triples 값 확인\n{triples}")
         bracket_str, bracket_answers = _assemble_bracket_passage(triples, sentences)
+        logger.debug(f"STAGE 7-1 | STEP 1 | 최종으로 만들어진 지문\n{bracket_str}\n최종으로 만들어진 정답지 데이터\n{bracket_answers}")
         d["grammar_bracket_passage"] = bracket_str
         d["grammar_bracket_answers"] = bracket_answers
         d["grammar_bracket_count"] = len(bracket_answers)
-        return d
+        return data
 
     data = _ai_call()
 
-    # 🔒 검증: 문장 수 체크
-    for key in ['grammar_bracket_passage', 'grammar_error_passage']:
-        gen_text = data.get(key, '')
-        gen_sents = len(split_sentences(gen_text))
-        if gen_sents != sent_count:
-            _safe_print(f"  WARNING: {key}: {gen_sents} sentences (original {sent_count}), retrying...")
-            cache_path = passage_dir / "step5_grammar.json"
-            if cache_path.exists():
-                cache_path.unlink()
-            data = _ai_call()
-            break
-    
-    
-    # 🔒 최종 가드: 8-1/8-2에서 원문에 없는 문장이 추가되었는지 확인
-    # 괄호/오류를 제거한 후 원문과 길이 비교 → 20% 이상 길어졌으면 원문 외 내용 추가된 것
-    def _strip_brackets(t: str) -> str:
-        """어법 괄호 (N)[A / B]를 정답만 남기고 제거"""
-        stripped = re.sub(r'\(\d+\)\[([^/\]]+)\s*/\s*[^\]]+\]', r'\1', t)
-        return re.sub(r'\s+', ' ', stripped).strip()
-    
-    orig_len = len(re.sub(r'\s+', '', passage))
-    
-    # 🔒 8-1 괄호 존재 검증: 괄호가 하나도 없으면 재시도 (최대 5회)
-    bracket_text = data.get("grammar_bracket_passage", "")
-    for _bracket_retry in range(5):
-        if bracket_text and re.search(r'\(\d+\)\[', bracket_text):
-            break
-        if _bracket_retry == 0 and not bracket_text:
-            break  # 지문 자체가 없으면 스킵
-        _safe_print(f"  WARNING: grammar_bracket_passage에 괄호 없음 → {_bracket_retry+1}차 재시도")
+    # 🔒 8-2 grammar_error_passage 검증
+    err_text = data.get("grammar_error_passage", "")
+    if err_text and len(split_sentences(err_text)) != sent_count:
+        _safe_print(f"  WARNING: grammar_error_passage 문장 수 {len(split_sentences(err_text))} != {sent_count}, retrying...")
         cache_path = passage_dir / "step5_grammar.json"
         if cache_path.exists():
             cache_path.unlink()
         data = _ai_call()
-        bracket_text = data.get("grammar_bracket_passage", "")
 
-    for key in ["grammar_bracket_passage", "grammar_error_passage"]:
-        gen_text = data.get(key, "")
-        if not gen_text:
-            continue
-        gen_sents_list = split_sentences(gen_text)
-        
-        # 문장 수 체크
-        if len(gen_sents_list) > sent_count:
-            _safe_print(f"  WARNING: {key}: {len(gen_sents_list)} sentences > original {sent_count}, trimming...")
-            data[key] = " ".join(gen_sents_list[:sent_count]).strip()
-        elif len(gen_sents_list) < sent_count:
-            _safe_print(f"  WARNING: {key}: {len(gen_sents_list)} sentences < original {sent_count}, using original")
-            data[key] = passage
-        
-        # 길이 체크: 괄호 제거 후 원문 대비 20% 이상 길면 내용 추가된 것
-        stripped = _strip_brackets(data.get(key, ""))
-        stripped_len = len(re.sub(r'\s+', '', stripped))
-        if orig_len > 0 and stripped_len > orig_len * 1.2:
-            _safe_print(f"  WARNING: {key} length {stripped_len} >> original {orig_len} (>20%), retrying...")
+    orig_len = len(re.sub(r'\s+', '', passage))
+    err_gen = data.get("grammar_error_passage", "")
+    if err_gen:
+        err_sents_list = split_sentences(err_gen)
+        if len(err_sents_list) > sent_count:
+            _safe_print(f"  WARNING: grammar_error_passage: {len(err_sents_list)} sentences > {sent_count}, trimming...")
+            data["grammar_error_passage"] = " ".join(err_sents_list[:sent_count]).strip()
+        elif len(err_sents_list) < sent_count:
+            _safe_print(f"  WARNING: grammar_error_passage: {len(err_sents_list)} sentences < {sent_count}, using original")
+            data["grammar_error_passage"] = passage
+
+        # 길이 체크: 원문 대비 20% 초과면 내용 추가된 것
+        err_clean_len = len(re.sub(r'\s+', '', data.get("grammar_error_passage", "")))
+        if orig_len > 0 and err_clean_len > orig_len * 1.2:
+            _safe_print(f"  WARNING: grammar_error_passage length {err_clean_len} >> {orig_len} (>20%), retrying...")
             cache_path = passage_dir / "step5_grammar.json"
             if cache_path.exists():
                 cache_path.unlink()
             retry_data = _ai_call()
-            retry_text = retry_data.get(key, "")
-            retry_stripped = _strip_brackets(retry_text)
-            retry_len = len(re.sub(r'\s+', '', retry_stripped))
-            if retry_len <= orig_len * 1.2:
-                data[key] = retry_text
-                # 관련 답안도 갱신
-                if "bracket" in key:
-                    data["grammar_bracket_answers"] = retry_data.get("grammar_bracket_answers", data.get("grammar_bracket_answers", []))
-                else:
-                    data["grammar_error_answers"] = retry_data.get("grammar_error_answers", data.get("grammar_error_answers", []))
-                _safe_print(f"  ✅ {key} retry successful (length {retry_len})")
+            retry_text = retry_data.get("grammar_error_passage", "")
+            retry_clean_len = len(re.sub(r'\s+', '', retry_text))
+            if retry_clean_len <= orig_len * 1.2:
+                data["grammar_error_passage"] = retry_text
+                data["grammar_error_answers"] = retry_data.get("grammar_error_answers", data.get("grammar_error_answers", []))
+                logger.info(f"  OK: grammar_error_passage retry successful (length {retry_clean_len})")
             else:
-                _safe_print(f"  ⚠ {key} retry still too long ({retry_len}), keeping best version")
+                logger.warning(f"STAGE 7-1 | STEP 2 | grammar_error_passage retry still too long ({retry_clean_len}), keeping best version")
 # ★ 서술형: 무의미 항목 제거 (error == original인 경우)
     raw_errors = data.get("grammar_error_answers", [])
     valid_errors = [a for a in raw_errors if isinstance(a, dict) and a.get("error", "").strip() != a.get("original", "").strip()]
@@ -1373,54 +1340,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
                 data["grammar_error_count"] = len(errs3)
                 _safe_print(f"  ✅ 8-2 재시도 성공: {len(errs3)}개 오류")
                 break
-            _safe_print(f"  ⚠ 8-2 재시도 {_err_retry+1} 실패 ({len(errs3)}개)")
-
-    # ★ bracket_count를 지문 내 실제 괄호 수로 보정 (오답박스 수 = 지문 괄호 수)
-    actual_brackets = data.get("grammar_bracket_answers", [])
-    bracket_passage = data.get("grammar_bracket_passage", "")
-    # 지문에서 실제 (N)[...] 패턴 수를 카운트
-    actual_bracket_in_text = len(re.findall(r'\(\d+\)\[', bracket_passage))
-    if actual_bracket_in_text > 0 and actual_bracket_in_text != len(actual_brackets):
-        _safe_print(f"  WARNING: 지문 괄호 {actual_bracket_in_text}개 ≠ answers {len(actual_brackets)}개 → 지문 기준으로 보정")
-        # answers가 더 많으면 지문 괄호 수에 맞춰 자름
-        if len(actual_brackets) > actual_bracket_in_text:
-            # 지문에 실제 존재하는 번호만 유지
-            text_nums = set(int(m) for m in re.findall(r'\((\d+)\)\[', bracket_passage))
-            actual_brackets = [a for a in actual_brackets if a.get("num") in text_nums]
-            data["grammar_bracket_answers"] = actual_brackets
-    data["grammar_bracket_count"] = actual_bracket_in_text if actual_bracket_in_text > 0 else len(actual_brackets)
-
-    # ★ 빈 선택지 괄호 제거: (N)[/ text] 또는 (N)[text /] 같은 불량 괄호
-    bp = data.get("grammar_bracket_passage", "")
-    if bp:
-        bad_brackets = re.findall(r'\((\d+)\)\[([^\]]*)\]', bp)
-        removed_bad = []
-        for num_str, content in bad_brackets:
-            parts = [p.strip() for p in content.split('/')]
-            # 2개로 깔끔하게 나눠지지 않는 경우도 처리
-            if len(parts) >= 2:
-                left = parts[0].strip()
-                right = '/'.join(parts[1:]).strip()  # / 가 여러개면 오른쪽 합치기
-                if not left or not right:
-                    good_text = left if left else right
-                    bp = re.sub(r'\(' + num_str + r'\)\[[^\]]+\]', good_text, bp)
-                    removed_bad.append(int(num_str))
-                    _safe_print(f"  🚫 빈 선택지 괄호({num_str}) 제거: [{content}]")
-            elif len(parts) == 1:
-                # / 자체가 없음 → 괄호 제거
-                bp = re.sub(r'\(' + num_str + r'\)\[[^\]]+\]', content, bp)
-                removed_bad.append(int(num_str))
-                _safe_print(f"  🚫 잘못된 괄호({num_str}) 제거: [{content}]")
-        if removed_bad:
-            data["grammar_bracket_passage"] = bp
-            data["grammar_bracket_answers"] = [a for a in data.get("grammar_bracket_answers", []) if a.get("num") not in removed_bad]
-            # 재번호
-            remaining = re.findall(r'\((\d+)\)\[', bp)
-            new_count = len(remaining)
-            data["grammar_bracket_count"] = new_count
-            _safe_print(f"  ✅ 불량 괄호 {len(removed_bad)}개 제거 (남은 괄호: {new_count}개)")
-
-
+            logger.debug(f"  ⚠ 8-2 재시도 {_err_retry+1} 실패 ({len(errs3)}개)")
 
     # ★ 8-1 괄호 자동 검증: 둘 다 정답인 괄호를 올바른 출제로 교체
     bracket_passage_val = data.get("grammar_bracket_passage", "")
@@ -1604,37 +1524,22 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             
             _safe_print(f"  ✅ 둘 다 정답 괄호 {len(fixed_nums)}개 처리 완료 (남은 괄호: {actual_after}개)")
     
-    # ★ 8-1 정답 좌우 진짜 랜덤 shuffle (각 괄호 개별 50% 확률)
-    import re as _re, random as _rand_sh
-    bracket_answers = data.get("grammar_bracket_answers", [])
-    bracket_text = data.get("grammar_bracket_passage", "")
-    if bracket_answers and bracket_text:
-        result = bracket_text
-        for ans in bracket_answers:
-            num = ans.get("num", 0)
-            if _rand_sh.random() < 0.5:  # 50% 확률로 각각 독립적으로 swap
-                pat = _re.compile(r'\(' + str(num) + r'\)\[([^\]]+)\]')
-                def do_swap_81(m, n=num):
-                    parts = [p.strip() for p in m.group(1).split(' / ')]
-                    return f'({n})[{parts[1]} / {parts[0]}]' if len(parts)==2 else m.group(0)
-                result = pat.sub(do_swap_81, result)
-        data["grammar_bracket_passage"] = result
 
         # ★ grammar_bracket_passage / grammar_error_passage 중복 제거
     # API가 지문을 2번 붙여서 반환하는 경우 방어
-    for key in ["grammar_bracket_passage", "grammar_error_passage"]:
-        val = data.get(key, "")
-        if val:
-            half = len(val) // 2
-            # 앞절반과 뒷절반이 80% 이상 유사하면 앞절반만 사용
-            first_half = val[:half].strip()
-            second_half = val[half:].strip()
-            if first_half and second_half:
-                overlap = sum(1 for a, b in zip(first_half[-200:], second_half[:200]) if a == b)
-                similarity = overlap / min(200, len(first_half), len(second_half))
-                if similarity > 0.7:
-                    _safe_print(f"  WARNING: {key} appears duplicated, trimming...")
-                    data[key] = first_half
+    # 중복 제거: AI가 grammar_error_passage를 2번 붙여 반환하는 경우 방어
+    # (8-1은 코드 조립이라 중복 불가능 — 검사 제외)
+    err_val = data.get("grammar_error_passage", "")
+    if err_val:
+        half = len(err_val) // 2
+        first_half = err_val[:half].strip()
+        second_half = err_val[half:].strip()
+        if first_half and second_half:
+            overlap = sum(1 for a, b in zip(first_half[-200:], second_half[:200]) if a == b)
+            similarity = overlap / min(200, len(first_half), len(second_half))
+            if similarity > 0.7:
+                _safe_print(f"  WARNING: grammar_error_passage appears duplicated, trimming...")
+                data["grammar_error_passage"] = first_half
 
     # ★ 최종 지시대명사(those/these) 복원 — 모든 괄호 처리 후 마지막에 실행
     # AI가 those를 [that/where], [where/that], [those/that] 등으로 만든 뒤
@@ -2037,28 +1942,6 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             data["grammar_bracket_count"] = len(new_answers)
             logger.info(f"INFO | STAGE 8 | 최종 번호 매기기 완료: {dict(list(renumber_map.items())[:5])}...")
 
-  # 최종 괄호 수 체크: 모든 제거 후 min_brackets 미만이면 재생성 (최대 3회)
-    final_bracket_count = data.get("grammar_bracket_count", 0)
-    if 0 < final_bracket_count < min_brackets:
-        for _retry_n in range(3):
-            logger.info(f"INFO | STAGE 8 | 최종 괄호 {final_bracket_count}개 < {min_brackets}개 → 재생성 시도 {_retry_n+1}/3...")
-            data_retry = _ai_call()
-            retry_bp = data_retry.get("grammar_bracket_passage", "")
-            retry_count = len(re.findall(r'\(\d+\)\[', retry_bp))
-            if retry_count >= min_brackets:
-                data["grammar_bracket_passage"] = retry_bp
-                data["grammar_bracket_answers"] = data_retry.get("grammar_bracket_answers", [])
-                data["grammar_bracket_count"] = retry_count
-                data["grammar_error_passage"] = data_retry.get("grammar_error_passage", data.get("grammar_error_passage", ""))
-                data["grammar_error_answers"] = data_retry.get("grammar_error_answers", data.get("grammar_error_answers", []))
-                data["grammar_error_count"] = len(data["grammar_error_answers"])
-                logger.info(f"  ✅ 재생성 성공: 괄호 {retry_count}개")
-                # ★★ 재생성 결과에도 핵심 차단 다시 적용 (시제/주어동명사/that-which 등)
-                data = _apply_critical_grammar_filters(data)
-                logger.info(f"INFO | STAGE 8 | 재생성 후 차단 적용 → 최종 {data.get('grammar_bracket_count', 0)}개")
-                break
-            final_bracket_count = retry_count
-            logger.info(f"  ⚠ 재생성 {_retry_n+1}회 실패 ({retry_count}개)")
 
     # ★★ 최종 안전장치: 항상 핵심 차단 한 번 더 (캐시되기 전)
     data = _apply_critical_grammar_filters(data)

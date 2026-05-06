@@ -5,14 +5,14 @@ PIPELINE_VERSION = "v10"
 
 # Step별 버전 관리: 해당 step 코드 수정 시 버전만 올리면 캐시 자동 무효화
 STEP_VERSIONS = {
-    "step1_basic": "v3",
-    "step2_order": "v7",
-    "step3_blank": "v5",
-    "step4_topic": "v3",
-    "step5_grammar": "v12",
-    "step6_vocab_content": "v5",
-    "step7_writing": "v3",
-    "step8_answers": "v9",
+    "step1_basic": "v4",
+    "step2_order": "v8",
+    "step3_blank": "v6",
+    "step4_topic": "v4",
+    "step5_grammar": "v13",
+    "step6_vocab_content": "v6",
+    "step7_writing": "v4",
+    "step8_answers": "v10",
     "secret_note_a": "v1",
     "secret_note_b": "v1",
     "secret_note_c": "v5",  # v5: 유의어 6-7개, 고난도 4-5개, 요지 2배 길이, 가로 배치
@@ -1213,7 +1213,6 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     sentences = split_sentences(passage)
     sent_count = len(sentences)
     word_count = len(passage.split())
-    error_count = max(5, min(8, sent_count))  # 최소 5개, 최대 8개
 
     # ★ 지문 길이에 따라 최소 괄호 수 동적 계산 (사용자 명시 요구)
     #   박스 4줄(~80단어) → 최소 2개 / 6줄(~120단어) → 최소 3개 / 그 이상 → 최소 8개
@@ -1320,7 +1319,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
                 break
             logger.debug(f"  ⚠ 8-2 재시도 {_err_retry+1} 실패 ({len(errs3)}개)")
 
-    # ★ 8-1 괄호 자동 검증: 둘 다 정답인 괄호를 올바른 출제로 교체
+    # ★ 8-1 괄호 검증(알고리즘): 둘 다 정답인 괄호를 올바른 출제로 교체
     bracket_passage_val = data.get("grammar_bracket_passage", "")
     bracket_answers_val = data.get("grammar_bracket_answers", [])
     if bracket_passage_val and bracket_answers_val:
@@ -1923,29 +1922,6 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 
     # ★★ 최종 안전장치: 항상 핵심 차단 한 번 더 (캐시되기 전)
     data = _apply_critical_grammar_filters(data)
-
-    # 🔒 8-1 괄호 누락 최종 검증: 후처리로 일부 문장에서 괄호가 빠진 경우
-    # bracket_dist + grammar_bracket_answers 동기화
-    final_passage = data.get("grammar_bracket_passage", "")
-    if final_passage:
-        result_sentences = split_sentences(final_passage)
-        if len(result_sentences) == sent_count:
-            bracket_pat = re.compile(r'\(\d+\)\[')
-            for i, sentence in enumerate(result_sentences):
-                if bracket_dist[i] == 1 and not bracket_pat.search(sentence):
-                    logger.debug(
-                        f"STAGE 7-1 | STEP 1 | AI의 답변에서 추출한 지문에서 "
-                        f"{i+1}번째 문장({sentence})이 괄호 없이 나옴. "
-                        f"괄호 없는 문장으로 수정 -> 답안지 데이터도 삭제."
-                    )
-                    bracket_dist[i] = 0
-            # 답안지 동기화: 지문에 실제 존재하는 num만 유지
-            existing_nums = set(int(m) for m in re.findall(r'\((\d+)\)\[', final_passage))
-            data["grammar_bracket_answers"] = [
-                a for a in data.get("grammar_bracket_answers", [])
-                if a.get("num") in existing_nums
-            ]
-            data["grammar_bracket_count"] = len(data["grammar_bracket_answers"])
 
     save_step(passage_dir, "step5_grammar", data)
     return data

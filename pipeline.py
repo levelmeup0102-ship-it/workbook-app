@@ -1273,7 +1273,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
         d["grammar_bracket_passage"] = bracket_str
         d["grammar_bracket_answers"] = bracket_answers
         d["grammar_bracket_count"] = len(bracket_answers)
-        return data
+        return d
 
     data = _ai_call()
 

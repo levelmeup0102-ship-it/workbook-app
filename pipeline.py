@@ -9,7 +9,7 @@ STEP_VERSIONS = {
     "step2_order": "v8",
     "step3_blank": "v6",
     "step4_topic": "v4",
-    "step5_grammar": "v13",
+    "step5_grammar": "v14",
     "step6_vocab_content": "v6",
     "step7_writing": "v4",
     "step8_answers": "v10",
@@ -1406,9 +1406,12 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
                 a_is_ing = a.endswith('ing') and a.lower() not in _ing_base_verbs
                 b_is_ing = b.endswith('ing') and b.lower() not in _ing_base_verbs
                 
-                if a_is_ing or b_is_ing:
-                    ing_form = a_raw if a_is_ing else b_raw
-                    base_form = b_raw if a_is_ing else a_raw
+                # ★ 진짜 ~ing형이 아니면 이 분기는 처리 대상 아님 (bring/brings 같은 경우)
+                if not (a_is_ing or b_is_ing):
+                    continue
+                
+                ing_form = a_raw if a_is_ing else b_raw
+                base_form = b_raw if a_is_ing else a_raw
                 # 원형과 ing가 쌍인지 확인
                 if _make_ing(base_form.lower()) == ing_form.lower() or \
                    a.endswith('ing') and (_get_base(a) == b or a[:-3] == b) or \

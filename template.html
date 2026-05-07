@@ -365,6 +365,14 @@
             break-inside: avoid;
         }
 
+        .passage-b {
+            padding: 3mm 4mm;
+            line-height: 1.8;
+            font-size: 8pt;
+            margin-bottom: 1.5mm;
+            break-inside: avoid;
+        }
+
         .p-dense {
             letter-spacing: -0.05em;
             word-spacing: -0.02em;
@@ -2063,7 +2071,7 @@
                     <p class="flow-section-label-sep">B. 문장 삽입</p>
                     <p class="mb2">주어진 문장이 들어가기에 가장 적절한 곳을 고르시오.</p>
                     <div class="passage flow-pass-insert p-dense">{{ insert_sentence }}</div>
-                    <div class="passage flow-pass-intro p-dense mt2">{{ insert_passage }}</div>
+                    <div class="passage-b flow-pass-intro p-dense mt2">{{ insert_passage }}</div>
                     <p class="flow-section-label-sep">(심화) 전체 문장 순서 배열</p>
                     <p class="text-muted mb4 fs-75">지문의 모든 문장을 정확한 순서로 배열하여 글의 흐름을 완벽히 체화합니다.</p>
                     {% for label, text in full_order_blocks %}

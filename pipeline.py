@@ -2317,7 +2317,7 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
     step1_items = []
     for i in range(0, len(stage7_step1_correct_list), 3):
         chunk = stage7_step1_correct_list[i:i+3]
-        line = ', '.join(f'({c.get("num")}) {c.get("answer")}' for c in chunk)
+        line = ' '.join(f'({c.get("num")}) {c.get("answer")}' for c in chunk)
         step1_items.append(f'<p>{line}</p>')
     
     stage7_step1_answer = ''.join(step1_items)
@@ -2325,7 +2325,7 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
     step2_items = []
     for i in range(0, len(stage7_step2_error_list), 2):
         chunk = stage7_step2_error_list[i:i+2]
-        line = ', '.join(
+        line = ' '.join(
             f'({c.get("num")}) {c.get("error")} → {c.get("original")}' for c in chunk
         )
         step2_items.append(f'<p>{line}</p>')

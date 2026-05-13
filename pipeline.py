@@ -589,12 +589,23 @@ def _generate_order_choices(data, passage: str = ""):
     if len(paras) != 3:
         raise ValueError(f"STAGE 5 | 단락 개수 이상(3개 필요): {len(paras)}개")
 
+    # 공백 정규화: AI 출력과 원문 모두 단일 공백으로 정규화 후 매칭
+    norm_passage = re.sub(r'\s+', ' ', passage)
+
     def _find_pos(text):
-        snippet = re.sub(r'\s+', ' ', text.strip())[:50]
-        pos = passage.find(snippet[:30])
-        if pos == -1:
-            pos = passage.find(' '.join(snippet.split()[:5]))
-        return pos
+        snippet = re.sub(r'\s+', ' ', text.strip())
+        words = snippet.split()
+        # 점진적 fallback: 긴 prefix부터 짧은 prefix 순으로 시도
+        for n in [30, 20, 15, 10, 8, 6, 5, 4, 3]:
+            if len(snippet) >= n:
+                pos = norm_passage.find(snippet[:n])
+                if pos != -1:
+                    return pos
+            if len(words) >= n:
+                pos = norm_passage.find(' '.join(words[:n]))
+                if pos != -1:
+                    return pos
+        return -1
 
     positions = [_find_pos(paras[i][1]) for i in range(3)]
     if -1 in positions or len(set(positions)) != 3:

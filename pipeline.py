@@ -6,7 +6,7 @@ PIPELINE_VERSION = "v10"
 # Step별 버전 관리: 해당 step 코드 수정 시 버전만 올리면 캐시 자동 무효화
 STEP_VERSIONS = {
     "step1_basic": "v4",
-    "step2_order": "v8",
+    "step2_order": "v10",
     "step3_blank": "v6",
     "step4_topic": "v4",
     "step5_grammar": "v14",

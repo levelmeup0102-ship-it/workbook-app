@@ -688,7 +688,48 @@ JSON 형식:
   "full_order_answer": "..."
 }}"""
     
-    data = call_claude_json(SYS_JSON, prompt, max_tokens=4096)
+   # 단락 위치 매칭이 성공할 때까지 최대 3회 재시도
+    max_step2_retries = 3
+    data = None
+    for _try in range(max_step2_retries):
+        try:
+            candidate = call_claude_json(SYS_JSON, prompt, max_tokens=4096)
+            # 위치 매칭 사전 검증
+            paras_check = candidate.get("order_paragraphs", [])
+            if len(paras_check) == 3:
+                norm_p = re.sub(r'\s+', ' ', passage)
+                def _quick_find(t):
+                    if isinstance(t, dict):
+                        t = t.get("text", "")
+                    elif isinstance(t, list) and len(t) >= 2:
+                        t = t[1]
+                    s = re.sub(r'\s+', ' ', (t or "").strip())
+                    for n in [30, 20, 15, 10, 8, 6, 5, 4, 3]:
+                        if len(s) >= n:
+                            p = norm_p.find(s[:n])
+                            if p != -1:
+                                return p
+                    return -1
+                test_positions = [_quick_find(paras_check[i]) for i in range(3)]
+                if -1 not in test_positions and len(set(test_positions)) == 3:
+                    data = candidate
+                    if _try > 0:
+                        _safe_print(f"  step2: 재시도 {_try+1}회만에 성공")
+                    break
+                else:
+                    _safe_print(f"  step2: 시도 {_try+1}/{max_step2_retries} 위치 매칭 실패 {test_positions} → 재시도")
+            else:
+                _safe_print(f"  step2: 시도 {_try+1}/{max_step2_retries} 단락 개수 이상 → 재시도")
+        except Exception as e:
+            _safe_print(f"  step2: 시도 {_try+1}/{max_step2_retries} 예외 {str(e)[:80]}")
+        # 캐시 무효화 위해 약간 대기
+        time.sleep(1)
+
+    if data is None:
+        # 마지막 시도: 그래도 받아서 진행 (어차피 _generate_order_choices에서 또 검증)
+        data = call_claude_json(SYS_JSON, prompt, max_tokens=4096)
+        _safe_print(f"  step2: {max_step2_retries}회 재시도 모두 실패, 마지막 결과로 진행")
+
     data.setdefault("full_order_blocks", [])
 
     # ※ order_answer / order_choices는 _generate_order_choices에서 결정·세팅됨

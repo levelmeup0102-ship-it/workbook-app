@@ -187,6 +187,49 @@ body {
 }
 .expl-label { font-weight: bold; color: var(--primary); margin-right: 3px; }
 .expl-label.purple { color: var(--purple); }
+
+/* ★★★ NEW: A 답지 컴팩트 행 (정답+해설 통합) ★★★ */
+.ans-row-c {
+  display: grid;
+  grid-template-columns: 56px 28px 1fr;
+  grid-template-rows: auto auto;
+  gap: 1px 6px;
+  padding: 3px 0;
+  border-bottom: 1px dashed #E5E5E5;
+  align-items: baseline;
+}
+.ans-row-c:last-child { border-bottom: none; }
+.ans-row-c b.q-name {
+  grid-column: 1; grid-row: 1;
+  font-size: 7.8pt; color: var(--accent); font-weight: bold;
+}
+.ans-row-c .ans-val {
+  grid-column: 2; grid-row: 1;
+  font-weight: bold; color: var(--accent); font-size: 8.7pt;
+  padding: 0 5px; background: var(--bg-orange); border-radius: 3px;
+  text-align: center;
+}
+.ans-row-c .ans-text {
+  grid-column: 3; grid-row: 1;
+  color: #333; font-size: 7.7pt; line-height: 1.35;
+}
+.ans-row-c .ans-write {
+  display: inline-block;
+  background: var(--bg-orange); color: var(--accent);
+  padding: 0 5px; border-radius: 3px; font-weight: bold;
+}
+.ans-row-c .ans-note {
+  grid-column: 2 / -1; grid-row: 2;
+  color: #777; font-size: 6.9pt; line-height: 1.3;
+  padding-left: 4px;
+  border-left: 2px solid #DDD;
+  margin-top: 1px;
+}
+.ans-row-c .ans-note b {
+  color: var(--accent);
+  font-size: 6.9pt;
+}
+
 .match-tbl { width: 100%; border-collapse: collapse; margin: 2px 0; font-size: 6.7pt; }
 .match-tbl th {
   background: var(--bg-blue); padding: 1.5px 4px; text-align: left;
@@ -298,70 +341,45 @@ body {
     <div class="ans-block">
       <div class="ans-block-title">▶ {{ item.label }}</div>
 
-      <div class="ans-row">
-        <b class="q-name">Q1. 주제</b>
+      <div class="ans-row-c">
+        <b class="q-name">Q1.주제</b>
         <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.topic_correct] }}</span>
-        <span class="ans-detail">{{ item.data.topic_options[item.data.topic_correct] }}</span>
+        <span class="ans-text">{{ item.data.topic_options[item.data.topic_correct] }}</span>
+        <span class="ans-note">{{ item.data.topic_explain }}</span>
       </div>
-      <div class="ans-row">
-        <b class="q-name">Q2. 순서</b>
+
+      <div class="ans-row-c">
+        <b class="q-name">Q2.순서</b>
         <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.order_correct] }}</span>
-        <span class="ans-detail">{{ item.data.order_options[item.data.order_correct] }}</span>
+        <span class="ans-text">{{ item.data.order_options[item.data.order_correct] }}</span>
+        <span class="ans-note">{{ item.data.order_explain }}</span>
       </div>
+
       {% if item.data.core_blank_correct is defined and item.data.core_blank_correct is not none %}
-      <div class="ans-row">
-        <b class="q-name">Q3. 핵심빈칸</b>
+      <div class="ans-row-c">
+        <b class="q-name">Q3.핵심빈칸</b>
         <span class="ans-val" style="color:var(--purple); background:var(--bg-purple);">{{ ['①','②','③','④','⑤'][item.data.core_blank_correct] }}</span>
-        <span class="ans-detail">{{ item.data.core_blank_options[item.data.core_blank_correct] }}</span>
-      </div>
-      <div class="ans-row">
-        <b class="q-name"><span style="color:#888;">↳ 원문</span></b>
-        <span style="font-size:7.5pt; color:#666; font-style:italic;">"{{ item.data.core_blank_target }}"</span>
+        <span class="ans-text">{{ item.data.core_blank_options[item.data.core_blank_correct] }}</span>
+        <span class="ans-note">원문: "{{ item.data.core_blank_target }}" — {{ item.data.core_blank_explain }}</span>
       </div>
       {% endif %}
-      <div class="ans-row">
-        <b class="q-name">Q4. 불일치</b>
+
+      <div class="ans-row-c">
+        <b class="q-name">Q4.불일치</b>
         <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.mismatch_count - 1] }}</span>
-        <span class="ans-detail">{{ item.data.mismatch_count }}개 — {% for s in item.data.statements %}{% if not s[2] %}{{ s[0] }}{% if not loop.last %}, {% endif %}{% endif %}{% endfor %}</span>
-      </div>
-      <div class="blank-ans-grid">
-        <b>Q5(A):</b><span><span class="ans-val">{{ item.data.blank_A }}</span></span>
-        <b>Q5(B):</b><span><span class="ans-val">{{ item.data.blank_B }}</span></span>
+        <span class="ans-text">{{ item.data.mismatch_count }}개 — {% for s in item.data.statements %}{% if not s[2] %}{{ s[0] }}{% if not loop.last %}, {% endif %}{% endif %}{% endfor %}</span>
+        <span class="ans-note">{% for stmt in item.data.statements %}{% set kr_pair = item.data.statements_kr[loop.index0] if item.data.statements_kr else ['', ''] %}<b>{{ stmt[0] }}</b>({{ 'O' if stmt[2] else 'X' }}) {{ kr_pair[1] if kr_pair[1] else '' }}{% if not loop.last %} / {% endif %}{% endfor %}</span>
       </div>
 
-      <div class="expl-box"><span class="expl-label">Q1 주제</span>{{ item.data.topic_explain }}</div>
-      <div class="expl-box"><span class="expl-label">Q2 순서</span>{{ item.data.order_explain }}</div>
-
-      {% if item.data.core_blank_explain %}
-      <div class="expl-box"><span class="expl-label purple">Q3 핵심빈칸</span>{{ item.data.core_blank_explain }}</div>
-      {% endif %}
-
-      <div class="expl-box">
-        <span class="expl-label">Q4 진술 분석</span>
-        <table class="match-tbl">
-          <tr>
-            <th style="width:18px;">#</th>
-            <th>진술 (영어 · 한국어)</th>
-            <th style="width:24px; text-align:center;">판정</th>
-            <th style="width:36%;">왜?</th>
-          </tr>
-          {% for stmt in item.data.statements %}
-            {% set kr_pair = item.data.statements_kr[loop.index0] if item.data.statements_kr else ['', ''] %}
-            <tr>
-              <td><b>{{ stmt[0] }}</b></td>
-              <td>{{ stmt[1] }}{% if kr_pair[0] %}<span class="stmt-kr"> · {{ kr_pair[0] }}</span>{% endif %}</td>
-              <td class="{{ 'o-mark' if stmt[2] else 'x-mark' }}">{{ 'O' if stmt[2] else 'X' }}</td>
-              <td class="{{ 'stmt-why-true' if stmt[2] else 'stmt-why' }}">{{ kr_pair[1] if kr_pair[1] else '' }}</td>
-            </tr>
-          {% endfor %}
-        </table>
+      <div class="ans-row-c">
+        <b class="q-name">Q5(A)</b>
+        <span class="ans-text"><span class="ans-write">{{ item.data.blank_A }}</span></span>
+        <span class="ans-note">{{ item.data.blank_explain_A | safe }}</span>
       </div>
-
-      <div class="expl-box">
-        <span class="expl-label">Q5(A)</span>
-        <div class="grammar-note">{{ item.data.blank_explain_A | safe }}</div>
-        <span class="expl-label">Q5(B)</span>
-        <div class="grammar-note">{{ item.data.blank_explain_B | safe }}</div>
+      <div class="ans-row-c">
+        <b class="q-name">Q5(B)</b>
+        <span class="ans-text"><span class="ans-write">{{ item.data.blank_B }}</span></span>
+        <span class="ans-note">{{ item.data.blank_explain_B | safe }}</span>
       </div>
     </div>
   {% endfor %}

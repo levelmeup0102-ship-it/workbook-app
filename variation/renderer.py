@@ -122,14 +122,43 @@ PRINT_HINT_STYLE = """
     #print-hint-banner { display: none !important; }
     body { padding-top: 0 !important; }
   }
-  /* 답지 페이지 처리 - 한 답지 박스가 페이지 중간에 끊기지 않도록 */
-  .ans-block,
-  .answer-block,
-  .ans-row,
-  .ans-item,
-  .answer-section { page-break-inside: avoid; }
+  
+  /* ★ footer-logo는 WeasyPrint 전용 - 브라우저에서는 화면에서만 숨김 (인쇄 시 보임 X) */
+  .footer-logo {
+    display: none !important;
+  }
+  
+  /* ★ 빈칸 underline 명확하게 (Q3 핵심빈칸 등) */
+  .core-blank-inline {
+    border-bottom: 2px solid #6A1B9A !important;
+    min-width: 120px !important;
+    display: inline-block !important;
+    font-size: 0 !important;  /* '_____' 문자 안 보이게 - 밑줄만 보임 */
+    height: 1.2em;
+    vertical-align: middle;
+  }
+  
+  /* 일반 빈칸 (밑줄 표시) */
+  .blank-line, .blank-underline {
+    display: inline-block;
+    min-width: 100px;
+    border-bottom: 2px solid #333;
+  }
+  
+  /* 답지 페이지 처리 */
+  .ans-block, .answer-block, .ans-row, .ans-item, .answer-section {
+    page-break-inside: avoid;
+  }
   /* 새 변형문제 섹션은 새 페이지에서 시작 */
   .variation-section + .variation-section { page-break-before: always; }
+  
+  /* q-page는 페이지 단위 (원래 템플릿 정의) - print 시에만 페이지 break */
+  .q-page {
+    page-break-after: auto;  /* 화면에서는 break 강제 X */
+  }
+  @media print {
+    .q-page { page-break-after: always; }
+  }
 </style>
 """
 

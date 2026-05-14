@@ -185,7 +185,9 @@ def generate_variation_a(
                 print(f"[VAR][A][{pid}] 생성 완료 (시도 {attempt})")
                 return data
             last_errors = errors
-            print(f"[VAR][A][{pid}] 시도 {attempt} 실패 ({len(errors)}건): {errors[0][:120]}")
+            print(f"[VAR][A][{pid}] 시도 {attempt} 실패 ({len(errors)}건):")
+            for err in errors[:5]:
+                print(f"    - {err[:200]}")
         except Exception as e:
             traceback.print_exc()
             last_errors = [f"예외: {e}"]
@@ -233,7 +235,9 @@ def generate_variation_b(
                 print(f"[VAR][B][{pid}] 생성 완료 (시도 {attempt})")
                 return data
             last_errors = errors
-            print(f"[VAR][B][{pid}] 시도 {attempt} 실패 ({len(errors)}건): {errors[0][:120]}")
+            print(f"[VAR][B][{pid}] 시도 {attempt} 실패 ({len(errors)}건):")
+            for err in errors[:5]:
+                print(f"    - {err[:200]}")
         except Exception as e:
             traceback.print_exc()
             last_errors = [f"예외: {e}"]

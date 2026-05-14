@@ -114,6 +114,40 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?") -> list
     except (KeyError, AttributeError) as e:
         errors.append(f"[{pid}] blank_A/B 형식 오류: {e}")
     
+    # ★ Q3 core_blank_target 단어 수 최소 3개 강제
+    if data.get("core_blank_target"):
+        try:
+            cwc = len(data["core_blank_target"].split())
+            if cwc < 3:
+                errors.append(
+                    f"[{pid}] Q3 core_blank_target 단어 수 부족 ({cwc}개 < 3개) "
+                    f"— '{data['core_blank_target']}' 대신 더 긴 구문을 선택할 것"
+                )
+        except (KeyError, AttributeError):
+            pass
+    
+    # ★ blank_A와 blank_B가 chunks 안에서 인접해 있으면 거부 (최소 5단어 사이에)
+    try:
+        chunks_text = " ".join([c[1] for c in data["chunks"] if len(c) >= 2])
+        # BLANK_A와 BLANK_B 마커 위치
+        ia = chunks_text.find("<BLANK_A>")
+        ib = chunks_text.find("<BLANK_B>")
+        if ia >= 0 and ib >= 0:
+            # 두 마커 사이 단어 수 계산
+            start = min(ia, ib) + len("<BLANK_A>")  # 어느 쪽이든 마커 길이는 같음
+            end = max(ia, ib)
+            between_text = chunks_text[start:end]
+            # 빈칸 마커 제거
+            between_text = between_text.replace("<BLANK_A>", "").replace("<BLANK_B>", "").strip()
+            wc_between = len(between_text.split()) if between_text else 0
+            if wc_between < 5:
+                errors.append(
+                    f"[{pid}] Q5 blank_A와 blank_B가 너무 가까움 (사이에 {wc_between}단어만 있음 < 5개) "
+                    f"— 서로 떨어진 두 구문을 선택할 것"
+                )
+    except (KeyError, AttributeError, TypeError) as e:
+        pass  # 거리 검증 실패는 무시 (필수 검증은 아님)
+    
     # Q5 잘라쓰기 검증 (대소문자 무시)
     try:
         errors += check_cutout_match(
@@ -166,6 +200,28 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?") -> list
         v = data.get(key, -1)
         if not isinstance(v, int) or not (0 <= v <= 4):
             errors.append(f"[{pid}] {key} 범위 오류: {v}")
+    
+    # ★ Q4 blank_A, blank_B 단어 수 최소 6개 강제
+    try:
+        wa = len(data["blank_A"].split())
+        wb = len(data["blank_B"].split())
+        if wa < 6:
+            errors.append(f"[{pid}] Q4 blank_A 단어 수 부족 ({wa}개 < 6개) — 더 긴 구문 선택")
+        if wb < 6:
+            errors.append(f"[{pid}] Q4 blank_B 단어 수 부족 ({wb}개 < 6개) — 더 긴 구문 선택")
+    except (KeyError, AttributeError) as e:
+        errors.append(f"[{pid}] B blank_A/B 형식 오류: {e}")
+    
+    # ★ Q5 topic_writing_answer 단어 수 최소 10개 강제
+    try:
+        twc = len(data["topic_writing_answer"].split())
+        if twc < 10:
+            errors.append(
+                f"[{pid}] Q5 topic_writing_answer 단어 수 부족 ({twc}개 < 10개) "
+                f"— 더 완전한 문장으로 작성"
+            )
+    except (KeyError, AttributeError):
+        errors.append(f"[{pid}] B topic_writing_answer 형식 오류")
     
     # Q4 잘라쓰기 (요약 영작)
     try:

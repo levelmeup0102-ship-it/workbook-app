@@ -164,10 +164,13 @@ def create_variation(
     return {
         "questions_pdf": f"/variation-pdf/{file_id}",  # 호환 위해 기존 키 유지
         "answers_pdf": None,
-        "html_url": f"/variation-pdf/{file_id}",  # 명확한 키
+        "html_url": f"/variation-pdf/{file_id}",
+        "download_url": f"/variation-pdf/{file_id}?download=1",  # 다운로드 전용
         "passages_generated": len(req.passages),
         "types_generated": req.types,
         "mode": req.mode,
+        "a_count": len(a_items),  # 디버그: A 유형 생성된 개수
+        "b_count": len(b_items),  # 디버그: B 유형 생성된 개수
         "warnings": errors_per_passage if errors_per_passage else None,
     }
 
@@ -177,12 +180,17 @@ download_router = APIRouter(tags=["variation-download"])
 
 
 @download_router.get("/variation-pdf/{file_id}", include_in_schema=False)
-def download_variation_html(file_id: str):
-    """변형문제 HTML 페이지 (브라우저 새 창)"""
+def download_variation_html(file_id: str, download: int = 0):
+    """변형문제 HTML 페이지 - download=1이면 다운로드, 아니면 새 창 표시"""
     if not file_id.replace("-", "").replace("_", "").isalnum():
         raise HTTPException(status_code=400, detail="Invalid file_id")
     html_path = os.path.join(OUTPUT_DIR, f"variation_{file_id}.html")
     if not os.path.exists(html_path):
         raise HTTPException(status_code=404, detail="변형문제 파일이 만료되었거나 없습니다")
     with open(html_path, "r", encoding="utf-8") as f:
-        return HTMLResponse(content=f.read())
+        content = f.read()
+    
+    headers = {}
+    if download:
+        headers["Content-Disposition"] = f'attachment; filename="변형문제_{file_id}.html"'
+    return HTMLResponse(content=content, headers=headers)

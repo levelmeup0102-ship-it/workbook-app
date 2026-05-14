@@ -21,18 +21,34 @@ def normalize_word(w: str) -> str:
     return w.strip(".,!?;:'\"()[]{}").lower()
 
 
+def tokenize_for_comparison(text: str) -> list:
+    """비교용 토큰화: 하이픈을 공백으로 처리해서 split
+    'south-facing slopes' → ['south', 'facing', 'slopes']
+    이 함수로 정답과 보기 양쪽 다 정규화하면 'south-facing' vs ['south','facing'] 문제 해결
+    """
+    # 하이픈을 공백으로
+    text = text.replace("-", " ").replace("—", " ").replace("–", " ")
+    words = []
+    for w in text.split():
+        cleaned = normalize_word(w)
+        if cleaned:
+            words.append(cleaned)
+    return words
+
+
 def check_cutout_match(bogi: list, answer_parts: list, pid: str = "?", q_name: str = "Q") -> list:
-    """보기 단어 = 정답 단어 (대소문자/구두점 무시, 개수만 일치)"""
+    """보기 단어 = 정답 단어 (대소문자/구두점/하이픈 무시, 개수만 일치)"""
     errors = []
     
+    # 정답을 토큰화 (하이픈 분리 포함)
     all_ans_words = []
     for part in answer_parts:
-        for w in part.split():
-            cleaned = normalize_word(w)
-            if cleaned:
-                all_ans_words.append(cleaned)
+        all_ans_words.extend(tokenize_for_comparison(part))
     
-    bogi_normalized = [normalize_word(w) for w in bogi if normalize_word(w)]
+    # 보기도 토큰화 (혹시 보기에 하이픈 단어 있을 경우 대비)
+    bogi_normalized = []
+    for w in bogi:
+        bogi_normalized.extend(tokenize_for_comparison(w))
     
     bogi_c = Counter(bogi_normalized)
     ans_c = Counter(all_ans_words)

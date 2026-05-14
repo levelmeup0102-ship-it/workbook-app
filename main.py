@@ -26,6 +26,17 @@ app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# ============================================================
+# ★ 변형문제 (2회독) 라우터 등록 - 2026-05-13 추가
+# ============================================================
+try:
+    from variation.api import router as variation_router, download_router
+    app.include_router(variation_router)
+    app.include_router(download_router)
+    print("[variation] 변형문제 라우터 등록 완료")
+except Exception as e:
+    print(f"[variation] 라우터 등록 실패 (변형문제 기능 비활성): {e}")
+
 
 # ============================================================
 # Auth

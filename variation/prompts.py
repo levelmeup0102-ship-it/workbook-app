@@ -10,6 +10,15 @@ Given an English passage, generate a variation problem set with 5 questions in E
 
 # CRITICAL RULES (NEVER VIOLATE)
 
+0. **JSON OUTPUT — DOUBLE QUOTES HANDLING (READ THIS FIRST!)**:
+   - When the original passage contains double quotes (e.g., 「cheated "God"」), you MUST handle them in JSON.
+   - **RECOMMENDED**: Replace internal double quotes with single quotes in your JSON string values.
+     - Original passage: `said that I "cheated God" to bring in lettuce`
+     - In JSON write: `"said that I 'cheated God' to bring in lettuce"`
+   - **OR** escape them with backslash: `"said that I \\"cheated God\\" to bring in lettuce"`
+   - DO NOT output unescaped double quotes inside string values — this breaks JSON parsing!
+   - Same rule for apostrophes and other special chars.
+
 1. **CHUNKS MUST BE SHUFFLED, NOT IN ORIGINAL ORDER**:
    - Split passage into 4 logical chunks
    - Label them (a), (b), (c), (d) in **SHUFFLED ORDER** (not the original passage order!)
@@ -113,6 +122,18 @@ Given an English passage, generate a variation problem set in EXACT JSON format 
 
 # CRITICAL RULES (NEVER VIOLATE)
 
+0. **JSON OUTPUT — DOUBLE QUOTES HANDLING (READ THIS FIRST!)**:
+   - When the original passage contains double quotes, replace them with single quotes in your JSON values.
+   - Example: original `"cheated God"` → in JSON output: `'cheated God'`
+   - DO NOT leave unescaped `"` characters inside JSON string values.
+
+0-1. **HYPHENATED WORDS — KEEP AS ONE TOKEN**:
+   - If the original passage has hyphenated words like "south-facing", "well-known", "cost-effective":
+     - In blank_A/blank_B: keep them as one token: `"south-facing slopes are warmer"`
+     - In bogi: keep as one token: `["slopes", "are", "south-facing", "warmer"]` — NOT `["south", "facing"]`!
+   - The bogi must use the SAME tokenization as blank_A/blank_B.
+   - If you split "south-facing" into "south" + "facing" anywhere, you create a mismatch and the question fails.
+
 1. **MARKER DISTRIBUTION**: Place <MARK1>...<MARK5> at 5 different positions in passage_with_marks. Each marker must have AT LEAST 3 words between it and the previous marker. If passage is too short, use 3 or 4 markers (at minimum 3).
 
 2. **GIVEN SENTENCE**: Pick a key transition/summary sentence FROM the passage. Remove it. The position where it was must use <MARK(position_correct+1)>. So if position_correct=2, then MARK3 marks where given_sentence belongs.
@@ -194,6 +215,15 @@ import re
 import json
 
 
+def _try_repair_json(text: str) -> dict:
+    """간단한 JSON 복구 시도 - 흔한 패턴만"""
+    # 시도 1: 스마트 따옴표 → 일반 따옴표 (그러나 escape 처리)
+    repaired = text
+    # 시도 2: 일반적 패턴: '" content "word" content "' → '" content \"word\" content "'
+    # 너무 위험. 그냥 raise.
+    return json.loads(repaired)
+
+
 def extract_json_from_response(text: str) -> dict:
     """Claude 응답에서 JSON 객체 추출"""
     text = text.strip()
@@ -213,9 +243,17 @@ def extract_json_from_response(text: str) -> dict:
     start = text.find("{")
     end = text.rfind("}")
     if start >= 0 and end > start:
+        json_text = text[start:end + 1]
         try:
-            return json.loads(text[start:end + 1])
+            return json.loads(json_text)
         except json.JSONDecodeError as e:
-            raise ValueError(f"JSON 파싱 실패: {e}\n원문 일부: {text[:500]}")
+            # 따옴표 escape 문제로 추정 — Claude에게 구체적 가이드
+            err_msg = (
+                f"JSON 파싱 실패 ({e.msg}, line {e.lineno} col {e.colno}): "
+                f"문자열 값 안에 escape 안 된 큰따옴표(\") 또는 특수문자가 있을 가능성 높음. "
+                f"다음 재시도 시: 원문에 큰따옴표가 있으면 작은따옴표(')로 바꿔서 출력할 것. "
+                f"예: \"cheated God\" → 'cheated God'"
+            )
+            raise ValueError(err_msg)
     
-    raise ValueError(f"JSON 객체를 찾을 수 없음. 응답 일부: {text[:500]}")
+    raise ValueError(f"JSON 객체를 찾을 수 없음. 응답 일부: {text[:300]}")

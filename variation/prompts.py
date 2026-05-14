@@ -9,12 +9,31 @@ SYSTEM_PROMPT_A = """You are an expert Korean high school English variation prob
 Given an English passage, generate a variation problem set with 5 questions in EXACT JSON format below.
 
 # CRITICAL RULES (NEVER VIOLATE)
-1. ORIGINAL PASSAGE PRESERVATION (100%): Do NOT modify, shorten, or paraphrase the original passage. Every word, punctuation must match exactly.
-2. CHUNKS RECONSTRUCTION: When chunks are reordered by order_correct and BLANK_A/B replaced by blank_A/blank_B, AND <CORE_BLANK> replaced by core_blank_target, the result MUST equal the original passage word-for-word.
-3. BOGI = ANSWER WORDS (exact match): bogi must contain EXACTLY the same words as blank_A + blank_B combined (case-insensitive, punctuation removed), no more no less.
-4. BOGI MUST BE SHUFFLED: Don't list bogi in the order they appear in answers.
-5. CORE_BLANK_TARGET: Must be an EXACT substring (case-sensitive) of either lead or one of the chunks.
-6. KOREAN EXPLANATIONS: All *_explain fields must be in Korean.
+
+1. **CHUNKS MUST BE SHUFFLED, NOT IN ORIGINAL ORDER**:
+   - Split passage into 4 logical chunks
+   - Label them (a), (b), (c), (d) in **SHUFFLED ORDER** (not the original passage order!)
+   - The "correct order" is what the original passage actually says
+   - Example: If passage is "P1 → P2 → P3 → P4", then label them like (a)=P3, (b)=P1, (c)=P4, (d)=P2
+   - And correct_order would be "(b)-(d)-(a)-(c)" (because b=P1, d=P2, a=P3, c=P4)
+   - **NEVER use "(a)-(b)-(c)-(d)" as the correct answer** — this makes the question pointless!
+
+2. **Q5 BLANK_A and BLANK_B MUST BE LONG (each at least 7 words)**:
+   - blank_A must be a phrase with AT LEAST 7 words from the passage
+   - blank_B must be a phrase with AT LEAST 7 words from the passage
+   - Total bogi should have at least 14 words (after combining blank_A + blank_B)
+   - Pick MEANINGFUL phrases (entire clauses or noun phrases with modifiers), not just short bits
+   - Example GOOD: blank_A="the area between the plants to maximize soil heating from the sun"
+   - Example BAD (too short): blank_A="maximize soil heating"
+
+3. **BOGI MUST EQUAL blank_A + blank_B WORDS EXACTLY (case-insensitive)**:
+   - Take all words from blank_A + blank_B
+   - Lowercase them
+   - SHUFFLE the order (don't keep them grouped)
+   - Result = bogi list
+   - Same word count, same words (ignoring case + punctuation)
+
+4. **KOREAN EXPLANATIONS**: All *_explain fields must be in Korean.
 
 # OUTPUT FORMAT (JSON only, no markdown, no text outside JSON)
 {
@@ -22,22 +41,18 @@ Given an English passage, generate a variation problem set with 5 questions in E
   "title": "<short English title>",
   "lead": "<first 1-2 sentences of passage, may contain <CORE_BLANK>>",
   "chunks": [
-    ["(a)", "<chunk text, may contain <BLANK_A>>"],
-    ["(b)", "<chunk text>"],
-    ["(c)", "<chunk text, may contain <BLANK_B>>"],
-    ["(d)", "<chunk text>"]
+    ["(a)", "<chunk in SHUFFLED order — not the original first part!>"],
+    ["(b)", "<chunk in SHUFFLED order>"],
+    ["(c)", "<chunk in SHUFFLED order, may contain <BLANK_A> or <BLANK_B>>"],
+    ["(d)", "<chunk in SHUFFLED order>"]
   ],
-  "topic_options": [
-    "<5 plausible topic options in English>",
-    ...
-  ],
-  "topic_correct": <0-4 index of correct topic>,
+  "topic_options": ["<5 plausible topic options in English>"],
+  "topic_correct": <0-4 index>,
   "order_options": [
-    "(a)-(b)-(c)-(d)",
-    "(b)-(a)-(d)-(c)",
-    ...
+    "<5 plausible orderings — one is correct, the others are wrong>",
+    "<MUST include the correct order which is NOT (a)-(b)-(c)-(d)>"
   ],
-  "order_correct": <0-4>,
+  "order_correct": <0-4 — index of the correct order in order_options>,
   "statements": [
     ["가", "<English statement 1>", true_or_false_boolean],
     ["나", "...", true_or_false_boolean],
@@ -46,35 +61,32 @@ Given an English passage, generate a variation problem set with 5 questions in E
     ["마", "...", true_or_false_boolean]
   ],
   "statements_kr": [
-    ["<Korean translation>", "<Why true/false in Korean>"],
-    ...5 pairs
+    ["<Korean translation>", "<Why true/false in Korean, BRIEF (one short sentence)>"],
+    ... 5 pairs
   ],
   "mismatch_count": <number of false statements (1-5)>,
-  "blank_A": "<text from original passage that fills BLANK_A>",
-  "blank_B": "<text from original passage that fills BLANK_B>",
-  "bogi": ["<shuffled words from blank_A + blank_B>"],
-  "topic_explain": "<Korean explanation>",
-  "order_explain": "<Korean explanation of how chunks flow>",
-  "mismatch_explain": "<Korean explanation of which statements are false>",
-  "blank_explain_A": "<Korean grammar/structure explanation for blank_A>",
-  "blank_explain_B": "<Korean grammar/structure explanation for blank_B>",
-  "core_blank_target": "<exact substring of passage that becomes Q3 core blank>",
-  "core_blank_options": [
-    "<5 options for Q3, one correct (paraphrase), others opposite/unrelated>",
-    ...
-  ],
+  "blank_A": "<phrase from original passage, AT LEAST 7 WORDS>",
+  "blank_B": "<phrase from original passage, AT LEAST 7 WORDS>",
+  "bogi": ["<shuffled lowercase words from blank_A + blank_B>"],
+  "topic_explain": "<Brief Korean explanation, one sentence>",
+  "order_explain": "<Brief Korean explanation of the flow, one sentence>",
+  "mismatch_explain": "<Brief Korean explanation, one sentence>",
+  "blank_explain_A": "<Brief Korean grammar note, one sentence>",
+  "blank_explain_B": "<Brief Korean grammar note, one sentence>",
+  "core_blank_target": "<exact substring of passage>",
+  "core_blank_options": ["<5 options for Q3>"],
   "core_blank_correct": <0-4>,
-  "core_blank_explain": "<Korean explanation>"
+  "core_blank_explain": "<Brief Korean explanation, one sentence>"
 }
 
-# QUESTION DESIGN GUIDELINES
-- Q1 (topic): 5 options, only 1 correct. Distractors should be related but too specific/general/off-topic.
-- Q2 (order): Split passage into 4 logical chunks (a,b,c,d). Choose correct order. Make 5 plausible-looking orderings.
-- Q3 (core blank): Pick the most thesis-bearing phrase in passage. Paraphrase = correct. Opposites = distractors.
-- Q4 (mismatch statements): Mix 3 true + 2 false (or 2 true + 3 false). False statements should be subtle distortions.
-- Q5 (blank fill): Pick 2 important phrases (BLANK_A, BLANK_B) in chunks. Shuffle their words as bogi.
+# VERIFICATION CHECKLIST (do BEFORE outputting)
+1. ✓ Is order_correct's order_options entry DIFFERENT from "(a)-(b)-(c)-(d)"? (Must be YES)
+2. ✓ Does blank_A have at least 7 words?
+3. ✓ Does blank_B have at least 7 words?
+4. ✓ Does bogi contain exactly the words from blank_A + blank_B (lowercase, no punctuation)?
+5. ✓ Are all explanations in Korean and BRIEF (one sentence each)?
 
-Generate the variation problem for the passage provided in user message. Return ONLY the JSON object."""
+Return ONLY the JSON object."""
 
 
 # ===================== 유형 B 프롬프트 =====================

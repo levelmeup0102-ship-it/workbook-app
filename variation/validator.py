@@ -79,7 +79,7 @@ def check_marker_positions(passage_with_marks: str, pid: str = "?", min_between:
 
 # ====================== 유형 A 검증 (완화) ======================
 def validate_a(data: dict, original_passage: str = None, pid: str = "?") -> list:
-    """유형 A 검증 - 원문 보존은 검증하지 않음 (Claude의 미세한 차이 허용)"""
+    """유형 A 검증 - 원문 보존은 검증하지 않음, 핵심 규칙만"""
     errors = []
     
     # 필수 필드 존재 확인
@@ -89,7 +89,30 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?") -> list
     for f in required:
         if f not in data:
             errors.append(f"[{pid}] 필수 필드 누락: {f}")
-            return errors  # 필드 누락 시 즉시 종료
+            return errors
+    
+    # ★ 정답 순서가 (a)-(b)-(c)-(d) 원본 그대로면 거부
+    try:
+        correct_order_str = data["order_options"][data["order_correct"]]
+        # 공백 제거 후 비교
+        normalized = correct_order_str.replace(" ", "").replace("(", "").replace(")", "")
+        if normalized == "a-b-c-d":
+            errors.append(
+                f"[{pid}] Q2 순서 정답이 (a)-(b)-(c)-(d) 원본 그대로임 — 청크를 SHUFFLE해서 정답이 다른 순서가 되도록 해야 함"
+            )
+    except (IndexError, KeyError, AttributeError) as e:
+        errors.append(f"[{pid}] Q2 order_options/correct 형식 오류: {e}")
+    
+    # ★ blank_A, blank_B 단어 수 최소 7개 강제
+    try:
+        wa = len(data["blank_A"].split())
+        wb = len(data["blank_B"].split())
+        if wa < 7:
+            errors.append(f"[{pid}] Q5 blank_A 단어 수 부족 ({wa}개 < 7개) — 더 긴 구문을 선택할 것")
+        if wb < 7:
+            errors.append(f"[{pid}] Q5 blank_B 단어 수 부족 ({wb}개 < 7개) — 더 긴 구문을 선택할 것")
+    except (KeyError, AttributeError) as e:
+        errors.append(f"[{pid}] blank_A/B 형식 오류: {e}")
     
     # Q5 잘라쓰기 검증 (대소문자 무시)
     try:
@@ -120,7 +143,6 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?") -> list
     if not isinstance(data.get("chunks"), list) or len(data["chunks"]) != 4:
         errors.append(f"[{pid}] chunks는 4개 항목이어야 함")
     
-    # ※ 원문 보존 검증은 일부러 안 함 (Claude가 종종 한 단어 다르게 써서 무한 실패)
     return errors
 
 

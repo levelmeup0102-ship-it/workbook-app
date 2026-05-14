@@ -1469,20 +1469,25 @@ async function doVariation() {
     
     const data = await res.json();
     progressFill.style.width = '100%';
-    progressText.textContent = `✓ 완료 (${data.questions_pdf ? '문제+답지' : ''})`;
+    progressText.textContent = `✓ 완료 (지문 ${data.passages_generated}개 · ${data.types_generated.join('+')} 유형)`;
     
     resultsSection.classList.remove('hidden');
+    const htmlUrl = data.html_url || data.questions_pdf;
     let resultHtml = '';
-    if (data.questions_pdf) {
+    if (htmlUrl) {
       resultHtml += `<div class="sn-result-item">
-        <span>📝 변형문제 (문제지)</span>
-        <a href="${data.questions_pdf}" target="_blank" class="btn btn-sm btn-primary">열기</a>
+        <span>📝 변형문제 (문제+답지)</span>
+        <a href="${htmlUrl}" target="_blank" class="btn btn-sm btn-primary">새 창에서 열기</a>
+      </div>
+      <div style="font-size:11px;color:#666;padding:8px;background:#fef3c7;border-radius:6px;margin-top:8px;">
+        💡 새 창에서 열린 뒤 <b>Ctrl+P</b> (Mac: Cmd+P)로 인쇄하거나 PDF로 저장할 수 있어요.
       </div>`;
+      // 자동으로 새 창 열기 (선택)
+      try { window.open(htmlUrl, '_blank'); } catch(e) {}
     }
-    if (data.answers_pdf) {
-      resultHtml += `<div class="sn-result-item">
-        <span>📋 변형문제 (답지·해설)</span>
-        <a href="${data.answers_pdf}" target="_blank" class="btn btn-sm btn-primary">열기</a>
+    if (data.warnings && data.warnings.length) {
+      resultHtml += `<div style="margin-top:10px;padding:8px;background:#fee;border:1px solid #fca5a5;border-radius:6px;font-size:11px;color:#991b1b;">
+        ⚠️ 일부 지문 생성 실패: ${data.warnings.join('; ')}
       </div>`;
     }
     resultsList.innerHTML = resultHtml;

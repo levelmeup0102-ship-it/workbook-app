@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ko">
 
 <head>
@@ -1145,6 +1145,26 @@
             flex: 0 0 auto;
         }
 
+        .gram-err-cell > p:first-child {
+            white-space: nowrap;
+            overflow: hidden;
+            display: flex;
+            align-items: flex-end;
+            gap: 0.8mm;
+            font-size: 8pt;
+        }
+
+        .gram-err-cell > p:first-child .input-line,
+        .gram-err-cell > p:first-child .input-line.input-xs {
+            flex: 1 1 0;
+            min-width: 0;
+        }
+
+        .gram-err-cell > p:first-child .grammar-number,
+        .gram-err-cell > p:first-child .grammar-option {
+            flex: 0 0 auto;
+        }
+
         .gram-note {
             font-size: 8pt;
             margin-bottom: 0.8mm;
@@ -2006,6 +2026,9 @@
                     <span class="opt-memo-indent">← 오답정리</span>
                 </div>{% endfor %}
                 <p class="ans-row">답: <span class="input-line input-ans"></span></p>
+                <div class="sketch-box mt6">
+                    <p class="sketch-label">구조화하세요</p>
+                </div>
             </div>
         </div>
         <div class="page-foot">

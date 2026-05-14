@@ -152,10 +152,11 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       <button class="logout-btn" onclick="doLogout()">로그아웃</button>
     </div>
     <div class="header-tabs">
-      <div class="header-tab active" onclick="switchTab('generate', this)">📄 워크북 생성</div>
-      <div class="header-tab" onclick="switchTab('upload', this)">📤 지문 관리</div>
+      <div class="header-tab active" onclick="switchTab('generate', this)">📄 1회독 교재 생성</div>
+      <div class="header-tab" onclick="switchTab('variation', this)">📝 2회독 변형문제</div>
       <div class="header-tab" onclick="switchTab('secret', this)">🔐 비밀노트</div>
       <div class="header-tab" onclick="switchTab('extract', this)">📖 원문 추출</div>
+      <div class="header-tab" onclick="switchTab('upload', this)">📤 지문 관리</div>
     </div>
   </div>
 
@@ -245,6 +246,88 @@ textarea:focus { border-color: #4A90D9; outline: none; }
 
 
   <!-- ★ 비밀노트 탭 -->
+  <!-- ★ 변형문제 탭 (2회독) -->
+  <div id="tab-variation" class="hidden">
+    <div class="three-col">
+      <div style="grid-column: span 2;">
+        <div class="card">
+          <div class="card-title">📚 지문 선택 (클릭 순서대로 출력됨)</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <button class="btn btn-sm" onclick="vrExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
+            <button class="btn btn-sm" onclick="vrCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
+            <button class="btn btn-sm" onclick="vrClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
+            <span style="margin-left:auto;font-size:13px;color:#666;" id="vr-sel-count">0개 선택</span>
+          </div>
+          <div id="vr-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
+            <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-right">
+        <div class="vr-card card" style="border:1.5px solid #fdba74;background:linear-gradient(135deg,#fff7ed,#fffbeb);">
+          <div class="card-title" style="color:#c2410c;">🏫 학교명</div>
+          <input type="text" id="vr-school-name" placeholder="레벨미업학원" value="레벨미업학원"
+            style="width:100%;padding:9px 12px;border:2px solid #fdba74;border-radius:8px;font-size:13px;outline:none;">
+        </div>
+
+        <div class="vr-card card" style="border:1.5px solid #fdba74;background:linear-gradient(135deg,#fff7ed,#fffbeb);">
+          <div class="card-title" style="color:#c2410c;">📝 유형 선택 (다중 선택 가능)</div>
+          
+          <label style="display:flex;align-items:center;gap:8px;background:#dbeafe;border:1.5px solid #93c5fd;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;">
+            <input type="checkbox" id="vr-type-a" checked onchange="vrUpdateBtns()" style="width:18px;height:18px;">
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:700;color:#1e40af;">유형 A — 종합 5문제</div>
+              <div style="font-size:11px;color:#666;">주제·순서·핵심빈칸·일치판단·빈칸영작</div>
+            </div>
+          </label>
+          
+          <label style="display:flex;align-items:center;gap:8px;background:#f3e8ff;border:1.5px solid #c4b5fd;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;">
+            <input type="checkbox" id="vr-type-b" checked onchange="vrUpdateBtns()" style="width:18px;height:18px;">
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:700;color:#6d28d9;">유형 B — 위치·요약·서술 5문제</div>
+              <div style="font-size:11px;color:#666;">문장위치·주제·요약빈칸·요약영작·주제영작</div>
+            </div>
+          </label>
+        </div>
+
+        <div class="vr-card card" style="border:1.5px solid #fdba74;background:linear-gradient(135deg,#fff7ed,#fffbeb);">
+          <div class="card-title" style="color:#c2410c;">📑 출력 방식</div>
+          <label style="display:flex;align-items:center;gap:8px;padding:6px;cursor:pointer;">
+            <input type="radio" name="vr-mode" value="by-type" checked style="width:16px;height:16px;">
+            <div style="font-size:12px;">
+              <b>유형별 묶기</b><br>
+              <span style="color:#666;">A 지문1,2,3... → B 지문1,2,3...</span>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:6px;cursor:pointer;">
+            <input type="radio" name="vr-mode" value="by-passage" style="width:16px;height:16px;">
+            <div style="font-size:12px;">
+              <b>지문별 묶기</b><br>
+              <span style="color:#666;">지문1: A+B → 지문2: A+B...</span>
+            </div>
+          </label>
+        </div>
+
+        <div class="vr-card card" style="border:1.5px solid #fdba74;background:linear-gradient(135deg,#fff7ed,#fffbeb);">
+          <button class="btn btn-primary" id="vr-btn-generate" onclick="doVariation()" disabled
+            style="width:100%;padding:14px;font-size:15px;font-weight:700;background:linear-gradient(135deg,#ea580c,#c2410c);color:white;border:none;border-radius:10px;cursor:pointer;">
+            📝 변형문제 생성
+          </button>
+          <div class="progress hidden" id="vr-progress">
+            <div class="progress-bar" style="margin-top:8px;"><div class="progress-fill" id="vr-progress-fill" style="width:0%"></div></div>
+            <div class="progress-text" id="vr-progress-text">생성 중...</div>
+          </div>
+        </div>
+
+        <div class="card hidden" id="vr-results-section">
+          <div class="card-title">✅ 생성 완료</div>
+          <div id="vr-results-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 비밀노트 탭 -->
   <div id="tab-secret" class="hidden">
     <div class="three-col">
       <div style="grid-column: span 2;">
@@ -716,11 +799,13 @@ function switchTab(tab, el) {
   document.querySelectorAll('.header-tab').forEach(t => t.classList.remove('active'));
   if(el) el.classList.add('active');
   document.getElementById('tab-generate').classList.toggle('hidden', tab!=='generate');
+  document.getElementById('tab-variation').classList.toggle('hidden', tab!=='variation');
   document.getElementById('tab-upload').classList.toggle('hidden', tab!=='upload');
   document.getElementById('tab-secret').classList.toggle('hidden', tab!=='secret');
   document.getElementById('tab-extract').classList.toggle('hidden', tab!=='extract');
   if(tab==='secret') snRefreshBooks();
   if(tab==='extract') extRefreshBooks();
+  if(tab==='variation') vrRefreshBooks();
 }
 
 function toast(msg) {
@@ -1191,6 +1276,229 @@ function refreshTemplate() {
 }
 
 if (TOKEN) showMain();
+
+// ============================================================
+// ★ 변형문제 (2회독) - 클릭 순서 유지 + 다중 유형 선택
+// ============================================================
+let vrSelectedPassages = new Map();  // Map은 삽입 순서 유지 — 클릭한 순서대로 처리됨
+let vrExpandedBooks = new Set();
+
+function vrRefreshBooks() {
+  if (!PASSAGES_DATA) return;
+  vrRenderBookList();
+}
+
+function vrRenderBookList() {
+  const books = {};
+  PASSAGES_DATA.forEach(p => {
+    if (!books[p.book]) books[p.book] = {};
+    if (!books[p.book][p.unit]) books[p.book][p.unit] = [];
+    books[p.book][p.unit].push(p);
+  });
+
+  const bookNames = Object.keys(books).sort();
+  const container = document.getElementById('vr-book-list');
+  
+  let html = '';
+  for (const book of bookNames) {
+    const units = Object.keys(books[book]).sort((a,b) => {
+      const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
+      const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
+      return numA - numB || a.localeCompare(b);
+    });
+    const bookPassages = Object.values(books[book]).flat();
+    const selectedCount = bookPassages.filter(p => vrSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+    const isExpanded = vrExpandedBooks.has(book);
+    const allSelected = selectedCount === bookPassages.length && bookPassages.length > 0;
+
+    html += `<div class="ext-book-item ${isExpanded?'expanded':''}" onclick="vrToggleExpand('${book}')">
+      <span style="color:#666;font-size:12px;">${isExpanded?'▼':'▶'}</span>
+      <input type="checkbox" ${allSelected?'checked':''} onclick="event.stopPropagation();vrToggleBook('${book}')" style="width:15px;height:15px;">
+      <span style="flex:1;font-size:13px;font-weight:500;">${book}</span>
+      <span class="ext-count-badge">${selectedCount}/${bookPassages.length}</span>
+    </div>`;
+
+    if (isExpanded) {
+      for (const unit of units) {
+        const unitPassages = books[book][unit];
+        const unitSelectedCount = unitPassages.filter(p => vrSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+        const unitAllSelected = unitSelectedCount === unitPassages.length;
+
+        html += `<div class="ext-unit-row">
+          <div class="ext-unit-header">
+            <input type="checkbox" ${unitAllSelected?'checked':''} onclick="vrToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
+            <span style="font-size:13px;font-weight:600;color:#c2410c;">${unit}</span>
+            <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
+          </div>
+          <div class="ext-pid-list">`;
+        
+        for (const p of unitPassages) {
+          const key = `${p.book}|${p.unit}|${p.id}`;
+          const isSelected = vrSelectedPassages.has(key);
+          // 클릭 순서 표시 (선택된 경우 순서 번호 보이기)
+          let orderNum = '';
+          if (isSelected) {
+            const idx = [...vrSelectedPassages.keys()].indexOf(key);
+            orderNum = `<span style="background:#ea580c;color:white;font-weight:700;padding:0 4px;border-radius:8px;font-size:9px;margin-right:2px;">${idx+1}</span>`;
+          }
+          html += `<label class="ext-pid-chip ${isSelected?'selected':''}" style="${isSelected?'background:#fed7aa;border-color:#fb923c;':''}">
+            <input type="checkbox" ${isSelected?'checked':''} onchange="vrTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
+            ${orderNum}${p.id}
+          </label>`;
+        }
+        html += '</div></div>';
+      }
+    }
+  }
+  container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
+  vrUpdateCount();
+  vrUpdateBtns();
+}
+
+function vrToggleExpand(book) {
+  if (vrExpandedBooks.has(book)) vrExpandedBooks.delete(book);
+  else vrExpandedBooks.add(book);
+  vrRenderBookList();
+}
+
+function vrExpandAll() {
+  const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
+  books.forEach(b => vrExpandedBooks.add(b));
+  vrRenderBookList();
+}
+
+function vrCollapseAll() {
+  vrExpandedBooks.clear();
+  vrRenderBookList();
+}
+
+function vrToggleBook(book) {
+  const bookPassages = PASSAGES_DATA.filter(p => p.book === book);
+  const allSelected = bookPassages.every(p => vrSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  bookPassages.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    if (allSelected) vrSelectedPassages.delete(key);
+    else if (!vrSelectedPassages.has(key)) vrSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
+  });
+  vrRenderBookList();
+}
+
+function vrToggleUnit(book, unit) {
+  const unitPassages = PASSAGES_DATA.filter(p => p.book === book && p.unit === unit);
+  const allSelected = unitPassages.every(p => vrSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  unitPassages.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    if (allSelected) vrSelectedPassages.delete(key);
+    else if (!vrSelectedPassages.has(key)) vrSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
+  });
+  vrRenderBookList();
+}
+
+function vrTogglePassage(book, unit, id) {
+  const key = `${book}|${unit}|${id}`;
+  if (vrSelectedPassages.has(key)) {
+    vrSelectedPassages.delete(key);
+  } else {
+    vrSelectedPassages.set(key, {book, unit, id});  // 새로 추가 = Map의 끝에 들어감 = 클릭 순서대로
+  }
+  vrRenderBookList();
+}
+
+function vrClearSelection() {
+  vrSelectedPassages.clear();
+  vrRenderBookList();
+}
+
+function vrUpdateCount() {
+  document.getElementById('vr-sel-count').textContent = `${vrSelectedPassages.size}개 선택`;
+}
+
+function vrUpdateBtns() {
+  const hasPassage = vrSelectedPassages.size > 0;
+  const typeA = document.getElementById('vr-type-a').checked;
+  const typeB = document.getElementById('vr-type-b').checked;
+  const hasType = typeA || typeB;
+  document.getElementById('vr-btn-generate').disabled = !(hasPassage && hasType);
+}
+
+async function doVariation() {
+  const passages = [...vrSelectedPassages.values()];
+  if (!passages.length) { toast('지문을 선택하세요'); return; }
+  
+  const types = [];
+  if (document.getElementById('vr-type-a').checked) types.push('A');
+  if (document.getElementById('vr-type-b').checked) types.push('B');
+  if (!types.length) { toast('유형을 1개 이상 선택하세요'); return; }
+  
+  const mode = document.querySelector('input[name="vr-mode"]:checked').value;
+  const schoolName = document.getElementById('vr-school-name').value.trim() || '레벨미업학원';
+  
+  const btn = document.getElementById('vr-btn-generate');
+  const progress = document.getElementById('vr-progress');
+  const progressFill = document.getElementById('vr-progress-fill');
+  const progressText = document.getElementById('vr-progress-text');
+  const resultsSection = document.getElementById('vr-results-section');
+  const resultsList = document.getElementById('vr-results-list');
+
+  btn.disabled = true;
+  progress.classList.remove('hidden');
+  resultsSection.classList.add('hidden');
+  resultsList.innerHTML = '';
+
+  const total = passages.length * types.length;
+  let completed = 0;
+  
+  try {
+    progressText.textContent = `변형문제 생성 시작... (지문 ${passages.length}개 × 유형 ${types.length}개 = ${total}개 항목)`;
+    
+    const res = await fetch(API+'/api/variation', {
+      method: 'POST',
+      headers: { ...headers(), 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        passages: passages,
+        types: types,
+        mode: mode,
+        school_name: schoolName,
+      })
+    });
+    
+    if (!res.ok) {
+      const errTxt = await res.text();
+      throw new Error(errTxt || 'API 오류');
+    }
+    
+    const data = await res.json();
+    progressFill.style.width = '100%';
+    progressText.textContent = `✓ 완료 (${data.questions_pdf ? '문제+답지' : ''})`;
+    
+    resultsSection.classList.remove('hidden');
+    let resultHtml = '';
+    if (data.questions_pdf) {
+      resultHtml += `<div class="sn-result-item">
+        <span>📝 변형문제 (문제지)</span>
+        <a href="${data.questions_pdf}" target="_blank" class="btn btn-sm btn-primary">열기</a>
+      </div>`;
+    }
+    if (data.answers_pdf) {
+      resultHtml += `<div class="sn-result-item">
+        <span>📋 변형문제 (답지·해설)</span>
+        <a href="${data.answers_pdf}" target="_blank" class="btn btn-sm btn-primary">열기</a>
+      </div>`;
+    }
+    resultsList.innerHTML = resultHtml;
+    toast('변형문제 생성 완료!');
+  } catch (e) {
+    progressText.textContent = '❌ ' + (e.message || '생성 실패');
+    toast('생성 실패: ' + (e.message || ''));
+  } finally {
+    setTimeout(() => {
+      progress.classList.add('hidden');
+      progressFill.style.width = '0%';
+      vrUpdateBtns();
+    }, 2000);
+  }
+}
+
 </script>
 </body>
 </html>

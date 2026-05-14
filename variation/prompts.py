@@ -26,12 +26,27 @@ Given an English passage, generate a variation problem set with 5 questions in E
    - Example GOOD: blank_A="the area between the plants to maximize soil heating from the sun"
    - Example BAD (too short): blank_A="maximize soil heating"
 
+2-1. **Q5 BLANK_A and BLANK_B MUST BE SEPARATED IN THE PASSAGE**:
+   - blank_A and blank_B cannot be back-to-back (adjacent) in the passage
+   - There MUST be at least 5 words of original text BETWEEN blank_A and blank_B
+   - If you can't find two well-separated phrases, pick blank_A from one chunk and blank_B from a DIFFERENT chunk
+   - Example GOOD: blank_A is in chunk (a), blank_B is in chunk (c) — naturally separated
+   - Example BAD: "and <BLANK_A> <BLANK_B>." — adjacent, no words between them
+
 3. **BOGI MUST EQUAL blank_A + blank_B WORDS EXACTLY (case-insensitive)**:
    - Take all words from blank_A + blank_B
    - Lowercase them
    - SHUFFLE the order (don't keep them grouped)
    - Result = bogi list
    - Same word count, same words (ignoring case + punctuation)
+
+3-1. **Q3 CORE_BLANK_TARGET MUST BE AT LEAST 3 WORDS**:
+   - core_blank_target is the phrase that gets replaced by a blank in Q3
+   - It MUST be at least 3 words (a meaningful phrase, not a single word)
+   - Pick a thesis-bearing PHRASE, not just one word
+   - Example GOOD: "compete with your own past performance" (6 words)
+   - Example BAD: "microclimate" (1 word - way too short!)
+   - Example BAD: "soil heating" (2 words - still too short)
 
 4. **KOREAN EXPLANATIONS**: All *_explain fields must be in Korean.
 
@@ -83,8 +98,10 @@ Given an English passage, generate a variation problem set with 5 questions in E
 1. ✓ Is order_correct's order_options entry DIFFERENT from "(a)-(b)-(c)-(d)"? (Must be YES)
 2. ✓ Does blank_A have at least 7 words?
 3. ✓ Does blank_B have at least 7 words?
-4. ✓ Does bogi contain exactly the words from blank_A + blank_B (lowercase, no punctuation)?
-5. ✓ Are all explanations in Korean and BRIEF (one sentence each)?
+4. ✓ Are blank_A and blank_B SEPARATED by at least 5 words in the passage? (Not adjacent!)
+5. ✓ Does core_blank_target have at least 3 words?
+6. ✓ Does bogi contain exactly the words from blank_A + blank_B (lowercase, no punctuation)?
+7. ✓ Are all explanations in Korean and BRIEF (one sentence each)?
 
 Return ONLY the JSON object."""
 
@@ -109,6 +126,13 @@ Given an English passage, generate a variation problem set in EXACT JSON format 
    Example: blank_A="economic growth", blank_B="environmental cost"
    → blank_summary_bogi = ["cost", "growth", "economic", "environmental"] (4 words, shuffled, lowercase)
 
+3-1. **Q4 blank_A and blank_B MUST BE AT LEAST 6 WORDS EACH**:
+   - blank_A must contain AT LEAST 6 words (meaningful phrase, not just a noun phrase)
+   - blank_B must contain AT LEAST 6 words
+   - Pick FULL CLAUSES or extended phrases, not short noun phrases
+   - Example GOOD: blank_A="strategically arranged south-facing terraces with stone walls" (7 words)
+   - Example BAD: blank_A="south-facing slopes" (2 words - way too short!)
+
 4. **Q5 BOGI MUST EQUAL topic_writing_answer EXACTLY (word-by-word, case-insensitive)**:
    - Take all words from topic_writing_answer (no punctuation)
    - Lowercase them all
@@ -116,6 +140,13 @@ Given an English passage, generate a variation problem set in EXACT JSON format 
    - That's topic_writing_bogi
    Example: topic_writing_answer="Effort drives success."
    → topic_writing_bogi = ["success", "drives", "effort"] (3 words, shuffled, lowercase, no period)
+
+4-1. **Q5 topic_writing_answer MUST BE AT LEAST 10 WORDS**:
+   - topic_writing_answer is the full topic sentence to be written
+   - It MUST contain AT LEAST 10 words (a complete topic statement, not just a short summary)
+   - Include subject, verb, object, and modifiers
+   - Example GOOD: "Strategic microclimate manipulation enables earlier cultivation in temperate regions through localized warming." (12 words)
+   - Example BAD: "Strategic placement maximizes soil heating." (5 words - too short!)
 
 5. **TOPIC WRITING (Q5)**: VARY sentence patterns. AVOID always starting with "What ~ is/does". Use diverse openings:
    - "Thanks to X, ..." / "People can ..." / "A model serves ..." / "By doing X, ..."
@@ -148,6 +179,9 @@ Given an English passage, generate a variation problem set in EXACT JSON format 
 }
 
 VERIFY BEFORE OUTPUT:
+- blank_A has at least 6 words
+- blank_B has at least 6 words
+- topic_writing_answer has at least 10 words
 - blank_summary_bogi has same word count as (blank_A words + blank_B words)
 - topic_writing_bogi has same word count as topic_writing_answer (excluding punctuation)
 - Same words (case-insensitive) appear in bogi and the answer

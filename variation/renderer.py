@@ -1,23 +1,45 @@
 """
 variation/renderer.py
-변형문제 PDF 렌더링 (Jinja2 + WeasyPrint)
+변형문제 HTML 렌더링 (WeasyPrint 없이, Jinja2만)
+
+비밀노트와 동일 패턴 — HTML 페이지를 만들어서
+사용자가 브라우저에서 Ctrl+P로 인쇄/PDF 저장
 """
 import os
+import base64
 from typing import List
 from jinja2 import Environment, FileSystemLoader
-from weasyprint import HTML
 
 # 템플릿/스태틱 경로
-# variation/ 폴더의 부모 = 워크북 루트 (기존 template.html, secret_note_*.html과 같은 위치)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_DIR = BASE_DIR  # 루트에서 variation.html, variation_b.html 찾기
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 LOGO_PATH = os.path.join(STATIC_DIR, "logo2.png")
 
 
+# ============ 로고 → data URI (HTML에 인라인) ============
+_logo_data_uri_cache = None
+
+def get_logo_data_uri() -> str:
+    """로고 파일을 base64 data URI로 변환 (HTML에 인라인 임베드)"""
+    global _logo_data_uri_cache
+    if _logo_data_uri_cache:
+        return _logo_data_uri_cache
+    if not os.path.exists(LOGO_PATH):
+        _logo_data_uri_cache = ""
+        return ""
+    try:
+        with open(LOGO_PATH, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("ascii")
+        _logo_data_uri_cache = f"data:image/png;base64,{b64}"
+        return _logo_data_uri_cache
+    except Exception:
+        return ""
+
+
 # ============ 위치 마커 렌더링 (유형 B) ============
 def render_marks(text: str) -> str:
-    """<MARK1>...<MARK5>를 동그라미 숫자로 변환"""
+    """<MARK1>...<MARK5>를 동그라미 숫자로"""
     circles = ['①', '②', '③', '④', '⑤']
     for i in range(1, 6):
         text = text.replace(f"<MARK{i}>", f'<span class="pos-mark">{circles[i-1]}</span>')
@@ -26,7 +48,6 @@ def render_marks(text: str) -> str:
 
 # ============ Q5 빈칸 / Q4 빈칸 렌더링 (유형 A) ============
 def convert_chunks_a(chunks):
-    """chunks의 <BLANK_A>, <BLANK_B>, <CORE_BLANK>를 시각 마크로 변환"""
     out = []
     for label, text in chunks:
         text = text.replace("<BLANK_A>", '<span class="blank-mark">(A)</span>')
@@ -37,13 +58,12 @@ def convert_chunks_a(chunks):
 
 
 def convert_lead_a(lead: str) -> str:
-    """lead의 <CORE_BLANK> 변환"""
     return lead.replace("<CORE_BLANK>", '<span class="core-blank-inline">______________</span>')
 
 
-# ============ 데이터 정규화 (템플릿이 기대하는 형태로) ============
+# ============ 데이터 정규화 ============
 def prepare_a_passage(data: dict, label: str) -> dict:
-    """유형 A 데이터를 템플릿 입력 형식으로"""
+    """유형 A → 템플릿 입력 형식"""
     n_false = sum(1 for _, _, ok in data["statements"] if not ok)
     return {
         "label": label,
@@ -73,7 +93,7 @@ def prepare_a_passage(data: dict, label: str) -> dict:
 
 
 def prepare_b_passage(data: dict, label: str) -> dict:
-    """유형 B 데이터를 템플릿 입력 형식으로"""
+    """유형 B → 템플릿 입력 형식"""
     return {
         "label": label,
         "data": {
@@ -88,57 +108,60 @@ def get_jinja_env():
     return Environment(loader=FileSystemLoader(TEMPLATE_DIR))
 
 
-# ============ 메인 렌더링 함수 ============
-def render_variation_pdf(
+# ============ 인쇄 안내 헤더 ============
+PRINT_HEADER = """
+<!-- 인쇄 안내 (화면에만 보임, 인쇄 시 숨김) -->
+<div class="print-hint" style="position:fixed;top:0;left:0;right:0;background:#fef3c7;color:#92400e;padding:10px 20px;text-align:center;font-family:'Malgun Gothic',sans-serif;font-size:13px;border-bottom:2px solid #fbbf24;z-index:9999;">
+  💡 인쇄/PDF 저장: 키보드 <b>Ctrl+P</b> (Mac: <b>Cmd+P</b>) → '대상'에서 PDF로 저장 선택
+  <button onclick="this.parentElement.style.display='none'" style="margin-left:15px;padding:3px 10px;background:#92400e;color:white;border:none;border-radius:4px;cursor:pointer;">닫기</button>
+</div>
+<style>
+  body { padding-top: 50px !important; }
+  @media print {
+    .print-hint { display: none !important; }
+    body { padding-top: 0 !important; }
+  }
+</style>
+"""
+
+
+# ============ 메인 렌더링 ============
+def render_variation_html(
     a_items: List[dict],
     b_items: List[dict],
     mode: str = "by-type",
     school_name: str = "레벨미업학원",
-) -> bytes:
+) -> str:
     """
-    변형문제 PDF 생성
+    변형문제 HTML 페이지 생성
     
-    a_items: [{label: str, data: dict}, ...] (유형 A 데이터)
-    b_items: [{label: str, data: dict}, ...] (유형 B 데이터)
-    mode: 'by-type' (AAAA...BBBB...) or 'by-passage' (AB AB AB)
-    
-    by-type: A 유형 모든 지문 → B 유형 모든 지문 (한 PDF에)
-    by-passage: 지문1 A+B → 지문2 A+B (한 PDF에)
+    a_items, b_items: prepare_a_passage / prepare_b_passage로 가공된 데이터 리스트
+    mode: 'by-type' (A 전체 → B 전체) or 'by-passage' (지문별 A+B 묶음)
     """
     env = get_jinja_env()
+    logo_url = get_logo_data_uri()
     
-    logo_url = f"file://{LOGO_PATH}" if os.path.exists(LOGO_PATH) else None
+    try:
+        tmpl_a = env.get_template("variation.html")
+    except Exception as e:
+        raise RuntimeError(f"variation.html 템플릿 로드 실패: {e}")
+    try:
+        tmpl_b = env.get_template("variation_b.html")
+    except Exception as e:
+        raise RuntimeError(f"variation_b.html 템플릿 로드 실패: {e}")
     
-    # 두 템플릿 로드
-    tmpl_a = env.get_template("variation.html")
-    tmpl_b = env.get_template("variation_b.html")
+    html_parts = []
     
     if mode == "by-type":
-        # 유형 A 전체 → 유형 B 전체
-        html_parts = []
         if a_items:
-            html_a = tmpl_a.render(
-                passages=a_items,
-                school_name=school_name,
-                logo_url=logo_url,
-            )
-            html_parts.append(html_a)
+            html_parts.append(tmpl_a.render(
+                passages=a_items, school_name=school_name, logo_url=logo_url
+            ))
         if b_items:
-            html_b = tmpl_b.render(
-                passages=b_items,
-                school_name=school_name,
-                logo_url=logo_url,
-            )
-            html_parts.append(html_b)
-        
-        # HTML들을 한 PDF에 결합 - WeasyPrint는 각각 따로 만든 후 합칠 수 있지만,
-        # 가장 간단한 방법: 한 HTML로 결합
-        combined_html = _combine_htmls(html_parts)
-        return HTML(string=combined_html).write_pdf()
-    
+            html_parts.append(tmpl_b.render(
+                passages=b_items, school_name=school_name, logo_url=logo_url
+            ))
     elif mode == "by-passage":
-        # 지문별로 묶기 — 각 지문에 대해 A+B를 한 묶음
-        # a_items와 b_items의 label로 매칭
         a_by_label = {item["label"]: item for item in a_items}
         b_by_label = {item["label"]: item for item in b_items}
         all_labels = []
@@ -147,44 +170,37 @@ def render_variation_pdf(
             if it["label"] not in seen:
                 all_labels.append(it["label"])
                 seen.add(it["label"])
-        
-        html_parts = []
         for label in all_labels:
             if label in a_by_label:
                 html_parts.append(tmpl_a.render(
                     passages=[a_by_label[label]],
-                    school_name=school_name,
-                    logo_url=logo_url,
+                    school_name=school_name, logo_url=logo_url
                 ))
             if label in b_by_label:
                 html_parts.append(tmpl_b.render(
                     passages=[b_by_label[label]],
-                    school_name=school_name,
-                    logo_url=logo_url,
+                    school_name=school_name, logo_url=logo_url
                 ))
-        
-        combined_html = _combine_htmls(html_parts)
-        return HTML(string=combined_html).write_pdf()
-    
     else:
         raise ValueError(f"Unknown mode: {mode}")
+    
+    combined = _combine_htmls(html_parts)
+    # 인쇄 안내 추가
+    combined = combined.replace("<body>", "<body>\n" + PRINT_HEADER, 1)
+    return combined
 
 
 def _combine_htmls(html_parts: List[str]) -> str:
-    """여러 HTML 문자열을 하나로 결합 (body 내용만 추출 후 합침)"""
+    """여러 HTML을 하나로 결합 (head는 첫 번째 것 사용, body는 모두 합침)"""
     if not html_parts:
-        return "<html><body></body></html>"
+        return "<html><body><p>변형문제 데이터가 없습니다.</p></body></html>"
     if len(html_parts) == 1:
         return html_parts[0]
     
-    # 첫 번째 HTML의 <head>를 보존하고, body 내용만 추가
     import re
-    
-    # 첫 번째 HTML에서 <head>...</head> 추출
     head_match = re.search(r"<head[^>]*>(.*?)</head>", html_parts[0], re.DOTALL)
     head_content = head_match.group(1) if head_match else ""
     
-    # 각 HTML에서 body 내용 추출
     body_contents = []
     for h in html_parts:
         m = re.search(r"<body[^>]*>(.*?)</body>", h, re.DOTALL)
@@ -193,11 +209,10 @@ def _combine_htmls(html_parts: List[str]) -> str:
         else:
             body_contents.append(h)
     
-    combined = (
+    return (
         '<!DOCTYPE html><html lang="ko"><head>'
         + head_content
         + "</head><body>"
         + "\n".join(body_contents)
         + "</body></html>"
     )
-    return combined

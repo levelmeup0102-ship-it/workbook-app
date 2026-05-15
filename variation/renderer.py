@@ -128,14 +128,14 @@ PRINT_HINT_STYLE = """
     display: none !important;
   }
   
-  /* ★ 빈칸 underline 명확하게 (Q3 핵심빈칸 등) */
+  /* ★ 빈칸 underline 명확하게 (Q3 핵심빈칸 등) - 글자 baseline 높이에 맞춤 */
   .core-blank-inline {
     border-bottom: 2px solid #6A1B9A !important;
     min-width: 120px !important;
     display: inline-block !important;
     font-size: 0 !important;  /* '_____' 문자 안 보이게 - 밑줄만 보임 */
-    height: 1.2em;
-    vertical-align: middle;
+    height: 0.95em;            /* 글자 높이만큼 - 글자가 있는 것처럼 */
+    vertical-align: baseline;  /* 글자 baseline에 정렬 → 밑줄이 글자 아래쪽 */
   }
   
   /* 일반 빈칸 (밑줄 표시) */

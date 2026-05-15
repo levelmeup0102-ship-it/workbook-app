@@ -48,6 +48,13 @@ Given an English passage, generate a variation problem set with 5 questions in E
    - SHUFFLE the order (don't keep them grouped)
    - Result = bogi list
    - Same word count, same words (ignoring case + punctuation)
+   
+   ⚠️ CRITICAL — COUNT EVERY SMALL WORD:
+   - Articles ("the", "a", "an") count separately every time they appear
+   - Prepositions ("of", "in", "to", "for", "with") count separately every time
+   - Example: blank_A = "the area between the plants" (5 words: 'the', 'area', 'between', 'the', 'plants')
+     → bogi MUST include 'the' TWICE, not once!
+   - Hyphenated words like "south-facing" stay as ONE token (don't split into "south" + "facing")
 
 3-1. **Q3 CORE_BLANK_TARGET MUST BE AT LEAST 3 WORDS**:
    - core_blank_target is the phrase that gets replaced by a blank in Q3
@@ -134,7 +141,22 @@ Given an English passage, generate a variation problem set in EXACT JSON format 
    - The bogi must use the SAME tokenization as blank_A/blank_B.
    - If you split "south-facing" into "south" + "facing" anywhere, you create a mismatch and the question fails.
 
-1. **MARKER DISTRIBUTION**: Place <MARK1>...<MARK5> at 5 different positions in passage_with_marks. Each marker must have AT LEAST 3 words between it and the previous marker. If passage is too short, use 3 or 4 markers (at minimum 3).
+1. **MARKER DISTRIBUTION**: Place <MARK1>...<MARK5> at 5 different positions in passage_with_marks. 
+   - There MUST be AT LEAST 3 words between every adjacent pair of markers
+   - Markers MUST be spread across the ENTIRE passage, not clustered together
+   - If passage is short, use 3-4 markers minimum (still with 3+ words between each)
+   
+   ⚠️ MARKER PLACEMENT RULES:
+   - BAD: "...words <MARK1>word<MARK2>..." (only 1 word between MARK1 and MARK2!)
+   - BAD: "...words <MARK1> <MARK2>..." (0 words between — adjacent!)
+   - BAD: "...words <MARK1> word word <MARK2>..." (only 2 words between — too few!)
+   - GOOD: "...words <MARK1> word word word <MARK2> word word word <MARK3>..."
+   
+   ⚠️ DISTRIBUTE markers like a ladder across the WHOLE passage:
+   - Approximately equal spacing
+   - First marker NOT at the very beginning
+   - Last marker NOT at the very end
+   - Each marker has at least 3 words of original text on BOTH sides (between it and the next marker)
 
 2. **GIVEN SENTENCE**: Pick a key transition/summary sentence FROM the passage. Remove it. The position where it was must use <MARK(position_correct+1)>. So if position_correct=2, then MARK3 marks where given_sentence belongs.
 

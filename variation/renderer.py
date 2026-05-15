@@ -11,6 +11,8 @@ variation/renderer.py
 import os
 import re
 import base64
+import random
+import hashlib
 from typing import List
 from jinja2 import Environment, FileSystemLoader
 
@@ -64,8 +66,29 @@ def convert_lead_a(lead: str) -> str:
 
 
 # ============ 데이터 정규화 ============
+def shuffle_bogi(bogi: list, seed_str: str = "") -> list:
+    """보기 단어들을 셔플 (seed로 동일 데이터엔 동일 결과 보장)"""
+    if not bogi:
+        return bogi
+    shuffled = list(bogi)
+    # seed: 정답 텍스트 기반으로 deterministic하지만 정답 순서와는 다르게
+    seed_int = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16) if seed_str else 42
+    rng = random.Random(seed_int)
+    # 정답 순서와 다른지 확인하면서 셔플 (최대 5번 시도)
+    for _ in range(5):
+        rng.shuffle(shuffled)
+        if shuffled != list(bogi):
+            return shuffled
+    return shuffled
+
+
 def prepare_a_passage(data: dict, label: str) -> dict:
     n_false = sum(1 for _, _, ok in data["statements"] if not ok)
+    # Q5 bogi 셔플
+    bogi_shuffled = shuffle_bogi(
+        data["bogi"],
+        seed_str=(data.get("blank_A", "") + data.get("blank_B", ""))
+    )
     return {
         "label": label,
         "data": {
@@ -80,7 +103,7 @@ def prepare_a_passage(data: dict, label: str) -> dict:
             "mismatch_count": data.get("mismatch_count", n_false),
             "blank_A": data["blank_A"],
             "blank_B": data["blank_B"],
-            "bogi": data["bogi"],
+            "bogi": bogi_shuffled,
             "topic_explain": data.get("topic_explain", ""),
             "order_explain": data.get("order_explain", ""),
             "blank_explain_A": data.get("blank_explain_A", ""),
@@ -94,12 +117,24 @@ def prepare_a_passage(data: dict, label: str) -> dict:
 
 
 def prepare_b_passage(data: dict, label: str) -> dict:
+    new_data = {**data, "passage_rendered": render_marks(data["passage_with_marks"])}
+    
+    # Q4 blank_summary_bogi 셔플
+    if "blank_summary_bogi" in new_data:
+        new_data["blank_summary_bogi"] = shuffle_bogi(
+            new_data["blank_summary_bogi"],
+            seed_str=(data.get("blank_A", "") + data.get("blank_B", ""))
+        )
+    # Q5 topic_writing_bogi 셔플
+    if "topic_writing_bogi" in new_data:
+        new_data["topic_writing_bogi"] = shuffle_bogi(
+            new_data["topic_writing_bogi"],
+            seed_str=data.get("topic_writing_answer", "")
+        )
+    
     return {
         "label": label,
-        "data": {
-            **data,
-            "passage_rendered": render_marks(data["passage_with_marks"]),
-        },
+        "data": new_data,
     }
 
 

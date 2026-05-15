@@ -227,8 +227,10 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?") -> list
 
 
 # ====================== 유형 B 검증 (완화) ======================
-def validate_b(data: dict, original_passage: str = None, pid: str = "?") -> list:
-    """유형 B 검증 - 핵심만 체크"""
+def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict: bool = True) -> list:
+    """유형 B 검증 - 핵심만 체크
+    strict=False면 단어 수 / 중복 검증을 풀어줌 (마지막 retry용)
+    """
     errors = []
     
     # 필수 필드 존재
@@ -241,35 +243,37 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?") -> list
             errors.append(f"[{pid}] 필수 필드 누락: {f}")
             return errors
     
-    # 정답 인덱스 범위
+    # 정답 인덱스 범위 (필수)
     for key in ["summary_correct", "topic_correct", "position_correct"]:
         v = data.get(key, -1)
         if not isinstance(v, int) or not (0 <= v <= 4):
             errors.append(f"[{pid}] {key} 범위 오류: {v}")
     
-    # ★ Q4 blank_A, blank_B 단어 수 최소 6개 강제
+    # ★ Q4 blank_A, blank_B 단어 수 (strict면 6개, 완화면 3개)
+    min_blank_words = 6 if strict else 3
     try:
         wa = len(data["blank_A"].split())
         wb = len(data["blank_B"].split())
-        if wa < 6:
-            errors.append(f"[{pid}] Q4 blank_A 단어 수 부족 ({wa}개 < 6개) — 더 긴 구문 선택")
-        if wb < 6:
-            errors.append(f"[{pid}] Q4 blank_B 단어 수 부족 ({wb}개 < 6개) — 더 긴 구문 선택")
+        if wa < min_blank_words:
+            errors.append(f"[{pid}] Q4 blank_A 단어 수 부족 ({wa}개 < {min_blank_words}개) — 더 긴 구문 선택")
+        if wb < min_blank_words:
+            errors.append(f"[{pid}] Q4 blank_B 단어 수 부족 ({wb}개 < {min_blank_words}개) — 더 긴 구문 선택")
     except (KeyError, AttributeError) as e:
         errors.append(f"[{pid}] B blank_A/B 형식 오류: {e}")
     
-    # ★ Q5 topic_writing_answer 단어 수 최소 10개 강제
+    # ★ Q5 topic_writing_answer 단어 수 (strict면 10개, 완화면 6개)
+    min_topic_words = 10 if strict else 6
     try:
         twc = len(data["topic_writing_answer"].split())
-        if twc < 10:
+        if twc < min_topic_words:
             errors.append(
-                f"[{pid}] Q5 topic_writing_answer 단어 수 부족 ({twc}개 < 10개) "
+                f"[{pid}] Q5 topic_writing_answer 단어 수 부족 ({twc}개 < {min_topic_words}개) "
                 f"— 더 완전한 문장으로 작성"
             )
     except (KeyError, AttributeError):
         errors.append(f"[{pid}] B topic_writing_answer 형식 오류")
     
-    # Q4 잘라쓰기 (요약 영작)
+    # Q4 잘라쓰기 (요약 영작) - 필수
     try:
         errors += check_cutout_match(
             data["blank_summary_bogi"],
@@ -279,7 +283,7 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?") -> list
     except Exception as e:
         errors.append(f"[{pid}] Q4 보기 검증 예외: {e}")
     
-    # Q5 잘라쓰기 (주제 영작)
+    # Q5 잘라쓰기 (주제 영작) - 필수
     try:
         errors += check_cutout_match(
             data["topic_writing_bogi"],
@@ -298,11 +302,12 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?") -> list
     except Exception as e:
         errors.append(f"[{pid}] 마커 검증 예외: {e}")
     
-    # summary_options 5개
+    # summary_options 5개 (필수)
     if not isinstance(data.get("summary_options"), list) or len(data["summary_options"]) != 5:
         errors.append(f"[{pid}] summary_options는 5개 항목이어야 함")
     else:
-        # ★ Q3 각 (A), (B) 슬롯은 한 단어만 (한국 수능 요약문 빈칸 표준)
+        # ★ Q3 각 (A), (B) 슬롯은 한 단어만 (strict면 엄격, 완화면 1~3단어 허용)
+        max_slot_words = 1 if strict else 3
         a_words = []
         b_words = []
         for idx, opt in enumerate(data["summary_options"]):
@@ -310,32 +315,31 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?") -> list
                 errors.append(f"[{pid}] Q3 summary_options[{idx}] 형식 오류 (2개 슬롯 필요)")
                 continue
             a_val, b_val = opt[0], opt[1]
-            # 각 슬롯이 한 단어여야 함 (공백 없음, 하이픈 단어는 1단어로 카운트)
             if not isinstance(a_val, str) or not isinstance(b_val, str):
                 errors.append(f"[{pid}] Q3 summary_options[{idx}] 문자열 아님")
                 continue
             a_wc = len(a_val.strip().split())
             b_wc = len(b_val.strip().split())
-            if a_wc != 1:
+            if a_wc > max_slot_words:
                 errors.append(
-                    f"[{pid}] Q3 summary_options[{idx}][A]는 단어 1개여야 함 "
-                    f"({a_wc}단어: '{a_val}') — 한 단어로만 작성"
+                    f"[{pid}] Q3 summary_options[{idx}][A]는 단어 {max_slot_words}개 이하여야 함 "
+                    f"({a_wc}단어: '{a_val}')"
                 )
-            if b_wc != 1:
+            if b_wc > max_slot_words:
                 errors.append(
-                    f"[{pid}] Q3 summary_options[{idx}][B]는 단어 1개여야 함 "
-                    f"({b_wc}단어: '{b_val}') — 한 단어로만 작성"
+                    f"[{pid}] Q3 summary_options[{idx}][B]는 단어 {max_slot_words}개 이하여야 함 "
+                    f"({b_wc}단어: '{b_val}')"
                 )
             a_words.append(a_val.strip().lower())
             b_words.append(b_val.strip().lower())
         
-        # 5개 (A) 모두 다른 단어, 5개 (B) 모두 다른 단어
-        if len(set(a_words)) < len(a_words):
-            errors.append(f"[{pid}] Q3 summary_options의 (A) 값들이 중복됨: {a_words}")
-        if len(set(b_words)) < len(b_words):
-            errors.append(f"[{pid}] Q3 summary_options의 (B) 값들이 중복됨: {b_words}")
+        # 5개 (A) 모두 다른 단어, 5개 (B) 모두 다른 단어 (strict일 때만 체크)
+        if strict:
+            if len(set(a_words)) < len(a_words):
+                errors.append(f"[{pid}] Q3 summary_options의 (A) 값들이 중복됨: {a_words}")
+            if len(set(b_words)) < len(b_words):
+                errors.append(f"[{pid}] Q3 summary_options의 (B) 값들이 중복됨: {b_words}")
     
-    # ※ 원문 보존 검증은 일부러 안 함
     return errors
 
 

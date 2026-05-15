@@ -224,6 +224,7 @@ def generate_variation_b(
             return cached
     
     last_errors = []
+    last_data = None  # 마지막 fallback용
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             user_msg = (
@@ -262,12 +263,26 @@ def generate_variation_b(
                 print(f"[VAR][B][{pid}] 생성 완료 (시도 {attempt}, {mode_str})")
                 return data
             last_errors = errors
+            # 마지막 시도이고 검증 실패면, 데이터를 저장해두고 마지막에 fallback 사용
+            if is_last and data:
+                last_data = data
+                print(f"[VAR][B][{pid}] 마지막 시도도 실패했지만 데이터 보관: {len(errors)}건 위반")
             print(f"[VAR][B][{pid}] 시도 {attempt} 실패 ({len(errors)}건):")
             for err in errors[:5]:
                 print(f"    - {err[:200]}")
         except Exception as e:
             traceback.print_exc()
             last_errors = [f"예외: {e}"]
+    
+    # ★ 5회 모두 실패해도 마지막 데이터가 있으면 그거라도 사용 (불완전한 B라도 없는 것보단 나음)
+    if last_data is not None:
+        # 필수 필드만 있으면 저장하고 반환
+        required_minimum = ["given_sentence", "passage_with_marks", "blank_A", "blank_B",
+                            "topic_writing_answer", "summary_options"]
+        if all(k in last_data for k in required_minimum):
+            save_cached(cache_key, "variation_b", last_data)
+            print(f"[VAR][B][{pid}] ⚠️ 검증 실패했으나 데이터 fallback으로 저장")
+            return last_data
     
     raise RuntimeError(f"유형 B 생성 실패 ({MAX_RETRIES}회). 마지막 오류:\n" + "\n".join(last_errors[:5]))
 

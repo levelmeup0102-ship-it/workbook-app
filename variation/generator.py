@@ -179,7 +179,9 @@ def generate_variation_a(
                     "     Example: if blank_A is 'the area between the plants' (5 words including TWO 'the'), "
                     "bogi must include 'the' TWICE, not once.\n"
                     "  4. order_correct must NOT point to '(a)-(b)-(c)-(d)' — pick a SHUFFLED order\n"
-                    "  5. core_blank_target must have AT LEAST 3 words"
+                    "  5. core_blank_target must have AT LEAST 3 words\n"
+                    "  6. ★ ALL 4 CHUNKS must have actual text — NEVER leave (d) or any chunk empty/blank!\n"
+                    "     Split the passage into 4 BALANCED pieces, each with 5+ words"
                 )
             
             raw = call_claude(SYSTEM_PROMPT_A, user_msg)

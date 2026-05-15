@@ -253,10 +253,13 @@ def generate_variation_b(
             raw = call_claude(SYSTEM_PROMPT_B, user_msg)
             data = extract_json_from_response(raw)
             
-            errors = validate_b(data, en_text, pid)
+            # 마지막 시도면 strict=False (검증 풀어서라도 받아들임)
+            is_last = (attempt == MAX_RETRIES)
+            errors = validate_b(data, en_text, pid, strict=not is_last)
             if not errors:
                 save_cached(cache_key, "variation_b", data)
-                print(f"[VAR][B][{pid}] 생성 완료 (시도 {attempt})")
+                mode_str = "관대 모드" if is_last else "엄격 모드"
+                print(f"[VAR][B][{pid}] 생성 완료 (시도 {attempt}, {mode_str})")
                 return data
             last_errors = errors
             print(f"[VAR][B][{pid}] 시도 {attempt} 실패 ({len(errors)}건):")

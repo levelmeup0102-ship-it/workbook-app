@@ -205,6 +205,23 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?") -> list
     # chunks 4개
     if not isinstance(data.get("chunks"), list) or len(data["chunks"]) != 4:
         errors.append(f"[{pid}] chunks는 4개 항목이어야 함")
+    else:
+        # ★ 각 chunk의 텍스트가 비어있지 않은지 확인 (Claude가 종종 (d)를 비움)
+        for idx, ch in enumerate(data["chunks"]):
+            if not isinstance(ch, list) or len(ch) < 2:
+                errors.append(f"[{pid}] chunks[{idx}] 형식 오류 (label, text 필요)")
+                continue
+            label, text = ch[0], ch[1]
+            if not text or not text.strip():
+                errors.append(
+                    f"[{pid}] chunks[{idx}] {label} 텍스트가 비어있음 — "
+                    f"4개 chunk 모두 원문 텍스트를 채워야 함"
+                )
+            elif len(text.split()) < 5:
+                errors.append(
+                    f"[{pid}] chunks[{idx}] {label} 텍스트 너무 짧음 ({len(text.split())}단어) — "
+                    f"최소 5단어 이상으로 4개 chunk 균등 분할"
+                )
     
     return errors
 

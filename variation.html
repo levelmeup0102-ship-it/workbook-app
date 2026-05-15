@@ -31,10 +31,12 @@ body {
 }
 .q-page { page-break-after: always; }
 .hdr {
-  display: flex; justify-content: space-between; align-items: baseline;
+  display: flex; justify-content: space-between; align-items: center;
   padding-bottom: 4px; border-bottom: 2px solid var(--primary); margin-bottom: 10px;
+  gap: 8px;
 }
-.hdr-title { font-weight: bold; font-size: 11.5pt; color: var(--primary); }
+.hdr-title { font-weight: bold; font-size: 11.5pt; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+.hdr-logo { height: 18px; vertical-align: middle; }
 .hdr-right { font-size: 8.5pt; color: #555; }
 .var-badge {
   display: inline-block;
@@ -260,7 +262,10 @@ body {
 {% for item in passages %}
 <div class="q-page">
   <div class="hdr">
-    <span class="hdr-title">{{ school_name }} 변형문제 — 유형 A <span class="var-badge">📝 TOPIC+ORDER+MATCH+CORE+FILL</span></span>
+    <span class="hdr-title">
+      {% if logo_url %}<img class="hdr-logo" src="{{ logo_url }}" alt="레벨미업">{% endif %}
+      변형문제 — 유형 A <span class="var-badge">📝 TOPIC+ORDER+MATCH+CORE+FILL</span>
+    </span>
     <span class="hdr-right">{{ item.label }}</span>
   </div>
 
@@ -334,7 +339,10 @@ body {
 
 <div class="ans-start">
   <div class="ans-hdr">
-    <div class="hdr-title">{{ school_name }} 변형문제 (유형 A) — 정답·해설 <span class="var-badge">📝 ANSWERS</span></div>
+    <div class="hdr-title">
+      {% if logo_url %}<img class="hdr-logo" src="{{ logo_url }}" alt="레벨미업">{% endif %}
+      변형문제 (유형 A) — 정답·해설 <span class="var-badge">📝 ANSWERS</span>
+    </div>
   </div>
 
   {% for item in passages %}

@@ -284,6 +284,39 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?") -> list
     # summary_options 5개
     if not isinstance(data.get("summary_options"), list) or len(data["summary_options"]) != 5:
         errors.append(f"[{pid}] summary_options는 5개 항목이어야 함")
+    else:
+        # ★ Q3 각 (A), (B) 슬롯은 한 단어만 (한국 수능 요약문 빈칸 표준)
+        a_words = []
+        b_words = []
+        for idx, opt in enumerate(data["summary_options"]):
+            if not isinstance(opt, list) or len(opt) != 2:
+                errors.append(f"[{pid}] Q3 summary_options[{idx}] 형식 오류 (2개 슬롯 필요)")
+                continue
+            a_val, b_val = opt[0], opt[1]
+            # 각 슬롯이 한 단어여야 함 (공백 없음, 하이픈 단어는 1단어로 카운트)
+            if not isinstance(a_val, str) or not isinstance(b_val, str):
+                errors.append(f"[{pid}] Q3 summary_options[{idx}] 문자열 아님")
+                continue
+            a_wc = len(a_val.strip().split())
+            b_wc = len(b_val.strip().split())
+            if a_wc != 1:
+                errors.append(
+                    f"[{pid}] Q3 summary_options[{idx}][A]는 단어 1개여야 함 "
+                    f"({a_wc}단어: '{a_val}') — 한 단어로만 작성"
+                )
+            if b_wc != 1:
+                errors.append(
+                    f"[{pid}] Q3 summary_options[{idx}][B]는 단어 1개여야 함 "
+                    f"({b_wc}단어: '{b_val}') — 한 단어로만 작성"
+                )
+            a_words.append(a_val.strip().lower())
+            b_words.append(b_val.strip().lower())
+        
+        # 5개 (A) 모두 다른 단어, 5개 (B) 모두 다른 단어
+        if len(set(a_words)) < len(a_words):
+            errors.append(f"[{pid}] Q3 summary_options의 (A) 값들이 중복됨: {a_words}")
+        if len(set(b_words)) < len(b_words):
+            errors.append(f"[{pid}] Q3 summary_options의 (B) 값들이 중복됨: {b_words}")
     
     # ※ 원문 보존 검증은 일부러 안 함
     return errors

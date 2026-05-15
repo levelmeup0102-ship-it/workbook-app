@@ -284,17 +284,58 @@ import re
 import json
 
 
-def _try_repair_json(text: str) -> dict:
-    """간단한 JSON 복구 시도 - 흔한 패턴만"""
-    # 시도 1: 스마트 따옴표 → 일반 따옴표 (그러나 escape 처리)
-    repaired = text
-    # 시도 2: 일반적 패턴: '" content "word" content "' → '" content \"word\" content "'
-    # 너무 위험. 그냥 raise.
-    return json.loads(repaired)
+def _repair_quotes_in_json_strings(text: str) -> str:
+    """JSON 문자열 값 안의 escape 안 된 따옴표를 자동 escape
+    예: "key": "He said "hello" loudly" → "key": "He said \"hello\" loudly"
+    
+    알고리즘 (단순화):
+    1. 콜론 이후 첫 따옴표가 문자열 시작
+    2. 그 다음 따옴표가 끝일 가능성. 단 다음 글자가 (콤마/공백+key) 또는 (}, ]) 아니면 중간 따옴표
+    """
+    out = []
+    i = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':
+            # 문자열 시작
+            out.append(c)
+            i += 1
+            while i < n:
+                c = text[i]
+                if c == '\\':
+                    # 이미 escape됨
+                    out.append(c)
+                    if i + 1 < n:
+                        out.append(text[i+1])
+                        i += 2
+                    else:
+                        i += 1
+                elif c == '"':
+                    # 다음에 오는 글자 중 의미있는 첫 글자가 뭔지 확인
+                    j = i + 1
+                    while j < n and text[j] in ' \t\n\r':
+                        j += 1
+                    if j < n and text[j] in ',}]:':
+                        # 문자열 끝
+                        out.append(c)
+                        i += 1
+                        break
+                    else:
+                        # escape되지 않은 중간 따옴표 → escape 해서 출력
+                        out.append('\\"')
+                        i += 1
+                else:
+                    out.append(c)
+                    i += 1
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
 
 
 def extract_json_from_response(text: str) -> dict:
-    """Claude 응답에서 JSON 객체 추출"""
+    """Claude 응답에서 JSON 객체 추출 (따옴표 자동 복구 포함)"""
     text = text.strip()
     # 마크다운 코드 펜스 제거
     text = re.sub(r"^```(?:json)?\n?", "", text)
@@ -316,13 +357,20 @@ def extract_json_from_response(text: str) -> dict:
         try:
             return json.loads(json_text)
         except json.JSONDecodeError as e:
-            # 따옴표 escape 문제로 추정 — Claude에게 구체적 가이드
-            err_msg = (
-                f"JSON 파싱 실패 ({e.msg}, line {e.lineno} col {e.colno}): "
-                f"문자열 값 안에 escape 안 된 큰따옴표(\") 또는 특수문자가 있을 가능성 높음. "
-                f"다음 재시도 시: 원문에 큰따옴표가 있으면 작은따옴표(')로 바꿔서 출력할 것. "
-                f"예: \"cheated God\" → 'cheated God'"
-            )
-            raise ValueError(err_msg)
+            # 따옴표 escape 자동 복구 시도
+            try:
+                repaired = _repair_quotes_in_json_strings(json_text)
+                result = json.loads(repaired)
+                print(f"[JSON 복구 성공] 따옴표 escape 자동 처리됨")
+                return result
+            except json.JSONDecodeError as e2:
+                # 자동 복구도 실패
+                err_msg = (
+                    f"JSON 파싱 실패 ({e.msg}, line {e.lineno} col {e.colno}): "
+                    f"문자열 값 안에 escape 안 된 큰따옴표(\") 또는 특수문자가 있을 가능성 높음. "
+                    f"다음 재시도 시: 원문에 큰따옴표가 있으면 작은따옴표(')로 바꿔서 출력할 것. "
+                    f"예: \"cheated God\" → 'cheated God'"
+                )
+                raise ValueError(err_msg)
     
     raise ValueError(f"JSON 객체를 찾을 수 없음. 응답 일부: {text[:300]}")

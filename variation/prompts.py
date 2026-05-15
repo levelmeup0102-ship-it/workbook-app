@@ -27,9 +27,9 @@ Given an English passage, generate a variation problem set with 5 questions in E
    - And correct_order would be "(b)-(d)-(a)-(c)" (because b=P1, d=P2, a=P3, c=P4)
    - **NEVER use "(a)-(b)-(c)-(d)" as the correct answer** — this makes the question pointless!
 
-2. **Q5 BLANK_A and BLANK_B MUST BE LONG (each at least 7 words)**:
-   - blank_A must be a phrase with AT LEAST 7 words from the passage
-   - blank_B must be a phrase with AT LEAST 7 words from the passage
+2. **Q5 BLANK_A and BLANK_B MUST BE LONG (each at least 5 words)**:
+   - blank_A must be a phrase with AT LEAST 5 words from the passage
+   - blank_B must be a phrase with AT LEAST 5 words from the passage
    - Total bogi should have at least 14 words (after combining blank_A + blank_B)
    - Pick MEANINGFUL phrases (entire clauses or noun phrases with modifiers), not just short bits
    - Example GOOD: blank_A="the area between the plants to maximize soil heating from the sun"
@@ -37,7 +37,7 @@ Given an English passage, generate a variation problem set with 5 questions in E
 
 2-1. **Q5 BLANK_A and BLANK_B MUST BE SEPARATED IN THE PASSAGE**:
    - blank_A and blank_B cannot be back-to-back (adjacent) in the passage
-   - There MUST be at least 5 words of original text BETWEEN blank_A and blank_B
+   - There MUST be at least 3 words of original text BETWEEN blank_A and blank_B
    - If you can't find two well-separated phrases, pick blank_A from one chunk and blank_B from a DIFFERENT chunk
    - Example GOOD: blank_A is in chunk (a), blank_B is in chunk (c) — naturally separated
    - Example BAD: "and <BLANK_A> <BLANK_B>." — adjacent, no words between them
@@ -96,8 +96,8 @@ Given an English passage, generate a variation problem set with 5 questions in E
     ... 5 pairs
   ],
   "mismatch_count": <number of false statements (1-5)>,
-  "blank_A": "<phrase from original passage, AT LEAST 7 WORDS>",
-  "blank_B": "<phrase from original passage, AT LEAST 7 WORDS>",
+  "blank_A": "<phrase from original passage, AT LEAST 5 WORDS>",
+  "blank_B": "<phrase from original passage, AT LEAST 5 WORDS>",
   "bogi": ["<shuffled lowercase words from blank_A + blank_B>"],
   "topic_explain": "<Brief Korean explanation, one sentence>",
   "order_explain": "<Brief Korean explanation of the flow, one sentence>",
@@ -112,8 +112,8 @@ Given an English passage, generate a variation problem set with 5 questions in E
 
 # VERIFICATION CHECKLIST (do BEFORE outputting)
 1. ✓ Is order_correct's order_options entry DIFFERENT from "(a)-(b)-(c)-(d)"? (Must be YES)
-2. ✓ Does blank_A have at least 7 words?
-3. ✓ Does blank_B have at least 7 words?
+2. ✓ Does blank_A have at least 5 words?
+3. ✓ Does blank_B have at least 5 words?
 4. ✓ Are blank_A and blank_B SEPARATED by at least 5 words in the passage? (Not adjacent!)
 5. ✓ Does core_blank_target have at least 3 words?
 6. ✓ Does bogi contain exactly the words from blank_A + blank_B (lowercase, no punctuation)?
@@ -159,6 +159,32 @@ Given an English passage, generate a variation problem set in EXACT JSON format 
    - Each marker has at least 3 words of original text on BOTH sides (between it and the next marker)
 
 2. **GIVEN SENTENCE**: Pick a key transition/summary sentence FROM the passage. Remove it. The position where it was must use <MARK(position_correct+1)>. So if position_correct=2, then MARK3 marks where given_sentence belongs.
+
+2-1. **Q3 SUMMARY_OPTIONS — EACH SLOT MUST BE A SINGLE WORD ONLY**:
+   - Q3 is a Korean college entrance exam style summary blank question
+   - summary_options is a list of 5 [A, B] pairs
+   - **Each (A) and each (B) MUST be exactly ONE single word** — NOT a phrase, NOT multiple words
+   - All 5 (A) values must be DIFFERENT single words (one is correct, 4 are distractors)
+   - All 5 (B) values must be DIFFERENT single words (one is correct, 4 are distractors)
+   - The (A) and (B) words should be content words (nouns, adjectives, verbs) — never articles or prepositions alone
+   
+   ⚠️ Example GOOD:
+   ```
+   "summary_template": "Strategic (A) of microclimate enables (B) of cultivation in cold regions.",
+   "summary_options": [
+     ["manipulation", "extension"],   ← each is 1 word
+     ["control", "delay"],
+     ["observation", "expansion"],
+     ["measurement", "reduction"],
+     ["analysis", "improvement"]
+   ]
+   ```
+   
+   ⚠️ Example BAD (phrases instead of single words):
+   ```
+   ["south-facing garden beds angled at 50 degrees", "flat stones from the beach to maximize soil heating"]
+   ← WRONG! Each must be 1 word only.
+   ```
 
 3. **Q4 BOGI MUST EQUAL blank_A + blank_B EXACTLY (word-by-word, case-insensitive)**:
    - Take all words from blank_A and blank_B
@@ -210,7 +236,7 @@ Given an English passage, generate a variation problem set in EXACT JSON format 
   "topic_options": ["<5 topic options in English>"],
   "topic_correct": <0-4>,
   "summary_template": "<English summary with (A) and (B) placeholders>",
-  "summary_options": [["<A>", "<B>"], ["<A>", "<B>"], ["<A>", "<B>"], ["<A>", "<B>"], ["<A>", "<B>"]],
+  "summary_options": [["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"]],
   "summary_correct": <0-4>,
   "blank_summary_template": "<same summary structure for Q4 writing>",
   "blank_summary_bogi": ["<lowercase shuffled words from blank_A + blank_B>"],
@@ -228,6 +254,8 @@ VERIFY BEFORE OUTPUT:
 - blank_summary_bogi has same word count as (blank_A words + blank_B words)
 - topic_writing_bogi has same word count as topic_writing_answer (excluding punctuation)
 - Same words (case-insensitive) appear in bogi and the answer
+- ★ Every (A) and (B) in summary_options is EXACTLY ONE WORD (no spaces, no phrases!)
+- ★ All five (A) values are different from each other; all five (B) values are different
 
 Return ONLY the JSON object."""
 

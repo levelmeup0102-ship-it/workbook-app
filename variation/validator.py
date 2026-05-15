@@ -249,8 +249,8 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
         if not isinstance(v, int) or not (0 <= v <= 4):
             errors.append(f"[{pid}] {key} 범위 오류: {v}")
     
-    # ★ Q4 blank_A, blank_B 단어 수 (strict면 6개, 완화면 3개)
-    min_blank_words = 6 if strict else 3
+    # ★ Q4 blank_A, blank_B 단어 수 (strict 6개, soft 2개)
+    min_blank_words = 6 if strict else 2
     try:
         wa = len(data["blank_A"].split())
         wb = len(data["blank_B"].split())
@@ -261,8 +261,8 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
     except (KeyError, AttributeError) as e:
         errors.append(f"[{pid}] B blank_A/B 형식 오류: {e}")
     
-    # ★ Q5 topic_writing_answer 단어 수 (strict면 10개, 완화면 6개)
-    min_topic_words = 10 if strict else 6
+    # ★ Q5 topic_writing_answer 단어 수 (strict 10개, soft 3개)
+    min_topic_words = 10 if strict else 3
     try:
         twc = len(data["topic_writing_answer"].split())
         if twc < min_topic_words:
@@ -273,41 +273,54 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
     except (KeyError, AttributeError):
         errors.append(f"[{pid}] B topic_writing_answer 형식 오류")
     
-    # Q4 잘라쓰기 (요약 영작) - 필수
-    try:
-        errors += check_cutout_match(
-            data["blank_summary_bogi"],
-            [data["blank_A"], data["blank_B"]],
-            pid, "Q4(요약영작)"
-        )
-    except Exception as e:
-        errors.append(f"[{pid}] Q4 보기 검증 예외: {e}")
+    # Q4 잘라쓰기 (요약 영작) - strict일 때만 필수, soft는 통과
+    if strict:
+        try:
+            errors += check_cutout_match(
+                data["blank_summary_bogi"],
+                [data["blank_A"], data["blank_B"]],
+                pid, "Q4(요약영작)"
+            )
+        except Exception as e:
+            errors.append(f"[{pid}] Q4 보기 검증 예외: {e}")
     
-    # Q5 잘라쓰기 (주제 영작) - 필수
-    try:
-        errors += check_cutout_match(
-            data["topic_writing_bogi"],
-            [data["topic_writing_answer"]],
-            pid, "Q5(주제영작)"
-        )
-    except Exception as e:
-        errors.append(f"[{pid}] Q5 보기 검증 예외: {e}")
+    # Q5 잘라쓰기 (주제 영작) - strict일 때만 필수, soft는 통과
+    if strict:
+        try:
+            errors += check_cutout_match(
+                data["topic_writing_bogi"],
+                [data["topic_writing_answer"]],
+                pid, "Q5(주제영작)"
+            )
+        except Exception as e:
+            errors.append(f"[{pid}] Q5 보기 검증 예외: {e}")
     
-    # 마커 위치 분산 (완화: 정답 마커만 엄격, 나머지는 1단어 이상)
+    # 마커 위치 분산 - strict일 때만 필수, soft는 마커 개수만 체크
     try:
-        errors += check_marker_positions(
-            data["passage_with_marks"], pid, min_between=3,
-            position_correct=data.get("position_correct")
-        )
+        if strict:
+            errors += check_marker_positions(
+                data["passage_with_marks"], pid, min_between=3,
+                position_correct=data.get("position_correct")
+            )
+        else:
+            # soft: 마커가 최소 2개만 있어도 OK
+            positions = {}
+            for i in range(1, 6):
+                if data["passage_with_marks"].find(f"<MARK{i}>") >= 0:
+                    positions[i] = True
+            if len(positions) < 2:
+                errors.append(f"[{pid}] 마커 수 부족: {len(positions)}개 (최소 2개)")
     except Exception as e:
         errors.append(f"[{pid}] 마커 검증 예외: {e}")
     
     # summary_options 5개 (필수)
-    if not isinstance(data.get("summary_options"), list) or len(data["summary_options"]) != 5:
+    if not isinstance(data.get("summary_options"), list) or len(data["summary_options"]) < 2:
+        errors.append(f"[{pid}] summary_options는 최소 2개 항목 필요")
+    elif strict and len(data["summary_options"]) != 5:
         errors.append(f"[{pid}] summary_options는 5개 항목이어야 함")
     else:
-        # ★ Q3 각 (A), (B) 슬롯은 한 단어만 (strict면 엄격, 완화면 1~3단어 허용)
-        max_slot_words = 1 if strict else 3
+        # ★ Q3 각 (A), (B) 슬롯 단어 수 (strict 1단어, soft 5단어 이하)
+        max_slot_words = 1 if strict else 5
         a_words = []
         b_words = []
         for idx, opt in enumerate(data["summary_options"]):

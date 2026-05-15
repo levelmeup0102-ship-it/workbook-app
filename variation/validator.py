@@ -65,8 +65,11 @@ def check_cutout_match(bogi: list, answer_parts: list, pid: str = "?", q_name: s
     return errors
 
 
-def check_marker_positions(passage_with_marks: str, pid: str = "?", min_between: int = 3) -> list:
-    """마커 위치 분산 검증 (간격 최소 3단어 - 완화)"""
+def check_marker_positions(passage_with_marks: str, pid: str = "?", min_between: int = 3, position_correct: int = None) -> list:
+    """마커 위치 분산 검증 (완화):
+    - 정답 마커 좌우는 반드시 분산되어야 함 (앞뒤 3단어+)
+    - 나머지 마커들은 1단어 이상이면 OK (distractor라서 너무 까다롭게 안 함)
+    """
     errors = []
     positions = {}
     for i in range(1, 6):
@@ -74,21 +77,34 @@ def check_marker_positions(passage_with_marks: str, pid: str = "?", min_between:
         if idx >= 0:
             positions[i] = idx
     
-    # 마커 최소 3개만 있어도 OK
+    # 마커 최소 3개
     if len(positions) < 3:
         errors.append(f"[{pid}] 마커 수 부족: {len(positions)}개 (최소 3개)")
         return errors
     
     sorted_marks = sorted(positions.items(), key=lambda x: x[1])
+    # position_correct는 0-based 인덱스 → 정답 마커 번호 = sorted_marks[idx][0]
+    correct_mark_num = None
+    if position_correct is not None and 0 <= position_correct < len(sorted_marks):
+        correct_mark_num = sorted_marks[position_correct][0]
+    
     for i in range(len(sorted_marks) - 1):
         m1, p1 = sorted_marks[i]
         m2, p2 = sorted_marks[i + 1]
         between = passage_with_marks[p1 + len(f"<MARK{m1}>"):p2]
         between = re.sub(r"<MARK\d>", "", between).strip()
         wc = len(between.split())
-        if wc < min_between:
+        
+        # 정답 마커가 m1 또는 m2일 때만 엄격 (3단어 필요)
+        # 그 외 distractor끼리 가까운 건 OK (1단어 이상이면 패스)
+        is_correct_adjacent = (correct_mark_num is not None and 
+                              (m1 == correct_mark_num or m2 == correct_mark_num))
+        threshold = min_between if is_correct_adjacent else 1
+        
+        if wc < threshold:
+            label = "정답 마커 인접" if is_correct_adjacent else "마커"
             errors.append(
-                f"[{pid}] 마커 {m1}과 {m2} 사이 너무 짧음 ({wc}단어 < {min_between}최소)"
+                f"[{pid}] {label} {m1}과 {m2} 사이 너무 짧음 ({wc}단어 < {threshold}최소)"
             )
     return errors
 
@@ -259,9 +275,12 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?") -> list
     except Exception as e:
         errors.append(f"[{pid}] Q5 보기 검증 예외: {e}")
     
-    # 마커 위치 분산 (완화: 최소 3개, 최소 3단어 간격)
+    # 마커 위치 분산 (완화: 정답 마커만 엄격, 나머지는 1단어 이상)
     try:
-        errors += check_marker_positions(data["passage_with_marks"], pid, min_between=3)
+        errors += check_marker_positions(
+            data["passage_with_marks"], pid, min_between=3,
+            position_correct=data.get("position_correct")
+        )
     except Exception as e:
         errors.append(f"[{pid}] 마커 검증 예외: {e}")
     

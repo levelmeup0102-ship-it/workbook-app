@@ -294,12 +294,27 @@ PRINT_HINT_STYLE = """
     break-after: auto !important;
   }
   
-  /* q-page는 페이지 단위 (원래 템플릿 정의) - print 시에만 페이지 break */
+  /* q-page는 페이지 단위 - 마지막 q-page는 break 안 함 (빈 페이지 방지) */
   .q-page {
     page-break-after: auto;
   }
   @media print {
     .q-page { page-break-after: always; }
+    /* 마지막 q-page (다음에 answers-combined가 옴) → break 제거 */
+    .q-page:has(+ .answers-combined) {
+      page-break-after: auto !important;
+      break-after: auto !important;
+    }
+    /* 마지막 q-page (다음 형제 없음) → break 제거 */
+    .q-page:last-child {
+      page-break-after: auto !important;
+      break-after: auto !important;
+    }
+    /* 마지막 섹션의 마지막 q-page도 안전하게 */
+    section.variation-section:last-of-type .q-page:last-child {
+      page-break-after: auto !important;
+      break-after: auto !important;
+    }
   }
 </style>
 """

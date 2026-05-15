@@ -157,6 +157,19 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?") -> list
                 )
         except (KeyError, AttributeError):
             pass
+        
+        # ★ 지문 안에 <CORE_BLANK> 마커가 들어가 있는지 확인 (lead 또는 chunks 어딘가)
+        try:
+            lead_text = data.get("lead", "")
+            chunks_text = " ".join([c[1] for c in data.get("chunks", []) if len(c) >= 2])
+            full_text = lead_text + " " + chunks_text
+            if "<CORE_BLANK>" not in full_text:
+                errors.append(
+                    f"[{pid}] Q3 <CORE_BLANK> 마커가 lead와 chunks 어디에도 없음 — "
+                    f"지문 안에서 '{data['core_blank_target']}' 위치를 <CORE_BLANK>로 표시해야 함"
+                )
+        except Exception as e:
+            errors.append(f"[{pid}] CORE_BLANK 마커 검증 예외: {e}")
     
     # ★ blank_A와 blank_B가 chunks 안에서 인접해 있으면 거부 (최소 3단어 사이에 - 완화)
     try:

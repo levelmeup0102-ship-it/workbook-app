@@ -20,7 +20,7 @@ from variation.validator import validate_a, validate_b
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5")
 ANTHROPIC_VERSION = "2023-06-01"
-MAX_RETRIES = 3
+MAX_RETRIES = 5
 
 SB_URL = os.environ.get("SUPABASE_URL", "")
 SB_KEY = (
@@ -169,8 +169,17 @@ def generate_variation_a(
             )
             if last_errors:
                 user_msg += (
-                    "\n\n# Previous attempt errors to fix:\n"
-                    + "\n".join(f"- {e}" for e in last_errors[:5])
+                    "\n\n# ⚠️ PREVIOUS ATTEMPT FAILED — FIX THESE ERRORS:\n"
+                    + "\n".join(f"  ✗ {e}" for e in last_errors[:5])
+                    + "\n\n# REMINDER OF CRITICAL CHECKS FOR TYPE A:\n"
+                    "  1. blank_A and blank_B must EACH have AT LEAST 7 words\n"
+                    "  2. blank_A and blank_B should be in DIFFERENT chunks (so they're separated by 5+ words)\n"
+                    "  3. bogi must contain EVERY SINGLE WORD from blank_A + blank_B — "
+                    "count articles ('the', 'a', 'an') and prepositions ('of', 'in', 'to') carefully!\n"
+                    "     Example: if blank_A is 'the area between the plants' (5 words including TWO 'the'), "
+                    "bogi must include 'the' TWICE, not once.\n"
+                    "  4. order_correct must NOT point to '(a)-(b)-(c)-(d)' — pick a SHUFFLED order\n"
+                    "  5. core_blank_target must have AT LEAST 3 words"
                 )
             
             raw = call_claude(SYSTEM_PROMPT_A, user_msg)
@@ -192,7 +201,7 @@ def generate_variation_a(
             traceback.print_exc()
             last_errors = [f"예외: {e}"]
     
-    raise RuntimeError(f"유형 A 생성 실패 (3회). 마지막 오류:\n" + "\n".join(last_errors[:3]))
+    raise RuntimeError(f"유형 A 생성 실패 ({MAX_RETRIES}회). 마지막 오류:\n" + "\n".join(last_errors[:5]))
 
 
 # ============ 유형 B 생성 ============
@@ -222,8 +231,17 @@ def generate_variation_b(
             )
             if last_errors:
                 user_msg += (
-                    "\n\n# Previous attempt errors to fix:\n"
-                    + "\n".join(f"- {e}" for e in last_errors[:5])
+                    "\n\n# ⚠️ PREVIOUS ATTEMPT FAILED — FIX THESE ERRORS:\n"
+                    + "\n".join(f"  ✗ {e}" for e in last_errors[:5])
+                    + "\n\n# REMINDER OF CRITICAL CHECKS FOR TYPE B:\n"
+                    "  1. <MARK1>, <MARK2>, <MARK3>, <MARK4>, <MARK5> MUST be spread across the ENTIRE passage\n"
+                    "     There MUST be AT LEAST 3 words between every adjacent pair of markers\n"
+                    "     BAD example: 'word word <MARK1> word word <MARK2><MARK3> word' — MARK2/MARK3 adjacent (0 words between)\n"
+                    "     GOOD example: 'word word word <MARK1> word word word word <MARK2> word word word <MARK3> ...'\n"
+                    "  2. blank_A and blank_B must EACH have AT LEAST 6 words\n"
+                    "  3. topic_writing_answer must have AT LEAST 10 words\n"
+                    "  4. Hyphenated words (south-facing, well-known) stay as ONE token in both blank and bogi\n"
+                    "  5. blank_summary_bogi must contain EVERY word from blank_A + blank_B (count articles/preps)"
                 )
             
             raw = call_claude(SYSTEM_PROMPT_B, user_msg)
@@ -242,7 +260,7 @@ def generate_variation_b(
             traceback.print_exc()
             last_errors = [f"예외: {e}"]
     
-    raise RuntimeError(f"유형 B 생성 실패 (3회). 마지막 오류:\n" + "\n".join(last_errors[:3]))
+    raise RuntimeError(f"유형 B 생성 실패 ({MAX_RETRIES}회). 마지막 오류:\n" + "\n".join(last_errors[:5]))
 
 
 # ============ Passage 조회 ============

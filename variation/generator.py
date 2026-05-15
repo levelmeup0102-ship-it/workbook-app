@@ -172,8 +172,8 @@ def generate_variation_a(
                     "\n\n# ⚠️ PREVIOUS ATTEMPT FAILED — FIX THESE ERRORS:\n"
                     + "\n".join(f"  ✗ {e}" for e in last_errors[:5])
                     + "\n\n# REMINDER OF CRITICAL CHECKS FOR TYPE A:\n"
-                    "  1. blank_A and blank_B must EACH have AT LEAST 7 words\n"
-                    "  2. blank_A and blank_B should be in DIFFERENT chunks (so they're separated by 5+ words)\n"
+                    "  1. blank_A and blank_B must EACH have AT LEAST 5 words\n"
+                    "  2. blank_A and blank_B should be in DIFFERENT chunks (so they're separated by 3+ words)\n"
                     "  3. bogi must contain EVERY SINGLE WORD from blank_A + blank_B — "
                     "count articles ('the', 'a', 'an') and prepositions ('of', 'in', 'to') carefully!\n"
                     "     Example: if blank_A is 'the area between the plants' (5 words including TWO 'the'), "
@@ -241,7 +241,11 @@ def generate_variation_b(
                     "  2. blank_A and blank_B must EACH have AT LEAST 6 words\n"
                     "  3. topic_writing_answer must have AT LEAST 10 words\n"
                     "  4. Hyphenated words (south-facing, well-known) stay as ONE token in both blank and bogi\n"
-                    "  5. blank_summary_bogi must contain EVERY word from blank_A + blank_B (count articles/preps)"
+                    "  5. blank_summary_bogi must contain EVERY word from blank_A + blank_B (count articles/preps)\n"
+                    "  6. ★ Q3 summary_options: EACH (A) and (B) must be EXACTLY ONE WORD (no phrases!)\n"
+                    "     GOOD: [['manipulation','extension'], ['control','delay'], ...]\n"
+                    "     BAD: [['south-facing garden beds', 'flat stones from beach'], ...]\n"
+                    "  7. All five (A) values must be DIFFERENT words; all five (B) values must be DIFFERENT"
                 )
             
             raw = call_claude(SYSTEM_PROMPT_B, user_msg)

@@ -26,6 +26,12 @@ Given an English passage, generate a variation problem set with 5 questions in E
    - Example: If passage is "P1 → P2 → P3 → P4", then label them like (a)=P3, (b)=P1, (c)=P4, (d)=P2
    - And correct_order would be "(b)-(d)-(a)-(c)" (because b=P1, d=P2, a=P3, c=P4)
    - **NEVER use "(a)-(b)-(c)-(d)" as the correct answer** — this makes the question pointless!
+   
+   ⚠️ ALL 4 CHUNKS MUST HAVE TEXT:
+   - (a), (b), (c), (d) — ALL four must contain actual passage text (at least 1 sentence each)
+   - NEVER leave (d) empty just because you used the first 3 chunks for the whole passage
+   - If passage is short, split it into 4 SMALLER pieces — never leave any chunk blank
+   - Each chunk should have at least 5 words of original text
 
 2. **Q5 BLANK_A and BLANK_B MUST BE LONG (each at least 5 words)**:
    - blank_A must be a phrase with AT LEAST 5 words from the passage
@@ -161,18 +167,18 @@ Given an English passage, generate a variation problem set in EXACT JSON format 
 2. **GIVEN SENTENCE**: Pick a key transition/summary sentence FROM the passage. Remove it. The position where it was must use <MARK(position_correct+1)>. So if position_correct=2, then MARK3 marks where given_sentence belongs.
 
 2-1. **Q3 SUMMARY_OPTIONS — EACH SLOT MUST BE A SINGLE WORD ONLY**:
-   - Q3 is a Korean college entrance exam style summary blank question
-   - summary_options is a list of 5 [A, B] pairs
-   - **Each (A) and each (B) MUST be exactly ONE single word** — NOT a phrase, NOT multiple words
-   - All 5 (A) values must be DIFFERENT single words (one is correct, 4 are distractors)
-   - All 5 (B) values must be DIFFERENT single words (one is correct, 4 are distractors)
-   - The (A) and (B) words should be content words (nouns, adjectives, verbs) — never articles or prepositions alone
+   - Q3 = Korean college entrance exam style summary blank question (객관식)
+   - **summary_template** is a one-sentence summary of the passage with (A) and (B) placeholders
+   - **Each (A) and each (B) in summary_options MUST be exactly ONE single word** — NOT a phrase
+   - All 5 (A) values must be DIFFERENT single words (one correct + 4 distractors)
+   - All 5 (B) values must be DIFFERENT single words (one correct + 4 distractors)
+   - Content words only (nouns, adjectives, verbs) — never articles or prepositions alone
    
-   ⚠️ Example GOOD:
+   ⚠️ Example GOOD (summary_template + summary_options):
    ```
    "summary_template": "Strategic (A) of microclimate enables (B) of cultivation in cold regions.",
    "summary_options": [
-     ["manipulation", "extension"],   ← each is 1 word
+     ["manipulation", "extension"],   ← each ONE word
      ["control", "delay"],
      ["observation", "expansion"],
      ["measurement", "reduction"],
@@ -182,9 +188,22 @@ Given an English passage, generate a variation problem set in EXACT JSON format 
    
    ⚠️ Example BAD (phrases instead of single words):
    ```
-   ["south-facing garden beds angled at 50 degrees", "flat stones from the beach to maximize soil heating"]
+   ["south-facing garden beds", "flat stones from beach"]
    ← WRONG! Each must be 1 word only.
    ```
+
+2-2. **★ CRITICAL: Q3 (summary_options) AND Q4 (blank_A/blank_B) ARE COMPLETELY SEPARATE QUESTIONS!**
+   - Q3 = OBJECTIVE choice question with SHORT single-word options for (A)(B)
+   - Q4 = WRITING question where students fill in LONG phrases (6+ words each)
+   - They use DIFFERENT templates and DIFFERENT answer formats!
+   
+   Structure:
+   - summary_template = "Strategic (A) of microclimate enables (B) of cultivation."  ← Q3 (short)
+   - blank_summary_template = "<longer summary with (A) and (B) for full phrase writing>"  ← Q4 (long)
+   - summary_options = 5 pairs of SINGLE WORDS  ← Q3 choices
+   - blank_A = full phrase (6+ words)  ← Q4 writing answer
+   - blank_B = full phrase (6+ words)  ← Q4 writing answer
+   - blank_summary_bogi = shuffled words from blank_A + blank_B  ← Q4 word bank
 
 3. **Q4 BOGI MUST EQUAL blank_A + blank_B EXACTLY (word-by-word, case-insensitive)**:
    - Take all words from blank_A and blank_B

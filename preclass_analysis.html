@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>0회독 — 수업 전 분석 (레벨미업학원)</title>
+<!--
+  레벨미업학원 워크북앱 — 0회독 (수업 전 4페이지 완전 분석) 템플릿
+  생성 함수: pipeline.py :: render_preclass_analysis()
+  데이터 함수: pipeline.py :: generate_preclass_analysis()
+  비밀노트(secret_note_type_a/b/c.html)와는 별개 기능입니다.
+-->
+<style>
+:root {
+  --red: #CC0000;
+  --red-light: #FFF8F8;
+  --red-border: #FFAAAA;
+  --red-faint: #FFCCCC;
+  --blue: #1155BB;
+  --blue-light: #F6F9FF;
+  --blue-border: #AABBFF;
+  --blue-faint: #CCDEFF;
+  --black: #111111;
+  --orange: #B8420A;
+  --green: #1B5E20;
+  --green-light: #F0FBF0;
+  --green-border: #2D6A4F;
+  --green-faint: #88BB88;
+  --green-bg-kr: #FAFFF5;
+  --tblue: #1565C0;
+  --tblue-light: #F0F4FF;
+  --tblue-faint: #88AADD;
+  --tblue-bg-kr: #F5FAFF;
+  --purple: #6A1B9A;
+  --purple-faint: #D1C4E9;
+  --dark: #1A1A1A;
+  --gr: #777777;
+  --gr2: #444444;
+  --gr-light: #BBBBBB;
+  --gray-line: #DDDDDD;
+}
+@page { size: A4; margin: 11mm 13mm 11mm 13mm; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Noto Sans CJK KR','Noto Sans KR','맑은 고딕',sans-serif;
+  font-size: 9pt;
+  color: var(--dark);
+  line-height: 1.4;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.serif { font-family: 'Liberation Serif','Times New Roman',serif; }
+
+.page {
+  page-break-after: always;
+  min-height: 275mm;
+  position: relative;
+  padding-bottom: 10mm;
+}
+.page:last-child { page-break-after: avoid; }
+
+/* 헤더 */
+.hdr {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding-bottom: 4px; border-bottom: 2px solid #CCCCCC; margin-bottom: 10px;
+  font-size: 9pt; color: var(--gr);
+}
+.hdr-legend { display:flex; gap: 12px; }
+.hdr-legend span { display:flex; align-items:center; gap:3px; }
+.dot { display:inline-block; width:6px; height:6px; border-radius:50%; }
+.dot-r { background: var(--red); }
+.dot-b { background: var(--blue); }
+.dot-k { background: var(--black); }
+
+/* 지문 */
+.psg {
+  font-family: 'Liberation Serif','Times New Roman',serif;
+  font-size: 11pt;
+  line-height: 1.5;
+  text-align: justify;
+  color: var(--dark);
+  margin-bottom: 8px;
+  padding: 4px 0;
+}
+.psg .gr { color: var(--red); text-decoration: underline; text-decoration-color: var(--red); }
+.psg .vc { color: var(--blue); text-decoration: underline; text-decoration-color: var(--blue); }
+.psg .im { color: var(--black); text-decoration: underline; text-decoration-color: var(--black); }
+.psg sup { font-size: 7pt; font-weight: bold; vertical-align: super; }
+.psg sup.sup-r { color: var(--red); }
+.psg sup.sup-b { color: var(--blue); }
+
+.divider { border-bottom: 2px solid var(--gr-light); margin: 8px 0; }
+
+/* 옵션 A — 4박스 2x2 (table 기반) */
+.topic-grid {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 6px 4px;
+  margin-bottom: 6px;
+}
+.topic-td {
+  width: 50%;
+  vertical-align: top;
+  padding: 0;
+}
+.topic-label {
+  font-weight: bold; font-size: 9pt;
+  padding-bottom: 2px;
+}
+.topic-label.theme { color: var(--green); }
+.topic-label.title { color: var(--tblue); }
+.topic-label.theme-kr { color: var(--green-border); font-size: 8.5pt; }
+.topic-label.title-kr { color: var(--tblue); font-size: 8.5pt; }
+
+.topic-box {
+  border: 1.5px solid;
+  padding: 8px 10px;
+  border-radius: 2px;
+}
+.topic-box.en-theme { border-color: var(--green-border); background: var(--green-light); }
+.topic-box.en-title { border-color: var(--tblue); background: var(--tblue-light); }
+.topic-box.kr-theme { border-color: var(--green-faint); background: var(--green-bg-kr); }
+.topic-box.kr-title { border-color: var(--tblue-faint); background: var(--tblue-bg-kr); }
+
+.topic-item {
+  font-family: 'Liberation Serif','Times New Roman',serif;
+  font-size: 9pt;
+  line-height: 1.45;
+  margin-bottom: 4px;
+  color: var(--dark);
+}
+.topic-item:last-child { margin-bottom: 0; }
+.topic-item .tn { font-family: 'Noto Sans CJK KR',sans-serif; font-weight: bold; margin-right: 4px; }
+.topic-item.kr {
+  font-family: 'Noto Sans CJK KR',sans-serif;
+  font-size: 8.5pt;
+  color: var(--gr2);
+}
+.topic-item.kr .tn.k-theme { color: var(--green-border); }
+.topic-item.kr .tn.k-title { color: var(--tblue); }
+.topic-item .tn.t-theme { color: var(--green); }
+.topic-item .tn.t-title { color: var(--tblue); }
+
+/* 어법/어휘 노트 (2단 table) */
+.notes-row {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 10px 0;
+  margin-top: 10px;
+}
+.notes-td {
+  width: 50%;
+  vertical-align: top;
+  padding: 0;
+}
+.notes-col-hdr {
+  font-weight: bold; font-size: 10pt;
+  margin-bottom: 4px;
+}
+.notes-col-hdr.grm { color: var(--red); }
+.notes-col-hdr.voc { color: var(--blue); }
+
+.notes-box {
+  border: 2px solid;
+  padding: 12px 10px;
+  border-radius: 2px;
+}
+.notes-box.grm { border-color: var(--red); background: var(--red-light); }
+.notes-box.voc { border-color: var(--blue); background: var(--blue-light); }
+
+.gn-item {
+  font-size: 8.5pt;
+  line-height: 1.5;
+  margin-bottom: 5px;
+  padding-left: 6px;
+}
+.gn-num { font-weight: bold; color: var(--red); margin-right: 3px; }
+.gn-tag { color: var(--red); }
+.gn-desc { color: var(--dark); }
+
+.vn-item {
+  font-size: 8.5pt;
+  line-height: 1.4;
+  margin-bottom: 4px;
+  padding-left: 6px;
+}
+.vn-letter { font-weight: bold; color: var(--blue); margin-right: 3px; }
+.vn-word { font-weight: bold; color: var(--blue); font-family: 'Liberation Serif',serif; }
+.vn-eq { color: var(--dark); }
+.vn-syn { font-family: 'Liberation Serif',serif; color: var(--gr2); }
+.vn-ant { color: var(--orange); font-size: 8pt; padding-left: 14px; font-family: 'Liberation Serif',serif; }
+
+/* PAGE B — 어법 상세 */
+.detail-hdr {
+  font-weight: bold; font-size: 12pt; color: var(--red);
+  padding-bottom: 4px; border-bottom: 2px solid var(--red-border);
+  margin-bottom: 10px;
+}
+.detail-hdr .sub { font-size: 10pt; color: var(--gr); font-weight: normal; margin-left: 8px; }
+
+.detail-grid {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 18px 0;
+}
+.detail-td {
+  width: 50%;
+  vertical-align: top;
+  padding: 0;
+}
+
+.dg-box {
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--red-faint);
+  padding-bottom: 4px;
+}
+.dg-title {
+  font-weight: bold; font-size: 10.5pt; color: var(--red);
+  margin-bottom: 5px;
+}
+.dg-line {
+  font-size: 9pt;
+  color: var(--dark);
+  margin-bottom: 3px;
+  padding-left: 8px;
+  line-height: 1.5;
+}
+.dg-line.ex {
+  font-family: 'Liberation Serif','Times New Roman',serif;
+  font-style: italic;
+  color: var(--gr);
+  padding-left: 18px;
+  font-size: 8.5pt;
+}
+
+/* 함축 박스 */
+.impl-hdr {
+  font-weight: bold; font-size: 11pt; color: var(--black);
+  padding-bottom: 3px; border-bottom: 2px solid #333333;
+  margin-top: 14px; margin-bottom: 8px;
+}
+.impl-box {
+  border: 1px solid #333333;
+  background: #FAFAFA;
+  padding: 10px 14px;
+  border-radius: 2px;
+}
+.impl-line {
+  font-size: 8.5pt;
+  line-height: 1.4;
+  margin-bottom: 3px;
+  color: var(--gr2);
+}
+.impl-expr {
+  font-weight: bold;
+  font-family: 'Liberation Serif','Times New Roman',serif;
+  color: var(--black);
+}
+.impl-blank {
+  font-weight: bold; color: #333333; font-size: 9pt;
+  margin-top: 6px; padding-top: 4px;
+}
+.impl-blank-sent {
+  font-family: 'Liberation Serif',serif; font-style: italic; color: var(--dark);
+}
+.impl-blank-ans {
+  font-family: 'Liberation Serif',serif; font-weight: bold; color: #AA0000;
+  font-size: 8.5pt;
+}
+.impl-summary {
+  font-weight: bold; color: #333333; font-size: 9pt;
+  margin-top: 4px;
+}
+
+/* PAGE C 어휘 심화 */
+.vocab-hdr {
+  font-weight: bold; font-size: 13pt; color: var(--blue);
+  padding-bottom: 4px; border-bottom: 2px solid var(--blue-border);
+  margin-bottom: 10px;
+}
+.vocab-hdr .sub { font-size: 10pt; color: var(--gr); font-weight: normal; margin-left: 8px; }
+
+.vd-grid {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 22px 0;
+}
+.vd-td {
+  width: 50%;
+  vertical-align: top;
+  padding: 0;
+}
+.vd-item {
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+}
+.vd-word-line {
+  border-bottom: 1px solid var(--blue-faint);
+  padding-bottom: 3px;
+  margin-bottom: 4px;
+}
+.vd-letter { font-weight: bold; color: var(--blue); font-size: 11pt; margin-right: 4px; }
+.vd-word { font-weight: bold; color: var(--blue); font-family: 'Liberation Serif',serif; font-size: 11pt; }
+.vd-ko { color: var(--gr); font-size: 9.5pt; margin-left: 6px; }
+
+.vd-syn, .vd-ant, .vd-def, .vd-ex {
+  font-size: 8.5pt;
+  line-height: 1.45;
+  padding-left: 10px;
+  margin-bottom: 1px;
+}
+.vd-syn-mark { color: #336699; }
+.vd-syn-w { font-weight: bold; font-family: 'Liberation Serif',serif; color: var(--dark); }
+.vd-syn-k { color: var(--gr); font-size: 8pt; margin-left: 4px; }
+.vd-ant { color: var(--orange); font-size: 8pt; font-family: 'Liberation Serif',serif; padding-left: 16px; }
+.vd-def { color: #333333; padding-left: 14px; font-family: 'Liberation Serif',serif; }
+.vd-def-mark { color: #555555; margin-right: 3px; }
+.vd-ex { color: var(--gr); font-style: italic; padding-left: 14px; font-family: 'Liberation Serif',serif; }
+.vd-ex-mark { color: #AA6633; margin-right: 3px; }
+
+/* 주제 관련 추가 어휘 */
+.tv-hdr {
+  font-weight: bold; font-size: 11pt; color: var(--purple);
+  padding-bottom: 3px; border-bottom: 2px solid var(--purple-faint);
+  margin-top: 12px; margin-bottom: 8px;
+}
+.tv-hdr .sub { font-size: 9pt; color: var(--gr); font-weight: normal; margin-left: 6px; }
+
+.tv-grid {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 22px 0;
+}
+.tv-td {
+  width: 50%;
+  vertical-align: top;
+  padding: 0;
+}
+.tv-item {
+  margin-bottom: 6px;
+}
+.tv-word-line {
+  border-bottom: 1px solid var(--purple-faint);
+  padding-bottom: 3px;
+  margin-bottom: 4px;
+}
+.tv-mark { font-weight: bold; color: var(--purple); font-size: 10pt; margin-right: 4px; }
+.tv-word { font-weight: bold; color: var(--purple); font-family: 'Liberation Serif',serif; font-size: 10pt; }
+.tv-ko { color: var(--gr); font-size: 9pt; margin-left: 6px; }
+
+.tv-syn { font-size: 8.5pt; padding-left: 10px; line-height: 1.45; }
+.tv-syn-mark { color: var(--purple); }
+.tv-syn-w { font-weight: bold; font-family: 'Liberation Serif',serif; }
+.tv-syn-k { color: var(--gr); font-size: 8pt; margin-left: 4px; }
+.tv-def, .tv-ex {
+  font-size: 8.5pt; padding-left: 14px; line-height: 1.45;
+  font-family: 'Liberation Serif',serif;
+}
+.tv-def { color: #333333; }
+.tv-ex { color: var(--gr); font-style: italic; }
+</style>
+</head>
+<body>
+
+{% for item in passages %}
+{# ───────────────────── PAGE A — 지문 + 4박스 + 노트 ───────────────────── #}
+<div class="page">
+  <div class="hdr">
+    <div><b>{{ school_name }}</b>  |  {{ item.label }}</div>
+    <div class="hdr-legend">
+      <span><span class="dot dot-r"></span>어법</span>
+      <span><span class="dot dot-b"></span>어휘</span>
+      <span><span class="dot dot-k"></span>함축 빈칸 흐름</span>
+    </div>
+  </div>
+
+  {# 지문 (passage_marked를 파싱해서 색상 입힘) — Jinja safe로 그대로 출력 #}
+  <div class="psg">{{ item.data.passage_html | safe }}</div>
+
+  <div class="divider"></div>
+
+  {# 4박스 2x2 그리드 (table 사용 — 호환성 100%) #}
+  <table class="topic-grid">
+    <tr>
+      <td class="topic-td">
+        <div class="topic-label theme">■  주제  (Theme)</div>
+        <div class="topic-box en-theme">
+          {% for t in item.data.topics %}
+          <div class="topic-item"><span class="tn t-theme">{% if loop.index == 1 %}①{% elif loop.index == 2 %}②{% else %}③{% endif %}</span>{{ t }}</div>
+          {% endfor %}
+        </div>
+      </td>
+      <td class="topic-td">
+        <div class="topic-label title">■  제목  (Title)</div>
+        <div class="topic-box en-title">
+          {% for t in item.data.titles %}
+          <div class="topic-item"><span class="tn t-title">{% if loop.index == 1 %}①{% elif loop.index == 2 %}②{% else %}③{% endif %}</span>{{ t }}</div>
+          {% endfor %}
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td class="topic-td">
+        <div class="topic-label theme-kr">■  주제 해석</div>
+        <div class="topic-box kr-theme">
+          {% for t in item.data.topics_kr %}
+          <div class="topic-item kr"><span class="tn k-theme">{% if loop.index == 1 %}①{% elif loop.index == 2 %}②{% else %}③{% endif %}</span>{{ t }}</div>
+          {% endfor %}
+        </div>
+      </td>
+      <td class="topic-td">
+        <div class="topic-label title-kr">■  제목 해석</div>
+        <div class="topic-box kr-title">
+          {% for t in item.data.titles_kr %}
+          <div class="topic-item kr"><span class="tn k-title">{% if loop.index == 1 %}①{% elif loop.index == 2 %}②{% else %}③{% endif %}</span>{{ t }}</div>
+          {% endfor %}
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <div class="divider"></div>
+
+  {# 어법 / 어휘 노트 (2단) — table 기반 #}
+  <table class="notes-row">
+    <tr>
+      <td class="notes-td">
+        <div class="notes-col-hdr grm">●  어법 포인트</div>
+        <div class="notes-box grm">
+          {% for n in item.data.grammar_notes %}
+          <div class="gn-item">
+            <span class="gn-num">{{ n.num }}</span>
+            <span class="gn-tag">[{{ n.tag }}]</span>
+            <span class="gn-desc">{{ n.desc }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </td>
+      <td class="notes-td">
+        <div class="notes-col-hdr voc">●  주요 어휘</div>
+        <div class="notes-box voc">
+          {% for v in item.data.vocab_notes %}
+          <div class="vn-item">
+            <span class="vn-letter">{{ v.letter }}</span>
+            <span class="vn-word">{{ v.word }}</span>
+            <span class="vn-eq"> = </span>
+            <span class="vn-syn">{% for s in v.syns %}{{ s[0] }}({{ s[1] }}){% if not loop.last %} / {% endif %}{% endfor %}</span>
+            {% if v.ants %}
+            <div class="vn-ant">↔ {% for a in v.ants %}{{ a[0] }}({{ a[1] }}){% if not loop.last %} / {% endif %}{% endfor %}</div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </td>
+    </tr>
+  </table>
+</div>
+
+{# ───────────────────── PAGE B-1 — 어법 상세 1/2 ───────────────────── #}
+<div class="page">
+  <div class="detail-hdr">●  어법 상세 해설  <span class="sub">({{ item.label }} — 수업 후 셀프 점검 1/2)</span></div>
+  <table class="detail-grid">
+    <tr>
+      <td class="detail-td">
+        {% for box in item.data.grammar_p1.left %}
+        <div class="dg-box">
+          <div class="dg-title">{{ box.num }} {{ box.title }}</div>
+          {% for line in box.lines %}
+          <div class="dg-line {% if line.is_ex %}ex{% endif %}">{{ line.text }}</div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </td>
+      <td class="detail-td">
+        {% for box in item.data.grammar_p1.right %}
+        <div class="dg-box">
+          <div class="dg-title">{{ box.num }} {{ box.title }}</div>
+          {% for line in box.lines %}
+          <div class="dg-line {% if line.is_ex %}ex{% endif %}">{{ line.text }}</div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </td>
+    </tr>
+  </table>
+</div>
+
+{# ───────────────────── PAGE B-2 — 어법 상세 2/2 + 함축 박스 ───────────────────── #}
+<div class="page">
+  <div class="detail-hdr">●  어법 상세 해설  <span class="sub">({{ item.label }} — 수업 후 셀프 점검 2/2)</span></div>
+  <table class="detail-grid">
+    <tr>
+      <td class="detail-td">
+        {% for box in item.data.grammar_p2.left %}
+        <div class="dg-box">
+          <div class="dg-title">{{ box.num }} {{ box.title }}</div>
+          {% for line in box.lines %}
+          <div class="dg-line {% if line.is_ex %}ex{% endif %}">{{ line.text }}</div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </td>
+      <td class="detail-td">
+        {% for box in item.data.grammar_p2.right %}
+        <div class="dg-box">
+          <div class="dg-title">{{ box.num }} {{ box.title }}</div>
+          {% for line in box.lines %}
+          <div class="dg-line {% if line.is_ex %}ex{% endif %}">{{ line.text }}</div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </td>
+    </tr>
+  </table>
+
+  {# 함축 빈칸 흐름 핵심 정리 #}
+  <div class="impl-hdr">●  ■  함축 빈칸 흐름 핵심 정리</div>
+  <div class="impl-box">
+    {% for e in item.data.implication_box.expressions %}
+    <div class="impl-line">
+      <span class="impl-expr">■ {{ e.expr }}</span> = {{ e.meaning }}
+    </div>
+    {% endfor %}
+    <div class="impl-blank">
+      ★ 빈칸 추론 키워드 —
+      <span class="impl-blank-sent">{{ item.data.implication_box.blank_key }}</span>
+      <span class="impl-blank-ans">→ 답 후보: {{ item.data.implication_box.blank_answers | join(' / ') }}</span>
+    </div>
+    <div class="impl-summary">
+      ★ 주제 응축 — {{ item.data.implication_box.theme_summary }}
+    </div>
+  </div>
+</div>
+
+{# ───────────────────── PAGE C — 어휘 심화 + 주제 어휘 ───────────────────── #}
+<div class="page">
+  <div class="vocab-hdr">●  주요 어휘 심화  <span class="sub">({{ item.label }} — 수능 수준 동의어·반의어·영영풀이)</span></div>
+  <table class="vd-grid">
+    <tr>
+      <td class="vd-td">
+        {% for v in item.data.vocab_detail.left %}
+        <div class="vd-item">
+          <div class="vd-word-line">
+            <span class="vd-letter">{{ v.letter }}</span>
+            <span class="vd-word">{{ v.word }}</span>
+            <span class="vd-ko">{{ v.ko }}</span>
+          </div>
+          {% for s in v.syns %}
+          <div class="vd-syn"><span class="vd-syn-mark">≒</span> <span class="vd-syn-w">{{ s[0] }}</span><span class="vd-syn-k">{{ s[1] }}</span></div>
+          {% endfor %}
+          {% if v.ants %}
+          <div class="vd-ant">↔ {% for a in v.ants %}{{ a[0] }}({{ a[1] }}){% if not loop.last %} / {% endif %}{% endfor %}</div>
+          {% endif %}
+          {% if v.def_en %}<div class="vd-def"><span class="vd-def-mark">📖</span>{{ v.def_en }}</div>{% endif %}
+          {% if v.ex_short %}<div class="vd-ex"><span class="vd-ex-mark">✏️</span>{{ v.ex_short }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      </td>
+      <td class="vd-td">
+        {% for v in item.data.vocab_detail.right %}
+        <div class="vd-item">
+          <div class="vd-word-line">
+            <span class="vd-letter">{{ v.letter }}</span>
+            <span class="vd-word">{{ v.word }}</span>
+            <span class="vd-ko">{{ v.ko }}</span>
+          </div>
+          {% for s in v.syns %}
+          <div class="vd-syn"><span class="vd-syn-mark">≒</span> <span class="vd-syn-w">{{ s[0] }}</span><span class="vd-syn-k">{{ s[1] }}</span></div>
+          {% endfor %}
+          {% if v.ants %}
+          <div class="vd-ant">↔ {% for a in v.ants %}{{ a[0] }}({{ a[1] }}){% if not loop.last %} / {% endif %}{% endfor %}</div>
+          {% endif %}
+          {% if v.def_en %}<div class="vd-def"><span class="vd-def-mark">📖</span>{{ v.def_en }}</div>{% endif %}
+          {% if v.ex_short %}<div class="vd-ex"><span class="vd-ex-mark">✏️</span>{{ v.ex_short }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      </td>
+    </tr>
+  </table>
+
+  {# 주제 관련 추가 어휘 #}
+  <div class="tv-hdr">◆  주제 관련 추가 어휘  <span class="sub">(지문 주제·제목과 연결되는 수능 필수 어휘)</span></div>
+  <table class="tv-grid">
+    <tr>
+      <td class="tv-td">
+        {% for t in item.data.theme_vocab.left %}
+        <div class="tv-item">
+          <div class="tv-word-line">
+            <span class="tv-mark">◆</span>
+            <span class="tv-word">{{ t.word }}</span>
+            <span class="tv-ko">{{ t.ko }}</span>
+          </div>
+          {% for s in t.syns %}
+          <div class="tv-syn"><span class="tv-syn-mark">≒</span> <span class="tv-syn-w">{{ s[0] }}</span><span class="tv-syn-k">{{ s[1] }}</span></div>
+          {% endfor %}
+          {% if t.def_en %}<div class="tv-def"><span class="vd-def-mark">📖</span>{{ t.def_en }}</div>{% endif %}
+          {% if t.ex_short %}<div class="tv-ex"><span class="vd-ex-mark">✏️</span>{{ t.ex_short }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      </td>
+      <td class="tv-td">
+        {% for t in item.data.theme_vocab.right %}
+        <div class="tv-item">
+          <div class="tv-word-line">
+            <span class="tv-mark">◆</span>
+            <span class="tv-word">{{ t.word }}</span>
+            <span class="tv-ko">{{ t.ko }}</span>
+          </div>
+          {% for s in t.syns %}
+          <div class="tv-syn"><span class="tv-syn-mark">≒</span> <span class="tv-syn-w">{{ s[0] }}</span><span class="tv-syn-k">{{ s[1] }}</span></div>
+          {% endfor %}
+          {% if t.def_en %}<div class="tv-def"><span class="vd-def-mark">📖</span>{{ t.def_en }}</div>{% endif %}
+          {% if t.ex_short %}<div class="tv-ex"><span class="vd-ex-mark">✏️</span>{{ t.ex_short }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      </td>
+    </tr>
+  </table>
+</div>
+
+{% endfor %}
+
+</body>
+</html>

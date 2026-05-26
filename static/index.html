@@ -152,11 +152,66 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       <button class="logout-btn" onclick="doLogout()">로그아웃</button>
     </div>
     <div class="header-tabs">
+      <div class="header-tab" onclick="switchTab('preclass', this)">📕 0회독 — 수업 전 분석</div>
       <div class="header-tab active" onclick="switchTab('generate', this)">📄 1회독 교재 생성</div>
       <div class="header-tab" onclick="switchTab('variation', this)">📝 2회독 변형문제</div>
       <div class="header-tab" onclick="switchTab('secret', this)">🔐 비밀노트</div>
       <div class="header-tab" onclick="switchTab('extract', this)">📖 원문 추출</div>
       <div class="header-tab" onclick="switchTab('upload', this)">📤 지문 관리</div>
+    </div>
+  </div>
+
+  <!-- ★ 0회독 탭 (수업 전 4페이지 완전 분석) -->
+  <div id="tab-preclass" class="hidden">
+    <div class="three-col">
+      <div style="grid-column: span 2;">
+        <div class="card">
+          <div class="card-title">📚 지문 선택 (중복 선택 가능)</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <button class="btn btn-sm" onclick="pcExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
+            <button class="btn btn-sm" onclick="pcCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
+            <button class="btn btn-sm" onclick="pcClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
+            <span style="margin-left:auto;font-size:13px;color:#666;" id="pc-sel-count">0개 선택</span>
+          </div>
+          <div id="pc-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
+            <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-right">
+        <div class="card" style="border:2px solid #fbbf24;background:#fffbeb;">
+          <div class="card-title" style="color:#b45309;">📕 0회독 — 수업 전 분석</div>
+          <div style="font-size:11px;color:#92400e;margin-bottom:10px;line-height:1.5;">
+            선생님 본인 수업 준비용 4페이지 완전 분석.<br>
+            지문(색상 마킹) · 주제·제목·해석 (2x2) · 어법 12~14개 상세박스 · 어휘심화(영영풀이) · 함축 빈칸 흐름
+          </div>
+          <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:10px;margin-bottom:10px;">
+            <div style="font-size:11px;font-weight:700;color:#b45309;margin-bottom:4px;">📄 4페이지 구성</div>
+            <div style="font-size:10px;color:#666;line-height:1.6;">
+              <b>PAGE 1</b> 지문(빨/파/검 마킹) + 주제·제목 2x2 + 어법/어휘 노트<br>
+              <b>PAGE 2</b> 어법 상세 1/2 (좌우 박스)<br>
+              <b>PAGE 3</b> 어법 상세 2/2 + 함축 박스<br>
+              <b>PAGE 4</b> 어휘 심화 6개(영영풀이) + 주제 어휘 6개
+            </div>
+          </div>
+          <div style="margin-bottom:8px;">
+            <label style="font-size:11px;color:#444;">🏫 학교명</label>
+            <input type="text" id="pc-school-name" placeholder="레벨미업학원" value="레벨미업학원"
+              style="width:100%;padding:8px 10px;border:2px solid #fbbf24;border-radius:6px;font-size:12px;outline:none;margin-top:4px;">
+          </div>
+          <button class="btn btn-orange" id="pc-btn-d" onclick="doPreclass()" disabled style="width:100%;background:#f59e0b;">
+            📕 0회독 자료 생성
+          </button>
+          <div class="progress hidden" id="pc-progress">
+            <div class="progress-bar" style="margin-top:8px;"><div class="progress-fill" id="pc-progress-fill" style="width:0%"></div></div>
+            <div class="progress-text" id="pc-progress-text">생성 중...</div>
+          </div>
+        </div>
+        <div class="card hidden" id="pc-results-section">
+          <div class="card-title">✅ 생성 완료</div>
+          <div id="pc-results-list"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -798,11 +853,13 @@ async function clearCacheUI() {
 function switchTab(tab, el) {
   document.querySelectorAll('.header-tab').forEach(t => t.classList.remove('active'));
   if(el) el.classList.add('active');
+  document.getElementById('tab-preclass').classList.toggle('hidden', tab!=='preclass');
   document.getElementById('tab-generate').classList.toggle('hidden', tab!=='generate');
   document.getElementById('tab-variation').classList.toggle('hidden', tab!=='variation');
   document.getElementById('tab-upload').classList.toggle('hidden', tab!=='upload');
   document.getElementById('tab-secret').classList.toggle('hidden', tab!=='secret');
   document.getElementById('tab-extract').classList.toggle('hidden', tab!=='extract');
+  if(tab==='preclass') pcRefreshBooks();
   if(tab==='secret') snRefreshBooks();
   if(tab==='extract') extRefreshBooks();
   if(tab==='variation') vrRefreshBooks();
@@ -1025,6 +1082,206 @@ function snDownloadMerged(type, schoolName) {
   const blob = new Blob([merged], {type:'text/html; charset=utf-8'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href=url; a.download=`${schoolName}_비밀노트_유형${type}_합본.html`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ============================================================
+// ★ 0회독 — 수업 전 분석 (4페이지 완전 분석) - 추가 코드
+// ============================================================
+// 비밀노트(sn*) 함수 패턴을 그대로 따르되 prefix만 pc로 분리
+let pcSelectedPassages = new Map();
+let pcExpandedBooks = new Set();
+
+function pcRefreshBooks() {
+  if (!PASSAGES_DATA) return;
+  pcRenderBookList();
+}
+
+function pcRenderBookList() {
+  const books = {};
+  PASSAGES_DATA.forEach(p => {
+    if (!books[p.book]) books[p.book] = {};
+    if (!books[p.book][p.unit]) books[p.book][p.unit] = [];
+    books[p.book][p.unit].push(p);
+  });
+
+  const bookNames = Object.keys(books).sort();
+  const container = document.getElementById('pc-book-list');
+
+  let html = '';
+  for (const book of bookNames) {
+    const units = Object.keys(books[book]).sort((a,b) => {
+      const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
+      const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
+      return numA - numB || a.localeCompare(b);
+    });
+    const bookPassages = Object.values(books[book]).flat();
+    const selectedCount = bookPassages.filter(p => pcSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+    const isExpanded = pcExpandedBooks.has(book);
+    const allSelected = selectedCount === bookPassages.length && bookPassages.length > 0;
+
+    html += `<div class="ext-book-item ${isExpanded?'expanded':''}" onclick="pcToggleExpand('${book}')">
+      <span style="color:#666;font-size:12px;">${isExpanded?'▼':'▶'}</span>
+      <input type="checkbox" ${allSelected?'checked':''} onclick="event.stopPropagation();pcToggleBook('${book}')" style="width:15px;height:15px;">
+      <span style="flex:1;font-size:13px;font-weight:500;">${book}</span>
+      <span class="ext-count-badge">${selectedCount}/${bookPassages.length}</span>
+    </div>`;
+
+    if (isExpanded) {
+      for (const unit of units) {
+        const unitPassages = books[book][unit];
+        const unitSelectedCount = unitPassages.filter(p => pcSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+        const unitAllSelected = unitSelectedCount === unitPassages.length;
+
+        html += `<div class="ext-unit-row">
+          <div class="ext-unit-header">
+            <input type="checkbox" ${unitAllSelected?'checked':''} onclick="pcToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
+            <span style="font-size:13px;font-weight:600;color:#b45309;">${unit}</span>
+            <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
+          </div>
+          <div class="ext-pid-list">`;
+
+        for (const p of unitPassages) {
+          const key = `${p.book}|${p.unit}|${p.id}`;
+          const isSelected = pcSelectedPassages.has(key);
+          html += `<label class="ext-pid-chip ${isSelected?'selected':''}">
+            <input type="checkbox" ${isSelected?'checked':''} onchange="pcTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
+            ${p.id}
+          </label>`;
+        }
+        html += '</div></div>';
+      }
+    }
+  }
+  container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
+  pcUpdateCount();
+  pcUpdateBtn();
+}
+
+function pcToggleExpand(book) {
+  if (pcExpandedBooks.has(book)) pcExpandedBooks.delete(book);
+  else pcExpandedBooks.add(book);
+  pcRenderBookList();
+}
+
+function pcExpandAll() {
+  const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
+  books.forEach(b => pcExpandedBooks.add(b));
+  pcRenderBookList();
+}
+
+function pcCollapseAll() {
+  pcExpandedBooks.clear();
+  pcRenderBookList();
+}
+
+function pcToggleBook(book) {
+  const bookPassages = PASSAGES_DATA.filter(p => p.book === book);
+  const allSelected = bookPassages.every(p => pcSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  bookPassages.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    if (allSelected) pcSelectedPassages.delete(key);
+    else pcSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
+  });
+  pcRenderBookList();
+}
+
+function pcToggleUnit(book, unit) {
+  const unitPassages = PASSAGES_DATA.filter(p => p.book === book && p.unit === unit);
+  const allSelected = unitPassages.every(p => pcSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  unitPassages.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    if (allSelected) pcSelectedPassages.delete(key);
+    else pcSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
+  });
+  pcRenderBookList();
+}
+
+function pcTogglePassage(book, unit, id) {
+  const key = `${book}|${unit}|${id}`;
+  if (pcSelectedPassages.has(key)) {
+    pcSelectedPassages.delete(key);
+  } else {
+    pcSelectedPassages.set(key, {book, unit, id});
+  }
+  pcRenderBookList();
+}
+
+function pcClearSelection() {
+  pcSelectedPassages.clear();
+  pcRenderBookList();
+}
+
+function pcUpdateCount() {
+  document.getElementById('pc-sel-count').textContent = `${pcSelectedPassages.size}개 선택`;
+}
+
+function pcUpdateBtn() {
+  document.getElementById('pc-btn-d').disabled = pcSelectedPassages.size === 0;
+}
+
+async function doPreclass() {
+  const passages = [...pcSelectedPassages.values()];
+  if (!passages.length) { toast('지문을 선택하세요'); return; }
+  const schoolName = document.getElementById('pc-school-name').value.trim() || '레벨미업학원';
+
+  const btn = document.getElementById('pc-btn-d');
+  const progress = document.getElementById('pc-progress');
+  const progressFill = document.getElementById('pc-progress-fill');
+  const progressText = document.getElementById('pc-progress-text');
+  const resultsSection = document.getElementById('pc-results-section');
+  const resultsList = document.getElementById('pc-results-list');
+
+  btn.disabled = true;
+  progress.classList.remove('hidden');
+  resultsSection.classList.add('hidden'); resultsList.innerHTML = '';
+
+  let completed = 0; const results = [];
+  for (const p of passages) {
+    progressText.textContent = `생성 중... ${completed+1}/${passages.length} — ${p.unit} ${p.id}  (40~60초 소요)`;
+    progressFill.style.width = `${(completed/passages.length)*100}%`;
+    try {
+      // 백엔드는 /api/secret-note 라우트에서 type=D 분기 처리
+      const res = await fetch(API+'/api/secret-note', {
+        method: 'POST', headers: headers(),
+        body: JSON.stringify({type:'D', school_name: schoolName, passages:[{book:p.book,unit:p.unit,id:p.id}]})
+      });
+      const data = await res.json();
+      if (data.ok) results.push({id:`${p.unit} ${p.id}`,status:'success',html:data.html,filename:data.filename});
+      else results.push({id:`${p.unit} ${p.id}`,status:'error',error:data.detail});
+    } catch(e) { results.push({id:`${p.unit} ${p.id}`,status:'error',error:e.message}); }
+    completed++;
+    progressFill.style.width = `${(completed/passages.length)*100}%`;
+  }
+
+  progressText.textContent = `완료! ${results.filter(r=>r.status==='success').length}/${passages.length} 성공`;
+  resultsSection.classList.remove('hidden');
+  const successResults = results.filter(r=>r.status==='success');
+  window._lastPcResults = successResults;
+
+  let mergeBtn = successResults.length > 1
+    ? `<div style="margin-bottom:8px;"><button class="btn btn-orange" style="width:100%;" onclick="pcDownloadMerged('${schoolName}')">📦 합본 다운로드 (${successResults.length}개)</button></div>`
+    : '';
+  resultsList.innerHTML = mergeBtn + results.map(r =>
+    `<div class="sn-result-item">
+      <span>${r.status==='success'?'✅':'❌'} ${r.id}</span>
+      ${r.status==='success'
+        ? `<button class="btn btn-sm btn-orange" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')">📥 다운로드</button>`
+        : `<span style="color:#dc2626;font-size:12px;">${r.error}</span>`}
+    </div>`
+  ).join('');
+
+  btn.disabled = false;
+}
+
+function pcDownloadMerged(schoolName) {
+  if (!window._lastPcResults || !window._lastPcResults.length) return;
+  const css = (window._lastPcResults[0].html.match(/<style[^>]*>([\s\S]*?)<\/style>/) || ['',''])[1];
+  const bodies = window._lastPcResults.map(r => (r.html.match(/<body[^>]*>([\s\S]*?)<\/body>/) || ['',r.html])[1]);
+  const merged = `<!DOCTYPE html>\n<html lang="ko">\n<head>\n<meta charset="UTF-8">\n<title>${schoolName} 0회독 수업전분석 합본</title>\n<style>\n${css}\n</style>\n</head>\n<body>\n${bodies.join('\n')}\n</body>\n</html>`;
+  const blob = new Blob([merged], {type:'text/html; charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=`${schoolName}_0회독_수업전분석_합본.html`; a.click();
   URL.revokeObjectURL(url);
 }
 

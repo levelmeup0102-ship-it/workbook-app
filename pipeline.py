@@ -3199,3 +3199,279 @@ def generate_secret_note_c(passage: str, passage_dir: Path, translation: str = "
     save_step(passage_dir, "secret_note_c", data)
     return data
 
+
+# ════════════════════════════════════════════════════════════════════
+# 0회독 — 수업 전 분석 (4페이지 완전 분석)
+# ────────────────────────────────────────────────────────────────────
+# 선생님 본인 수업 준비용. 비밀노트 A/B/C와 별개 기능.
+# - 시스템 프롬프트: SYS_PRECLASS_ANALYSIS (v4)
+# - 생성 함수:      generate_preclass_analysis()
+# - 렌더 함수:      render_preclass_analysis() (preclass_analysis.html)
+# - 후처리:        _rebalance_grammar_boxes(), _passage_marked_to_html()
+# ════════════════════════════════════════════════════════════════════
+
+SYS_PRECLASS_ANALYSIS = """You are an expert Korean high-school English teacher producing exam-preparation analysis at the quality of Pyeongga-won (수능·평가원) standard.
+
+Return ONE JSON object — no markdown, no backticks, no commentary.
+
+═════════════════════════════════════════════════
+## ABSOLUTE RULES (8 STRICT RULES)
+═════════════════════════════════════════════════
+
+### RULE 1 — PASSAGE IS SACRED (원문 절대 보존)
+`passage_marked` reproduces the input passage VERBATIM. After stripping all `[[...]]` markers, the cleaned text must equal the input CHARACTER-BY-CHARACTER.
+- NO adding sentences/phrases/words not in input.
+- NO paraphrasing, summarizing, or "completing" the passage.
+
+### RULE 2 — MARKER SCOPE = 1~3 WORDS ONLY
+Every `[[GRAMMAR]]`, `[[VOCAB]]`, `[[IMPL]]` marker wraps ONLY 1~3 words.
+
+Examples of CORRECT narrow marking:
+- 관계대명사 what → just "what"
+- not A but B → just "not...but rather" or "but rather"
+- such as → "such as" (2 words)
+- 동명사 부정 → "not taking" (2 words)
+- 가주어 it → "It's" (1 word)
+- 관계대명사 that → just "that"
+- 계속적 which → ", which"
+- 동명사 주어 → "Being moderate"
+
+### RULE 3 — BOX MERGING ABSOLUTE MAX = 2
+Each box's `num` field: "①" or at most "②③" (2 merged max). NEVER 3+.
+If you'd merge 3+, create SEPARATE boxes instead.
+
+### RULE 4 — ALL 4 BOX-SLOTS MUST BE FILLED
+`grammar_p1.left`, `grammar_p1.right`, `grammar_p2.left`, `grammar_p2.right` — ALL FOUR must have 3~4 boxes each. Total 12~14 boxes.
+
+Distribution for 12 grammar_notes: 3+3+3+3 (p1.L=①②③ / p1.R=④⑤⑥ / p2.L=⑦⑧⑨ / p2.R=⑩⑪⑫)
+Distribution for 13: 3+4+3+3 or 4+3+3+3
+
+### RULE 5 — MARKER COUNT = NOTES COUNT
+- `[[GRAMMAR:n=N]]` count = len(grammar_notes)
+- `[[VOCAB:l=L]]` count = len(vocab_notes) = 10
+- `[[IMPL]]` count = len(implication_box.expressions) = 6~7
+
+### RULE 6 — GRAMMAR_NOTES COUNT = 12 (preferred) or 13
+Merge with "⑥⑪" (max 2) if you have too many.
+
+### RULE 7 — TOPICS / TITLES = 평가원 STANDARD
+- NEVER "When X happens, Y" / "How X affects Y" / "The importance of X"
+- Start with abstract nouns or participles
+- 14~22 words per sentence
+- titles often with colon (수능 24번 style)
+
+### RULE 8 — NO EMOJIS
+Use [O], [X], ?, ■, ●, ★ instead of ✅, ❌, ❓.
+
+═════════════════════════════════════════════════
+## VOCABULARY FORMAT
+═════════════════════════════════════════════════
+
+### `vocab_notes` (PAGE A, 10 items) — 수능 기본~중급
+{"letter": "ⓐ", "word": "moderation",
+ "syns": [["temperance","절제"], ["balance","균형"]],
+ "ants": [["excess","과잉"]]}
+
+### `vocab_detail` (PAGE C, 6 items) — GRE/고급 어휘 ★KEY FORMAT★
+Each item:
+- letter, word, ko
+- syns: 4 advanced synonyms with Korean glosses
+- ants: 3 advanced antonyms with Korean glosses
+- **`def_en`**: English dictionary definition, 8~15 words. NO example inside.
+- **`ex_short`**: SHORT example using the word, 8~12 words. Natural, NOT academic.
+
+Example:
+{"letter": "ⓐ", "word": "moderation", "ko": "절제, 적당함",
+ "syns": [["temperance","절제"], ["restraint","자제"], ["balance","균형"], ["prudence","신중함"]],
+ "ants": [["excess","과도함"], ["extremism","극단주의"], ["overindulgence","지나친 탐닉"]],
+ "def_en": "The avoidance of extremes; restraint, especially in behavior or speech.",
+ "ex_short": "Moderation in diet promotes long-term well-being."}
+
+### `theme_vocab` (PAGE C 하단, 6 items)
+Same format with def_en + ex_short.
+
+═════════════════════════════════════════════════
+## JSON SCHEMA (return EXACTLY this structure)
+═════════════════════════════════════════════════
+{
+  "passage_marked": "...",
+  "topics": [3 abstract sentences],
+  "titles": [3 titles, colon style],
+  "topics_kr": [3 natural Korean],
+  "titles_kr": [3 natural Korean],
+  "grammar_notes": [{"num":"①","tag":"...","desc":"..."}],
+  "vocab_notes": [{"letter":"ⓐ","word":"...","syns":[...],"ants":[...]}],
+  "grammar_p1": {
+    "left": [{"num":"①","title":"...","lines":[
+       {"text":"원리","is_ex":false},
+       {"text":"[패턴] ...","is_ex":false},
+       {"text":"Example. [O]","is_ex":true},
+       {"text":"★ 교체(+) ...","is_ex":false},
+       {"text":"cf. ...","is_ex":false}
+    ]}],
+    "right": [3~4 boxes]
+  },
+  "grammar_p2": {"left":[3~4 boxes],"right":[3~4 boxes]},
+  "implication_box": {
+    "expressions": [{"expr":"phrase","meaning":"한국어 ─ 의미"}],
+    "blank_key": "Sentence with ____",
+    "blank_answers": ["a","b","c"],
+    "theme_summary": "한 줄 응축"
+  },
+  "vocab_detail": {
+    "left": [{"letter":"ⓐ","word":"...","ko":"...","syns":[4],"ants":[3],"def_en":"...","ex_short":"..."}],
+    "right": [3 items]
+  },
+  "theme_vocab": {
+    "left": [{"word":"...","ko":"...","syns":[2~3],"def_en":"...","ex_short":"..."}],
+    "right": [3 items]
+  }
+}
+
+═════════════════════════════════════════════════
+## SELF-CHECK BEFORE RETURNING
+═════════════════════════════════════════════════
+□ passage_marked stripped of [[...]] = input character-by-character?
+□ Every [[...]] marker wraps 1~3 words only?
+□ Every box's num is "X" or "XY" (max 2 merged)?
+□ grammar_p1.left/right ≥ 3 AND grammar_p2.left/right ≥ 3?
+□ Count of [[GRAMMAR]] = len(grammar_notes)?
+□ Every vocab_detail/theme_vocab has def_en (8~15w) AND ex_short (8~12w)?
+
+Return ONLY the JSON object.
+"""
+
+
+def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
+    """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
+    cached = load_step(passage_dir, "preclass_analysis")
+    if cached:
+        _safe_print("  ✅ preclass_analysis 캐시 사용")
+        return cached
+    _safe_print("  📕 preclass_analysis 생성 중...")
+
+    prompt = f"Analyze this passage for Korean high-school exam preparation (Level-MeUp 4-page pre-class note):\n\n{passage}"
+    if translation:
+        prompt += f"\n\n[Reference Korean translation - use this to ensure accurate Korean translations]:\n{translation}"
+
+    # 출력이 큰 스키마 — max_tokens 넉넉히
+    data = call_claude_json(SYS_PRECLASS_ANALYSIS, prompt, max_tokens=16000)
+
+    # 후처리 1 — 박스 균형 자동 보정
+    data = _rebalance_grammar_boxes(data)
+
+    # 후처리 2 — passage_marked → passage_html 변환 (Jinja2에서 |safe)
+    data["passage_html"] = _passage_marked_to_html(data.get("passage_marked", ""), passage)
+
+    save_step(passage_dir, "preclass_analysis", data)
+    return data
+
+
+def render_preclass_analysis(passages_data: list, school_name: str) -> str:
+    """0회독 HTML 렌더링 (preclass_analysis.html 템플릿 사용)."""
+    from jinja2 import Environment, FileSystemLoader
+    env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)))
+    tmpl = env.get_template("preclass_analysis.html")
+    return tmpl.render(passages=passages_data, school_name=school_name)
+
+
+def _rebalance_grammar_boxes(data: dict) -> dict:
+    """grammar_p1/p2 박스가 4분면에 균등 분배되도록 보정 + num 순서로 정렬."""
+    try:
+        p1 = data.get("grammar_p1", {}) or {}
+        p2 = data.get("grammar_p2", {}) or {}
+        all_boxes = (
+            (p1.get("left", []) or []) + (p1.get("right", []) or [])
+            + (p2.get("left", []) or []) + (p2.get("right", []) or [])
+        )
+        n = len(all_boxes)
+        if n < 4:
+            return data
+
+        # num 기준 정렬 — "①②"처럼 합쳐진 경우 첫 번째 마크 기준
+        CIRCLE_ORDER = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮"
+        def _sort_key(box):
+            num = (box.get("num") or "").strip()
+            for i, c in enumerate(CIRCLE_ORDER):
+                if c in num:
+                    return i
+            return 999
+        all_boxes_sorted = sorted(all_boxes, key=_sort_key)
+
+        # 12개 이상이면 균등 분배 (3+3+3+3 또는 3+4+3+3)
+        if n >= 12:
+            q = n // 4
+            r = n % 4
+            slots = [q + (1 if i < r else 0) for i in range(4)]
+        else:
+            # 12 미만이면 기존 분배 유지하되 num 순서로만 재정렬
+            slots = [
+                len(p1.get("left", [])) or 1,
+                len(p1.get("right", [])) or 1,
+                len(p2.get("left", [])) or 1,
+                len(p2.get("right", [])) or 1,
+            ]
+            total = sum(slots)
+            if total != n:
+                q = n // 4; r = n % 4
+                slots = [q + (1 if i < r else 0) for i in range(4)]
+
+        idx = 0
+        new_p1_l = all_boxes_sorted[idx:idx+slots[0]]; idx += slots[0]
+        new_p1_r = all_boxes_sorted[idx:idx+slots[1]]; idx += slots[1]
+        new_p2_l = all_boxes_sorted[idx:idx+slots[2]]; idx += slots[2]
+        new_p2_r = all_boxes_sorted[idx:idx+slots[3]]
+        data["grammar_p1"] = {"left": new_p1_l, "right": new_p1_r}
+        data["grammar_p2"] = {"left": new_p2_l, "right": new_p2_r}
+    except Exception as e:
+        _safe_print(f"  ⚠️ rebalance 실패: {e}")
+    return data
+
+
+def _passage_marked_to_html(marked: str, original: str = "") -> str:
+    """passage_marked의 [[GRAMMAR/VOCAB/IMPL]] 마커를 HTML span으로 변환.
+    원본 길이를 초과하는 부분은 잘라낸다 (Claude가 끝에 추가 문장을 붙였을 때 대비)."""
+    import re as _re
+    import html as _html
+
+    orig_len = len(original.strip()) if original else None
+
+    out = []
+    plain_len = 0
+    pattern = _re.compile(
+        r'\[\[(GRAMMAR:n=([①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮]+)|VOCAB:l=([ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙ])|IMPL)\]\]'
+        r'([\s\S]*?)'
+        r'\[\[/(GRAMMAR|VOCAB|IMPL)\]\]'
+    )
+    last_end = 0
+    for m in pattern.finditer(marked):
+        if m.start() > last_end:
+            plain = marked[last_end:m.start()]
+            if orig_len and plain_len + len(plain) > orig_len:
+                plain = plain[:max(0, orig_len - plain_len)]
+                out.append(_html.escape(plain))
+                plain_len += len(plain)
+                return "".join(out)
+            out.append(_html.escape(plain))
+            plain_len += len(plain)
+
+        kind = m.group(1)
+        inner = m.group(4)
+        if kind.startswith("GRAMMAR"):
+            num = m.group(2)
+            out.append(f'<span class="gr">{_html.escape(inner)}</span><sup class="sup-r">{num}</sup>')
+        elif kind.startswith("VOCAB"):
+            letter = m.group(3)
+            out.append(f'<span class="vc">{_html.escape(inner)}</span><sup class="sup-b">{letter}</sup>')
+        else:  # IMPL
+            out.append(f'<span class="im">{_html.escape(inner)}</span>')
+        plain_len += len(inner)
+        last_end = m.end()
+
+    if last_end < len(marked):
+        tail = marked[last_end:]
+        if orig_len and plain_len + len(tail) > orig_len:
+            tail = tail[:max(0, orig_len - plain_len)]
+        out.append(_html.escape(tail))
+
+    return "".join(out)

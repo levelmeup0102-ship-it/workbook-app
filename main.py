@@ -591,11 +591,11 @@ async def set_notice(request: Request):
 # ============================================================
 @app.post("/api/secret-note")
 async def secret_note(request: Request):
-    """비밀노트 생성: type A (한국어 종합) / type B (영어 중심) / type C (어휘+분석)"""
+    """비밀노트 / 0회독 생성: type A (한국어 종합) / B (영어 중심) / C (어휘+분석) / D (0회독 수업 전 4페이지 분석)"""
     _verify(request)
     body = await request.json()
 
-    note_type   = (body.get("type") or "B").upper()          # "A", "B", or "C"
+    note_type   = (body.get("type") or "B").upper()          # "A", "B", "C", or "D"
     school_name = (body.get("school_name") or "레벨미업학원").strip()
     passages_in = body.get("passages") or []
     # passages_in: [{"book":"...", "unit":"...", "id":"..."}]
@@ -644,6 +644,9 @@ async def secret_note(request: Request):
             note_data = pl.generate_secret_note_a(passage_text, translation, passage_dir)
         elif note_type == "C":
             note_data = pl.generate_secret_note_c(passage_text, passage_dir, translation)
+        elif note_type == "D":
+            # 유형 D — 0회독 (수업 전 4페이지 완전 분석)
+            note_data = pl.generate_preclass_analysis(passage_text, passage_dir, translation)
         else:  # B가 기본
             note_data = pl.generate_secret_note_b(passage_text, passage_dir, translation)
 
@@ -656,6 +659,11 @@ async def secret_note(request: Request):
 
     if not passages_data:
         raise HTTPException(404, "처리 가능한 지문 없음")
+
+    # 유형 D는 별도 템플릿(preclass_analysis.html) + 다른 파일명
+    if note_type == "D":
+        html = pl.render_preclass_analysis(passages_data, school_name)
+        return {"ok": True, "html": html, "filename": "0회독_수업전분석.html"}
 
     html = pl.render_secret_note(passages_data, note_type, school_name)
     return {"ok": True, "html": html, "filename": f"비밀노트_유형{note_type}.html"}

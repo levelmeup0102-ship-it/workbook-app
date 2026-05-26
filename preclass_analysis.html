@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <title>0회독 — 수업 전 분석 (레벨미업학원)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@400;500;700&family=Noto+Serif:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 <!--
   레벨미업학원 워크북앱 — 0회독 (수업 전 4페이지 완전 분석) 템플릿
   생성 함수: pipeline.py :: render_preclass_analysis()
@@ -41,14 +44,14 @@
 @page { size: A4; margin: 11mm 13mm 11mm 13mm; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  font-family: 'Noto Sans CJK KR','Noto Sans KR','맑은 고딕',sans-serif;
+  font-family: 'Noto Sans KR','Noto Sans CJK KR','맑은 고딕',sans-serif;
   font-size: 9pt;
   color: var(--dark);
   line-height: 1.4;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
-.serif { font-family: 'Liberation Serif','Times New Roman',serif; }
+.serif { font-family: 'Noto Serif','Liberation Serif','Times New Roman',serif; }
 
 .page {
   page-break-after: always;
@@ -73,7 +76,7 @@ body {
 
 /* 지문 */
 .psg {
-  font-family: 'Liberation Serif','Times New Roman',serif;
+  font-family: 'Noto Serif','Liberation Serif','Times New Roman',serif;
   font-size: 11pt;
   line-height: 1.5;
   text-align: justify;
@@ -122,16 +125,16 @@ body {
 .topic-box.kr-title { border-color: var(--tblue-faint); background: var(--tblue-bg-kr); }
 
 .topic-item {
-  font-family: 'Liberation Serif','Times New Roman',serif;
+  font-family: 'Noto Serif','Liberation Serif','Times New Roman',serif;
   font-size: 9pt;
   line-height: 1.45;
   margin-bottom: 4px;
   color: var(--dark);
 }
 .topic-item:last-child { margin-bottom: 0; }
-.topic-item .tn { font-family: 'Noto Sans CJK KR',sans-serif; font-weight: bold; margin-right: 4px; }
+.topic-item .tn { font-family: 'Noto Sans KR','Noto Sans CJK KR',sans-serif; font-weight: bold; margin-right: 4px; }
 .topic-item.kr {
-  font-family: 'Noto Sans CJK KR',sans-serif;
+  font-family: 'Noto Sans KR','Noto Sans CJK KR',sans-serif;
   font-size: 8.5pt;
   color: var(--gr2);
 }
@@ -184,10 +187,10 @@ body {
   padding-left: 6px;
 }
 .vn-letter { font-weight: bold; color: var(--blue); margin-right: 3px; }
-.vn-word { font-weight: bold; color: var(--blue); font-family: 'Liberation Serif',serif; }
+.vn-word { font-weight: bold; color: var(--blue); font-family: 'Noto Serif','Liberation Serif',serif; }
 .vn-eq { color: var(--dark); }
-.vn-syn { font-family: 'Liberation Serif',serif; color: var(--gr2); }
-.vn-ant { color: var(--orange); font-size: 8pt; padding-left: 14px; font-family: 'Liberation Serif',serif; }
+.vn-syn { font-family: 'Noto Serif','Liberation Serif',serif; color: var(--gr2); }
+.vn-ant { color: var(--orange); font-size: 8pt; padding-left: 14px; font-family: 'Noto Serif','Liberation Serif',serif; }
 
 /* PAGE B — 어법 상세 */
 .detail-hdr {
@@ -225,7 +228,7 @@ body {
   line-height: 1.5;
 }
 .dg-line.ex {
-  font-family: 'Liberation Serif','Times New Roman',serif;
+  font-family: 'Noto Serif','Liberation Serif','Times New Roman',serif;
   font-style: italic;
   color: var(--gr);
   padding-left: 18px;
@@ -252,7 +255,7 @@ body {
 }
 .impl-expr {
   font-weight: bold;
-  font-family: 'Liberation Serif','Times New Roman',serif;
+  font-family: 'Noto Serif','Liberation Serif','Times New Roman',serif;
   color: var(--black);
 }
 .impl-blank {
@@ -260,10 +263,10 @@ body {
   margin-top: 6px; padding-top: 4px;
 }
 .impl-blank-sent {
-  font-family: 'Liberation Serif',serif; font-style: italic; color: var(--dark);
+  font-family: 'Noto Serif','Liberation Serif',serif; font-style: italic; color: var(--dark);
 }
 .impl-blank-ans {
-  font-family: 'Liberation Serif',serif; font-weight: bold; color: #AA0000;
+  font-family: 'Noto Serif','Liberation Serif',serif; font-weight: bold; color: #AA0000;
   font-size: 8.5pt;
 }
 .impl-summary {
@@ -299,7 +302,7 @@ body {
   margin-bottom: 4px;
 }
 .vd-letter { font-weight: bold; color: var(--blue); font-size: 11pt; margin-right: 4px; }
-.vd-word { font-weight: bold; color: var(--blue); font-family: 'Liberation Serif',serif; font-size: 11pt; }
+.vd-word { font-weight: bold; color: var(--blue); font-family: 'Noto Serif','Liberation Serif',serif; font-size: 11pt; }
 .vd-ko { color: var(--gr); font-size: 9.5pt; margin-left: 6px; }
 
 .vd-syn, .vd-ant, .vd-def, .vd-ex {
@@ -309,12 +312,12 @@ body {
   margin-bottom: 1px;
 }
 .vd-syn-mark { color: #336699; }
-.vd-syn-w { font-weight: bold; font-family: 'Liberation Serif',serif; color: var(--dark); }
+.vd-syn-w { font-weight: bold; font-family: 'Noto Serif','Liberation Serif',serif; color: var(--dark); }
 .vd-syn-k { color: var(--gr); font-size: 8pt; margin-left: 4px; }
-.vd-ant { color: var(--orange); font-size: 8pt; font-family: 'Liberation Serif',serif; padding-left: 16px; }
-.vd-def { color: #333333; padding-left: 14px; font-family: 'Liberation Serif',serif; }
+.vd-ant { color: var(--orange); font-size: 8pt; font-family: 'Noto Serif','Liberation Serif',serif; padding-left: 16px; }
+.vd-def { color: #333333; padding-left: 14px; font-family: 'Noto Serif','Liberation Serif',serif; }
 .vd-def-mark { color: #555555; margin-right: 3px; }
-.vd-ex { color: var(--gr); font-style: italic; padding-left: 14px; font-family: 'Liberation Serif',serif; }
+.vd-ex { color: var(--gr); font-style: italic; padding-left: 14px; font-family: 'Noto Serif','Liberation Serif',serif; }
 .vd-ex-mark { color: #AA6633; margin-right: 3px; }
 
 /* 주제 관련 추가 어휘 */
@@ -344,16 +347,16 @@ body {
   margin-bottom: 4px;
 }
 .tv-mark { font-weight: bold; color: var(--purple); font-size: 10pt; margin-right: 4px; }
-.tv-word { font-weight: bold; color: var(--purple); font-family: 'Liberation Serif',serif; font-size: 10pt; }
+.tv-word { font-weight: bold; color: var(--purple); font-family: 'Noto Serif','Liberation Serif',serif; font-size: 10pt; }
 .tv-ko { color: var(--gr); font-size: 9pt; margin-left: 6px; }
 
 .tv-syn { font-size: 8.5pt; padding-left: 10px; line-height: 1.45; }
 .tv-syn-mark { color: var(--purple); }
-.tv-syn-w { font-weight: bold; font-family: 'Liberation Serif',serif; }
+.tv-syn-w { font-weight: bold; font-family: 'Noto Serif','Liberation Serif',serif; }
 .tv-syn-k { color: var(--gr); font-size: 8pt; margin-left: 4px; }
 .tv-def, .tv-ex {
   font-size: 8.5pt; padding-left: 14px; line-height: 1.45;
-  font-family: 'Liberation Serif',serif;
+  font-family: 'Noto Serif','Liberation Serif',serif;
 }
 .tv-def { color: #333333; }
 .tv-ex { color: var(--gr); font-style: italic; }

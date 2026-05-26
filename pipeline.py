@@ -3226,6 +3226,13 @@ Return ONE JSON object — no markdown, no backticks, no commentary.
 ### RULE 2 — MARKER SCOPE = 1~3 WORDS ONLY
 Every `[[GRAMMAR]]`, `[[VOCAB]]`, `[[IMPL]]` marker wraps ONLY 1~3 words.
 
+**MARKER FORMAT (CRITICAL):**
+- GRAMMAR: use circled numerals — `[[GRAMMAR:n=①]]...[[/GRAMMAR]]`, `[[GRAMMAR:n=②]]`, etc.
+  (You may also use plain numbers: `[[GRAMMAR:n=1]]`, `[[GRAMMAR:n=2]]` — both work.)
+- VOCAB: use circled letters — `[[VOCAB:l=ⓐ]]...[[/VOCAB]]`, `[[VOCAB:l=ⓑ]]`, etc.
+  (You may also use plain letters: `[[VOCAB:l=a]]`, `[[VOCAB:l=b]]` — both work.)
+- IMPL: no numbering — `[[IMPL]]...[[/IMPL]]`
+
 Examples of CORRECT narrow marking:
 - 관계대명사 what → just "what"
 - not A but B → just "not...but rather" or "but rather"
@@ -3303,11 +3310,11 @@ Same format with def_en + ex_short.
   "vocab_notes": [{"letter":"ⓐ","word":"...","syns":[...],"ants":[...]}],
   "grammar_p1": {
     "left": [{"num":"①","title":"...","lines":[
-       {"text":"원리","is_ex":false},
-       {"text":"[패턴] ...","is_ex":false},
-       {"text":"Example. [O]","is_ex":true},
-       {"text":"★ 교체(+) ...","is_ex":false},
-       {"text":"cf. ...","is_ex":false}
+       {"text":"전체 어법 핵심 원리를 한 줄로 설명 (예: 'to부정사가 동사 뒤에서 명사 역할')","is_ex":false},
+       {"text":"[패턴] 구체적 공식 (예: 'V + to-V = ~할 것을 V하다')","is_ex":false},
+       {"text":"본문 적용 또는 [O] 예문 (영어 문장)","is_ex":true},
+       {"text":"★ 교체(+) 변형/대체 표현","is_ex":false},
+       {"text":"cf. 혼동되는 비교 포인트","is_ex":false}
     ]}],
     "right": [3~4 boxes]
   },
@@ -3344,9 +3351,10 @@ Return ONLY the JSON object.
 
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
-    cached = load_step(passage_dir, "preclass_analysis")
+    # v2: 캐시 키 변경 — passage_html 변환 로직 개선 후 기존 캐시 무효화
+    cached = load_step(passage_dir, "preclass_analysis_v2")
     if cached:
-        _safe_print("  ✅ preclass_analysis 캐시 사용")
+        _safe_print("  ✅ preclass_analysis_v2 캐시 사용")
         return cached
     _safe_print("  📕 preclass_analysis 생성 중...")
 
@@ -3363,7 +3371,7 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     # 후처리 2 — passage_marked → passage_html 변환 (Jinja2에서 |safe)
     data["passage_html"] = _passage_marked_to_html(data.get("passage_marked", ""), passage)
 
-    save_step(passage_dir, "preclass_analysis", data)
+    save_step(passage_dir, "preclass_analysis_v2", data)
     return data
 
 
@@ -3430,16 +3438,50 @@ def _rebalance_grammar_boxes(data: dict) -> dict:
 
 def _passage_marked_to_html(marked: str, original: str = "") -> str:
     """passage_marked의 [[GRAMMAR/VOCAB/IMPL]] 마커를 HTML span으로 변환.
-    원본 길이를 초과하는 부분은 잘라낸다 (Claude가 끝에 추가 문장을 붙였을 때 대비)."""
+
+    Claude가 n=①(원숫자) 대신 n=1(일반숫자), l=ⓐ 대신 l=a로 출력해도 호환되도록
+    정규식이 두 형태 모두 매칭. 출력 시 원숫자/원알파벳으로 자동 변환.
+
+    원본 길이를 초과하는 부분은 잘라낸다 (Claude가 끝에 추가 문장을 붙였을 때 대비).
+    """
     import re as _re
     import html as _html
 
     orig_len = len(original.strip()) if original else None
 
+    # 원숫자/원알파벳 변환 테이블
+    CIRCLED_NUMS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮"
+    CIRCLED_ALPHA = "ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞ"
+
+    def _to_circled_num(s: str) -> str:
+        """'1' → '①', '①' → '①' (이미 원숫자면 그대로)."""
+        s = s.strip()
+        if s and s[0] in CIRCLED_NUMS:
+            return s
+        try:
+            n = int(s)
+            if 1 <= n <= 15:
+                return CIRCLED_NUMS[n - 1]
+        except ValueError:
+            pass
+        return s  # 못 변환하면 원본 유지
+
+    def _to_circled_alpha(s: str) -> str:
+        """'a' → 'ⓐ', 'ⓐ' → 'ⓐ'."""
+        s = s.strip()
+        if s and s[0] in CIRCLED_ALPHA:
+            return s
+        if len(s) == 1 and 'a' <= s.lower() <= 'o':
+            return CIRCLED_ALPHA[ord(s.lower()) - ord('a')]
+        return s
+
     out = []
     plain_len = 0
+    # 일반 숫자/알파벳 + 유니코드 원숫자/원알파벳 모두 허용
     pattern = _re.compile(
-        r'\[\[(GRAMMAR:n=([①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮]+)|VOCAB:l=([ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙ])|IMPL)\]\]'
+        r'\[\[(GRAMMAR:n=([0-9]+|[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮]+)'
+        r'|VOCAB:l=([a-oA-O]|[ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞ])'
+        r'|IMPL)\]\]'
         r'([\s\S]*?)'
         r'\[\[/(GRAMMAR|VOCAB|IMPL)\]\]'
     )
@@ -3458,10 +3500,10 @@ def _passage_marked_to_html(marked: str, original: str = "") -> str:
         kind = m.group(1)
         inner = m.group(4)
         if kind.startswith("GRAMMAR"):
-            num = m.group(2)
+            num = _to_circled_num(m.group(2))
             out.append(f'<span class="gr">{_html.escape(inner)}</span><sup class="sup-r">{num}</sup>')
         elif kind.startswith("VOCAB"):
-            letter = m.group(3)
+            letter = _to_circled_alpha(m.group(3))
             out.append(f'<span class="vc">{_html.escape(inner)}</span><sup class="sup-b">{letter}</sup>')
         else:  # IMPL
             out.append(f'<span class="im">{_html.escape(inner)}</span>')

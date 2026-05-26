@@ -3258,8 +3258,56 @@ Distribution for 13: 3+4+3+3 or 4+3+3+3
 - `[[VOCAB:l=L]]` count = len(vocab_notes) = 10
 - `[[IMPL]]` count = len(implication_box.expressions) = 6~7
 
-### RULE 6 — GRAMMAR_NOTES COUNT = 12 (preferred) or 13
-Merge with "⑥⑪" (max 2) if you have too many.
+### RULE 6 — GRAMMAR_NOTES COUNT = STRICT 12~14 (절대 7~10개 안됨)
+**MINIMUM 12, ABSOLUTE FLOOR. If you find fewer than 12, you MUST re-scan the passage.**
+
+You MUST systematically scan the passage for ALL these categories:
+
+**카테고리 A — 동사 관련 (Verbs)**
+- 수일치 (S-V agreement, 부분표현+V, 동명사 주어 등)
+- 시제 (과거/현재완료/대과거/미래완료)
+- 능동/수동 (수동태 다양한 형태, by 생략, 진행수동 등)
+- 사역동사 (make/have/let + O + V/p.p.)
+- 지각동사 (see/hear + O + V/V-ing/p.p.)
+- 가정법 (현재/과거/혼합/도치)
+
+**카테고리 B — 준동사 (Verbals)**
+- to부정사 (명사적·형용사적·부사적; "S+V+to-V" 5형식 동사 포함)
+- 동명사 (주어/목적어/보어/전치사 뒤)
+- 분사 (현재/과거; 명사 수식; 보어)
+- 분사구문 (능동·수동·완료·접속사+분사)
+
+**카테고리 C — 관계사·접속사**
+- 관계대명사 (who/which/that, 제한적 vs 계속적, 소유격 whose)
+- 관계부사 (when/where/why/how)
+- what (관계대명사 vs 의문사)
+- 접속사 that vs 동격 that vs 관계대명사 that
+- 양보·조건 부사절 (no matter how, even if, unless 등)
+
+**카테고리 D — 특수구문**
+- 가주어 it ~ 진주어 to-V/that
+- It-cleft 강조구문 (It is X that ~)
+- so~that / such~that
+- 도치 (부정어 도치, only 도치, so/neither 도치)
+- 동격 (쉼표/of/that/to-V)
+- 비교 (원급/비교급/최상급, 비교급 강조, the 비교급 the 비교급)
+
+**카테고리 E — 자주 출제되는 어구 구문 ★ABSOLUTELY DO NOT MISS★**
+- **prevent/keep/stop/prohibit/discourage A from V-ing** ← 매번 빼먹지 말 것
+- **be expected to V / be likely to V / be supposed to V**
+- **make/find/consider + O + OC(형용사/명사)**
+- **부분표현 + of + N + V** (most/all/some/half/the rest of)
+- **It takes 사람 시간 to-V**
+- **the way (how) S+V / the reason why**
+- **as if / as though**
+
+**카테고리 F — 어휘구문·전치사**
+- such as / including (예시)
+- not A but B / not only A but also B (대조·병렬)
+- 전치사 + 동명사 (be used to V-ing, look forward to V-ing 등)
+- by V-ing / despite + N · in spite of
+
+**SCAN EVERY SENTENCE.** For each sentence, identify at least 1-2 grammar points if possible. Aim for 12-14 distinct points.
 
 ### RULE 7 — TOPICS / TITLES = 평가원 STANDARD
 - NEVER "When X happens, Y" / "How X affects Y" / "The importance of X"
@@ -3345,16 +3393,34 @@ Same format with def_en + ex_short.
 □ Count of [[GRAMMAR]] = len(grammar_notes)?
 □ Every vocab_detail/theme_vocab has def_en (8~15w) AND ex_short (8~12w)?
 
+★★★ FINAL CHECK — GRAMMAR_NOTES COUNT ★★★
+□ len(grammar_notes) >= 12?
+   If < 12: RE-SCAN. Common missed points:
+   • prevent/keep/stop A from V-ing
+   • to-V 부사적 용법 (목적: "in order to V")
+   • 현재완료 수동 (have been + p.p.)
+   • 형용사적 to-V (N + to-V)
+   • be expected to V / be likely to V
+   • 분사구문 (V-ing... = 접속사 + S + V)
+   • 부분표현 + V 수일치 (most/all of N + V)
+   • such as (예시 표현)
+   • 관계대명사 계속적 용법 (, which)
+   • 동격 of (the city of Seoul, the idea of V-ing)
+
+If still < 12 after re-scan, BREAK COMPOUND structures into separate notes:
+- "have been successfully turned into" → 1) 현재완료 수동 + 2) turn A into B
+- "preventing food from sticking to paper" → 1) 분사구문 + 2) prevent A from V-ing
+
 Return ONLY the JSON object.
 """
 
 
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
-    # v2: 캐시 키 변경 — passage_html 변환 로직 개선 후 기존 캐시 무효화
-    cached = load_step(passage_dir, "preclass_analysis_v2")
+    # v3: 시스템 프롬프트 v3 강화 (어법 12개 강제) — 기존 v2 캐시 무효화
+    cached = load_step(passage_dir, "preclass_analysis_v3")
     if cached:
-        _safe_print("  ✅ preclass_analysis_v2 캐시 사용")
+        _safe_print("  ✅ preclass_analysis_v3 캐시 사용")
         return cached
     _safe_print("  📕 preclass_analysis 생성 중...")
 
@@ -3371,7 +3437,7 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     # 후처리 2 — passage_marked → passage_html 변환 (Jinja2에서 |safe)
     data["passage_html"] = _passage_marked_to_html(data.get("passage_marked", ""), passage)
 
-    save_step(passage_dir, "preclass_analysis_v2", data)
+    save_step(passage_dir, "preclass_analysis_v3", data)
     return data
 
 

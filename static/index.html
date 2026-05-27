@@ -406,18 +406,23 @@ textarea:focus { border-color: #4A90D9; outline: none; }
             style="width:100%;padding:9px 12px;border:2px solid #c4b5fd;border-radius:8px;font-size:13px;outline:none;">
         </div>
         <div class="sn-card card">
+          <div class="card-title">👨‍🏫 강사명 (선택)</div>
+          <input type="text" id="sn-teacher-name" placeholder="예: 홍길동"
+            style="width:100%;padding:9px 12px;border:2px solid #a5b4fc;border-radius:8px;font-size:13px;outline:none;">
+        </div>
+        <div class="sn-card card">
           <div class="card-title">🔐 유형 선택</div>
           <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:8px;margin-bottom:6px;">
-            <div style="font-size:11px;font-weight:700;color:#6d28d9;">유형 A — 한국어 종합</div>
-            <div style="font-size:10px;color:#666;">흐름·요약·배경지식·어휘</div>
+            <div style="font-size:11px;font-weight:700;color:#6d28d9;">유형 A — 반의어+요약</div>
+            <div style="font-size:10px;color:#666;">핵심어휘(반의어)·요약문·Paraphrase</div>
           </div>
           <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:8px;margin-bottom:6px;">
             <div style="font-size:11px;font-weight:700;color:#7c3aed;">유형 B — 영어 중심</div>
             <div style="font-size:10px;color:#666;">Summary · Vocabulary</div>
           </div>
           <div style="background:#e0f2fe;border:1px solid #7dd3fc;border-radius:8px;padding:8px;margin-bottom:10px;">
-            <div style="font-size:11px;font-weight:700;color:#0369a1;">유형 C — 어휘+분석</div>
-            <div style="font-size:10px;color:#666;">핵심어휘 · 주제/제목/요지</div>
+            <div style="font-size:11px;font-weight:700;color:#0369a1;">유형 C — 고난이도유의어</div>
+            <div style="font-size:10px;color:#666;">핵심어휘(고난이도)·Paraphrase</div>
           </div>
           <div style="display:flex;gap:6px;">
             <button class="sn-type-btn sn-type-a" id="sn-btn-a" onclick="doSecretNote('A')" disabled>A</button>
@@ -1023,6 +1028,7 @@ async function doSecretNote(type) {
   const passages = [...snSelectedPassages.values()];
   if (!passages.length) { toast('지문을 선택하세요'); return; }
   const schoolName = document.getElementById('sn-school-name').value.trim() || '레벨미업학원';
+  const teacherName = document.getElementById('sn-teacher-name').value.trim() || '';
 
   const btnA = document.getElementById('sn-btn-a');
   const btnB = document.getElementById('sn-btn-b');
@@ -1044,7 +1050,7 @@ async function doSecretNote(type) {
     try {
       const res = await fetch(API+'/api/secret-note', {
         method: 'POST', headers: headers(),
-        body: JSON.stringify({type, school_name: schoolName, passages:[{book:p.book,unit:p.unit,id:p.id}]})
+        body: JSON.stringify({type, school_name: schoolName, teacher_name: teacherName, passages:[{book:p.book,unit:p.unit,id:p.id}]})
       });
       const data = await res.json();
       if (data.ok) results.push({id:`${p.unit} ${p.id}`,status:'success',html:data.html,filename:data.filename});

@@ -595,9 +595,10 @@ async def secret_note(request: Request):
     _verify(request)
     body = await request.json()
 
-    note_type   = (body.get("type") or "B").upper()          # "A", "B", "C", or "D"
-    school_name = (body.get("school_name") or "레벨미업학원").strip()
-    passages_in = body.get("passages") or []
+    note_type    = (body.get("type") or "B").upper()          # "A", "B", "C", or "D"
+    school_name  = (body.get("school_name") or "레벨미업학원").strip()
+    teacher_name = (body.get("teacher_name") or "").strip()   # 강사명 (선택)
+    passages_in  = body.get("passages") or []
     # passages_in: [{"book":"...", "unit":"...", "id":"..."}]
 
     if not passages_in:
@@ -665,7 +666,7 @@ async def secret_note(request: Request):
         html = pl.render_preclass_analysis(passages_data, school_name)
         return {"ok": True, "html": html, "filename": "0회독_수업전분석.html"}
 
-    html = pl.render_secret_note(passages_data, note_type, school_name)
+    html = pl.render_secret_note(passages_data, note_type, school_name, teacher_name)
     return {"ok": True, "html": html, "filename": f"비밀노트_유형{note_type}.html"}
 
 

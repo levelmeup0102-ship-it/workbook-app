@@ -9,7 +9,7 @@ STEP_VERSIONS = {
     "step2_order": "v10",
     "step3_blank": "v6",
     "step4_topic": "v4",
-    "step5_grammar": "v14",
+    "step5_grammar": "v15",
     "step6_vocab_content": "v6",
     "step7_writing": "v4",
     "step8_answers": "v10",
@@ -1292,9 +1292,18 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
         bracket_dist_lines=bracket_dist_lines,
     )
 
+    # ★ v14: Supabase grammar_points 자동 학습 시스템 (stage7-1 어법 출제용)
+    # 한국 수능·내신 빈출 어법 함정을 시스템 프롬프트에 동적 주입
+    # → 어법 괄호 출제 시 사용자 9가지 + 김대균 영문법 핵심을 우선 활용
+    sys_prompt_stage7 = SYS_JSON
+    grammar_addendum = _load_grammar_points_for_prompt()
+    if grammar_addendum:
+        sys_prompt_stage7 = SYS_JSON + "\n\n" + grammar_addendum
+        logger.debug(f"  step5: grammar_points 주입됨 ({len(grammar_addendum):,} chars)")
+
     def _ai_call():
         """call_claude_json + 8-1 triples → string 조립을 한 번에."""
-        d = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
+        d = call_claude_json(sys_prompt_stage7, prompt, max_tokens=4000)
         triples = d.get("grammar_bracket_passage", [])
         logger.debug(f"STAGE 7-1 | STEP 1 | AI 응답의 triples 값 확인\n{triples}")
         bracket_str, bracket_answers = _assemble_bracket_passage(triples, sentences)
@@ -3417,10 +3426,10 @@ Return ONLY the JSON object.
 
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
-    # v3: 시스템 프롬프트 v3 강화 (어법 12개 강제) — 기존 v2 캐시 무효화
-    cached = load_step(passage_dir, "preclass_analysis_v3")
+    # v4: Supabase grammar_points 자동 학습 시스템 — 기존 v3 캐시 무효화
+    cached = load_step(passage_dir, "preclass_analysis_v4")
     if cached:
-        _safe_print("  ✅ preclass_analysis_v3 캐시 사용")
+        _safe_print("  ✅ preclass_analysis_v4 캐시 사용")
         return cached
     _safe_print("  📕 preclass_analysis 생성 중...")
 
@@ -3428,8 +3437,16 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     if translation:
         prompt += f"\n\n[Reference Korean translation - use this to ensure accurate Korean translations]:\n{translation}"
 
+    # v4: Supabase grammar_points 자동 fetch → 시스템 프롬프트 동적 주입
+    # 한국 수능·내신 빈출 어법 + 김대균 영문법 정제 데이터를 매 호출마다 적용
+    sys_prompt = SYS_PRECLASS_ANALYSIS
+    grammar_addendum = _load_grammar_points_for_prompt()
+    if grammar_addendum:
+        sys_prompt = sys_prompt + "\n\n" + grammar_addendum
+        _safe_print(f"  📚 grammar_points 주입됨 ({len(grammar_addendum):,} chars)")
+
     # 출력이 큰 스키마 — max_tokens 넉넉히
-    data = call_claude_json(SYS_PRECLASS_ANALYSIS, prompt, max_tokens=16000)
+    data = call_claude_json(sys_prompt, prompt, max_tokens=16000)
 
     # 후처리 1 — 박스 균형 자동 보정
     data = _rebalance_grammar_boxes(data)
@@ -3437,8 +3454,109 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     # 후처리 2 — passage_marked → passage_html 변환 (Jinja2에서 |safe)
     data["passage_html"] = _passage_marked_to_html(data.get("passage_marked", ""), passage)
 
-    save_step(passage_dir, "preclass_analysis_v3", data)
+    save_step(passage_dir, "preclass_analysis_v4", data)
     return data
+
+
+def _load_grammar_points_for_prompt() -> str:
+    """Supabase grammar_points 테이블에서 활성 어법 포인트를 fetch하여
+    시스템 프롬프트에 부착할 텍스트로 변환.
+    
+    - 우선순위 5(★★★★★)부터 3(★★★)까지 모두 포함
+    - 카테고리별로 그룹화
+    - 실패 시 빈 문자열 반환 (안전)
+    """
+    try:
+        import httpx
+        url = os.environ.get("SUPABASE_URL", "")
+        key = os.environ.get("SUPABASE_KEY", "")
+        if not url or not key:
+            return ""
+        
+        headers = {
+            "apikey": key,
+            "Authorization": f"Bearer {key}",
+        }
+        # priority DESC, category 순으로 가져오기. priority >= 3 만
+        endpoint = (
+            f"{url}/rest/v1/grammar_points"
+            "?active=eq.true&priority=gte.3"
+            "&select=category,subcategory,priority,name,pattern,example_good,example_bad,why_important,trap_warning,prohibited_analysis,trigger_keywords,notes"
+            "&order=priority.desc,category.asc"
+        )
+        with httpx.Client(timeout=10) as client:
+            resp = client.get(endpoint, headers=headers)
+        if resp.status_code != 200:
+            return ""
+        rows = resp.json()
+        if not isinstance(rows, list) or len(rows) == 0:
+            return ""
+    except Exception as e:
+        _safe_print(f"  ⚠️ grammar_points fetch 실패: {str(e)[:100]}")
+        return ""
+    
+    # 카테고리별로 그룹화
+    by_cat: dict = {}
+    for r in rows:
+        cat = r.get("category", "기타")
+        by_cat.setdefault(cat, []).append(r)
+    
+    # 시스템 프롬프트 부착용 텍스트 생성
+    lines = [
+        "═" * 60,
+        "## 📚 한국 수능·내신 빈출 어법 함정 (반드시 우선 적용)",
+        "═" * 60,
+        "",
+        "본문 분석 시 다음 어법 포인트를 우선적으로 발견하라.",
+        "특히 '★ trap_warning'과 '🚫 prohibited_analysis'는 절대 위반 금지.",
+        "지문에 trigger_keywords가 보이면 즉시 해당 어법으로 분석할 것.",
+        "",
+    ]
+    star_map = {5: "★★★★★", 4: "★★★★", 3: "★★★", 2: "★★", 1: "★"}
+    
+    for cat, items in by_cat.items():
+        lines.append(f"### [{cat}]")
+        for it in items:
+            star = star_map.get(it.get("priority", 3), "★★★")
+            name = it.get("name", "")
+            pattern = it.get("pattern") or ""
+            ex_good = it.get("example_good") or ""
+            ex_bad = it.get("example_bad") or ""
+            trap = it.get("trap_warning") or ""
+            prohibited = it.get("prohibited_analysis") or ""
+            keywords = it.get("trigger_keywords") or []
+            notes = it.get("notes") or ""
+            
+            lines.append(f"- **{star} {name}**")
+            if pattern:
+                lines.append(f"  - 패턴: {pattern}")
+            if ex_good:
+                lines.append(f"  - [O] {ex_good}")
+            if ex_bad:
+                lines.append(f"  - [X] {ex_bad}")
+            if trap:
+                lines.append(f"  - ⚠️ {trap}")
+            if prohibited:
+                lines.append(f"  - 🚫 금지: {prohibited}")
+            if keywords:
+                kw_str = ", ".join(keywords[:8])
+                lines.append(f"  - 🔑 trigger: {kw_str}")
+            if notes:
+                lines.append(f"  - 💡 {notes}")
+        lines.append("")
+    
+    lines.extend([
+        "═" * 60,
+        "## 적용 규칙 (RECAP)",
+        "═" * 60,
+        "1. 위 어법 중 본문 trigger_keywords에 해당하는 것은 무조건 grammar_notes에 포함",
+        "2. prohibited_analysis 위반 절대 금지 (잘못된 해설 방지)",
+        "3. 생략구문 분석 시 생략된 부분을 [I was], [it is], [have] 같이 대괄호로 명시",
+        "4. 의미상 주어 + 동명사 패턴 (someone V-ing)은 단순 분사가 아닌 동명사로 분석",
+        "5. 한국 수능·내신 빈출 어법 (도치/의미상주어/대동사/조동사 등) 우선 포함",
+    ])
+    
+    return "\n".join(lines)
 
 
 def render_preclass_analysis(passages_data: list, school_name: str) -> str:

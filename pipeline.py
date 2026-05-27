@@ -3502,10 +3502,10 @@ Return ONLY the JSON object.
 
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
-    # v5: 시스템 프롬프트 강화 — VOCAB/IMPL 마커 본문 강제 + 가목적어 it 명시 — 기존 v4 캐시 무효화
-    cached = load_step(passage_dir, "preclass_analysis_v5")
+    # v6: 코드 레벨 후처리 — VOCAB/IMPL 마커 자동 보정 + 가주어/가목적어/It-cleft 강제 감지 — 기존 v5 캐시 무효화
+    cached = load_step(passage_dir, "preclass_analysis_v6")
     if cached:
-        _safe_print("  ✅ preclass_analysis_v5 캐시 사용")
+        _safe_print("  ✅ preclass_analysis_v6 캐시 사용")
         return cached
     _safe_print("  📕 preclass_analysis 생성 중...")
 
@@ -3527,10 +3527,27 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     # 후처리 1 — 박스 균형 자동 보정
     data = _rebalance_grammar_boxes(data)
 
-    # 후처리 2 — passage_marked → passage_html 변환 (Jinja2에서 |safe)
+    # ★ v6 후처리 2 — 가주어/가목적어/It-cleft 패턴 자동 감지 → grammar_notes 강제 추가
+    data = _inject_dummy_it_notes(data, passage)
+
+    # ★ v6 후처리 3 — IMPL 마커 본문 자동 보정 (먼저 — 긴 표현이 우선)
+    # AI가 implication_box.expressions만 만들고 본문 마커 빼먹은 경우, 자동 삽입
+    data["passage_marked"] = _ensure_implication_markers(
+        data.get("passage_marked", ""),
+        data.get("implication_box", {}).get("expressions", []),
+    )
+
+    # ★ v6 후처리 4 — VOCAB 마커 본문 자동 보정 (IMPL 영역 안의 단어는 자동 회피)
+    # AI가 vocab_notes만 만들고 본문 마커 빼먹은 경우, 자동 삽입
+    data["passage_marked"] = _ensure_vocab_markers(
+        data.get("passage_marked", ""),
+        data.get("vocab_notes", []),
+    )
+
+    # 후처리 5 — passage_marked → passage_html 변환 (Jinja2에서 |safe)
     data["passage_html"] = _passage_marked_to_html(data.get("passage_marked", ""), passage)
 
-    save_step(passage_dir, "preclass_analysis_v5", data)
+    save_step(passage_dir, "preclass_analysis_v6", data)
     return data
 
 
@@ -3693,6 +3710,294 @@ def _rebalance_grammar_boxes(data: dict) -> dict:
         data["grammar_p2"] = {"left": new_p2_l, "right": new_p2_r}
     except Exception as e:
         _safe_print(f"  ⚠️ rebalance 실패: {e}")
+    return data
+
+
+# ═══════════════════════════════════════════════════════════════════
+# v6 후처리 — AI가 빠뜨린 VOCAB/IMPL 마커와 가주어/가목적어 패턴 자동 보정
+# ═══════════════════════════════════════════════════════════════════
+
+def _find_in_marked(marked: str, search: str) -> tuple:
+    """marked 텍스트에서 [[...]] 마커를 무시하고 search 찾기.
+    매치 영역이 어떤 마커 영역(GRAMMAR/VOCAB/IMPL) 안이거나, 매치 영역 안에 
+    마커가 들어가 있으면 다음 매치 시도. 모두 충돌하면 None.
+    
+    중첩 마커는 HTML 변환이 지원 안 되므로 회피.
+    
+    Returns: (start_in_marked, end_in_marked, matched_text) or None
+    """
+    import re as _re
+    
+    # plain text 추출 + 위치 매핑 + 마커 안인지 flag
+    plain_chars = []
+    pos_map = []  # plain[i] -> marked의 위치
+    in_marker = []  # plain[i]가 마커 영역(GRAMMAR/VOCAB/IMPL) 안에 있는지
+    
+    depth = 0
+    i = 0
+    while i < len(marked):
+        if marked[i:i+2] == "[[":
+            end = marked.find("]]", i)
+            if end > 0:
+                tag = marked[i:end+2]
+                if tag.startswith("[[/"):
+                    depth = max(0, depth - 1)
+                else:
+                    depth += 1
+                i = end + 2
+                continue
+        plain_chars.append(marked[i])
+        pos_map.append(i)
+        in_marker.append(depth > 0)
+        i += 1
+    
+    plain = "".join(plain_chars)
+    pattern = _re.compile(_re.escape(search), _re.IGNORECASE)
+    
+    # 모든 매치 시도 — 첫 번째 충돌 없는 매치 사용
+    for sm in pattern.finditer(plain):
+        if sm.end() > len(pos_map):
+            continue
+        # 매치 영역이 마커 안에 있으면 패스 (중첩 회피)
+        if any(in_marker[sm.start():sm.end()]):
+            continue
+        s_start = pos_map[sm.start()]
+        s_end = pos_map[sm.end() - 1] + 1
+        region = marked[s_start:s_end]
+        # 매치 영역 내에 마커 시작/끝 있는지 체크 (있으면 충돌)
+        if "[[" in region or "]]" in region:
+            continue
+        return (s_start, s_end, region)
+    
+    return None
+
+
+def _ensure_vocab_markers(passage_marked: str, vocab_notes: list) -> str:
+    """vocab_notes의 각 단어가 passage_marked에 [[VOCAB]] 마커로 감싸져 있는지 확인하고,
+    없으면 본문에서 단어 첫 등장 위치를 찾아 자동으로 [[VOCAB:l=L]]word[[/VOCAB]] 삽입.
+    
+    AI가 vocab_notes는 만들었지만 본문에 마커를 빠뜨리는 문제 해결.
+    """
+    if not passage_marked or not vocab_notes:
+        return passage_marked
+    
+    CIRCLED_ALPHA = "ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞ"
+    added = 0
+    
+    for idx, v in enumerate(vocab_notes):
+        if not isinstance(v, dict):
+            continue
+        word = (v.get("word") or "").strip()
+        if not word:
+            continue
+        letter = (v.get("letter") or "").strip()
+        # letter가 원알파벳 아니면 idx로 보정
+        if not letter or letter[0] not in CIRCLED_ALPHA:
+            if idx < len(CIRCLED_ALPHA):
+                letter = CIRCLED_ALPHA[idx]
+            else:
+                continue
+        else:
+            letter = letter[0]
+        
+        # 이미 마커가 있는지 체크 (l=letter 또는 plain letter 형태 모두)
+        l_idx = CIRCLED_ALPHA.index(letter)
+        plain_letter = chr(ord('a') + l_idx)
+        if (f"[[VOCAB:l={letter}]]" in passage_marked or 
+            f"[[VOCAB:l={plain_letter}]]" in passage_marked):
+            continue  # 이미 마커 있음
+        
+        # plain text 검색 (마커 영역 회피)
+        result = _find_in_marked(passage_marked, word)
+        if not result:
+            continue
+        
+        s_start, s_end, matched_text = result
+        wrapped = f"[[VOCAB:l={letter}]]{matched_text}[[/VOCAB]]"
+        passage_marked = passage_marked[:s_start] + wrapped + passage_marked[s_end:]
+        added += 1
+    
+    if added > 0:
+        _safe_print(f"  🔵 VOCAB 마커 자동 보정: {added}개 추가")
+    return passage_marked
+
+
+def _ensure_implication_markers(passage_marked: str, expressions: list) -> str:
+    """implication_box.expressions의 각 표현이 passage_marked에 [[IMPL]] 마커로 감싸져
+    있는지 확인하고, 없으면 본문에서 자동으로 [[IMPL]]...[[/IMPL]] 삽입.
+    
+    검색은 마커 영역을 무시하고 plain text로 진행 (마커와 충돌 시 다음 매치 시도).
+    """
+    import re as _re
+    if not passage_marked or not expressions:
+        return passage_marked
+    
+    added = 0
+    
+    for e in expressions:
+        if not isinstance(e, dict):
+            continue
+        expr = (e.get("expr") or "").strip()
+        if not expr or len(expr) < 3:
+            continue
+        # 앞쪽 기호 제거 (■ 같은 거)
+        expr = _re.sub(r'^[■●★◆□○·\s]+', '', expr).strip()
+        if not expr:
+            continue
+        
+        # 이미 마커 있는지 (정확히 같은 텍스트를 IMPL로 감싼 게 있는지)
+        if f"[[IMPL]]{expr}[[/IMPL]]" in passage_marked:
+            continue
+        # 대소문자 무관도 체크
+        if _re.search(r'\[\[IMPL\]\]' + _re.escape(expr) + r'\[\[/IMPL\]\]', 
+                      passage_marked, _re.IGNORECASE):
+            continue
+        
+        # 본문에서 정확히 그 표현 찾기 (마커 영역 회피)
+        # 너무 긴 표현은 핵심 부분만으로도 시도
+        words = expr.split()
+        candidates = [expr]
+        if len(words) > 5:
+            candidates.append(' '.join(words[:5]))
+            candidates.append(' '.join(words[:4]))
+            candidates.append(' '.join(words[:3]))
+        elif len(words) > 3:
+            candidates.append(' '.join(words[:3]))
+        
+        for cand in candidates:
+            result = _find_in_marked(passage_marked, cand)
+            if result:
+                s_start, s_end, matched_text = result
+                wrapped = f"[[IMPL]]{matched_text}[[/IMPL]]"
+                passage_marked = passage_marked[:s_start] + wrapped + passage_marked[s_end:]
+                added += 1
+                break
+    
+    if added > 0:
+        _safe_print(f"  ⚫ IMPL 마커 자동 보정: {added}개 추가")
+    return passage_marked
+
+
+def _check_it_cleft_and_dummy(passage: str, grammar_notes: list, passage_marked: str) -> list:
+    """본문에서 가주어/가목적어/It-cleft 패턴을 자동 감지.
+    grammar_notes에 해당 패턴이 없으면 추가 후보를 반환.
+    
+    감지 패턴:
+    1. 가주어 it ~ to-V/that:  It is/was + 형용사/명사 + (for X) + to-V/that S+V
+    2. 가목적어 it ~ to-V:  V + it + 형용사/명사 + to-V  (make/find/think/consider + it)
+    3. It-cleft 강조구문:  It is/was + X + that/who + 동사
+    """
+    import re as _re
+    
+    # 이미 grammar_notes에 가주어/가목적어/cleft 관련이 있는지 검사
+    existing_tags = []
+    for n in grammar_notes or []:
+        if isinstance(n, dict):
+            tag = (n.get("tag") or "") + " " + (n.get("desc") or "")
+            existing_tags.append(tag)
+    existing_text = " ".join(existing_tags).lower()
+    
+    has_dummy_subj = any(k in existing_text for k in ["가주어", "dummy subject", "it ~ to-v"])
+    has_dummy_obj = any(k in existing_text for k in ["가목적어", "dummy object"])
+    has_cleft = any(k in existing_text for k in ["it-cleft", "it cleft", "분열문", "강조구문"])
+    
+    detected = []
+    
+    # 패턴 1: 가주어 it
+    p1 = _re.compile(
+        r"\bIt\s+(?:is|was|seems|appears|becomes|became|remained|remains)\s+"
+        r"(?:not\s+)?(?:\w+\s+){1,3}(?:to\s+\w+|that\s+\w+)",
+        _re.IGNORECASE
+    )
+    for m in p1.finditer(passage):
+        if not has_dummy_subj and not has_cleft:
+            detected.append({
+                "type": "dummy_subj",
+                "tag": "가주어 it ~ 진주어 to-V/that",
+                "match": m.group(0)[:60],
+                "pos": m.start(),
+            })
+    
+    # 패턴 2: 가목적어 it
+    p2 = _re.compile(
+        r"\b(?:makes?|made|making|finds?|found|finding|thinks?|thought|considers?|considered|"
+        r"believes?|believed|deems?|deemed|feels?|felt)\s+it\s+"
+        r"(?:\w+\s+){0,3}(?:to\s+\w+|that\s+\w+)",
+        _re.IGNORECASE
+    )
+    for m in p2.finditer(passage):
+        if not has_dummy_obj:
+            detected.append({
+                "type": "dummy_obj",
+                "tag": "가목적어 it ~ 진목적어 to-V",
+                "match": m.group(0)[:60],
+                "pos": m.start(),
+            })
+    
+    # 패턴 3: It-cleft (it is X that + V)
+    p3 = _re.compile(
+        r"\bIt\s+(?:is|was)\s+\w+(?:\s+\w+){0,5}\s+that\s+(?:\w+\s+)?(?:do|does|did|is|was|are|were|has|have|had|can|could|will|would|may|might|\w+ed|\w+s)\b",
+        _re.IGNORECASE
+    )
+    for m in p3.finditer(passage):
+        if not has_cleft:
+            # 가주어와 겹칠 수 있으니 위치로 dedup
+            already = any(d["pos"] == m.start() for d in detected)
+            if not already:
+                detected.append({
+                    "type": "cleft",
+                    "tag": "It-cleft 강조구문 (It is X that ~)",
+                    "match": m.group(0)[:60],
+                    "pos": m.start(),
+                })
+    
+    return detected
+
+
+def _inject_dummy_it_notes(data: dict, passage: str) -> dict:
+    """가주어/가목적어/It-cleft가 본문에 있는데 grammar_notes에 없으면 강제 추가."""
+    grammar_notes = data.get("grammar_notes", [])
+    passage_marked = data.get("passage_marked", "")
+    detected = _check_it_cleft_and_dummy(passage, grammar_notes, passage_marked)
+    
+    if not detected:
+        return data
+    
+    CIRCLED_NUMS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮"
+    added = 0
+    
+    # dedup by type
+    seen_types = set()
+    for d in detected:
+        if d["type"] in seen_types:
+            continue
+        seen_types.add(d["type"])
+        
+        # 번호 할당 (이미 있는 마지막 번호 + 1)
+        next_idx = len(grammar_notes)
+        if next_idx >= len(CIRCLED_NUMS):
+            break  # 15개 초과 방지
+        num = CIRCLED_NUMS[next_idx]
+        
+        # desc 작성
+        if d["type"] == "dummy_subj":
+            desc = f'It+be+형/명+to-V/that: it=가주어, to-V/that절=진주어 (본문: "{d["match"]}...")'
+        elif d["type"] == "dummy_obj":
+            desc = f'V+it+형/명+to-V: it=가목적어, to-V=진목적어 (본문: "{d["match"]}...")'
+        else:  # cleft
+            desc = f'It is/was + X + that ~: X 강조 (분열문). 제거해도 문장 성립 (본문: "{d["match"]}...")'
+        
+        grammar_notes.append({
+            "num": num,
+            "tag": d["tag"],
+            "desc": desc,
+        })
+        added += 1
+    
+    if added > 0:
+        _safe_print(f"  🔴 가주어/가목적어/It-cleft 패턴 자동 감지: {added}개 추가")
+        data["grammar_notes"] = grammar_notes
+    
     return data
 
 

@@ -13,7 +13,7 @@ STEP_VERSIONS = {
     "step6_vocab_content": "v6",
     "step7_writing": "v4",
     "step8_answers": "v10",
-    "secret_note_a": "v2",  # v2: Type C 기반, 반의어, 요약문, 강사명
+    "secret_note_a": "v3",  # v3: 요약문 30-40단어 + summary_kr 추가
     "secret_note_b": "v1",
     "secret_note_c": "v5",  # v5: 유의어 6-7개, 고난도 4-5개, 요지 2배 길이, 가로 배치
 }
@@ -3001,11 +3001,15 @@ Analyze the passage and return structured study materials.
 
 5. ONE_SENTENCE_SUMMARY: A SINGLE English sentence that captures the entire passage
    - MUST have at least 2 clauses (절이 2개 이상)
-   - MUST be under 30 words
+   - MUST be 30-40 words (not too short!)
    - MUST include ALL key content of the passage
    - Example: "While information itself cannot be eaten, food represents solar energy transformed through millennia of accumulated agricultural knowledge, enabling human flourishing."
 
-6. PARAPHRASE: Rewrite the ENTIRE passage in different words
+6. SUMMARY_KR: Korean translation of the one_sentence_summary
+   - Natural Korean, not translation-style
+   - Must convey the same meaning as the English summary
+
+7. PARAPHRASE: Rewrite the ENTIRE passage in different words
    - SAME number of sentences as original
    - SIMILAR word count as original
    - COMPLETELY different vocabulary and sentence structures
@@ -3035,7 +3039,8 @@ Return ONLY valid JSON:
     "요지 2 - 40-60자의 완전한 한국어 문장",
     "요지 3 - 40-60자의 완전한 한국어 문장"
   ],
-  "one_sentence_summary": "A single sentence under 30 words with at least 2 clauses that captures all key content...",
+  "one_sentence_summary": "A single sentence of 30-40 words with at least 2 clauses that captures all key content...",
+  "summary_kr": "위 영어 요약의 자연스러운 한국어 번역...",
   "paraphrase": "Full passage rewritten in different words..."
 }
 
@@ -3044,7 +3049,8 @@ IMPORTANT:
 - topics: exactly 3 items (LONG phrases, 15-25 words each)
 - titles: exactly 3 items (수능 24번 style with colon, 10-15 words)
 - main_points: exactly 3 items (Korean only, 40-60 characters each)
-- one_sentence_summary: ONE sentence, 2+ clauses, under 30 words
+- one_sentence_summary: ONE sentence, 2+ clauses, 30-40 words
+- summary_kr: Korean translation of the summary
 - paraphrase: FULL passage rewritten
 - Return ONLY valid JSON. No markdown, no backticks."""
 

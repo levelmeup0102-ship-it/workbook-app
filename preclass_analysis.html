@@ -59,9 +59,9 @@ body {
 
 .page {
   page-break-after: always;
-  min-height: 275mm;
+  min-height: 270mm;
   position: relative;
-  padding-bottom: 10mm;
+  padding-bottom: 4mm;
 }
 .page:last-child { page-break-after: avoid; }
 
@@ -242,6 +242,9 @@ body {
   margin-bottom: 6px;
   border-bottom: 1px solid var(--red-faint);
   padding-bottom: 4px;
+  /* 박스가 페이지 경계에서 잘리지 않게 */
+  page-break-inside: avoid;
+  break-inside: avoid;
 }
 .dg-title {
   font-weight: bold; font-size: 10.5pt; color: var(--red);
@@ -491,13 +494,15 @@ body {
   </table>
 </div>
 
-{# ───────────────────── PAGE B-1 — 어법 상세 1/2 ───────────────────── #}
+{# ───────────────────── PAGE B — 어법 상세 (B-1, B-2 통합) + 함축 박스 ───────────────────── #}
+{# 좌측 6박스 = p1.left + p2.left / 우측 6박스 = p1.right + p2.right
+   → 좌측이 끝까지 채워지고 우측으로 흐름, 페이지 하단 여백 최소화 #}
 <div class="page">
-  <div class="detail-hdr">●  어법 상세 해설  <span class="sub">({{ item.label }} — 수업 후 셀프 점검 1/2)</span></div>
+  <div class="detail-hdr">●  어법 상세 해설  <span class="sub">({{ item.label }} — 수업 후 셀프 점검)</span></div>
   <table class="detail-grid">
     <tr>
       <td class="detail-td">
-        {% for box in item.data.grammar_p1.left %}
+        {% for box in (item.data.grammar_p1.left or []) + (item.data.grammar_p2.left or []) %}
         <div class="dg-box">
           <div class="dg-title">{{ box.num }} {{ box.title }}</div>
           {% for line in box.lines %}
@@ -507,36 +512,7 @@ body {
         {% endfor %}
       </td>
       <td class="detail-td">
-        {% for box in item.data.grammar_p1.right %}
-        <div class="dg-box">
-          <div class="dg-title">{{ box.num }} {{ box.title }}</div>
-          {% for line in box.lines %}
-          <div class="dg-line {% if line.is_ex %}ex{% endif %}">{{ line.text }}</div>
-          {% endfor %}
-        </div>
-        {% endfor %}
-      </td>
-    </tr>
-  </table>
-</div>
-
-{# ───────────────────── PAGE B-2 — 어법 상세 2/2 + 함축 박스 ───────────────────── #}
-<div class="page">
-  <div class="detail-hdr">●  어법 상세 해설  <span class="sub">({{ item.label }} — 수업 후 셀프 점검 2/2)</span></div>
-  <table class="detail-grid">
-    <tr>
-      <td class="detail-td">
-        {% for box in item.data.grammar_p2.left %}
-        <div class="dg-box">
-          <div class="dg-title">{{ box.num }} {{ box.title }}</div>
-          {% for line in box.lines %}
-          <div class="dg-line {% if line.is_ex %}ex{% endif %}">{{ line.text }}</div>
-          {% endfor %}
-        </div>
-        {% endfor %}
-      </td>
-      <td class="detail-td">
-        {% for box in item.data.grammar_p2.right %}
+        {% for box in (item.data.grammar_p1.right or []) + (item.data.grammar_p2.right or []) %}
         <div class="dg-box">
           <div class="dg-title">{{ box.num }} {{ box.title }}</div>
           {% for line in box.lines %}
@@ -548,7 +524,7 @@ body {
     </tr>
   </table>
 
-  {# 함축 빈칸 흐름 핵심 정리 #}
+  {# 함축 빈칸 흐름 핵심 정리 (같은 페이지 하단) #}
   <div class="impl-hdr">●  ■  함축 빈칸 흐름 핵심 정리</div>
   <div class="impl-box">
     {% for e in item.data.implication_box.expressions %}

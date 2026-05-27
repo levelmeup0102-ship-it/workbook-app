@@ -13,7 +13,7 @@ STEP_VERSIONS = {
     "step6_vocab_content": "v6",
     "step7_writing": "v4",
     "step8_answers": "v10",
-    "secret_note_a": "v1",
+    "secret_note_a": "v2",  # v2: Type C 기반, 반의어, 요약문, 강사명
     "secret_note_b": "v1",
     "secret_note_c": "v5",  # v5: 유의어 6-7개, 고난도 4-5개, 요지 2배 길이, 가로 배치
 }
@@ -2976,41 +2976,77 @@ if __name__ == "__main__":
 # ★ 비밀노트 (Secret Note) - 수정된 코드
 # ============================================================
 
-SYS_SECRET_NOTE_A = """You are an English passage analyzer for Korean high school students preparing for exams in ONE WEEK.
-Your analysis must be precise, academic, and exam-ready. Every output should look like a correct answer choice on a standardized test.
+SYS_SECRET_NOTE_A = """You are an expert English teacher preparing Korean high school students for their FINAL EXAM.
+Analyze the passage and return structured study materials.
 
-Return ONLY valid JSON with NO markdown, NO backticks, NO explanation.
+=== CRITICAL RULES ===
+1. VOCABULARY: Select 10 key words. Each must have:
+   - 6-7 synonyms (middle/high school level, 중고등 수준)
+   - 3 antonyms with Korean meaning in parentheses
+   
+2. TOPICS (주제): 3 different topic statements with Korean translation
+   - Express what the passage is ABOUT
+   - LONG complete phrases (15-25 words), like 수능 format
+   - Example: "The essential role of accumulated agricultural knowledge in transforming solar energy into consumable food"
+
+3. TITLES (제목): 3 creative titles - 수능 24번 STYLE with Korean translation
+   - MUST BE LONG with subtitle (콜론 사용)
+   - Example: "From Sunlight to Supper: The Knowledge Revolution in Food Production"
+   - NOT short titles like "Food and Knowledge" - TOO SHORT!
+
+4. MAIN_POINTS (요지): 3 statements in KOREAN only
+   - State the key message/lesson of the passage
+   - LONG complete sentences in natural Korean (40-60 characters)
+   - Must be detailed and comprehensive
+
+5. ONE_SENTENCE_SUMMARY: A SINGLE English sentence that captures the entire passage
+   - MUST have at least 2 clauses (절이 2개 이상)
+   - MUST be under 30 words
+   - MUST include ALL key content of the passage
+   - Example: "While information itself cannot be eaten, food represents solar energy transformed through millennia of accumulated agricultural knowledge, enabling human flourishing."
+
+6. PARAPHRASE: Rewrite the ENTIRE passage in different words
+   - SAME number of sentences as original
+   - SIMILAR word count as original
+   - COMPLETELY different vocabulary and sentence structures
+
+=== JSON FORMAT ===
+Return ONLY valid JSON:
 {
-  "flow": "지문의 논리적 흐름을 한국어로 서술. 핵심 단계를 → 로 연결. 예: 문제 제기 → 사례 제시 → 해결책 → 결론",
-  "summary_kr": "지문 핵심 내용을 한국어 1-2문장으로 요약. 주어+서술어 완전한 문장.",
-  "summary_en": "One English sentence of 50-70 words. Include key argument, evidence, and conclusion.",
-  "background": ["배경지식1: 한 줄 설명","배경지식2","배경지식3","배경지식4","배경지식5"],
-  "analogies": ["비유나 예시1 (한국어, 지문 내용과 직접 연결)","비유나 예시2"],
-  "related_topics": ["연관주제1: 한 줄 설명","연관주제2","연관주제3","연관주제4","연관주제5"],
-  "proverbs": [{"en":"English proverb1","kr":"한국어 의미"},{"en":"English proverb2","kr":"한국어 의미2"},{"en":"English proverb3","kr":"한국어 의미3"}],
-  "main_points": [
-    {"en":"Complete English sentence stating the main claim clearly and definitively (exam-style answer)","kr":"핵심 주장을 명확하게 서술한 완전한 한국어 문장 (수능 선택지 스타일)"},
-    {"en":"MP2","kr":"번역2"},
-    {"en":"MP3","kr":"번역3"}
+  "vocabulary": [
+    {
+      "word": "flourish",
+      "synonyms": ["thrive", "prosper", "bloom", "succeed", "grow", "blossom", "expand"],
+      "antonyms": ["wither (시들다)", "decline (쇠퇴하다)", "perish (소멸하다)"]
+    }
+  ],
+  "topics": [
+    {"en": "The essential role of accumulated agricultural knowledge in transforming solar energy into consumable food", "kr": "축적된 농업 지식이 태양 에너지를 먹을 수 있는 음식으로 변환하는 데 있어서의 핵심적인 역할"},
+    {"en": "Topic 2...", "kr": "주제 2 번역"},
+    {"en": "Topic 3...", "kr": "주제 3 번역"}
   ],
   "titles": [
-    {"en":"English title: concise, exam-style, clearly states the topic and main claim","kr":"한국어 제목: 수능 주제문처럼 명확하고 간결하게"},
-    {"en":"Title2","kr":"번역2"},
-    {"en":"Title3","kr":"번역3"}
+    {"en": "From Sunlight to Supper: The Knowledge Revolution in Food Production", "kr": "햇빛에서 저녁 식사까지: 식량 생산의 지식 혁명"},
+    {"en": "Title 2...", "kr": "제목 2 번역"},
+    {"en": "Title 3...", "kr": "제목 3 번역"}
   ],
-  "figurative_phrases": [
-    {"phrase":"figurative expression from passage","explanation":"수사법 이름 + 효과 (한국어)"},
-    {"phrase":"phrase2","explanation":"설명2"},
-    {"phrase":"phrase3","explanation":"설명3"}
+  "main_points": [
+    "요지 1 - 40-60자의 완전한 한국어 문장",
+    "요지 2 - 40-60자의 완전한 한국어 문장",
+    "요지 3 - 40-60자의 완전한 한국어 문장"
   ],
-  "vocabulary": [{"word":"word1","synonyms":["s1","s2","s3","s4","s5"],"antonyms":["a1","a2","a3","a4","a5"]}]
+  "one_sentence_summary": "A single sentence under 30 words with at least 2 clauses that captures all key content...",
+  "paraphrase": "Full passage rewritten in different words..."
 }
-Rules:
-- main_points: 수능 시험 선택지처럼 명확하고 단정적인 문장. 모호한 표현 금지.
-- titles: 수능 주제·제목 찾기 정답처럼 핵심 주장이 뚜렷하게 드러나야 함.
-- vocabulary must have exactly 10 words.
-- proverbs must have exactly 3 items.
-- Return ONLY valid JSON."""
+
+IMPORTANT:
+- vocabulary: exactly 10 words, each with 6-7 synonyms and 3 antonyms (with Korean meaning)
+- topics: exactly 3 items (LONG phrases, 15-25 words each)
+- titles: exactly 3 items (수능 24번 style with colon, 10-15 words)
+- main_points: exactly 3 items (Korean only, 40-60 characters each)
+- one_sentence_summary: ONE sentence, 2+ clauses, under 30 words
+- paraphrase: FULL passage rewritten
+- Return ONLY valid JSON. No markdown, no backticks."""
 
 
 SYS_SECRET_NOTE_B = """You are an expert English teacher preparing Korean high school students for their FINAL EXAM in ONE WEEK.
@@ -3110,13 +3146,13 @@ def generate_secret_note_b(passage: str, passage_dir: Path, translation: str = "
     return data
 
 
-def render_secret_note(passages_data: list, note_type: str, school_name: str) -> str:
+def render_secret_note(passages_data: list, note_type: str, school_name: str, teacher_name: str = "") -> str:
     """비밀노트 HTML 렌더링 (Jinja2)"""
     from jinja2 import Environment, FileSystemLoader
     template_file = f"secret_note_type_{note_type.lower()}.html"
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)))
     tmpl = env.get_template(template_file)
-    return tmpl.render(passages=passages_data, school_name=school_name)
+    return tmpl.render(passages=passages_data, school_name=school_name, teacher_name=teacher_name)
 
 
 # ============================================================
@@ -3262,10 +3298,31 @@ If you'd merge 3+, create SEPARATE boxes instead.
 Distribution for 12 grammar_notes: 3+3+3+3 (p1.L=①②③ / p1.R=④⑤⑥ / p2.L=⑦⑧⑨ / p2.R=⑩⑪⑫)
 Distribution for 13: 3+4+3+3 or 4+3+3+3
 
-### RULE 5 — MARKER COUNT = NOTES COUNT
-- `[[GRAMMAR:n=N]]` count = len(grammar_notes)
-- `[[VOCAB:l=L]]` count = len(vocab_notes) = 10
-- `[[IMPL]]` count = len(implication_box.expressions) = 6~7
+### RULE 5 — MARKER COUNT IN PASSAGE = NOTES COUNT (★ABSOLUTE — NO EXCEPTIONS★)
+
+**3가지 마커 모두 반드시 본문에 표시해야 한다. 어법(빨간)만 마킹하고 어휘(파랑)·함축(검정) 마커를 빼먹는 것은 절대 금지.**
+
+In `passage_marked`, ALL THREE marker types must appear in the body:
+
+| 마커 종류 | 본문 내 개수 | 대응 항목 |
+|---|---|---|
+| `[[GRAMMAR:n=N]]...[[/GRAMMAR]]` | = len(grammar_notes) | 보통 12~14개 |
+| `[[VOCAB:l=L]]...[[/VOCAB]]` | **= len(vocab_notes) = 정확히 10개** | 어휘 노트와 1:1 매칭 |
+| `[[IMPL]]...[[/IMPL]]` | **= len(implication_box.expressions) = 6~7개** | implication 표현 1:1 매칭 |
+
+★ ENFORCEMENT ★
+- 본문에 VOCAB 마커가 10개 미만이면 SELF-CHECK 실패 → 다시 본문 스캔해서 어휘 위치 찾기
+- 본문에 IMPL 마커가 6개 미만이면 SELF-CHECK 실패 → implication_box.expressions 각 표현을 본문에서 찾아 마킹
+- vocab_notes·implication_box를 만들었다면, 그 단어/표현이 본문에 반드시 있다 → 본문에서 위치 찾아 마커로 감싸라
+
+**IMPL 마커 가이드 (★검은 밑줄 = 함축 빈칸 흐름★)**
+검은 밑줄은 다음 4가지 중 본문에 실제 등장하는 6~7개를 마킹:
+1. 핵심 비유·은유·구체 표현 (예: "compare apples to oranges", "yesterday-you")
+2. 전환점 신호어 직후의 핵심구 (예: "Instead, ~", "However, ~")
+3. 주제 응축 표현 / 필자 주장 (예: "the only fair comparison is ~", "it's you")
+4. 빈칸 출제 후보 구문 (논리 단계의 결정적 어구)
+
+implication_box.expressions의 각 expr 필드는 본문에서 정확히 그 표현으로 마킹된 부분이어야 함.
 
 ### RULE 6 — GRAMMAR_NOTES COUNT = STRICT 12~14 (절대 7~10개 안됨)
 **MINIMUM 12, ABSOLUTE FLOOR. If you find fewer than 12, you MUST re-scan the passage.**
@@ -3295,6 +3352,10 @@ You MUST systematically scan the passage for ALL these categories:
 
 **카테고리 D — 특수구문**
 - 가주어 it ~ 진주어 to-V/that
+- **가목적어 it ~ 진목적어 to-V/that** ★ABSOLUTELY DO NOT MISS★
+  - 5형식 동사(make/find/think/consider/believe/feel) + it + 형용사/명사 + to-V (or that S+V)
+  - 본문 예: "makes it impossible to recycle", "find it difficult to V", "consider it necessary to V"
+  - **빨간 밑줄 대상: "it" 부분과 "to-V" 부분 모두 (또는 it만)**
 - It-cleft 강조구문 (It is X that ~)
 - so~that / such~that
 - 도치 (부정어 도치, only 도치, so/neither 도치)
@@ -3304,7 +3365,8 @@ You MUST systematically scan the passage for ALL these categories:
 **카테고리 E — 자주 출제되는 어구 구문 ★ABSOLUTELY DO NOT MISS★**
 - **prevent/keep/stop/prohibit/discourage A from V-ing** ← 매번 빼먹지 말 것
 - **be expected to V / be likely to V / be supposed to V**
-- **make/find/consider + O + OC(형용사/명사)**
+- **make/find/consider/think/believe + it + 형/명 + to-V** ← ★가목적어 it ★ 매번 빼먹지 말 것
+- **make/find/consider + O + OC(형용사/명사)** ← 일반 5형식
 - **부분표현 + of + N + V** (most/all/some/half/the rest of)
 - **It takes 사람 시간 to-V**
 - **the way (how) S+V / the reason why**
@@ -3400,7 +3462,15 @@ Same format with def_en + ex_short.
 □ Every box's num is "X" or "XY" (max 2 merged)?
 □ grammar_p1.left/right ≥ 3 AND grammar_p2.left/right ≥ 3?
 □ Count of [[GRAMMAR]] = len(grammar_notes)?
+□ **Count of [[VOCAB]] in passage_marked = len(vocab_notes) = 10?** ★MOST MISSED CHECK★
+□ **Count of [[IMPL]] in passage_marked = len(implication_box.expressions) = 6~7?** ★MOST MISSED CHECK★
 □ Every vocab_detail/theme_vocab has def_en (8~15w) AND ex_short (8~12w)?
+
+★★★ MARKER COMPLETENESS — DO NOT SKIP ★★★
+파란 밑줄(VOCAB)과 검은 밑줄(IMPL)은 빨간 밑줄(GRAMMAR)만큼 중요하다.
+vocab_notes 10개를 만들었으면 본문에 VOCAB 마커도 정확히 10개 있어야 한다.
+implication_box.expressions 6~7개를 만들었으면 본문에 IMPL 마커도 정확히 6~7개 있어야 한다.
+**만약 본문에 마커가 부족하면 → 단어/표현을 본문에서 다시 찾아서 마커 추가 → 재검토.**
 
 ★★★ FINAL CHECK — GRAMMAR_NOTES COUNT ★★★
 □ len(grammar_notes) >= 12?
@@ -3426,10 +3496,10 @@ Return ONLY the JSON object.
 
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
-    # v4: Supabase grammar_points 자동 학습 시스템 — 기존 v3 캐시 무효화
-    cached = load_step(passage_dir, "preclass_analysis_v4")
+    # v5: 시스템 프롬프트 강화 — VOCAB/IMPL 마커 본문 강제 + 가목적어 it 명시 — 기존 v4 캐시 무효화
+    cached = load_step(passage_dir, "preclass_analysis_v5")
     if cached:
-        _safe_print("  ✅ preclass_analysis_v4 캐시 사용")
+        _safe_print("  ✅ preclass_analysis_v5 캐시 사용")
         return cached
     _safe_print("  📕 preclass_analysis 생성 중...")
 
@@ -3454,7 +3524,7 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     # 후처리 2 — passage_marked → passage_html 변환 (Jinja2에서 |safe)
     data["passage_html"] = _passage_marked_to_html(data.get("passage_marked", ""), passage)
 
-    save_step(passage_dir, "preclass_analysis_v4", data)
+    save_step(passage_dir, "preclass_analysis_v5", data)
     return data
 
 

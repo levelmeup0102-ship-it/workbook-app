@@ -3503,11 +3503,13 @@ Each item:
       {"stage": "결론", "label_en": "Conclusion", "text_kr": "글쓴이의 최종 입장·주장. **1~2문장, 50~80자**, ~해요체", "key_phrase": "결론부 핵심 (3~6단어)"}
     ],
     "blank_candidates": [
+      "★ 정확히 3개만 (절대 3개 초과 금지) ★",
       {"sentence": "본문에서 빈칸으로 출제하기 좋은 중요 문장 (원문 그대로, 영어)", "paraphrase": "이 문장이 빈칸/변형으로 출제될 때 paraphrasing 될 수 있는 형태 (영어)", "why": "왜 이 문장이 빈칸 출제 포인트인지 한 줄 (한국어)"},
       {"sentence": "두 번째 중요 문장", "paraphrase": "패러프레이즈", "why": "이유"},
       {"sentence": "세 번째 중요 문장", "paraphrase": "패러프레이즈", "why": "이유"}
     ],
     "implicit_meanings": [
+      "★ 정확히 3개만 (절대 3개 초과 금지) ★",
       {"expr": "본문의 비유적·함축적 표현 (영어 원문)", "literal": "표면적 의미 (한국어)", "implied": "글에서 빗댄/함축한 진짜 의미 (한국어)", "implied_en": "그 함축 의미를 영어로 다시 표현 (paraphrase, 영어 한 문장)"},
       {"expr": "두 번째 함축 표현", "literal": "표면 의미", "implied": "함축 의미", "implied_en": "영어 paraphrase"},
       {"expr": "세 번째 함축 표현", "literal": "표면 의미", "implied": "함축 의미", "implied_en": "영어 paraphrase"}
@@ -3574,9 +3576,9 @@ Return ONLY the JSON object.
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
     # v12: topics 강제 압축(제목 길이) + 어휘 편입/GRE급 + 영영 단어밑 배치 + 솔루션 페이지 통합 — v11 캐시 무효화
-    cached = load_step(passage_dir, "preclass_analysis_v13")
+    cached = load_step(passage_dir, "preclass_analysis_v14")
     if cached:
-        _safe_print("  ✅ preclass_analysis_v13 캐시 사용")
+        _safe_print("  ✅ preclass_analysis_v14 캐시 사용")
         return cached
     _safe_print("  📕 preclass_analysis 생성 중...")
 
@@ -3597,6 +3599,9 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
 
     # 후처리 1 — 박스 균형 자동 보정
     data = _rebalance_grammar_boxes(data)
+
+    # ★ v14 후처리 1.5 — 빈칸/함축 정확히 3개로 제한 (IMPL 마커 수집보다 먼저)
+    data = _enforce_count_3(data)
 
     # ★ v6 후처리 2 — 가주어/가목적어/It-cleft 패턴 자동 감지 → grammar_notes 강제 추가
     data = _inject_dummy_it_notes(data, passage)
@@ -3632,7 +3637,7 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     # ★ v13 후처리 7 — 요약문 40단어 이내 강제
     data = _enforce_summary_length(data, max_words=40)
 
-    save_step(passage_dir, "preclass_analysis_v13", data)
+    save_step(passage_dir, "preclass_analysis_v14", data)
     return data
 
 
@@ -4243,6 +4248,28 @@ def _enforce_summary_length(data: dict, max_words: int = 40) -> dict:
     impl["summary"] = summary
     data["implication_box"] = impl
     _safe_print(f"  ✂️ 요약문 압축: {len(words)}단어 → {len(result.split())}단어 (40 이내 강제)")
+    return data
+
+
+def _enforce_count_3(data: dict) -> dict:
+    """blank_candidates와 implicit_meanings를 정확히 3개로 강제.
+    
+    선생님 요청: 함축이 3~5개로 들쭉날쭉 → 빈칸·함축 둘 다 정확히 3개씩만.
+    AI가 3개 초과 생성하면 앞 3개만 남기고 자른다.
+    문자열 등 dict가 아닌 항목(스키마 설명 잔재)은 제거.
+    """
+    impl = data.get("implication_box", {})
+    if not isinstance(impl, dict):
+        return data
+    for key in ("blank_candidates", "implicit_meanings"):
+        items = impl.get(key, [])
+        if isinstance(items, list):
+            # dict 항목만 남기고 (스키마 설명 문자열 제거)
+            dicts = [x for x in items if isinstance(x, dict)]
+            if len(dicts) != len(items) or len(dicts) > 3:
+                _safe_print(f"  ✂️ {key}: {len(items)}개 → {min(len(dicts),3)}개로 정리")
+            impl[key] = dicts[:3]
+    data["implication_box"] = impl
     return data
 
 

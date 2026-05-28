@@ -3574,9 +3574,9 @@ Return ONLY the JSON object.
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
     # v12: topics 강제 압축(제목 길이) + 어휘 편입/GRE급 + 영영 단어밑 배치 + 솔루션 페이지 통합 — v11 캐시 무효화
-    cached = load_step(passage_dir, "preclass_analysis_v12")
+    cached = load_step(passage_dir, "preclass_analysis_v13")
     if cached:
-        _safe_print("  ✅ preclass_analysis_v12 캐시 사용")
+        _safe_print("  ✅ preclass_analysis_v13 캐시 사용")
         return cached
     _safe_print("  📕 preclass_analysis 생성 중...")
 
@@ -3629,7 +3629,10 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     # ★ v9 후처리 6 — topics 길이 검증 (위반 시 콘솔 경고)
     data = _check_topics_length(data)
 
-    save_step(passage_dir, "preclass_analysis_v12", data)
+    # ★ v13 후처리 7 — 요약문 40단어 이내 강제
+    data = _enforce_summary_length(data, max_words=40)
+
+    save_step(passage_dir, "preclass_analysis_v13", data)
     return data
 
 
@@ -4196,6 +4199,50 @@ def _check_topics_length(data: dict) -> dict:
 
     if fixed_en or fixed_kr:
         _safe_print(f"  ✂️ topics 자동 압축: 영어 {fixed_en}건, 한글 {fixed_kr}건 (제목 길이에 맞춤)")
+    return data
+
+
+def _enforce_summary_length(data: dict, max_words: int = 40) -> dict:
+    """요약문(summary.en)을 40단어 이내로 강제 절단.
+    
+    선생님 요청: 요약이 너무 김 → 항상 40단어 이내. 시스템 프롬프트가 안 지켜져서 코드 강제.
+    문장 경계를 존중하며 40단어 넘는 마지막 문장은 통째로 제거.
+    """
+    import re as _re
+    impl = data.get("implication_box", {})
+    if not isinstance(impl, dict):
+        return data
+    summary = impl.get("summary", {})
+    if not isinstance(summary, dict):
+        return data
+    en = summary.get("en", "")
+    if not isinstance(en, str) or not en.strip():
+        return data
+
+    words = en.split()
+    if len(words) <= max_words:
+        return data
+
+    # 문장 단위로 누적하다가 40단어 넘으면 직전까지만 (문장 완결성 유지)
+    sentences = _re.split(r'(?<=[.!?])\s+', en.strip())
+    kept, count = [], 0
+    for s in sentences:
+        w = len(s.split())
+        if count + w <= max_words:
+            kept.append(s)
+            count += w
+        else:
+            break
+    if kept:
+        result = ' '.join(kept).strip()
+    else:
+        # 첫 문장조차 40단어 초과 → 어절로 강제 절단 후 마침표
+        result = ' '.join(words[:max_words]).rstrip(',;:') + '.'
+
+    summary["en"] = result
+    impl["summary"] = summary
+    data["implication_box"] = impl
+    _safe_print(f"  ✂️ 요약문 압축: {len(words)}단어 → {len(result.split())}단어 (40 이내 강제)")
     return data
 
 

@@ -13,7 +13,7 @@ STEP_VERSIONS = {
     "step6_vocab_content": "v6",
     "step7_writing": "v4",
     "step8_answers": "v10",
-    "secret_note_a": "v3",  # v3: 요약문 30-40단어 + summary_kr 추가
+    "secret_note_a": "v4",  # v4: 유의어 5개, paraphrase 템플릿에서 삭제
     "secret_note_b": "v1",
     "secret_note_c": "v5",  # v5: 유의어 6-7개, 고난도 4-5개, 요지 2배 길이, 가로 배치
 }
@@ -2981,7 +2981,7 @@ Analyze the passage and return structured study materials.
 
 === CRITICAL RULES ===
 1. VOCABULARY: Select 10 key words. Each must have:
-   - 6-7 synonyms (middle/high school level, 중고등 수준)
+   - exactly 5 synonyms (middle/high school level, 중고등 수준)
    - 3 antonyms with Korean meaning in parentheses
    
 2. TOPICS (주제): 3 different topic statements with Korean translation
@@ -3020,7 +3020,7 @@ Return ONLY valid JSON:
   "vocabulary": [
     {
       "word": "flourish",
-      "synonyms": ["thrive", "prosper", "bloom", "succeed", "grow", "blossom", "expand"],
+      "synonyms": ["thrive", "prosper", "bloom", "succeed", "grow"],
       "antonyms": ["wither (시들다)", "decline (쇠퇴하다)", "perish (소멸하다)"]
     }
   ],
@@ -3045,7 +3045,7 @@ Return ONLY valid JSON:
 }
 
 IMPORTANT:
-- vocabulary: exactly 10 words, each with 6-7 synonyms and 3 antonyms (with Korean meaning)
+- vocabulary: exactly 10 words, each with exactly 5 synonyms and 3 antonyms (with Korean meaning)
 - topics: exactly 3 items (LONG phrases, 15-25 words each)
 - titles: exactly 3 items (수능 24번 style with colon, 10-15 words)
 - main_points: exactly 3 items (Korean only, 40-60 characters each)

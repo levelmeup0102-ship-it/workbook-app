@@ -3386,11 +3386,48 @@ You MUST systematically scan the passage for ALL these categories:
 
 **SCAN EVERY SENTENCE.** For each sentence, identify at least 1-2 grammar points if possible. Aim for 12-14 distinct points.
 
-### RULE 7 — TOPICS / TITLES = 평가원 STANDARD
+### RULE 7 — TOPICS / TITLES (★ABSOLUTE — NO EXCEPTIONS★)
+
+**topics와 titles는 동일한 크기·무게여야 한다. 한 번에 시각적으로 보아 비슷한 길이여야 한다.**
+
+#### HARD LIMITS (위반 시 self-check 실패 → 재작성)
+- **topics 영어: 6~10 단어. ABSOLUTE MAX 10 단어. 100자 이내. (이전 12 → 10으로 더 축소)**
+- **titles 영어: 6~10 단어. ABSOLUTE MAX 10 단어.**
+- **topics_kr: 한국어 15자 이내**
+- **titles_kr: 한국어 15자 이내**
+- 한 줄 분량 (절대 두 줄로 넘어가지 않아야 함)
+
+#### topics/titles 작성 원칙
 - NEVER "When X happens, Y" / "How X affects Y" / "The importance of X"
-- Start with abstract nouns or participles
-- 14~22 words per sentence
-- titles often with colon (수능 24번 style)
+- 추상명사 or 동명사로 시작 (Self-comparison, Harnessing, Beyond Petroleum 등)
+- topics와 titles **둘 다 콜론(:) 사용 가능**, **둘 다 동일 길이·무게**
+- topics가 titles보다 길면 안 됨 — 한 번에 봐서 비슷해야 함
+
+#### [O] 좋은 예시 (이 정도 길이만 허용)
+- topics: "Self-comparison as the only meaningful growth metric" (7 단어, 49자)
+- topics: "Knowledge as the engine of solar energy conversion" (8 단어, 49자)
+- titles: "Beyond Petroleum: The Rise of Plant-Based Alternatives" (7 단어, 53자)
+- titles_kr: "햇빛에서 저녁까지: 지식의 혁명" (15자)
+
+#### [X] 절대 금지 예시 (이렇게 길면 즉시 재작성)
+- "Corporate adoption of biodegradable alternatives to conventional synthetic materials reflects growing consumer environmental consciousness and regulatory pressure" (25 단어 ❌ — 즉시 압축)
+- "Revolutionary sustainable packaging materials derived from marine organisms are replacing traditional petroleum-based products across multiple industries" (18 단어 ❌)
+- "How human civilization has flourished by developing sophisticated methods to capture solar energy" (14 단어 ❌)
+
+#### SELF-CHECK (출력 직전 반드시 확인)
+□ topics 3개 모두 ≤ 10 단어인가? (단어 수 세어보기)
+□ titles 3개 모두 ≤ 10 단어인가?
+□ topics_kr / titles_kr 모두 ≤ 15자인가?
+□ topics와 titles의 길이가 한 눈에 비슷한가? (topics가 titles 2배 이상이면 FAIL)
+→ **하나라도 위반이면 그 항목을 압축해서 다시 작성**
+
+#### ★ 생성 절차 (반드시 이 순서로) ★
+1. 먼저 titles 3개를 만든다 (각 6~10 단어).
+2. **topics는 각 title과 1:1로 짝지어, 같은 길이(±2 단어)로 만든다.**
+3. topics[0]를 만들 때 titles[0]를 보고 "이것과 비슷한 길이인가?" 확인.
+4. topics가 길어지려 하면, 핵심 명사구만 남기고 부연(분사구문·관계절·콤마 뒤)을 모두 제거.
+→ [X] "Corporate adoption of biodegradable alternatives reflects growing consumer consciousness and regulatory pressure"
+→ [O] "Corporate adoption of biodegradable material alternatives" (핵심만, 6단어)
 
 ### RULE 8 — NO EMOJIS
 Use [O], [X], ?, ■, ●, ★ instead of ✅, ❌, ❓.
@@ -3404,33 +3441,47 @@ Use [O], [X], ?, ■, ●, ★ instead of ✅, ❌, ❓.
  "syns": [["temperance","절제"], ["balance","균형"]],
  "ants": [["excess","과잉"]]}
 
-### `vocab_detail` (PAGE C, 6 items) — GRE/고급 어휘 ★KEY FORMAT★
+### `vocab_detail` (PAGE C, 6 items) — ★편입영어/GRE 수준 고난도★
 Each item:
 - letter, word, ko
-- syns: 4 advanced synonyms with Korean glosses
-- ants: 3 advanced antonyms with Korean glosses
-- **`def_en`**: English dictionary definition, 8~15 words. NO example inside.
-- **`ex_short`**: SHORT example using the word, 8~12 words. Natural, NOT academic.
+- **syns: 4개 — 전부 고급 어휘. 학생이 사전 찾아야 하는 수준.**
+  - **syns[0]: 수능 상위~편입 입문** (예: difficult→demanding)
+  - **syns[1]: 편입 중급** (예: difficult→onerous)
+  - **syns[2]: 편입 고급~GRE** (예: difficult→arduous)
+  - **syns[3]: GRE/희귀어휘 또는 2번째 뜻** (예: difficult→intractable, formidable)
 
-Example:
-{"letter": "ⓐ", "word": "moderation", "ko": "절제, 적당함",
- "syns": [["temperance","절제"], ["restraint","자제"], ["balance","균형"], ["prudence","신중함"]],
- "ants": [["excess","과도함"], ["extremism","극단주의"], ["overindulgence","지나친 탐닉"]],
- "def_en": "The avoidance of extremes; restraint, especially in behavior or speech.",
- "ex_short": "Moderation in diet promotes long-term well-being."}
+★★ 절대 규칙 — 위반 시 FAIL ★★
+1. **쉬운 단어(중학~수능 기본) 절대 금지**: hard, big, good, easy, fast, large, small, main, important 같은 건 syns에 넣지 마라. 이런 건 학생이 이미 안다 → 추가 자료로 줄 가치 없음.
+2. **편입영어·GRE 수준 또는 다의어의 잘 안 쓰이는 2·3번째 뜻을 활용하라.**
+   - 예: "interest" → syns에 "stake(이해관계)", "dividend(배당)" 같은 2번뜻
+   - 예: "address" → "tackle(다루다)", "broach(꺼내다)" 같은 고급 의미
+3. 학생이 "어? 이 단어가 이런 뜻도 있어?" 하고 놀랄 만한 어휘여야 한다.
+
+[O] 좋은 예시 (전부 고난도):
+{"word": "increase", "ko": "증가하다",
+ "syns": [["augment","증대시키다"], ["escalate","고조되다"], ["proliferate","급증하다"], ["burgeon","급성장하다"]]}
+{"word": "important", "ko": "중요한",
+ "syns": [["pivotal","중추적인"], ["paramount","가장 중요한"], ["salient","두드러진"], ["cardinal","기본적인"]]}
+
+[X] 절대 금지 (너무 쉬움):
+{"word": "alternative", "syns": [["substitute","대체물"], ["replacement","교체물"], ["option","선택"], ["choice","선택"]]}
+ → option, choice는 중학생도 안다 ❌❌❌ 이런 거 주지 마라
+
+- **`def_en`**: English 영영풀이, 8~15 words. (메인 단어 바로 아래 배치됨)
+- **`ex_short`**: 짧은 예문, 8~12 words.
 
 ### `theme_vocab` (PAGE C 하단, 6 items)
-Same format with def_en + ex_short.
+동일하게 편입/GRE 수준. 쉬운 동의어 금지.
 
 ═════════════════════════════════════════════════
 ## JSON SCHEMA (return EXACTLY this structure)
 ═════════════════════════════════════════════════
 {
   "passage_marked": "...",
-  "topics": [3 abstract sentences],
-  "titles": [3 titles, colon style],
-  "topics_kr": [3 natural Korean],
-  "titles_kr": [3 natural Korean],
+  "topics": [3 SHORT phrases, **6~10 words each, MAX 10 words, ≤ 100 chars**. Same length/weight as titles. Abstract noun-phrase or compressed proposition. NEVER long explanatory propositions],
+  "titles": [3 titles, **6~10 words each, MAX 10 words**. Colon style allowed],
+  "topics_kr": [3 natural Korean, **≤ 15 자 each**, same length as titles_kr],
+  "titles_kr": [3 natural Korean titles, **≤ 15 자 each**],
   "grammar_notes": [{"num":"①","tag":"...","desc":"..."}],
   "vocab_notes": [{"letter":"ⓐ","word":"...","syns":[...],"ants":[...]}],
   "grammar_p1": {
@@ -3445,10 +3496,27 @@ Same format with def_en + ex_short.
   },
   "grammar_p2": {"left":[3~4 boxes],"right":[3~4 boxes]},
   "implication_box": {
-    "expressions": [{"expr":"phrase","meaning":"한국어 ─ 의미"}],
-    "blank_key": "Sentence with ____",
-    "blank_answers": ["a","b","c"],
-    "theme_summary": "한 줄 응축"
+    "flow_4panel": [
+      {"stage": "도입", "label_en": "Setup", "text_kr": "글이 어떤 상황·문제로 시작되는지. **1~2문장, 50~80자 (절대 80자 초과 금지)**, ~해요체. 박스에 들어가야 하므로 짧고 강렬하게.", "key_phrase": "본문의 이 단계 핵심 영어 (3~6단어)"},
+      {"stage": "전개", "label_en": "Development", "text_kr": "어떤 논리·예시로 발전. **1~2문장, 50~80자**, ~해요체", "key_phrase": "본문 핵심 (3~6단어)"},
+      {"stage": "전환", "label_en": "Turn", "text_kr": "어디서 방향이 바뀌는지 — 역접·대조·강조. **1~2문장, 50~80자**, ~해요체", "key_phrase": "전환점 영어 표현 (Instead/However 등 포함, 3~6단어)"},
+      {"stage": "결론", "label_en": "Conclusion", "text_kr": "글쓴이의 최종 입장·주장. **1~2문장, 50~80자**, ~해요체", "key_phrase": "결론부 핵심 (3~6단어)"}
+    ],
+    "blank_candidates": [
+      {"sentence": "본문에서 빈칸으로 출제하기 좋은 중요 문장 (원문 그대로, 영어)", "paraphrase": "이 문장이 빈칸/변형으로 출제될 때 paraphrasing 될 수 있는 형태 (영어)", "why": "왜 이 문장이 빈칸 출제 포인트인지 한 줄 (한국어)"},
+      {"sentence": "두 번째 중요 문장", "paraphrase": "패러프레이즈", "why": "이유"},
+      {"sentence": "세 번째 중요 문장", "paraphrase": "패러프레이즈", "why": "이유"}
+    ],
+    "implicit_meanings": [
+      {"expr": "본문의 비유적·함축적 표현 (영어 원문)", "literal": "표면적 의미 (한국어)", "implied": "글에서 빗댄/함축한 진짜 의미 (한국어)", "implied_en": "그 함축 의미를 영어로 다시 표현 (paraphrase, 영어 한 문장)"},
+      {"expr": "두 번째 함축 표현", "literal": "표면 의미", "implied": "함축 의미", "implied_en": "영어 paraphrase"},
+      {"expr": "세 번째 함축 표현", "literal": "표면 의미", "implied": "함축 의미", "implied_en": "영어 paraphrase"}
+    ],
+    "summary": {
+      "en": "본문 전체를 정확히 40 단어(35~45 허용)로 요약한 영어 한 단락. 주제+핵심논거+결론 포함. 학술적이되 명료하게.",
+      "kr": "위 영어 요약의 자연스러운 한국어 번역 (한 단락)"
+    },
+    "theme_summary": "주제를 응축한 2~3문장 (이전 1문장 → 2배로 확대). 글의 핵심 주장 + 그것이 왜 중요한지 + 대비/함의까지. 80~120자 한국어."
   },
   "vocab_detail": {
     "left": [{"letter":"ⓐ","word":"...","ko":"...","syns":[4],"ants":[3],"def_en":"...","ex_short":"..."}],
@@ -3471,6 +3539,9 @@ Same format with def_en + ex_short.
 □ **Count of [[VOCAB]] in passage_marked = len(vocab_notes) = 10?** ★MOST MISSED CHECK★
 □ **Count of [[IMPL]] in passage_marked = len(implication_box.expressions) = 6~7?** ★MOST MISSED CHECK★
 □ Every vocab_detail/theme_vocab has def_en (8~15w) AND ex_short (8~12w)?
+□ **All 3 topics ≤ 10 words AND ≤ 100 chars?** ★ABSOLUTE — RE-WRITE IF VIOLATED★
+□ **All 3 topics_kr ≤ 15 chars (Korean)?** ★ABSOLUTE — RE-WRITE IF VIOLATED★
+□ **topics와 titles 길이가 한 눈에 비슷한가?** (한쪽이 다른쪽 1.5배 이상이면 FAIL)
 
 ★★★ MARKER COMPLETENESS — DO NOT SKIP ★★★
 파란 밑줄(VOCAB)과 검은 밑줄(IMPL)은 빨간 밑줄(GRAMMAR)만큼 중요하다.
@@ -3502,10 +3573,10 @@ Return ONLY the JSON object.
 
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
-    # v6: 코드 레벨 후처리 — VOCAB/IMPL 마커 자동 보정 + 가주어/가목적어/It-cleft 강제 감지 — 기존 v5 캐시 무효화
-    cached = load_step(passage_dir, "preclass_analysis_v6")
+    # v12: topics 강제 압축(제목 길이) + 어휘 편입/GRE급 + 영영 단어밑 배치 + 솔루션 페이지 통합 — v11 캐시 무효화
+    cached = load_step(passage_dir, "preclass_analysis_v12")
     if cached:
-        _safe_print("  ✅ preclass_analysis_v6 캐시 사용")
+        _safe_print("  ✅ preclass_analysis_v12 캐시 사용")
         return cached
     _safe_print("  📕 preclass_analysis 생성 중...")
 
@@ -3531,10 +3602,18 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     data = _inject_dummy_it_notes(data, passage)
 
     # ★ v6 후처리 3 — IMPL 마커 본문 자동 보정 (먼저 — 긴 표현이 우선)
-    # AI가 implication_box.expressions만 만들고 본문 마커 빼먹은 경우, 자동 삽입
+    # v9: implicit_meanings(함축 표현) + blank_candidates(빈칸 문장)에서 마킹 소스 수집
+    impl_box = data.get("implication_box", {}) or {}
+    impl_sources = []
+    for im in impl_box.get("implicit_meanings", []) or []:
+        if isinstance(im, dict) and im.get("expr"):
+            impl_sources.append({"expr": im["expr"]})
+    for bc in impl_box.get("blank_candidates", []) or []:
+        if isinstance(bc, dict) and bc.get("sentence"):
+            impl_sources.append({"expr": bc["sentence"]})
     data["passage_marked"] = _ensure_implication_markers(
         data.get("passage_marked", ""),
-        data.get("implication_box", {}).get("expressions", []),
+        impl_sources,
     )
 
     # ★ v6 후처리 4 — VOCAB 마커 본문 자동 보정 (IMPL 영역 안의 단어는 자동 회피)
@@ -3547,7 +3626,10 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     # 후처리 5 — passage_marked → passage_html 변환 (Jinja2에서 |safe)
     data["passage_html"] = _passage_marked_to_html(data.get("passage_marked", ""), passage)
 
-    save_step(passage_dir, "preclass_analysis_v6", data)
+    # ★ v9 후처리 6 — topics 길이 검증 (위반 시 콘솔 경고)
+    data = _check_topics_length(data)
+
+    save_step(passage_dir, "preclass_analysis_v12", data)
     return data
 
 
@@ -3998,6 +4080,122 @@ def _inject_dummy_it_notes(data: dict, passage: str) -> dict:
         _safe_print(f"  🔴 가주어/가목적어/It-cleft 패턴 자동 감지: {added}개 추가")
         data["grammar_notes"] = grammar_notes
     
+    return data
+
+
+def _shorten_one_topic_en(text: str, target_words: int) -> str:
+    """영어 topic을 target_words 근처로 압축. 자연 절단점 우선."""
+    import re as _re
+    if not isinstance(text, str):
+        return text
+    text = text.strip()
+    if len(text.split()) <= target_words + 2:
+        return text
+    # 1. 콜론 앞 (제목형이면 핵심은 콜론 앞)
+    if ':' in text:
+        before = text.split(':', 1)[0].strip()
+        if 3 <= len(before.split()) <= target_words + 3:
+            return before
+    # 2. 분사구문/관계절/콤마 신호어 앞에서 절단
+    for marker in [
+        r',\s+(?:demonstrating|reflecting|indicating|representing|suggesting|revealing|while|which|that|where|whereby)\b',
+        r'\s+(?:demonstrating|reflecting|indicating|representing|suggesting|revealing)\b',
+        r',\s+',
+    ]:
+        m = _re.search(marker, text)
+        if m:
+            cand = text[:m.start()].strip().rstrip(',;:')
+            if 3 <= len(cand.split()) <= target_words + 3:
+                return cand
+    # 3. 전치사구 앞 (across/throughout/for 등 부연)에서 절단
+    for prep in [' across ', ' throughout ', ' for ', ' in order ', ' so as ']:
+        idx = text.find(prep)
+        if idx > 0:
+            cand = text[:idx].strip()
+            if 3 <= len(cand.split()) <= target_words + 3:
+                return cand
+    # 4. 어절 강제 절단 (target_words개)
+    cut = ' '.join(text.split()[:target_words]).rstrip(',;:')
+    # 끝이 전치사·관사·접속사로 끝나면 그 단어 제거 (어색함 방지)
+    _TRAIL = {'of','to','from','for','in','on','at','by','with','and','or',
+              'the','a','an','that','which','as','into','across','through'}
+    parts = cut.split()
+    while parts and parts[-1].lower() in _TRAIL:
+        parts.pop()
+    return ' '.join(parts) if parts else cut
+
+
+def _shorten_one_topic_kr(text: str, target_chars: int) -> str:
+    """한국어 topic을 target_chars 근처로 압축. 어절 경계 + 연결어미."""
+    if not isinstance(text, str):
+        return text
+    text = text.strip()
+    if len(text) <= target_chars + 3:
+        return text
+    # 연결어미·구두점 뒤에서 절단
+    for marker in ['하며 ', '되며 ', '이며 ', '하고 ', '되고 ', '으로 ', '에서 ', ', ', '이는 ', '하는 ', '되는 ']:
+        idx = text.find(marker)
+        if 6 <= idx <= target_chars + 4:
+            return text[:idx + len(marker)].strip()
+    # 어절 경계로 target_chars까지
+    words = text.split(' ')
+    out = ''
+    for w in words:
+        if len(out) + len(w) + 1 > target_chars:
+            break
+        out = (out + ' ' + w).strip()
+    return out if len(out) >= 5 else text[:target_chars].strip()
+
+
+def _check_topics_length(data: dict) -> dict:
+    """★ topics를 titles 길이에 맞춰 강제 압축 (제목의 1/3 수준).
+    
+    선생님 반복 요청: 주제문 3문장이 너무 김 → 제목과 비슷한 짧은 길이로.
+    시스템 프롬프트로 안 되므로 코드에서 확실히 자른다.
+    """
+    topics = data.get("topics", [])
+    titles = data.get("titles", [])
+    topics_kr = data.get("topics_kr", [])
+    titles_kr = data.get("titles_kr", [])
+
+    # 목표 길이 = 대응하는 title 길이 (없으면 8단어)
+    fixed_en, fixed_kr = 0, 0
+
+    new_topics = []
+    for i, t in enumerate(topics):
+        if not isinstance(t, str):
+            new_topics.append(t); continue
+        # 대응 title 단어 수 (기준)
+        if i < len(titles) and isinstance(titles[i], str):
+            target = max(6, len(titles[i].split()))
+        else:
+            target = 8
+        before_len = len(t.split())
+        shortened = _shorten_one_topic_en(t, target)
+        if len(shortened.split()) < before_len:
+            fixed_en += 1
+        new_topics.append(shortened)
+    if new_topics:
+        data["topics"] = new_topics
+
+    new_kr = []
+    for i, t in enumerate(topics_kr):
+        if not isinstance(t, str):
+            new_kr.append(t); continue
+        if i < len(titles_kr) and isinstance(titles_kr[i], str):
+            target = max(12, len(titles_kr[i]))
+        else:
+            target = 18
+        before = len(t)
+        shortened = _shorten_one_topic_kr(t, target)
+        if len(shortened) < before:
+            fixed_kr += 1
+        new_kr.append(shortened)
+    if new_kr:
+        data["topics_kr"] = new_kr
+
+    if fixed_en or fixed_kr:
+        _safe_print(f"  ✂️ topics 자동 압축: 영어 {fixed_en}건, 한글 {fixed_kr}건 (제목 길이에 맞춤)")
     return data
 
 

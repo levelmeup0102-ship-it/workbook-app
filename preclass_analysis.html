@@ -512,13 +512,13 @@ body {
   padding: 0;
 }
 .vd-item {
-  margin-bottom: 6px;
-  padding-bottom: 4px;
+  margin-bottom: 4px;
+  padding-bottom: 3px;
 }
 .vd-word-line {
   border-bottom: 1px solid var(--blue-faint);
-  padding-bottom: 3px;
-  margin-bottom: 4px;
+  padding-bottom: 2px;
+  margin-bottom: 3px;
 }
 .vd-letter { font-weight: bold; color: var(--blue); font-size: 11pt; margin-right: 4px; }
 .vd-word { font-weight: bold; color: var(--blue); font-family: 'Source Serif Pro','Noto Serif','Liberation Serif',serif; font-size: 11pt; }
@@ -526,9 +526,9 @@ body {
 
 .vd-syn, .vd-ant, .vd-def, .vd-ex {
   font-size: 8.5pt;
-  line-height: 1.45;
+  line-height: 1.35;
   padding-left: 10px;
-  margin-bottom: 1px;
+  margin-bottom: 0;
 }
 .vd-syn-mark { color: #336699; }
 .vd-syn-w { font-weight: bold; font-family: 'Source Serif Pro','Noto Serif','Liberation Serif',serif; color: var(--dark); }
@@ -543,7 +543,7 @@ body {
 .tv-hdr {
   font-weight: bold; font-size: 11pt; color: var(--purple);
   padding-bottom: 3px; border-bottom: 2px solid var(--purple-faint);
-  margin-top: 12px; margin-bottom: 8px;
+  margin-top: 8px; margin-bottom: 6px;
 }
 .tv-hdr .sub { font-size: 9pt; color: var(--gr); font-weight: normal; margin-left: 6px; }
 
@@ -558,23 +558,23 @@ body {
   padding: 0;
 }
 .tv-item {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 .tv-word-line {
   border-bottom: 1px solid var(--purple-faint);
-  padding-bottom: 3px;
-  margin-bottom: 4px;
+  padding-bottom: 2px;
+  margin-bottom: 3px;
 }
 .tv-mark { font-weight: bold; color: var(--purple); font-size: 10pt; margin-right: 4px; }
 .tv-word { font-weight: bold; color: var(--purple); font-family: 'Source Serif Pro','Noto Serif','Liberation Serif',serif; font-size: 10pt; }
 .tv-ko { color: var(--gr); font-size: 9pt; margin-left: 6px; }
 
-.tv-syn { font-size: 8.5pt; padding-left: 10px; line-height: 1.45; }
+.tv-syn { font-size: 8.5pt; padding-left: 10px; line-height: 1.35; }
 .tv-syn-mark { color: var(--purple); }
 .tv-syn-w { font-weight: bold; font-family: 'Source Serif Pro','Noto Serif','Liberation Serif',serif; }
 .tv-syn-k { color: var(--gr); font-size: 8pt; margin-left: 4px; }
 .tv-def, .tv-ex {
-  font-size: 8.5pt; padding-left: 14px; line-height: 1.45;
+  font-size: 8.5pt; padding-left: 14px; line-height: 1.35;
   font-family: 'Source Serif Pro','Noto Serif','Liberation Serif',serif;
 }
 .tv-def { color: #333333; }
@@ -777,7 +777,7 @@ body {
   {# 3. 요약문 (영어 40단어 + 한국어) #}
   {% if item.data.implication_box.summary %}
   <div class="impl-section">
-    <div class="impl-sec-label summary-label">▶ 요약문 (40 words)</div>
+    <div class="impl-sec-label summary-label">▶ 요약문</div>
     <div class="summary-box">
       <div class="summary-en">{{ item.data.implication_box.summary.en }}</div>
       <div class="summary-kr">{{ item.data.implication_box.summary.kr }}</div>

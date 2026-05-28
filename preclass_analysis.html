@@ -69,33 +69,45 @@ body {
 .hdr {
   display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 16px;
-  padding: 10px 14px;
+  padding: 8px 14px;
   background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
   border: 1.5px solid #fbbf24;
   border-radius: 8px;
   font-size: 9pt;
 }
 .hdr-info {
-  display: flex; align-items: baseline; gap: 12px;
+  display: flex; align-items: center; gap: 10px;
+  white-space: nowrap;
 }
 .hdr-school {
-  font-weight: 700; font-size: 11pt; color: #92400e;
-  letter-spacing: 0.3px;
+  font-weight: 700; font-size: 10.5pt; color: #92400e;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
 }
 .hdr-divider {
-  display: inline-block; width: 1px; height: 14px;
+  display: inline-block; width: 1px; height: 12px;
   background: #d97706; opacity: 0.4;
-  margin: 0 4px;
+  margin: 0 2px;
+  flex-shrink: 0;
 }
 .hdr-label {
-  font-weight: 600; font-size: 10pt; color: #b45309;
+  font-weight: 600; font-size: 9.5pt; color: #b45309;
+  white-space: nowrap;
 }
 .hdr-legend {
-  display:flex; gap: 14px; align-items: center;
   font-size: 8.5pt; color: var(--gr2);
+  white-space: nowrap;
 }
-.hdr-legend span { display:flex; align-items:center; gap:4px; font-weight: 500; }
-.dot { display:inline-block; width:7px; height:7px; border-radius:50%; }
+.hdr-legend span {
+  font-weight: 500;
+  margin-left: 14px;
+}
+.dot {
+  display: inline-block; width: 7px; height: 7px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
 .dot-r { background: var(--red); }
 .dot-b { background: var(--blue); }
 .dot-k { background: var(--black); }
@@ -104,12 +116,12 @@ body {
 .psg {
   font-family: 'Source Serif Pro','Noto Serif','Liberation Serif','Times New Roman',serif;
   font-size: 11pt;
-  line-height: 1.55;
+  line-height: 1.5;
   text-align: justify;
   color: var(--dark);
-  margin-top: 4px;
-  margin-bottom: 12px;
-  padding: 6px 2px;
+  margin-top: 2px;
+  margin-bottom: 8px;
+  padding: 4px 2px;
 }
 .psg .gr { color: var(--red); text-decoration: underline; text-decoration-color: var(--red); }
 .psg .vc { color: var(--blue); text-decoration: underline; text-decoration-color: var(--blue); }
@@ -118,7 +130,7 @@ body {
 .psg sup.sup-r { color: var(--red); }
 .psg sup.sup-b { color: var(--blue); }
 
-.divider { border-bottom: 2px solid var(--gr-light); margin: 8px 0; }
+.divider { border-bottom: 2px solid var(--gr-light); margin: 4px 0; }
 
 /* 옵션 A — 4박스 2x2 (table 기반) */
 .topic-grid {
@@ -143,7 +155,7 @@ body {
 
 .topic-box {
   border: 1.5px solid;
-  padding: 8px 10px;
+  padding: 5px 8px;
   border-radius: 2px;
 }
 .topic-box.en-theme { border-color: var(--green-border); background: var(--green-light); }
@@ -175,7 +187,10 @@ body {
   width: 100%;
   border-collapse: separate;
   border-spacing: 10px 0;
-  margin-top: 10px;
+  margin-top: 4px;
+  /* 노트 테이블 전체가 한 페이지에 — 헤더만 외로이 남지 않게 */
+  page-break-inside: avoid;
+  break-inside: avoid;
 }
 .notes-td {
   width: 50%;
@@ -185,22 +200,25 @@ body {
 .notes-col-hdr {
   font-weight: bold; font-size: 10pt;
   margin-bottom: 4px;
+  /* 헤더가 페이지 끝에 혼자 남지 않게 다음 박스와 함께 */
+  page-break-after: avoid;
+  break-after: avoid;
 }
 .notes-col-hdr.grm { color: var(--red); }
 .notes-col-hdr.voc { color: var(--blue); }
 
 .notes-box {
-  border: 2px solid;
-  padding: 12px 10px;
+  border: 1.5px solid;
+  padding: 8px 10px;
   border-radius: 2px;
 }
-.notes-box.grm { border-color: var(--red); background: var(--red-light); }
-.notes-box.voc { border-color: var(--blue); background: var(--blue-light); }
+.notes-box.grm { border-color: var(--red-faint); background: var(--red-light); }
+.notes-box.voc { border-color: var(--blue-faint); background: var(--blue-light); }
 
 .gn-item {
   font-size: 8.5pt;
-  line-height: 1.5;
-  margin-bottom: 5px;
+  line-height: 1.4;
+  margin-bottom: 3px;
   padding-left: 6px;
 }
 .gn-num { font-weight: bold; color: var(--red); margin-right: 3px; }
@@ -210,7 +228,7 @@ body {
 .vn-item {
   font-size: 8.5pt;
   line-height: 1.4;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
   padding-left: 6px;
 }
 .vn-letter { font-weight: bold; color: var(--blue); margin-right: 3px; }
@@ -269,39 +287,202 @@ body {
 .impl-hdr {
   font-weight: bold; font-size: 11pt; color: var(--black);
   padding-bottom: 3px; border-bottom: 2px solid #333333;
-  margin-top: 14px; margin-bottom: 8px;
+  margin-top: 14px; margin-bottom: 10px;
 }
-.impl-box {
-  border: 1px solid #333333;
-  background: #FAFAFA;
-  padding: 10px 14px;
-  border-radius: 2px;
+
+/* ─── 4컷 만화처럼 글의 흐름 ─── */
+.flow-comic {
+  margin-bottom: 14px;
 }
-.impl-line {
+.flow-comic-label {
+  font-weight: bold; font-size: 10pt; color: #B8420A;
+  margin-bottom: 8px;
+}
+/* WeasyPrint 호환성: flex 대신 table */
+.flow-grid {
+  width: 100%;
+  display: table;
+  border-collapse: separate;
+  border-spacing: 4px 0;
+  margin-bottom: 8px;
+}
+.flow-panel {
+  display: table-cell;
+  width: 24%;
+  vertical-align: top;
+  border: 2px solid;
+  border-radius: 6px;
+  padding: 8px 9px;
+}
+.flow-arrow-cell {
+  display: table-cell;
+  width: auto;
+  vertical-align: middle;
+  text-align: center;
+  font-size: 12pt;
+  color: var(--gr);
+  padding: 0 2px;
+}
+/* 4컷 색상 단계 (도입→전개→전환→결론) */
+.flow-panel-1 { background: #FFF8E1; border-color: #FFB300; }
+.flow-panel-2 { background: #E3F2FD; border-color: #1976D2; }
+.flow-panel-3 { background: #FCE4EC; border-color: #C2185B; }
+.flow-panel-4 { background: #E8F5E9; border-color: #2E7D32; }
+.flow-panel-hdr {
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed rgba(0,0,0,0.2);
+  white-space: nowrap;
+}
+.flow-panel-num {
+  display: inline-block;
+  width: 16px; height: 16px;
+  line-height: 16px; text-align: center;
+  background: #333333; color: white;
+  border-radius: 50%;
+  font-size: 8.5pt; font-weight: bold;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.flow-panel-stage {
+  font-weight: bold; font-size: 9.5pt;
+  color: #333333;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.flow-panel-label-en {
+  font-size: 7.5pt;
+  color: var(--gr);
+  font-family: 'Source Serif Pro','Noto Serif',serif;
+  font-style: italic;
+  vertical-align: middle;
+}
+.flow-panel-text {
   font-size: 8.5pt;
-  line-height: 1.4;
+  line-height: 1.5;
+  color: var(--dark);
+  font-family: 'Pretendard','Noto Sans KR','Noto Sans CJK KR',sans-serif;
+  margin-bottom: 6px;
+}
+.flow-panel-key {
+  font-size: 7.5pt;
+  font-family: 'Source Serif Pro','Noto Serif','Liberation Serif',serif;
+  font-style: italic;
+  color: #555555;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(0,0,0,0.15);
+  word-break: break-word;
+}
+
+/* ─── 레벨미업 솔루션 박스 ─── */
+/* ─── 함축 페이지 2 섹션 공통 ─── */
+.impl-section { margin-bottom: 16px; }
+.impl-sec-label {
+  font-weight: bold; font-size: 10.5pt;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 2px solid;
+}
+.blank-label { color: #1565C0; border-color: #90CAF9; }
+.implicit-label { color: #6A1B9A; border-color: #CE93D8; }
+.summary-label { color: #2E7D32; border-color: #A5D6A7; }
+
+/* 빈칸 출제 카드 */
+.blank-card {
+  background: #F5F9FF;
+  border: 1px solid #BBDEFB;
+  border-radius: 5px;
+  padding: 8px 12px;
+  margin-bottom: 7px;
+}
+.blank-orig {
+  font-family: 'Source Serif Pro','Noto Serif','Liberation Serif',serif;
+  font-size: 9pt; color: var(--dark);
   margin-bottom: 3px;
-  color: var(--gr2);
 }
-.impl-expr {
-  font-weight: bold;
-  font-family: 'Source Serif Pro','Noto Serif','Liberation Serif','Times New Roman',serif;
-  color: var(--black);
+.blank-para {
+  font-family: 'Source Serif Pro','Noto Serif','Liberation Serif',serif;
+  font-size: 8.5pt; color: #00695C;
+  margin-bottom: 3px;
+  padding-left: 6px;
 }
-.impl-blank {
-  font-weight: bold; color: #333333; font-size: 9pt;
-  margin-top: 6px; padding-top: 4px;
+.blank-why {
+  font-size: 8.5pt; color: var(--gr2);
+  font-family: 'Pretendard','Noto Sans KR','Noto Sans CJK KR',sans-serif;
+  padding-left: 6px;
 }
-.impl-blank-sent {
-  font-family: 'Source Serif Pro','Noto Serif','Liberation Serif',serif; font-style: italic; color: var(--dark);
+
+/* 함축 의미 카드 */
+.implicit-card {
+  background: #FAF4FC;
+  border: 1px solid #E1BEE7;
+  border-radius: 5px;
+  padding: 8px 12px;
+  margin-bottom: 7px;
 }
-.impl-blank-ans {
-  font-family: 'Source Serif Pro','Noto Serif','Liberation Serif',serif; font-weight: bold; color: #AA0000;
-  font-size: 8.5pt;
+.implicit-expr {
+  font-family: 'Source Serif Pro','Noto Serif','Liberation Serif',serif;
+  font-weight: bold; font-style: italic;
+  font-size: 9.5pt; color: #4A148C;
+  margin-bottom: 4px;
 }
-.impl-summary {
-  font-weight: bold; color: #333333; font-size: 9pt;
-  margin-top: 4px;
+.implicit-literal {
+  font-size: 8.5pt; color: var(--gr2);
+  font-family: 'Pretendard','Noto Sans KR','Noto Sans CJK KR',sans-serif;
+  margin-bottom: 2px;
+}
+.implicit-implied {
+  font-size: 9pt; color: #6A1B9A; font-weight: 500;
+  font-family: 'Pretendard','Noto Sans KR','Noto Sans CJK KR',sans-serif;
+  margin-bottom: 2px;
+}
+.implicit-implied-en {
+  font-size: 8.5pt; color: #00695C; font-style: italic;
+  font-family: 'Source Serif Pro','Noto Serif','Liberation Serif',serif;
+  padding-top: 3px;
+  border-top: 1px dashed #E1BEE7;
+}
+
+/* 빈칸+함축 좌우 2단 */
+.impl-2col {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 12px 0;
+  margin-bottom: 4px;
+}
+.impl-2col-td {
+  width: 50%;
+  vertical-align: top;
+  padding: 0;
+}
+
+/* 요약문 박스 */
+.summary-box {
+  background: #F1F8F2;
+  border: 1.5px solid #A5D6A7;
+  border-radius: 5px;
+  padding: 12px 16px;
+}
+.summary-en {
+  font-family: 'Source Serif Pro','Noto Serif','Liberation Serif',serif;
+  font-size: 9.5pt; line-height: 1.6;
+  color: var(--dark);
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #A5D6A7;
+}
+.summary-kr {
+  font-size: 9pt; line-height: 1.6;
+  color: #1B5E20;
+  font-family: 'Pretendard','Noto Sans KR','Noto Sans CJK KR',sans-serif;
+}
+.impl-theme-summary {
+  font-weight: bold; color: #333333; font-size: 9.5pt;
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #F5F5F5;
+  border-left: 4px solid #333;
+  border-radius: 3px;
 }
 
 /* PAGE C 어휘 심화 */
@@ -399,7 +580,7 @@ body {
 <div class="page">
   <div class="hdr">
     <div class="hdr-info">
-      <span class="hdr-school">📕 {{ school_name }}</span>
+      <span class="hdr-school">{{ school_name }}</span>
       <span class="hdr-divider"></span>
       <span class="hdr-label">{{ item.label }}</span>
       <span class="hdr-divider"></span>
@@ -523,24 +704,83 @@ body {
       </td>
     </tr>
   </table>
+</div>
 
-  {# 함축 빈칸 흐름 핵심 정리 (같은 페이지 하단) #}
-  <div class="impl-hdr">●  ■  함축 빈칸 흐름 핵심 정리</div>
-  <div class="impl-box">
-    {% for e in item.data.implication_box.expressions %}
-    <div class="impl-line">
-      <span class="impl-expr">■ {{ e.expr }}</span> = {{ e.meaning }}
-    </div>
-    {% endfor %}
-    <div class="impl-blank">
-      ★ 빈칸 추론 키워드 —
-      <span class="impl-blank-sent">{{ item.data.implication_box.blank_key }}</span>
-      <span class="impl-blank-ans">→ 답 후보: {{ item.data.implication_box.blank_answers | join(' / ') }}</span>
-    </div>
-    <div class="impl-summary">
-      ★ 주제 응축 — {{ item.data.implication_box.theme_summary }}
+{# ───────────────────── PAGE 레벨미업 솔루션 (한 페이지 통합) ───────────────────── #}
+<div class="page">
+  <div class="impl-hdr">●  레벨미업 솔루션</div>
+
+  {# 1. 글의 흐름 이해하기 (4컷) #}
+  {% if item.data.implication_box.flow_4panel %}
+  <div class="flow-comic">
+    <div class="flow-comic-label">▶ 글의 흐름 이해하기</div>
+    <div class="flow-grid">
+      {% for panel in item.data.implication_box.flow_4panel %}
+      <div class="flow-panel flow-panel-{{ loop.index }}">
+        <div class="flow-panel-hdr">
+          <span class="flow-panel-num">{{ loop.index }}</span>
+          <span class="flow-panel-stage">{{ panel.stage }}</span>
+          <span class="flow-panel-label-en">{{ panel.label_en }}</span>
+        </div>
+        <div class="flow-panel-text">{{ panel.text_kr }}</div>
+        {% if panel.key_phrase %}
+        <div class="flow-panel-key">"{{ panel.key_phrase }}"</div>
+        {% endif %}
+      </div>
+      {% if not loop.last %}<div class="flow-arrow-cell">▶</div>{% endif %}
+      {% endfor %}
     </div>
   </div>
+  {% endif %}
+
+  {# 2. 빈칸(좌) + 함축(우) 좌우 2단 #}
+  <table class="impl-2col">
+    <tr>
+      <td class="impl-2col-td">
+        {% if item.data.implication_box.blank_candidates %}
+        <div class="impl-sec-label blank-label">▶ 빈칸 출제·변형 좋은 문장</div>
+        {% for bc in item.data.implication_box.blank_candidates %}
+        <div class="blank-card">
+          <div class="blank-orig">{{ bc.sentence }}</div>
+          <div class="blank-para">↳ {{ bc.paraphrase }}</div>
+          <div class="blank-why">· {{ bc.why }}</div>
+        </div>
+        {% endfor %}
+        {% endif %}
+      </td>
+      <td class="impl-2col-td">
+        {% if item.data.implication_box.implicit_meanings %}
+        <div class="impl-sec-label implicit-label">▶ 함축적 의미 출제 좋은 표현</div>
+        {% for im in item.data.implication_box.implicit_meanings %}
+        <div class="implicit-card">
+          <div class="implicit-expr">"{{ im.expr }}"</div>
+          <div class="implicit-literal">표면: {{ im.literal }}</div>
+          <div class="implicit-implied">함축: {{ im.implied }}</div>
+          {% if im.implied_en %}
+          <div class="implicit-implied-en">= {{ im.implied_en }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+        {% endif %}
+      </td>
+    </tr>
+  </table>
+
+  {# 3. 요약문 (영어 40단어 + 한국어) #}
+  {% if item.data.implication_box.summary %}
+  <div class="impl-section">
+    <div class="impl-sec-label summary-label">▶ 요약문 (40 words)</div>
+    <div class="summary-box">
+      <div class="summary-en">{{ item.data.implication_box.summary.en }}</div>
+      <div class="summary-kr">{{ item.data.implication_box.summary.kr }}</div>
+    </div>
+  </div>
+  {% endif %}
+
+  {# 4. 주제 응축 (2~3문장) #}
+  {% if item.data.implication_box.theme_summary %}
+  <div class="impl-theme-summary">★ 주제 응축 — {{ item.data.implication_box.theme_summary }}</div>
+  {% endif %}
 </div>
 
 {# ───────────────────── PAGE C — 어휘 심화 + 주제 어휘 ───────────────────── #}
@@ -556,14 +796,14 @@ body {
             <span class="vd-word">{{ v.word }}</span>
             <span class="vd-ko">{{ v.ko }}</span>
           </div>
+          {% if v.def_en %}<div class="vd-def"><span class="vd-def-mark">[영영]</span>{{ v.def_en }}</div>{% endif %}
           {% for s in v.syns %}
           <div class="vd-syn"><span class="vd-syn-mark">≒</span> <span class="vd-syn-w">{{ s[0] }}</span><span class="vd-syn-k">{{ s[1] }}</span></div>
           {% endfor %}
           {% if v.ants %}
           <div class="vd-ant">↔ {% for a in v.ants %}{{ a[0] }}({{ a[1] }}){% if not loop.last %} / {% endif %}{% endfor %}</div>
           {% endif %}
-          {% if v.def_en %}<div class="vd-def"><span class="vd-def-mark">📖</span>{{ v.def_en }}</div>{% endif %}
-          {% if v.ex_short %}<div class="vd-ex"><span class="vd-ex-mark">✏️</span>{{ v.ex_short }}</div>{% endif %}
+          {% if v.ex_short %}<div class="vd-ex"><span class="vd-ex-mark">[예문]</span>{{ v.ex_short }}</div>{% endif %}
         </div>
         {% endfor %}
       </td>
@@ -575,14 +815,14 @@ body {
             <span class="vd-word">{{ v.word }}</span>
             <span class="vd-ko">{{ v.ko }}</span>
           </div>
+          {% if v.def_en %}<div class="vd-def"><span class="vd-def-mark">[영영]</span>{{ v.def_en }}</div>{% endif %}
           {% for s in v.syns %}
           <div class="vd-syn"><span class="vd-syn-mark">≒</span> <span class="vd-syn-w">{{ s[0] }}</span><span class="vd-syn-k">{{ s[1] }}</span></div>
           {% endfor %}
           {% if v.ants %}
           <div class="vd-ant">↔ {% for a in v.ants %}{{ a[0] }}({{ a[1] }}){% if not loop.last %} / {% endif %}{% endfor %}</div>
           {% endif %}
-          {% if v.def_en %}<div class="vd-def"><span class="vd-def-mark">📖</span>{{ v.def_en }}</div>{% endif %}
-          {% if v.ex_short %}<div class="vd-ex"><span class="vd-ex-mark">✏️</span>{{ v.ex_short }}</div>{% endif %}
+          {% if v.ex_short %}<div class="vd-ex"><span class="vd-ex-mark">[예문]</span>{{ v.ex_short }}</div>{% endif %}
         </div>
         {% endfor %}
       </td>
@@ -601,11 +841,11 @@ body {
             <span class="tv-word">{{ t.word }}</span>
             <span class="tv-ko">{{ t.ko }}</span>
           </div>
+          {% if t.def_en %}<div class="tv-def"><span class="vd-def-mark">[영영]</span>{{ t.def_en }}</div>{% endif %}
           {% for s in t.syns %}
           <div class="tv-syn"><span class="tv-syn-mark">≒</span> <span class="tv-syn-w">{{ s[0] }}</span><span class="tv-syn-k">{{ s[1] }}</span></div>
           {% endfor %}
-          {% if t.def_en %}<div class="tv-def"><span class="vd-def-mark">📖</span>{{ t.def_en }}</div>{% endif %}
-          {% if t.ex_short %}<div class="tv-ex"><span class="vd-ex-mark">✏️</span>{{ t.ex_short }}</div>{% endif %}
+          {% if t.ex_short %}<div class="tv-ex"><span class="vd-ex-mark">[예문]</span>{{ t.ex_short }}</div>{% endif %}
         </div>
         {% endfor %}
       </td>
@@ -617,11 +857,11 @@ body {
             <span class="tv-word">{{ t.word }}</span>
             <span class="tv-ko">{{ t.ko }}</span>
           </div>
+          {% if t.def_en %}<div class="tv-def"><span class="vd-def-mark">[영영]</span>{{ t.def_en }}</div>{% endif %}
           {% for s in t.syns %}
           <div class="tv-syn"><span class="tv-syn-mark">≒</span> <span class="tv-syn-w">{{ s[0] }}</span><span class="tv-syn-k">{{ s[1] }}</span></div>
           {% endfor %}
-          {% if t.def_en %}<div class="tv-def"><span class="vd-def-mark">📖</span>{{ t.def_en }}</div>{% endif %}
-          {% if t.ex_short %}<div class="tv-ex"><span class="vd-ex-mark">✏️</span>{{ t.ex_short }}</div>{% endif %}
+          {% if t.ex_short %}<div class="tv-ex"><span class="vd-ex-mark">[예문]</span>{{ t.ex_short }}</div>{% endif %}
         </div>
         {% endfor %}
       </td>

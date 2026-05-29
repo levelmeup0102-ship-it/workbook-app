@@ -62,9 +62,6 @@ def _safe_print(msg):
 # ============================================================
 # 문장 분리 (Dr. Mr. Ms. Mrs. Prof. etc. 경칭 보호)
 # ============================================================
-# 마침표 뒤 공백에서 분리하되, 경칭/약어 뒤는 분리하지 않음
-_ABBREVS = r'(?<!\bDr)(?<!\bMr)(?<!\bMs)(?<!\bSt)(?<!\bvs)(?<!\bNo)(?<!\bJr)(?<!\bSr)(?<!\bet)(?<!\bMrs)(?<!\bal)(?<!\bProf)(?<!\bGen)(?<!\bGov)(?<!\bSgt)(?<!\bCpl)(?<!\bLt)(?<!\bCo)(?<!\bInc)(?<!\bLtd)(?<!\bCorp)(?<!\bDept)(?<!\bEst)(?<!\bFig)(?<!\bVol)(?<!\bRev)'
-
 def split_sentences(text: str) -> list:
     """영어 지문 문장 분리
     핵심 규칙:
@@ -113,6 +110,40 @@ def split_sentences(text: str) -> list:
         r'(?<=[.!?])\s+(?=[\u201c\u201d\u0022]?[A-Z])|(?<=[.!?][\u201c\u201d\u0022])\s+(?=[\u201c\u201d\u0022]?[A-Z])',
         protected
     ) if s.strip()]
+
+    # 3.5단계: 따옴표 내부가 너무 길면 추가 slice (짝 보정 X)
+    def inner_slice_long_quote(sentence: str, min_words: int = 6) -> list[str]:
+        if '§QSEP§' not in sentence:
+            return [sentence]
+
+        parts = sentence.split('§QSEP§')
+
+        def wc(seg: str) -> int:
+            cleaned = seg.strip().strip('"\u201c\u201d')  # §DOT§는 일부러 복원 X
+            tokens = cleaned.split()
+            count, i = 0, 0
+            while i < len(tokens):
+                t = tokens[i]
+                if not any(c.isalpha() for c in t.replace('§DOT§', '')):
+                    i += 1
+                    continue
+                # 약어 토큰(§DOT§로 끝남)은 다음 토큰까지 합쳐서 1단어
+                while t.endswith('§DOT§') and i + 1 < len(tokens):
+                    i += 1
+                    t = tokens[i]
+                count += 1
+                i += 1
+            return count
+
+        # 내부 조각 중 하나라도 단어 6 초과 → 전부 분리
+        if max(wc(p) for p in parts) > min_words:
+            return [p.strip() for p in parts if p.strip()]
+        return [sentence]
+
+    new_sentences = []
+    for s in sentences:
+        new_sentences.extend(inner_slice_long_quote(s))
+    sentences = new_sentences
 
     # 4단계: 토큰 복원
     restored = []
@@ -457,7 +488,6 @@ def step1_basic_analysis(passage: str, passage_dir: Path, full_translation: str,
     sentences_regex = _merge_short_dialogue(sentences_regex)
     sent_count = len(sentences_regex)
 
-    # _safe_print("  step1: basic analysis...")
     # 대화문 병합된 문장 리스트를 API에 명시적으로 전달
     numbered_sentences = "\n".join([f"[문장{i+1}] {s}" for i, s in enumerate(sentences_regex)])
     prompt = f"""다음 영어 지문을 분석하여 JSON을 생성하세요.
@@ -503,54 +533,6 @@ JSON 형식:
     # 🔒 검증: API 문장 분리 대신 항상 regex 사용 (AI가 문장을 합치거나 쪼개는 것 방지)
     # 영어 지문 문장 분리(알고리즘)
     data["sentences"] = sentences_regex
-
-#     # ★ sentence_translations: API 결과 개수 검증 → 불일치시 개별 번역 API 호출
-#     # 한국어 코드 분리는 불완전하므로, 개수 불일치시 API에 문장별 번역을 다시 요청
-#     st = data.get("sentence_translations", [])
-    
-#     # 지문에 따옴표가 포함되어 있으면 무조건 재요청 (잘못 분리 위험 높음)
-#     passage_has_quotes = any('"' in s or '\u201c' in s or '\u201d' in s for s in sentences_regex)
-#     if len(st) != sent_count or (passage_has_quotes and len(st) == sent_count):
-#         reason = f"{len(st)}개 ≠ {sent_count}개" if len(st) != sent_count else "지문에 따옴표 포함 → 안전 재요청"
-#         _safe_print(f"  WARNING: sentence_translations {reason} → 문장별 번역 재요청")
-#         # 영어 문장 리스트를 넘겨서 1:1 번역 요청
-#         numbered_sents = "\n".join([f"{i+1}. {s}" for i, s in enumerate(sentences_regex)])
-#         retry_prompt = f"""다음 영어 문장들을 각각 한국어로 번역하세요.
-
-# [필수 규칙]
-# - 반드시 정확히 {sent_count}개의 번역을 배열로 반환
-# - ⚠ 영어 1문장 = 한국어 1번역! 긴 문장이어도 한국어를 2개로 나누지 마세요!
-# - 한국어 번역 중간에 마침표를 찍어 문장을 분리하지 마세요. 쉼표로 이어주세요.
-# - 따옴표 안의 내용도 하나의 문장에 포함 (절대 분리하지 말 것)
-# - 자연스럽고 읽기 좋은 한국어로 번역 (의역 OK, 어색한 직역 금지)
-# - 단, 주어와 핵심 동사만 정확히 반영 (met→만났다, said→말했다 등)
-# - to부정사를 동사처럼 해석하지 말 것 (학생이 영작 시 진짜 동사를 찾을 수 있게)
-# - 한국어 화법: 나는 "~~~"라고 말했다 (O) / 나는 말했다, "~~~" (X)
-
-# [영어 문장 - 총 {sent_count}개]
-# {numbered_sents}
-
-# JSON 형식:
-# {{"translations": ["1번 문장 번역", "2번 문장 번역", ...]}}"""
-#         try:
-#             retry_data = call_claude_json(SYS_JSON_KR, retry_prompt, max_tokens=3000)
-#             retry_st = retry_data.get("translations", [])
-#             if len(retry_st) == sent_count:
-#                 st = retry_st
-#                 _safe_print(f"  ✅ 문장별 번역 성공: {len(st)}개")
-#             else:
-#                 _safe_print(f"  ⚠ 문장별 번역도 {len(retry_st)}개, 원본 사용 후 보정")
-#         except Exception as e:
-#             _safe_print(f"  ⚠ 문장별 번역 실패: {str(e)[:80]}")
-        
-#         # 최종 보정
-#         while len(st) < sent_count:
-#             st.append(f"문장 {len(st)+1}")
-#         data["sentence_translations"] = st[:sent_count]
-#     else:
-#         data["sentence_translations"] = st
-
-#     _safe_print(f"  Sentence count: {sent_count}")
     
     # ★ 사용자 해석이 있으면 Claude 번역을 덮어쓰기
     if user_translations:
@@ -1985,7 +1967,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 
 
     # ★★ 최종 안전장치: 항상 핵심 차단 한 번 더 (캐시되기 전)
-    data = _apply_critical_grammar_filters(data)
+    # data = _apply_critical_grammar_filters(data) 테스트1: 안전장치 제거.
 
     save_step(passage_dir, "step5_grammar", data)
     return data
@@ -2099,6 +2081,9 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
             - 문제로 작성된 내용: "④ Guests must select 'Travel Packages' in the reservation form."
             - content_match_en_wrong_trans에 들어갈 내용: "④ Select "Vacation Packages" in the reservation form." (문제가 되는 내용을 만들기 위해 사용한 원래 문장)
 
+[content_match_kr, content_match_en 생성 지침]
+- 단순 이중 부정한 내용을 정답이라고 제출하지 말 것.(지문의 '부정+부정'의 문장을 '긍정+긍정'으로 바꾸어서 문제로 출제하여 정답에 포함시키지 말 것, 원문 명제를 단순히 이중 부정, 완곡한 부정, 부정어 결합, 또는 ‘~와 무관하지 않다’, ‘~하지 않는 것은 아니다’, ‘~라고 보기 어렵다’ 등의 표현으로 바꾸어 원문과 사실상 같은 의미가 되거나 같은 정답으로 인정될 수 있는 단순 문장은 생성하지 않는다.)
+
 [JSON 형식]
 {{
   "vocab_advanced_passage": "괄호 포함 지문",
@@ -2205,7 +2190,7 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
 # ============================================================
 # STEP 7: Stage 10 영작 (API 불필요 - 프로그래밍으로 처리)
 # ============================================================
-def step7_writing(sentences: list, translation: str, passage_dir: Path, sentence_translations: list = None) -> dict:
+def step7_writing(sentences: list, passage_dir: Path, sentence_translations: list = None) -> dict:
     cached = load_step(passage_dir, "step7_writing")
     if cached:
         _safe_print("  Stage 10 영작: using cache")
@@ -2679,7 +2664,7 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
     
     logger.debug(f"DEBUG | translation와 sentence_translations 비교\ntranslation> {translation}\nsentence_translations> {sentence_translations}")
 
-    all_steps["step7"] = step7_writing(sentences_from_api, translation, passage_dir, sentence_translations)
+    all_steps["step7"] = step7_writing(sentences=sentences_from_api, passage_dir=passage_dir, sentence_translations=sentence_translations)
 
     # Step 8: 정답
     all_steps["step8"] = step8_answers(all_steps, passage_dir)

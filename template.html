@@ -71,6 +71,20 @@
             break-after: avoid;
         }
 
+        /* 정답 페이지: 높이를 강제로 잡지 않고, 다음 지문으로 넘어갈 때만 페이지를 넘김 */
+        .page.page-answer {
+            page-break-after: always;
+            break-after: page;
+            min-height: 0 !important;
+        }
+
+        /* 진짜 마지막 페이지(자바스크립트가 부여)만 빈 페이지 방지 */
+        .page.page-answer.page-last {
+            page-break-after: avoid;
+            break-after: avoid;
+            min-height: 0 !important;
+        }
+
 
         .page-head {
             flex-shrink: 0;
@@ -351,6 +365,14 @@
             break-inside: avoid;
         }
 
+        .passage-b {
+            padding: 3mm 4mm;
+            line-height: 1.8;
+            font-size: 8pt;
+            margin-bottom: 1.5mm;
+            break-inside: avoid;
+        }
+
         .p-dense {
             letter-spacing: -0.05em;
             word-spacing: -0.02em;
@@ -620,7 +642,6 @@
         }
 
         .sent-korean {
-            border-bottom: 0.25mm solid var(--border-input);
             height: 7mm;
         }
 
@@ -777,14 +798,18 @@
         }
 
         .opt-row-stack {
-            display: block;
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 6mm;
             margin-bottom: 2.5mm;
             font-size: 9pt;
             line-height: 1.4;
         }
 
         .opt-text {
-            flex-shrink: 0;
+            flex: 1;
+            min-width: 0;
         }
 
         .opt-memo {
@@ -796,12 +821,12 @@
         }
 
         .opt-memo-indent {
-            display: block;
-            padding-left: 4mm;
-            margin-top: 0.5mm;
+            display: inline-block;
             color: var(--text-muted);
             font-size: 8pt;
             font-weight: normal;
+            flex-shrink: 0;
+            white-space: nowrap;
         }
 
         .ans-row {
@@ -1063,8 +1088,21 @@
         .gram-ans-cell {
             border: 0.25mm solid var(--border-light);
             border-radius: 0.8mm;
-            padding: 1.5mm 2mm;
+            padding: 0.5mm 1mm;
             vertical-align: top;
+            line-height: 0.95;
+        }
+        .gram-ans-cell .gram-ans-row {
+            margin-bottom: 0.2mm;
+            min-height: 0;
+        }
+        .gram-ans-cell .gram-ans-line {
+            min-height: 3mm;
+        }
+        .gram-ans-cell .word-table-row-fixed {
+            margin: 0;
+            line-height: 0.95;
+            font-size: 7pt;
         }
 
         .gram-err-tbl {
@@ -1077,8 +1115,34 @@
         .gram-err-cell {
             border: 0.25mm solid var(--border-light);
             border-radius: 0.8mm;
-            padding: 1.5mm 2mm;
+            padding: 0.5mm 1mm;
             vertical-align: top;
+            line-height: 0.95;
+        }
+        .gram-err-cell .word-table-row-fixed {
+            margin: 0;
+            line-height: 0.95;
+            font-size: 7pt;
+        }
+
+        .gram-err-cell > p:first-child {
+            white-space: nowrap;
+            overflow: hidden;
+            display: flex;
+            align-items: flex-end;
+            gap: 0.8mm;
+            font-size: 8pt;
+        }
+
+        .gram-err-cell > p:first-child .input-line,
+        .gram-err-cell > p:first-child .input-line.input-xs {
+            flex: 1 1 0;
+            min-width: 0;
+        }
+
+        .gram-err-cell > p:first-child .grammar-number,
+        .gram-err-cell > p:first-child .grammar-option {
+            flex: 0 0 auto;
         }
 
         .gram-err-cell > p:first-child {
@@ -1267,7 +1331,7 @@
             column-gap: 6mm;
             column-fill: auto;
             column-rule: 0.2mm solid var(--border-light);
-            height: 230mm;
+            height: 210mm;
             font-size: 8pt;
             line-height: 1.4;
             overflow-wrap: break-word;
@@ -1293,6 +1357,15 @@
             margin-bottom: 3mm;
             padding-bottom: 2.5mm;
             border-bottom: 0.2mm dashed var(--border-light);
+        }
+
+        /* 타이틀(.ast)은 다음 줄과 떨어지지 않게 */
+        .ablock .ast {
+            break-after: avoid;
+        }
+        /* p 단위로는 break-inside: avoid 유지 (한 줄 안에서만 안 잘림) */
+        .ablock p {
+            break-inside: avoid;
         }
 
         .answer-block:last-child,
@@ -1480,16 +1553,20 @@
 
         .page {
             counter-increment: pagenum;
+            position: relative;
         }
 
-        .page-foot::after {
+        /* 쪽번호 제거 (사용자 요청) */
+        /* .page::after {
             content: counter(pagenum);
-            display: block;
+            position: absolute;
+            bottom: 6mm;
+            left: 0;
+            right: 0;
             text-align: center;
             font-size: 7.5pt;
             color: #999;
-            margin-top: 2mm;
-        }
+        } */
 
         @media screen {
             html {
@@ -1530,6 +1607,20 @@
             .page {
                 padding-left: 15mm;
                 padding-right: 15mm;
+            }
+
+            /* 정답 페이지: print 모드에서도 높이를 강제로 잡지 않고 페이지 넘김만 유지 */
+            .page.page-answer {
+                min-height: 0 !important;
+                page-break-after: always;
+                break-after: page;
+            }
+
+            /* 진짜 마지막 페이지(자바스크립트가 부여)만 빈 페이지 방지 */
+            .page.page-answer.page-last {
+                min-height: 0 !important;
+                page-break-after: avoid;
+                break-after: avoid;
             }
 
             /* JS 페이지네이션이 screen/print 동일 height 기준으로 동작 → print 별도 override 불필요 */
@@ -1809,6 +1900,9 @@
                     <p class="text-bold fs-9 mb4">▼ 해석 확인 (스스로 해석 후 비교)</p>
                     <p class="text-small lh-15 color-secondary">{{ translation }}</p>
                 </div>
+                <div class="sketch-box mt6">
+                    <p class="sketch-label">구조화하세요</p>
+                </div>
             </div>
         </div>
         <div class="page-foot">
@@ -1925,11 +2019,11 @@
             </div>
             <div class="content-block">
                 <p class="step-badge">STEP 2</p>
-                <p class="step-title">주제와 가장 유사한 내용 찾기</p>
+                <p class="step-title">주제와 가장 유사한 내용을 모두 고르시오</p>
                 {% for opt in topic_options %}
                 <div class="opt-row-stack">
                     <span class="opt-text">{{ opt }}</span>
-                    <span class="opt-memo-indent">→ 오답정리:</span>
+                    <span class="opt-memo-indent">← 오답정리</span>
                 </div>{% endfor %}
                 <p class="ans-row">답: <span class="input-line input-ans"></span></p>
                 <div class="sketch-box mt6">
@@ -1996,11 +2090,11 @@
                             text }}</p>{%
                         endfor %}
                     </div>
-                    <p class="fs-85 mt2">①(C)-(A)-(B) ②(A)-(C)-(B) ③(B)-(A)-(C) ④(A)-(B)-(C) ⑤(B)-(C)-(A)</p>
+                    <p class="fs-85 mt2">①(A)-(C)-(B) ②(B)-(A)-(C) ③(B)-(C)-(A) ④(C)-(A)-(B) ⑤(C)-(B)-(A)</p>
                     <p class="flow-section-label-sep">B. 문장 삽입</p>
                     <p class="mb2">주어진 문장이 들어가기에 가장 적절한 곳을 고르시오.</p>
                     <div class="passage flow-pass-insert p-dense">{{ insert_sentence }}</div>
-                    <div class="passage flow-pass-intro p-dense mt2">{{ insert_passage }}</div>
+                    <div class="passage-b flow-pass-intro p-dense mt2">{{ insert_passage }}</div>
                     <p class="flow-section-label-sep">(심화) 전체 문장 순서 배열</p>
                     <p class="text-muted mb4 fs-75">지문의 모든 문장을 정확한 순서로 배열하여 글의 흐름을 완벽히 체화합니다.</p>
                     {% for label, text in full_order_blocks %}
@@ -2020,15 +2114,13 @@
                             <tr>
                                 <td class="sol-step-label">[순서]</td>
                                 <td>
-                                    <span class="sol-step-line">① 첫 문장 찾기 → 지문 전체 흐름 상기</span>
-                                    <span class="sol-step-line">② 연결 단서로 한문장씩 순서 연결</span>
+                                    <span class="sol-step-line">★ 연결 단서로 한문장씩 순서 연결</span>
                                 </td>
                             </tr>
                             <tr>
                                 <td class="sol-step-label">[삽입]</td>
                                 <td>
-                                    <span class="sol-step-line">① 삽입 문장의 핵심어·연결사 파악</span>
-                                    <span class="sol-step-line">② 앞뒤 문장 논리 확인 → 삽입 위치 결정</span>
+                                    <span class="sol-step-line">★ 핵심어·연결사 파악 + 앞뒤 문장 논리 확인</span>
                                 </td>
                             </tr>
                         </table>
@@ -2070,7 +2162,7 @@
                 {% for opt in blank_options %}
                 <div class="opt-row-stack">
                     <span class="opt-text">{{ opt }}</span>
-                    <span class="opt-memo-indent">→ 오답정리:</span>
+                    <span class="opt-memo-indent">← 오답정리</span>
                 </div>{% endfor %}
                 <p class="ans-row">답: <span class="input-line input-ans"></span></p>
             </div>
@@ -2101,14 +2193,11 @@
         <div class="page-content">
             <div class="content-block">
                 <div class="section-title title-MD mt4">Stage 7-1 어법 (괄호 속 올바른 표현 고르기)</div>
-                <p class="step-badge">STEP 1</p>
-                <p class="step-title">어법 포인트 확인</p>
-                <p class="mb4 fs-85">아래 어법 문제를 순서대로 풀어보세요. 각 표현의 정답 근거를 반드시 확인하고 기록하세요.</p>
-                <p class="part-badge">PART 1</p>
-                <p class="mb2 fs-85 gram-note">기본적인 문장구조를 표시하여 <strong>정답의 근거를 분석</strong>해보기</p>
+                <p class="step-badge">STEP 1. 어법 포인트 확인</p>
+                <p class="mb2 fs-85">아래 어법 문제를 순서대로 풀어보세요. 각 표현의 정답 근거를 반드시 확인하고 기록하세요.</p>
+                <p class="part-badge">PART 1. 기본적인 문장구조를 표시하여 <strong>정답의 근거를 분석</strong>해보기</p>
                 <div class="passage passage-xs p-dense">{{ grammar_bracket_passage }}</div>
-                <p class="part-badge mt4">PART 2</p>
-                <p class="mb2 fs-85">각 번호에 해당하는 답을 <strong>'영어'</strong>로 작성</p>
+                <p class="part-badge mt4">PART 2. 각 번호에 해당하는 답을 <strong>'영어'</strong>로 작성</p>
                 {% set gram_ans_cols = 5 if grammar_bracket_count > 12 else 4 %}
                 <table class="gram-ans-tbl">
                     {% for i in range(0, grammar_bracket_count, gram_ans_cols) %}
@@ -2129,8 +2218,7 @@
                 </table>
             </div>
             <div class="content-block">
-                <p class="step-badge">STEP 2</p>
-                <p class="step-title">어법 서술형 — 틀린 곳 찾아 고치기</p>
+                <p class="step-badge">STEP 2. 어법 서술형 — 틀린 곳 찾아 고치기</p>
                 <p class="mb2 fs-85">다음 글에서 어법상 틀린 부분을 <strong>{{ grammar_error_count }}곳</strong> 찾아 바르게 고치시오. <span
                         class="warning-text">(밑줄 없음!) 기본적인 문장구조를 표시하여 <strong>정답의 근거</strong>를 분석해보기</span></p>
                 <!-- <p class="mb2 fs-85">기본적인 문장구조를 표시하여 <strong>정답의 근거</strong>를 분석해보기</p> -->
@@ -2409,14 +2497,13 @@
 
     {% if not levels or 0 in levels %}
     {# ==================== 정답 및 해설 ==================== #}
-    <div class="page page-last">
+    <div class="page page-answer">
         <div class="page-head">
             <div class="page-header"><span class="page-header-left">레벨미업학원</span><span>정답 및 해설</span></div>
         </div>
         <div class="page-content">
             <div class="content-block">
-                <div class="ans-heading text-center text-bold mt6 mb6">정답 및 해설</div>
-                <div class="answer-page">{{ answers_html }}</div>
+                <div class="answer-page">{{ answers_html | safe }}</div>
             </div>
         </div>
     </div>

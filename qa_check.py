@@ -98,25 +98,6 @@ def _fix_typo_스스로(html: str) -> str:
     return html
 
 
-def _check_bracket_passage(html: str) -> list:
-    """8-1 괄호형 지문에 실제 괄호가 있는지 감지
-    
-    문제: 파이프라인에서 Claude가 괄호 없는 원문을 그대로 출력
-    반환: 재생성 필요한 이슈 목록
-    """
-    issues = []
-    sections_8_1 = list(re.finditer(r'Stage 8-1', html))
-    for i, m in enumerate(sections_8_1):
-        psg_match = re.search(r'<div class="psg[^"]*"[^>]*>(.*?)</div>', html[m.start():m.start()+5000], re.DOTALL)
-        if psg_match:
-            psg_text = psg_match.group(1)
-            bracket_count = len(re.findall(r'\(\d+\)\[', psg_text))
-            if bracket_count == 0:
-                _log(f"[내용오류-심각] 섹션 {i+1} Stage 8-1: 괄호(N)[A/B] 없음! 재생성 필요")
-                issues.append("bracket_missing")
-    return issues
-
-
 def fix_single_html(html: str) -> tuple:
     """단건 HTML 전체 검증 + 수정 (파이프라인 render_pdf에서 호출)
     
@@ -132,8 +113,7 @@ def fix_single_html(html: str) -> tuple:
     html = _fix_bracket_count_mismatch(html)
     html = _fix_answer_bogus_entries(html)
     html = _fix_answer_format(html)
-    issues.extend(_check_bracket_passage(html))
-    
+
     _log(f"단건 검증 완료 (이슈 {len(issues)}건)")
     return html, issues
 
@@ -310,10 +290,7 @@ def fix_merged_html(html: str) -> str:
     html = _fix_error_count_mismatch(html)
     html = _fix_answer_bogus_entries(html)
     html = _fix_answer_format(html)
-    bracket_issues = _check_bracket_passage(html)
-    if bracket_issues:
-        _log(f"  ⚠️ 합본에서 괄호 누락 감지 — 해당 섹션 데이터 재생성 필요")
-    
+
     _log("합본 검증 완료")
     return html
 

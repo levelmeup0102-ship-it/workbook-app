@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<style>
+:root {
+  --primary: #1A6BB5; --accent: #C0621A; --green: #1A7D40;
+  --red: #B91C1C; --purple: #6A1B9A; --teal: #00796B;
+  --border: #C2CBD6;
+  --bg-passage: #F3F5F7; --bg-given: #E0F2F1;
+  --bg-yellow: #FFF3C0; --bg-orange: #FCEADE; --bg-blue: #D4E8F7;
+  --bg-purple: #F3E5F5;
+}
+@page {
+  size: A4;
+  margin: 11mm 13mm 22mm 13mm;
+  @bottom-right {
+    content: element(footer-logo);
+    margin-right: 0; margin-bottom: 0;
+  }
+}
+.footer-logo { position: running(footer-logo); }
+.footer-logo img {
+  height: 28mm; vertical-align: bottom;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Noto Sans CJK KR','Noto Sans KR','Malgun Gothic',sans-serif;
+  font-size: 9.5pt; color: #111; line-height: 1.55;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.q-page { page-break-after: always; }
+.hdr {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 4px; border-bottom: 2px solid var(--purple); margin-bottom: 10px;
+  gap: 8px;
+}
+.hdr-title { font-weight: bold; font-size: 11.5pt; color: var(--purple); display: flex; align-items: center; gap: 8px; }
+.hdr-logo { height: 18px; vertical-align: middle; }
+.hdr-right { font-size: 8.5pt; color: #555; }
+.var-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #6A1B9A, #C0621A);
+  color: white; padding: 1.5px 9px; border-radius: 10px;
+  font-size: 7.5pt; font-weight: bold; margin-left: 6px;
+}
+
+/* ⭐ 주어진 문장 박스 (Q3 위에) - 청록색 */
+.given-box {
+  border: 2px solid var(--teal);
+  border-radius: 5px;
+  background: var(--bg-given);
+  padding: 8px 12px;
+  margin: 6px 0 8px;
+  position: relative;
+}
+.given-label {
+  position: absolute;
+  top: -8px; left: 10px;
+  background: var(--teal); color: white;
+  padding: 1px 7px; border-radius: 8px;
+  font-size: 7pt; font-weight: bold;
+  letter-spacing: 0.3px;
+}
+.given-text {
+  font-size: 9pt;
+  line-height: 1.55;
+  font-weight: 500;
+  font-style: italic;
+  color: #1a1a1a;
+  padding-top: 2px;
+}
+
+.psg-box {
+  border: 1px solid var(--border); border-radius: 5px;
+  background: var(--bg-passage); padding: 9px 13px;
+  font-size: 9pt; line-height: 1.8; margin-bottom: 11px;
+  text-align: justify;
+}
+/* ⭐ 지문 안 위치 마커 - 동그라미 숫자만 (괄호 X) */
+.psg-box .pos-mark {
+  display: inline-block;
+  color: var(--teal);
+  font-weight: bold;
+  font-size: 11pt;
+  margin: 0 2px;
+}
+
+.two-col {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px;
+}
+.col-objective { border-right: 1px dashed #DDD; padding-right: 10px; }
+.col-writing { padding-left: 6px; }
+.col-header {
+  font-size: 8.5pt; font-weight: bold; letter-spacing: 0.5px;
+  padding: 3px 8px; margin-bottom: 7px; border-radius: 3px;
+}
+.col-obj-hdr { background: var(--bg-blue); color: var(--primary); border-left: 3px solid var(--primary); }
+.col-wri-hdr { background: var(--bg-orange); color: var(--accent); border-left: 3px solid var(--accent); }
+.q-num {
+  display: inline-block; background: var(--primary); color: white;
+  width: 18px; height: 18px; border-radius: 4px;
+  font-size: 9pt; font-weight: bold;
+  text-align: center; line-height: 18px;
+  margin-right: 5px; vertical-align: middle;
+}
+.q-num.write { background: var(--accent); }
+.q-num.teal { background: var(--teal); }
+.q-title {
+  font-weight: bold; font-size: 9.5pt; color: #111;
+  margin-bottom: 5px; margin-top: 11px;
+}
+.q-title:first-of-type { margin-top: 0; }
+
+.summary-template {
+  background: #FFFCEB;
+  border: 1px solid #F0E0A0;
+  border-radius: 3px;
+  padding: 5px 8px;
+  margin: 3px 0 5px;
+  font-size: 8.5pt;
+  line-height: 1.6;
+}
+.summary-template .ph-label {
+  display: inline-block;
+  border: 1px solid #888;
+  padding: 0 5px;
+  border-radius: 2px;
+  background: white;
+  font-weight: bold;
+  color: var(--accent);
+  margin: 0 1px;
+}
+
+.opt-pair-hdr {
+  font-size: 7.5pt; color: #777; font-weight: bold;
+  display: grid;
+  grid-template-columns: 22px 1fr 1fr;
+  gap: 2px 6px;
+  padding: 1px 4px;
+  margin-bottom: 2px;
+}
+.opt-pair-hdr span { text-align: center; }
+.opt-pair-hdr span:first-child { text-align: left; }
+.opt-pair-item {
+  display: grid;
+  grid-template-columns: 22px 1fr 1fr;
+  gap: 2px 6px;
+  font-size: 8.7pt;
+  padding: 1.5px 4px;
+}
+.opt-pair-item span { text-align: center; }
+.opt-pair-item span:first-child { text-align: left; }
+.opt-num { color: var(--primary); font-weight: bold; }
+.opt-num.teal { color: var(--teal); }
+
+.opts-1col-stack { font-size: 9pt; }
+.opts-1col-stack .opt { padding: 2px 0; line-height: 1.5; }
+
+/* ⭐ Q3 위치 선지 - 동그라미 숫자만 가로로 (괄호 박스 X) */
+.opts-position {
+  display: flex;
+  justify-content: space-around;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13pt;
+  font-weight: bold;
+  color: var(--teal);
+}
+
+.bogi {
+  border: 1.5px solid var(--accent); border-radius: 4px;
+  background: var(--bg-yellow); padding: 5px 9px;
+  font-size: 8.3pt; line-height: 1.6; margin: 3px 0 4px;
+}
+.bogi-label { font-weight: bold; color: var(--accent); margin-right: 4px; font-size: 8pt; }
+
+.condition {
+  font-size: 7.5pt; color: #555;
+  border-left: 2px solid #DDD;
+  padding-left: 7px;
+  margin: 2px 0 5px;
+  line-height: 1.5;
+}
+.condition-title {
+  display: block;
+  background: #EEE;
+  padding: 0 5px;
+  border-radius: 2px;
+  font-weight: bold;
+  color: #444;
+  font-size: 7.3pt;
+  margin-bottom: 3px;
+  width: fit-content;
+}
+.condition-list { padding-left: 8px; }
+
+.write-ans-row { margin: 4px 0 8px; }
+.write-ans-line {
+  border: 1px solid #999; border-radius: 3px; background: #fff;
+  height: 14mm;
+  background-image:
+    repeating-linear-gradient(to bottom,
+      transparent 0, transparent 6.5mm,
+      #ddd 6.5mm, #ddd 7mm);
+}
+.write-ans-line.compact {
+  height: 11mm;
+  background-image:
+    repeating-linear-gradient(to bottom,
+      transparent 0, transparent 5mm,
+      #ddd 5mm, #ddd 5.4mm);
+}
+.write-ans-prefix {
+  font-size: 8.3pt; color: var(--accent); font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.ans-start { page-break-before: always; }
+.ans-hdr {
+  background: linear-gradient(135deg, #fef3c7, #fed7aa);
+  border-left: 4px solid var(--accent);
+  padding: 6px 11px; margin-bottom: 7px; border-radius: 0 4px 4px 0;
+}
+.ans-hdr .hdr-title { color: var(--accent); font-size: 11pt; }
+.ans-block {
+  border: 1px solid #DDD; border-radius: 4px;
+  padding: 5px 9px; margin-bottom: 5px; background: #FAFAFA;
+  page-break-inside: avoid; break-inside: avoid;
+}
+.ans-block-title {
+  font-size: 9.5pt; font-weight: bold; color: var(--accent);
+  padding-bottom: 2px; margin-bottom: 4px; border-bottom: 1px solid #DDD;
+}
+.ans-row {
+  display: flex; align-items: flex-start; gap: 6px;
+  padding: 2px 0; font-size: 8pt;
+}
+.ans-row b.q-name { width: 75px; flex-shrink: 0; font-size: 8pt; padding-top: 1px; }
+.ans-row .ans-val {
+  font-weight: bold; color: var(--accent); font-size: 8.7pt;
+  padding: 0 6px; background: var(--bg-orange); border-radius: 3px;
+  flex-shrink: 0;
+}
+.ans-row .ans-val.teal { color: var(--teal); background: var(--bg-given); }
+.ans-row .ans-detail { color: #555; font-size: 7.5pt; line-height: 1.5; flex: 1; }
+.ans-row .ans-write {
+  color: #1a1a1a; font-size: 8.2pt; flex: 1; padding: 1px 0;
+  font-weight: 500;
+}
+.expl-box {
+  background: #F8F9FB; border-left: 2.5px solid var(--purple);
+  padding: 3px 8px; margin: 3px 0;
+  font-size: 7.7pt; line-height: 1.5;
+}
+.expl-box.teal-side { border-left-color: var(--teal); }
+.expl-label { font-weight: bold; color: var(--purple); margin-right: 4px; }
+.expl-label.teal { color: var(--teal); }
+</style>
+</head>
+<body>
+
+<div class="footer-logo">
+  {% if logo_url %}<img src="{{ logo_url }}" alt="레벨미업">{% endif %}
+</div>
+
+{% for item in passages %}
+<div class="q-page">
+  <div class="hdr">
+    <span class="hdr-title">
+      {% if logo_url %}<img class="hdr-logo" src="{{ logo_url }}" alt="레벨미업">{% endif %}
+      변형문제 — 유형 B <span class="var-badge">📝 SUMMARY+POSITION+WRITING</span>
+    </span>
+    <span class="hdr-right">{{ item.label }}</span>
+  </div>
+
+  {# ⭐ 지문 - 위치 마커 ①~⑤가 분산 배치됨 (Q3에 사용) #}
+  <div class="psg-box">{{ item.data.passage_rendered | safe }}</div>
+
+  <div class="two-col">
+
+    <div class="col-objective">
+      <div class="col-header col-obj-hdr">[ 객관식 ]</div>
+
+      {# ⭐ Q1 - 문장 위치 추론 #}
+      <div class="q-title"><span class="q-num teal">1</span> 윗글의 주어진 문장이 들어갈 가장 적절한 곳은?</div>
+      <div class="given-box">
+        <span class="given-label">주어진 문장</span>
+        <div class="given-text">{{ item.data.given_sentence }}</div>
+      </div>
+      <div class="opts-position">
+        <span>①</span>
+        <span>②</span>
+        <span>③</span>
+        <span>④</span>
+        <span>⑤</span>
+      </div>
+
+      <div class="q-title"><span class="q-num">2</span> 윗글의 주제로 가장 적절한 것은?</div>
+      <div class="opts-1col-stack">
+        {% for opt in item.data.topic_options %}
+        <div class="opt"><span class="opt-num">{{ ['①','②','③','④','⑤'][loop.index0] }}</span> {{ opt }}</div>
+        {% endfor %}
+      </div>
+
+      <div class="q-title"><span class="q-num">3</span> 다음 글의 내용을 한 문장으로 요약하고자 한다. 빈칸 (A), (B)에 들어갈 말로 가장 적절한 것은?</div>
+      <div class="summary-template">{{ item.data.summary_template | safe }}</div>
+      <div class="opt-pair-hdr">
+        <span></span>
+        <span>(A)</span>
+        <span>(B)</span>
+      </div>
+      {% for pair in item.data.summary_options %}
+      <div class="opt-pair-item">
+        <span class="opt-num">{{ ['①','②','③','④','⑤'][loop.index0] }}</span>
+        <span>{{ pair[0] }}</span>
+        <span>{{ pair[1] }}</span>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="col-writing">
+      <div class="col-header col-wri-hdr">[ 서술형 ]</div>
+
+      <div class="q-title"><span class="q-num write">4</span> 다음 요약문의 빈칸 (A), (B)에 들어갈 말을 &lt;보기&gt;에서 찾아 영작하시오.</div>
+      <div class="summary-template">{{ item.data.blank_summary_template | safe }}</div>
+      <div class="bogi">
+        <span class="bogi-label">&lt;보기&gt;</span>{{ item.data.blank_summary_bogi | join(' / ') }}
+      </div>
+      <div class="condition">
+        <span class="condition-title">조건</span>
+        <div class="condition-list">
+          ○ &lt;보기&gt;의 단어를 모두 한 번씩만 사용<br>
+          ○ 단어를 추가하지 마시오<br>
+          ○ 단어를 변형 없이 사용
+        </div>
+      </div>
+      <div class="write-ans-row">
+        <div class="write-ans-prefix">(A) 정답:</div>
+        <div class="write-ans-line"></div>
+      </div>
+      <div class="write-ans-row">
+        <div class="write-ans-prefix">(B) 정답:</div>
+        <div class="write-ans-line"></div>
+      </div>
+
+      {# Q5 - 주제문 영작 (이전 Q3이 Q5로 밀림) #}
+      <div class="q-title"><span class="q-num write">5</span> 다음 &lt;보기&gt;의 단어를 모두 사용하여 윗글의 주제문을 영작하시오.</div>
+      <div class="bogi">
+        <span class="bogi-label">&lt;보기&gt;</span>{{ item.data.topic_writing_bogi | join(' / ') }}
+      </div>
+      <div class="condition">
+        <span class="condition-title">조건</span>
+        <div class="condition-list">
+          ○ &lt;보기&gt;의 단어를 모두 한 번씩만 사용<br>
+          ○ 단어를 변형 없이 사용<br>
+          ○ 글의 핵심 논지가 명확히 드러나도록
+        </div>
+      </div>
+      <div class="write-ans-row">
+        <div class="write-ans-prefix">정답:</div>
+        <div class="write-ans-line"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endfor %}
+
+<div class="ans-start">
+  <div class="ans-hdr">
+    <div class="hdr-title">
+      {% if logo_url %}<img class="hdr-logo" src="{{ logo_url }}" alt="레벨미업">{% endif %}
+      변형문제 (유형 B) — 정답·해설 <span class="var-badge">📝 ANSWERS</span>
+    </div>
+  </div>
+
+  {% for item in passages %}
+    <div class="ans-block">
+      <div class="ans-block-title">▶ {{ item.label }}</div>
+
+      <div class="ans-row">
+        <b class="q-name">Q1. 문장위치</b>
+        <span class="ans-val teal">{{ ['①','②','③','④','⑤'][item.data.position_correct] }}</span>
+        <span class="ans-detail" style="font-style:italic;">"{{ item.data.given_sentence }}"</span>
+      </div>
+      <div class="ans-row">
+        <b class="q-name">Q2. 주제</b>
+        <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.topic_correct] }}</span>
+        <span class="ans-detail">{{ item.data.topic_options[item.data.topic_correct] }}</span>
+      </div>
+      <div class="ans-row">
+        <b class="q-name">Q3. 요약빈칸</b>
+        <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.summary_correct] }}</span>
+        <span class="ans-detail">(A) {{ item.data.summary_options[item.data.summary_correct][0] }} &nbsp;·&nbsp; (B) {{ item.data.summary_options[item.data.summary_correct][1] }}</span>
+      </div>
+      <div class="ans-row">
+        <b class="q-name">Q4(A) 영작</b>
+        <span class="ans-write">{{ item.data.blank_A }}</span>
+      </div>
+      <div class="ans-row">
+        <b class="q-name">Q4(B) 영작</b>
+        <span class="ans-write">{{ item.data.blank_B }}</span>
+      </div>
+      <div class="ans-row">
+        <b class="q-name">Q5. 주제영작</b>
+        <span class="ans-write">{{ item.data.topic_writing_answer }}</span>
+      </div>
+
+      {% if item.data.position_explain %}
+      <div class="expl-box teal-side">
+        <span class="expl-label teal">Q1 해설</span>{{ item.data.position_explain }}
+      </div>
+      {% endif %}
+      {% if item.data.explain %}
+      <div class="expl-box"><span class="expl-label">전체 해설</span>{{ item.data.explain }}</div>
+      {% endif %}
+    </div>
+  {% endfor %}
+</div>
+
+</body>
+</html>

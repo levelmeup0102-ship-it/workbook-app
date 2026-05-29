@@ -5,19 +5,20 @@ PIPELINE_VERSION = "v10"
 
 # Step별 버전 관리: 해당 step 코드 수정 시 버전만 올리면 캐시 자동 무효화
 STEP_VERSIONS = {
-    "step1_basic": "v3",
-    "step2_order": "v3",
-    "step3_blank": "v2",
-    "step4_topic": "v2",
-    "step5_grammar": "v3",
-    "step6_vocab_content": "v2",
-    "step7_writing": "v3",
-    "step8_answers": "v4",
-    "secret_note_a": "v1",
+    "step1_basic": "v4",
+    "step2_order": "v10",
+    "step3_blank": "v6",
+    "step4_topic": "v4",
+    "step5_grammar": "v15",
+    "step6_vocab_content": "v6",
+    "step7_writing": "v4",
+    "step8_answers": "v10",
+    "secret_note_a": "v4",  # v4: 유의어 5개, paraphrase 템플릿에서 삭제
     "secret_note_b": "v1",
     "secret_note_c": "v5",  # v5: 유의어 6-7개, 고난도 4-5개, 요지 2배 길이, 가로 배치
 }
 import asyncio, json, os, sys, time, random, re, math, logging
+from stage7_1_step1_prompt import PROMPT_TEMPLATE
 
 logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s] %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -53,16 +54,14 @@ OUTPUT_DIR = TEMPLATE_DIR / "output" / TODAY
 # ============================================================
 def _safe_print(msg):
     try:
-        print(str(msg))
+        print(msg)
     except Exception:
-        pass
+        print(str(msg))
+        # pass
 
 # ============================================================
 # 문장 분리 (Dr. Mr. Ms. Mrs. Prof. etc. 경칭 보호)
 # ============================================================
-# 마침표 뒤 공백에서 분리하되, 경칭/약어 뒤는 분리하지 않음
-_ABBREVS = r'(?<!\bDr)(?<!\bMr)(?<!\bMs)(?<!\bSt)(?<!\bvs)(?<!\bNo)(?<!\bJr)(?<!\bSr)(?<!\bet)(?<!\bMrs)(?<!\bal)(?<!\bProf)(?<!\bGen)(?<!\bGov)(?<!\bSgt)(?<!\bCpl)(?<!\bLt)(?<!\bCo)(?<!\bInc)(?<!\bLtd)(?<!\bCorp)(?<!\bDept)(?<!\bEst)(?<!\bFig)(?<!\bVol)(?<!\bRev)'
-
 def split_sentences(text: str) -> list:
     """영어 지문 문장 분리
     핵심 규칙:
@@ -112,6 +111,40 @@ def split_sentences(text: str) -> list:
         protected
     ) if s.strip()]
 
+    # 3.5단계: 따옴표 내부가 너무 길면 추가 slice (짝 보정 X)
+    def inner_slice_long_quote(sentence: str, min_words: int = 6) -> list[str]:
+        if '§QSEP§' not in sentence:
+            return [sentence]
+
+        parts = sentence.split('§QSEP§')
+
+        def wc(seg: str) -> int:
+            cleaned = seg.strip().strip('"\u201c\u201d')  # §DOT§는 일부러 복원 X
+            tokens = cleaned.split()
+            count, i = 0, 0
+            while i < len(tokens):
+                t = tokens[i]
+                if not any(c.isalpha() for c in t.replace('§DOT§', '')):
+                    i += 1
+                    continue
+                # 약어 토큰(§DOT§로 끝남)은 다음 토큰까지 합쳐서 1단어
+                while t.endswith('§DOT§') and i + 1 < len(tokens):
+                    i += 1
+                    t = tokens[i]
+                count += 1
+                i += 1
+            return count
+
+        # 내부 조각 중 하나라도 단어 6 초과 → 전부 분리
+        if max(wc(p) for p in parts) > min_words:
+            return [p.strip() for p in parts if p.strip()]
+        return [sentence]
+
+    new_sentences = []
+    for s in sentences:
+        new_sentences.extend(inner_slice_long_quote(s))
+    sentences = new_sentences
+
     # 4단계: 토큰 복원
     restored = []
     for s in sentences:
@@ -142,7 +175,7 @@ def _merge_short_dialogue(sentences: list, min_words: int = 6) -> list:
     if not _is_dialogue(sentences) or len(sentences) < 2:
         return sentences
 
-    _safe_print(f"  대화문 감지 → 짧은 문장 병합 (≤{min_words}단어)")
+    # _safe_print(f"  대화문 감지 → 짧은 문장 병합 (≤{min_words}단어)")
 
     # 각 문장의 화자 추적
     def _get_speaker(sent):
@@ -192,7 +225,7 @@ def _merge_short_dialogue(sentences: list, min_words: int = 6) -> list:
             final.pop()
             final_sp.pop()
 
-    _safe_print(f"  병합 결과: {len(sentences)}문장 → {len(final)}문장 (-{len(sentences)-len(final)})")
+    # _safe_print(f"  병합 결과: {len(sentences)}문장 → {len(final)}문장 (-{len(sentences)-len(final)})")
     return final
 
 # ============================================================
@@ -249,7 +282,7 @@ def call_claude(system_prompt: str, user_prompt: str, max_retries=2, max_tokens=
             if tmp_path:
                 try: os.unlink(tmp_path)
                 except: pass
-            _safe_print(f"  [WARN] API attempt {attempt+1} failed: {str(e)[:100]}")
+            # _safe_print(f"  [WARN] API attempt {attempt+1} failed: {str(e)[:100]}")
             if attempt < max_retries:
                 time.sleep(3 * (attempt + 1))
             else:
@@ -367,14 +400,14 @@ def save_step(passage_dir: Path, step_name: str, data: dict):
     path = passage_dir / f"{step_name}.json"
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    _safe_print(f"  Saved: {step_name}.json (ver={data['_step_version']})")
+    # _safe_print(f"  Saved: {step_name}.json (ver={data['_step_version']})")
     # Save to Supabase
     try:
         import supa
         if supa._enabled():
             cache_key = passage_dir.name
             _run_async(supa.save_step_supa(cache_key, step_name, data))
-            _safe_print(f"  Saved to Supabase: {cache_key}/{step_name}")
+            # _safe_print(f"  Saved to Supabase: {cache_key}/{step_name}")
     except Exception as e:
         _safe_print(f"  [supa] save error: {str(e)[:80]}")
 
@@ -388,7 +421,7 @@ def load_step(passage_dir: Path, step_name: str) -> dict | None:
         # 버전 체크: 다르면 캐시 무효
         cached_ver = data.get("_step_version", "")
         if cached_ver != expected_ver:
-            _safe_print(f"  Cache outdated: {step_name} (cached={cached_ver}, need={expected_ver}) → regenerate")
+            # _safe_print(f"  Cache outdated: {step_name} (cached={cached_ver}, need={expected_ver}) → regenerate")
             path.unlink()
             return None
         return data
@@ -402,7 +435,7 @@ def load_step(passage_dir: Path, step_name: str) -> dict | None:
                 # 버전 체크
                 cached_ver = data.get("_step_version", "")
                 if cached_ver != expected_ver:
-                    _safe_print(f"  Supabase cache outdated: {step_name} (cached={cached_ver}, need={expected_ver}) → regenerate")
+                    # _safe_print(f"  Supabase cache outdated: {step_name} (cached={cached_ver}, need={expected_ver}) → regenerate")
                     try:
                         _run_async(supa.delete_step(cache_key, step_name))
                     except:
@@ -412,7 +445,7 @@ def load_step(passage_dir: Path, step_name: str) -> dict | None:
                 passage_dir.mkdir(parents=True, exist_ok=True)
                 with open(path, 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
-                _safe_print(f"  Loaded from Supabase: {step_name} (ver={cached_ver})")
+                # _safe_print(f"  Loaded from Supabase: {step_name} (ver={cached_ver})")
                 return data
     except Exception as e:
         _safe_print(f"  [supa] load error: {str(e)[:80]}")
@@ -432,7 +465,7 @@ SYS_JSON_KR = """당신은 한국 고등학생을 위한 영어 시험 콘텐츠
 # ============================================================
 # STEP 1: 기본 분석 (어휘 + 번역 + 핵심문장)
 # ============================================================
-def step1_basic_analysis(passage: str, passage_dir: Path, user_translations: list = None) -> dict:
+def step1_basic_analysis(passage: str, passage_dir: Path, full_translation: str, user_translations: list = []) -> dict:
     cached = load_step(passage_dir, "step1_basic")
     if cached:
         # 캐시가 있어도 user_translations가 새로 제공되면 덮어쓰기
@@ -444,7 +477,7 @@ def step1_basic_analysis(passage: str, passage_dir: Path, user_translations: lis
                 cached["sentence_translations"] = user_translations
                 cached["translation"] = ' '.join(user_translations)
                 save_step(passage_dir, "step1_basic", cached)
-                _safe_print(f"  step1: cache + 사용자 해석 {sent_count}줄 적용")
+                # _safe_print(f"  step1: cache + 사용자 해석 {sent_count}줄 적용")
             else:
                 _safe_print(f"  step1: ⚠️ 사용자 해석 {len(user_translations)}줄 ≠ 영어 {sent_count}문장 → 사용자 해석 무시")
         else:
@@ -455,7 +488,6 @@ def step1_basic_analysis(passage: str, passage_dir: Path, user_translations: lis
     sentences_regex = _merge_short_dialogue(sentences_regex)
     sent_count = len(sentences_regex)
 
-    _safe_print("  step1: basic analysis...")
     # 대화문 병합된 문장 리스트를 API에 명시적으로 전달
     numbered_sentences = "\n".join([f"[문장{i+1}] {s}" for i, s in enumerate(sentences_regex)])
     prompt = f"""다음 영어 지문을 분석하여 JSON을 생성하세요.
@@ -463,39 +495,30 @@ def step1_basic_analysis(passage: str, passage_dir: Path, user_translations: lis
 [지문 - 총 {sent_count}개 문장]
 {passage}
 
-[문장 분리 기준 - 반드시 이 기준을 따르세요!]
+[문장 분리 기준 - 반드시 하단의 내용 준수]
 {numbered_sentences}
 
 [생성 항목]
 1. vocab: 핵심 어휘 14개 (각각 word, meaning(한국어), synonyms(영어 유의어 4개 쉼표구분))
-2. translation: 지문 전체의 자연스러운 한국어 번역
-   - 자연스럽고 읽기 좋은 한국어로 번역 (의역 OK)
-   - 단, 주어와 핵심 동사는 정확히 반영 (met→만났다, said→말했다 등 동사 혼동 방지)
-   - 한국어 화법: 나는 "~~~"라고 말했다 (O) / 나는 말했다, "~~~" (X)
-   - 대화체는 자연스러운 존댓말/반말 사용
-3. sentences: 위 [문장 분리 기준]과 정확히 동일하게 배열 (정확히 {sent_count}개!)
-   - 위에서 제공한 문장 분리를 그대로 사용하세요
-4. sentence_translations: 위 [문장 분리 기준]의 각 문장에 대한 한국어 번역 (정확히 {sent_count}개, 같은 순서!)
-   - ⚠ 영어 1문장 = 한국어 1문장! 영어가 긴 문장이어도 한국어 번역을 절대 2개로 나누지 마세요!
-   - 한국어 번역 중간에 마침표(.)를 찍어 문장을 나누면 안 됩니다. 쉼표(,)로 이어주세요.
-   - 자연스럽고 읽기 좋은 한국어 (의역 OK, 어색한 직역 금지)
-   - 단, 주어와 핵심 동사만 정확히 (met→만났다, said→말했다, prepared→준비하다 등)
-   - to부정사를 동사처럼 해석하지 말 것 (학생이 영작 시 진짜 동사를 찾을 수 있게)
-   - 한국어 화법: 나는 "~~~"라고 말했다 형태로 (나는 말했다, "~~~" 금지)
-   - 따옴표(" " 또는 " ") 안의 마침표는 문장의 끝으로 처리하지 말 것
-   - 따옴표가 열렸으면 반드시 닫힌 후에야 다음 문장으로 넘어감
-   - 예: "연설 때문에 부끄럽습니다."라고 말했다. → 이것은 하나의 번역!
-   - 영어 sentences 배열 수와 반드시 일치해야 함 (정확히 {sent_count}개!)
-5. key_sentences: 시험 출제 가능성이 높은 핵심 문장 8개 (원문 그대로)
-6. test_a: vocab에서 뜻 쓰기 테스트용 5개 단어 (영어)
-7. test_b: vocab에서 유의어 테스트용 5개 단어 (test_a와 겹치지 않게, 영어)
-8. test_c: vocab에서 철자 테스트용 5개 (한국어 뜻)
+2. sentence_translations: 위 [문장 분리 기준]의 각 문장에 대한 한국어 번역 (정확히 {sent_count}개, 같은 순서!)
+  - ⚠ 영어 1문장 = 한국어 1문장! 영어가 긴 문장이어도 한국어 번역을 절대 2개로 나누지 마세요!
+  - 한국어 번역 중간에 마침표(.)를 찍어 문장을 나누면 안 됩니다. 쉼표(,)로 이어주세요.
+  - 자연스럽고 읽기 좋은 한국어 (의역 OK, 어색한 직역 금지)
+  - 단, 주어와 핵심 동사만 정확히 (met→만났다, said→말했다, prepared→준비하다 등)
+  - to부정사를 동사처럼 해석하지 말 것 (학생이 영작 시 진짜 동사를 찾을 수 있게)
+  - 한국어 화법: 나는 "~~~"라고 말했다 형태로 (나는 말했다, "~~~" 금지)
+  - 따옴표(" " 또는 " ") 안의 마침표는 문장의 끝으로 처리하지 말 것
+  - 따옴표가 열렸으면 반드시 닫힌 후에야 다음 문장으로 넘어감
+  - 예: "연설 때문에 부끄럽습니다."라고 말했다. → 이것은 하나의 번역!
+  - 영어 sentences 배열 수와 반드시 일치해야 함 (정확히 {sent_count}개!)
+3. key_sentences: 시험 출제 가능성이 높은 핵심 문장 8개 (원문 그대로)
+4. test_a: vocab에서 뜻 쓰기 테스트용 5개 단어 (영어)
+5. test_b: vocab에서 유의어 테스트용 5개 단어 (test_a와 겹치지 않게, 영어)
+6. test_c: vocab에서 철자 테스트용 5개 (한국어 뜻)
 
 JSON 형식:
 {{
   "vocab": [{{"word":"...", "meaning":"...", "synonyms":"..."}}],
-  "translation": "...",
-  "sentences": ["...", "..."],
   "sentence_translations": ["첫째 문장 해석...", "둘째 문장 해석...", ...],
   "key_sentences": ["...", "..."],
   "test_a": ["...", "..."],
@@ -504,64 +527,19 @@ JSON 형식:
 }}"""
 
     data = call_claude_json(SYS_JSON_KR, prompt, max_tokens=4096)
-    
+
+    logger.debug(f"DEBUG | step1_basic_analysis | 한국어 해석 추가 data check\ndata\n> {data}")
+
     # 🔒 검증: API 문장 분리 대신 항상 regex 사용 (AI가 문장을 합치거나 쪼개는 것 방지)
+    # 영어 지문 문장 분리(알고리즘)
     data["sentences"] = sentences_regex
-
-    # ★ sentence_translations: API 결과 개수 검증 → 불일치시 개별 번역 API 호출
-    # 한국어 코드 분리는 불완전하므로, 개수 불일치시 API에 문장별 번역을 다시 요청
-    st = data.get("sentence_translations", [])
-    
-    # 지문에 따옴표가 포함되어 있으면 무조건 재요청 (잘못 분리 위험 높음)
-    passage_has_quotes = any('"' in s or '\u201c' in s or '\u201d' in s for s in sentences_regex)
-    if len(st) != sent_count or (passage_has_quotes and len(st) == sent_count):
-        reason = f"{len(st)}개 ≠ {sent_count}개" if len(st) != sent_count else "지문에 따옴표 포함 → 안전 재요청"
-        _safe_print(f"  WARNING: sentence_translations {reason} → 문장별 번역 재요청")
-        # 영어 문장 리스트를 넘겨서 1:1 번역 요청
-        numbered_sents = "\n".join([f"{i+1}. {s}" for i, s in enumerate(sentences_regex)])
-        retry_prompt = f"""다음 영어 문장들을 각각 한국어로 번역하세요.
-
-[필수 규칙]
-- 반드시 정확히 {sent_count}개의 번역을 배열로 반환
-- ⚠ 영어 1문장 = 한국어 1번역! 긴 문장이어도 한국어를 2개로 나누지 마세요!
-- 한국어 번역 중간에 마침표를 찍어 문장을 분리하지 마세요. 쉼표로 이어주세요.
-- 따옴표 안의 내용도 하나의 문장에 포함 (절대 분리하지 말 것)
-- 자연스럽고 읽기 좋은 한국어로 번역 (의역 OK, 어색한 직역 금지)
-- 단, 주어와 핵심 동사만 정확히 반영 (met→만났다, said→말했다 등)
-- to부정사를 동사처럼 해석하지 말 것 (학생이 영작 시 진짜 동사를 찾을 수 있게)
-- 한국어 화법: 나는 "~~~"라고 말했다 (O) / 나는 말했다, "~~~" (X)
-
-[영어 문장 - 총 {sent_count}개]
-{numbered_sents}
-
-JSON 형식:
-{{"translations": ["1번 문장 번역", "2번 문장 번역", ...]}}"""
-        try:
-            retry_data = call_claude_json(SYS_JSON_KR, retry_prompt, max_tokens=3000)
-            retry_st = retry_data.get("translations", [])
-            if len(retry_st) == sent_count:
-                st = retry_st
-                _safe_print(f"  ✅ 문장별 번역 성공: {len(st)}개")
-            else:
-                _safe_print(f"  ⚠ 문장별 번역도 {len(retry_st)}개, 원본 사용 후 보정")
-        except Exception as e:
-            _safe_print(f"  ⚠ 문장별 번역 실패: {str(e)[:80]}")
-        
-        # 최종 보정
-        while len(st) < sent_count:
-            st.append(f"문장 {len(st)+1}")
-        data["sentence_translations"] = st[:sent_count]
-    else:
-        data["sentence_translations"] = st
-
-    _safe_print(f"  Sentence count: {sent_count}")
     
     # ★ 사용자 해석이 있으면 Claude 번역을 덮어쓰기
     if user_translations:
         if len(user_translations) == sent_count:
             data["sentence_translations"] = user_translations
-            data["translation"] = ' '.join(user_translations)
-            _safe_print(f"  ✅ 사용자 해석 {sent_count}줄 적용 (Claude 번역 대체)")
+            data["translation"] = full_translation
+            # _safe_print(f"  ✅ 사용자 해석 {sent_count}줄 적용 (Claude 번역 대체)")
         else:
             _safe_print(f"  ⚠️ 사용자 해석 {len(user_translations)}줄 ≠ 영어 {sent_count}문장 → Claude 번역 사용")
     
@@ -572,75 +550,69 @@ JSON 형식:
 # 순서 선지 코드 생성 유틸리티
 # ============================================================
 _CIRCLE_NUMS = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩"]
+# ①(A)-(C)-(B) ②(B)-(A)-(C) ③(B)-(C)-(A) ④(C)-(A)-(B) ⑤(C)-(B)-(A) 로 수정
+# 학생용 5개 선지(template.html:2060)와 정확히 일치해야 함
+ORDER_TABLE = [
+    ("① (A)-(C)-(B)", ("A", "C", "B")),
+    ("② (B)-(A)-(C)", ("B", "A", "C")),
+    ("③ (B)-(C)-(A)", ("B", "C", "A")),
+    ("④ (C)-(A)-(B)", ("C", "A", "B")),
+    ("⑤ (C)-(B)-(A)", ("C", "B", "A")),
+]
 
-def _generate_order_choices(data, passage=""):
+
+def _generate_order_choices(data, passage: str = ""):
     """
-    1) order_paragraphs의 각 단락이 원문에서 어떤 순서인지 확인
-    2) 라벨 셔플 → 정답이 항상 ABC가 아니게
-    3) order_choices 5지선다를 코드로 생성
-    4) full_order_blocks 순서도 셔플
+    1) order_paragraphs 3단락의 원문 위치를 파악
+    2) ORDER_TABLE의 5개 선지 중 하나를 무작위로 정답으로 선택
+    3) 그 정답이 되도록 단락에 라벨(A/B/C)을 역산 부여
     """
-    from itertools import permutations
-    
-    # === 1. 3단락의 원문 순서 파악 ===
     paras = data.get("order_paragraphs", [])
-    if len(paras) == 3:
-        # 각 단락 텍스트가 원문에서 어디에 있는지 위치로 정렬
-        def _find_pos(text):
-            # 단락 텍스트의 첫 30자로 원문에서 위치 찾기
-            snippet = re.sub(r'\s+', ' ', text.strip())[:50]
-            pos = passage.find(snippet[:30])
-            if pos == -1:
-                # 첫 단어 몇 개로 재시도
-                words = snippet.split()[:5]
-                search = ' '.join(words)
-                pos = passage.find(search)
-            return pos if pos >= 0 else 999999
-        
-        # 원문 순서대로 정렬 (위치 기반)
-        indexed = [(i, _find_pos(paras[i][1])) for i in range(3)]
-        indexed.sort(key=lambda x: x[1])
-        original_order = [idx for idx, pos in indexed]  # 원문 순서의 인덱스
-        
-        # 라벨 셔플: 정답이 ABC가 되지 않도록
-        labels = ["A", "B", "C"]
-        for _ in range(10):
-            random.shuffle(labels)
-            # 원문 순서대로 라벨을 읽었을 때 ABC가 아니면 OK
-            correct_labels = tuple(labels[original_order.index(i)] for i in range(3))
-            if correct_labels != ("A", "B", "C"):
-                break
-        
-        # 각 단락에 새 라벨 부여
-        new_paras = [[labels[i], paras[i][1]] for i in range(3)]
-        
-        # 정답 = 원문 순서대로 라벨 읽기
-        correct = tuple(labels[original_order.index(i)] for i in range(3))
-        _safe_print(f"  순서 정답: {correct} (원문위치: {original_order})")
+    if len(paras) != 3:
+        raise ValueError(f"STAGE 5 | 단락 개수 이상(3개 필요): {len(paras)}개")
 
-        # 표시할 때는 라벨 알파벳 순으로 정렬
-        new_paras.sort(key=lambda x: x[0])
-        data["order_paragraphs"] = new_paras
-    else:
-        correct = ("A", "B", "C")
+    # 공백 정규화: AI 출력과 원문 모두 단일 공백으로 정규화 후 매칭
+    norm_passage = re.sub(r'\s+', ' ', passage)
+
+    def _find_pos(text):
+        snippet = re.sub(r'\s+', ' ', text.strip())
+        words = snippet.split()
+        # 점진적 fallback: 긴 prefix부터 짧은 prefix 순으로 시도
+        for n in [30, 20, 15, 10, 8, 6, 5, 4, 3]:
+            if len(snippet) >= n:
+                pos = norm_passage.find(snippet[:n])
+                if pos != -1:
+                    return pos
+            if len(words) >= n:
+                pos = norm_passage.find(' '.join(words[:n]))
+                if pos != -1:
+                    return pos
+        return -1
+
+    positions = [_find_pos(paras[i][1]) for i in range(3)]
+    if -1 in positions or len(set(positions)) != 3:
+        raise ValueError(f"STAGE 5 | 단락 위치 매칭 실패: {positions}")
+
+    # 원문에서 k번째인 단락의 paras 인덱스
+    original_order = sorted(range(3), key=lambda i: positions[i])
+
+    # 5개 중 하나를 정답으로 직접 선택
+    answer_str, correct = random.choice(ORDER_TABLE)
+
+    # labels[paras 인덱스] = 그 단락이 가질 라벨
+    # 원문 k번째 단락 = paras[original_order[k]] → 라벨 = correct[k]
+    labels = [None] * 3
+    for k in range(3):
+        labels[original_order[k]] = correct[k]
+
+    new_paras = [[labels[i], paras[i][1]] for i in range(3)]
+    new_paras.sort(key=lambda x: x[0])  # 표시 순서 A→B→C
+
+    data["order_paragraphs"] = new_paras
+    data["order_answer"] = answer_str
     
-    # === 2. 선지 5개 생성 ===
-    all_perms = list(permutations(["A", "B", "C"]))
-    wrong = [p for p in all_perms if p != correct]
-    selected_wrong = random.sample(wrong, 4)
-    all_choices = [correct] + selected_wrong
-    random.shuffle(all_choices)
-    
-    choices = []
-    answer = ""
-    for i, perm in enumerate(all_choices):
-        text = f"({perm[0]})-({perm[1]})-({perm[2]})"
-        choices.append(f"{_CIRCLE_NUMS[i]} {text}")
-        if perm == correct:
-            answer = f"{_CIRCLE_NUMS[i]} {text}"
-    data["order_choices"] = choices
-    data["order_answer"] = answer
-    
+def _generate_order_block_shuffled(data: dict):
+
     # === 3. 전체 문장 배열 (심화) 셔플 ===
     blocks = data.get("full_order_blocks", [])
     if len(blocks) >= 2:
@@ -680,60 +652,84 @@ def step2_order(passage: str, sentences: list, passage_dir: Path) -> dict:
 [생성 항목]
 1. order_intro: 제시문 (첫 1~2문장)
 2. order_paragraphs: (A)(B)(C) 3개 단락 (각각 label과 text). 정답 순서는 원문 순서대로.
+   - 지문 내용에 대한 변형/변경 절대 금지. [지문]의 내용을 그저 3개의 part로 나누는 것만 가능.
    - 모든 문장이 빠짐없이 포함되어야 함
-3. order_choices: 5지선다 (형식: "① (A)-(C)-(B)" 등). 정답 1개 포함.
-4. order_answer: 정답 번호 (예: "④ (C)-(A)-(B)")
-5. insert_sentence: 삽입할 문장 1개 (앞뒤 문맥 단서가 명확한 것)
-6. insert_passage: insert_sentence를 뺀 나머지 원문 전체에 ( ① )~( ⑤ ) 위치 표시
-   - ⚠ [절대 규칙] insert_sentence 1개만 빼고 나머지 원문의 모든 문장을 그대로 유지!
-   - 원문 축소/생략/요약 절대 금지! 삽입 문장 외의 모든 문장이 빠짐없이 포함되어야 함
-7. insert_answer: 삽입 정답 번호
-8. full_order_blocks: 전체 문장을 (A)~끝까지 개별 블록으로 분할 (각각 label, text)
-9. full_order_answer: 정답 순서 (예: "(C)→(G)→(D)→...")
+3. insert_sentence: 삽입할 문장 1개 (앞뒤 문맥 단서가 명확한 것, [지문]의 문장으로 변형하지 않고 그대로 반환.)
+4. insert_passage: insert_sentence를 뺀 [지문]에서의 나머지 문장들에 ( ① )~( ⑤ ) 위치 표시
+4.1 (중요)4번으로 지정된 문장을 제외하고 나머지 [지문]의 모든 문장의 내용을 그대로 반환한다.(변형 금지. 원문 축소/생략/요약 절대 금지! 삽입 문장 외의 모든 문장이 빠짐없이 포함되어야 함)
+5. insert_answer: 삽입 정답 번호
+6. full_order_answer: 정답 순서 (예: "(C)→(G)→(D)→...")
 
 JSON 형식:
 {{
   "order_intro": "...",
   "order_paragraphs": [{{"label":"A","text":"..."}}, ...],
-  "order_choices": ["① ...", "② ...", ...],
-  "order_answer": "...",
   "insert_sentence": "...",
   "insert_passage": "...",
   "insert_answer": "...",
-  "full_order_blocks": [{{"label":"A","text":"..."}}, ...],
   "full_order_answer": "..."
 }}"""
+    
+   # 단락 위치 매칭이 성공할 때까지 최대 3회 재시도
+    max_step2_retries = 3
+    data = None
+    for _try in range(max_step2_retries):
+        try:
+            candidate = call_claude_json(SYS_JSON, prompt, max_tokens=4096)
+            # 위치 매칭 사전 검증
+            paras_check = candidate.get("order_paragraphs", [])
+            if len(paras_check) == 3:
+                norm_p = re.sub(r'\s+', ' ', passage)
+                def _quick_find(t):
+                    if isinstance(t, dict):
+                        t = t.get("text", "")
+                    elif isinstance(t, list) and len(t) >= 2:
+                        t = t[1]
+                    s = re.sub(r'\s+', ' ', (t or "").strip())
+                    for n in [30, 20, 15, 10, 8, 6, 5, 4, 3]:
+                        if len(s) >= n:
+                            p = norm_p.find(s[:n])
+                            if p != -1:
+                                return p
+                    return -1
+                test_positions = [_quick_find(paras_check[i]) for i in range(3)]
+                if -1 not in test_positions and len(set(test_positions)) == 3:
+                    data = candidate
+                    if _try > 0:
+                        _safe_print(f"  step2: 재시도 {_try+1}회만에 성공")
+                    break
+                else:
+                    _safe_print(f"  step2: 시도 {_try+1}/{max_step2_retries} 위치 매칭 실패 {test_positions} → 재시도")
+            else:
+                _safe_print(f"  step2: 시도 {_try+1}/{max_step2_retries} 단락 개수 이상 → 재시도")
+        except Exception as e:
+            _safe_print(f"  step2: 시도 {_try+1}/{max_step2_retries} 예외 {str(e)[:80]}")
+        # 캐시 무효화 위해 약간 대기
+        time.sleep(1)
 
-    data = call_claude_json(SYS_JSON, prompt, max_tokens=4096)
+    if data is None:
+        # 마지막 시도: 그래도 받아서 진행 (어차피 _generate_order_choices에서 또 검증)
+        data = call_claude_json(SYS_JSON, prompt, max_tokens=4096)
+        _safe_print(f"  step2: {max_step2_retries}회 재시도 모두 실패, 마지막 결과로 진행")
+
+    data.setdefault("full_order_blocks", [])
+
+    # ※ order_answer / order_choices는 _generate_order_choices에서 결정·세팅됨
+
     # 변환: order_paragraphs를 [label, text] 형태로
     if data.get("order_paragraphs") and isinstance(data["order_paragraphs"][0], dict):
         data["order_paragraphs"] = [[p["label"], p["text"]] for p in data["order_paragraphs"]]
-    if data.get("full_order_blocks") and isinstance(data["full_order_blocks"][0], dict):
-        data["full_order_blocks"] = [[b["label"], b["text"]] for b in data["full_order_blocks"]]
+    # if data.get("full_order_blocks") and isinstance(data["full_order_blocks"][0], dict):
+        # data["full_order_blocks"] = [[b["label"], b["text"]] for b in data["full_order_blocks"]]
+
+    for i, s in enumerate(sentences):
+        data["full_order_blocks"].append([chr(ord('A')+i), s])
 
     # ★ 순서 선지를 코드로 직접 생성 (AI가 다양하게 안 만드는 문제 해결)
-    _generate_order_choices(data, passage=passage)
+    _generate_order_block_shuffled(data)
 
-    # 🔒 검증: 전체배열 블록 수 vs 원문 문장 수
-    block_count = len(data.get("full_order_blocks", []))
-    sentence_count = len(sentences)
-    if block_count != sentence_count:
-        _safe_print(f"  WARNING: sentence mismatch! original {sentence_count} vs generated {block_count}, retrying...")
-        # 캐시 삭제 후 재시도 (1회)
-        cache_path = passage_dir / "step2_order.json"
-        if cache_path.exists():
-            cache_path.unlink()
-        data = call_claude_json(SYS_JSON, prompt, max_tokens=4096)
-        if data.get("order_paragraphs") and isinstance(data["order_paragraphs"][0], dict):
-            data["order_paragraphs"] = [[p["label"], p["text"]] for p in data["order_paragraphs"]]
-        if data.get("full_order_blocks") and isinstance(data["full_order_blocks"][0], dict):
-            data["full_order_blocks"] = [[b["label"], b["text"]] for b in data["full_order_blocks"]]
-        # ★ 순서 선지를 코드로 직접 생성 (재시도 후에도 반드시 재생성해야 정답/정답지 불일치가 안 생김)
-        _generate_order_choices(data, passage=passage)
-        block_count2 = len(data.get("full_order_blocks", []))
-        if block_count2 != sentence_count:
-            _safe_print(f"  WARNING: still mismatch ({block_count2} vs {sentence_count}), using original")
-            data["full_order_blocks"] = [[chr(65+i), s] for i, s in enumerate(sentences)]
+    # ★★ 3단락에 라벨 부여 + 정답 결정 (ORDER_TABLE 5개 중 무작위)
+    _generate_order_choices(data, passage=passage)
 
     # 🔒 삽입 지문: API 결과를 신뢰하지 않고 항상 코드로 재구성
     # (API가 마커를 앞에 몰아넣거나, 정답 위치에 마커를 안 넣는 문제 방지)
@@ -862,28 +858,29 @@ JSON 형식:
             data["order_paragraphs"] = [[p["label"], p["text"]] for p in data["order_paragraphs"]]
         if data.get("full_order_blocks") and isinstance(data["full_order_blocks"][0], dict):
             data["full_order_blocks"] = [[b["label"], b["text"]] for b in data["full_order_blocks"]]
-        _generate_order_choices(data)
+        # _generate_order_choices(data)
 
-        # 재검증 후에도 실패하면, 원문 기반으로 강제 구성(축약 방지)
-        ins_sent = _norm(data.get("insert_sentence", ""))
-        ins_passage = _norm(data.get("insert_passage", ""))
-        if not ins_sent or ins_sent not in orig_norm:
-            # 원문 가운데 문장을 삽입문장으로 선택
-            pick_idx = max(0, min(len(orig_sents)-1, len(orig_sents)//2))
-            data["insert_sentence"] = orig_sents[pick_idx]
-            ins_sent = _norm(data["insert_sentence"])
+        # 내용 수동 구성이라 일단 주석처리
+        # # 재검증 후에도 실패하면, 원문 기반으로 강제 구성(축약 방지)
+        # ins_sent = _norm(data.get("insert_sentence", ""))
+        # ins_passage = _norm(data.get("insert_passage", ""))
+        # if not ins_sent or ins_sent not in orig_norm:
+        #     # 원문 가운데 문장을 삽입문장으로 선택
+        #     pick_idx = max(0, min(len(orig_sents)-1, len(orig_sents)//2))
+        #     data["insert_sentence"] = orig_sents[pick_idx]
+        #     ins_sent = _norm(data["insert_sentence"])
 
-        # insert_passage는 원문에서 insert_sentence 1개만 제거한 본문으로 강제
-        remaining = [s for s in orig_sents if _norm(s) != ins_sent]
-        # 위치표시는 간단히 5개 구간으로 균등 배치 (본문은 절대 변형하지 않기)
-        markers = ["( ① )", "( ② )", "( ③ )", "( ④ )", "( ⑤ )"]
-        rebuilt = []
-        for i, s in enumerate(remaining):
-            rebuilt.append(s)
-            # 문장 사이에 마커를 분산 삽입
-            if i < len(remaining) and i < len(markers):
-                rebuilt.append(markers[i])
-        data["insert_passage"] = " ".join(rebuilt).strip()
+        # # insert_passage는 원문에서 insert_sentence 1개만 제거한 본문으로 강제
+        # remaining = [s for s in orig_sents if _norm(s) != ins_sent]
+        # # 위치표시는 간단히 5개 구간으로 균등 배치 (본문은 절대 변형하지 않기)
+        # markers = ["( ① )", "( ② )", "( ③ )", "( ④ )", "( ⑤ )"]
+        # rebuilt = []
+        # for i, s in enumerate(remaining):
+        #     rebuilt.append(s)
+        #     # 문장 사이에 마커를 분산 삽입
+        #     if i < len(remaining) and i < len(markers):
+        #         rebuilt.append(markers[i])
+        # data["insert_passage"] = " ".join(rebuilt).strip()
     save_step(passage_dir, "step2_order", data)
     return data
 
@@ -907,13 +904,20 @@ def step3_blank(passage: str, passage_dir: Path) -> dict:
 - 빈칸은 15단어 이내로 (너무 긴 빈칸 금지)
 - 빈칸 문장 외의 다른 문장은 원문 그대로 유지 (생략/축약/변형 절대 금지)
 - 빈칸을 제외한 나머지 문장 부분도 절대 변형하지 말 것
-- 선지 12개: 정답 6~7개 + 오답 5~6개
+- 선지 12개: 정답의 개수를 전체의 50-60%로 구성. 나머지(12개에서 정답의 개수를 뺀) 개수가 오답의 개수.
 - 정답: 원문 핵심 표현을 유의어/비유적 표현으로 변형
-- 오답: 지문 내용 왜곡, 반대 의미, 미언급 내용
+- 오답: 정답과 반대 의미의 내용, 지문에서 미언급 내용
 - 각 선지는 15단어 이내로 간결하게
 - ★표현 중복 금지★ 정답 선지끼리 의미가 비슷한 건 OK, 하지만 거의 같은 문장을 단어만 바꿔 반복하면 안 됨
 - 예시(금지): "all products were designed for usability by everyone" / "all environments combined usability for everyone" → 문장 구조와 핵심어가 너무 유사
 - 정답 선지들은 같은 주제를 서로 다른 각도/표현 방식으로 설명해야 함 (예: 비유적 표현, 추상적 요약, 구체적 서술 등 다양하게)
+
+[blank_wrong_translation에 대한 지침]
+- blank_wrong의 값에 대한 한글 해석 내용(topic_wrong의 값들에 대한 한글 해석)
+    - 양식: "번호(blank_wrong에 넣어진 값) 번호에 해당하는 영어문장의 한글 해석"
+    - 예시 데이터
+        - blank_wrong: blank_correct에서 blank_wrong의 값을 제외한 번호들
+        - blank_wrong_translation: ["① ①번 내용으로 출제된 영어 문장의 한글 해석", "③ ③번 내용으로 출제된 영어 문장의 한글 해석 내용", "④ ④번 내용으로 출제된 영어 문장의 한글 해석 내용"]
 
 [JSON 형식]
 {{
@@ -922,6 +926,7 @@ def step3_blank(passage: str, passage_dir: Path) -> dict:
   "blank_options": ["① ...", "② ...", ... "⑫ ..."],
   "blank_correct": ["②", "③", "⑤", ...],
   "blank_wrong": ["①", "④", ...]
+  "blank_wrong_translation": ["① ①에 대한 한글 해석 문장", "④ ④에 대한 한글 해석 문장", ...]
 }}"""
 
     data = call_claude_json(SYS_JSON, prompt, max_tokens=3000)
@@ -930,48 +935,74 @@ def step3_blank(passage: str, passage_dir: Path) -> dict:
     options = data.get("blank_options", [])
     correct_set = set(data.get("blank_correct", []))
     wrong_set = set(data.get("blank_wrong", []))
+    ai_wrong_labels = data.get("blank_wrong", [])             # 셔플 전 AI 라벨
+    ai_wrong_translations = data.get("blank_wrong_translation", [])
+
     if options and len(options) >= 2:
         CIRCLE_NUMS = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫"]
         import re as _re_blank
-        # 선지 텍스트만 추출 (번호 제거)
-        texts = []
+        import random as _rand_blank
+
+        # 선지 텍스트만 추출 (번호 제거) - 셔플 전 순서 보존
+        original_texts = [_re_blank.sub(r'^[①-⑫]\s*', '', opt).strip() for opt in options]
+
+        # 정답/오답 텍스트 스냅샷
         old_correct_texts = []
         old_wrong_texts = []
-        for opt in options:
-            text = _re_blank.sub(r'^[①-⑫]\s*', '', opt).strip()
-            texts.append(text)
         for c in correct_set:
             idx_c = CIRCLE_NUMS.index(c) if c in CIRCLE_NUMS else -1
-            if 0 <= idx_c < len(texts):
-                old_correct_texts.append(texts[idx_c])
+            if 0 <= idx_c < len(original_texts):
+                old_correct_texts.append(original_texts[idx_c])
         for w in wrong_set:
             idx_w = CIRCLE_NUMS.index(w) if w in CIRCLE_NUMS else -1
-            if 0 <= idx_w < len(texts):
-                old_wrong_texts.append(texts[idx_w])
-        # 셔플
-        import random as _rand_blank
-        _rand_blank.shuffle(texts)
-        # 새 번호 부여 + 정답/오답 재매핑
-        new_options = []
-        new_correct = []
-        new_wrong = []
-        for i, text in enumerate(texts):
+            if 0 <= idx_w < len(original_texts):
+                old_wrong_texts.append(original_texts[idx_w])
+
+        # 셔플: 원본 copy해서 사용
+        shuffled = original_texts.copy()
+        _rand_blank.shuffle(shuffled)
+
+        # 새 번호 부여 + 정답/오답 다시 매핑
+        new_options, new_correct, new_wrong = [], [], []
+        for i, text in enumerate(shuffled):
             label = CIRCLE_NUMS[i]
             new_options.append(f"{label} {text}")
             if text in old_correct_texts:
                 new_correct.append(label)
             elif text in old_wrong_texts:
                 new_wrong.append(label)
+
+        # 오답 한글 해석 -> 셔플된 라벨로 매핑
+        trans_by_new_label = {}
+        for old_label, trans in zip(ai_wrong_labels, ai_wrong_translations):
+            if old_label not in CIRCLE_NUMS:
+                continue
+            old_idx = CIRCLE_NUMS.index(old_label)
+            if not (0 <= old_idx < len(original_texts)):
+                continue
+            text = original_texts[old_idx]
+            new_idx = shuffled.index(text)
+            new_label = CIRCLE_NUMS[new_idx]
+            body = _re_blank.sub(r'^[①-⑫]\s*', '', trans).strip()
+            trans_by_new_label[new_label] = body
+
+        new_wrong_translation = [
+            f"{lbl} {trans_by_new_label[lbl]}"
+            for lbl in new_wrong
+            if lbl in trans_by_new_label
+        ]
+
         data["blank_options"] = new_options
         data["blank_correct"] = new_correct
         data["blank_wrong"] = new_wrong
-        _safe_print(f"  🔀 빈칸 선지 셔플 완료: 정답 위치 {new_correct}")
+        data["blank_wrong_translation"] = new_wrong_translation
+        logger.info(f"INFO | STAGE 6 | 빈칸 선지 셔플: 정답 {new_correct} / 오답해석 {len(new_wrong_translation)}건 매핑")
 
     save_step(passage_dir, "step3_blank", data)
     return data
 
 # ============================================================
-# STEP 4: Stage 7 주제 찾기
+# STEP 4: Stage 7 주제 찾기 -> 현재 Stage 4의 하단 문제로 포함되어 있음.
 # ============================================================
 def step4_topic(passage: str, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step4_topic")
@@ -986,7 +1017,6 @@ def step4_topic(passage: str, passage_dir: Path) -> dict:
 {passage}
 
 [규칙]
-- 지문은 원문 그대로 (생략/변형 금지)
 - 선지 12개: 정답 5개 + 오답 7개
 - 선지는 반드시 영어로 작성 (한국어 금지)
 - 정답: 주제문 키워드를 유의어로 치환한 영어 표현
@@ -994,21 +1024,220 @@ def step4_topic(passage: str, passage_dir: Path) -> dict:
 - 추론적 사고 금지: 글에서 직접 언급된 내용만 정답
 - 각 선지는 30단어 이내로 간결하게
 
+[topic_wrong_translation에 대한 지침]
+- topic_wrong의 값에 대한 한글 해석 내용(topic_wrong의 값의 순서와 같음)
+    - 양식: "번호(topic_wrong에 넣어진 값) 번호에 해당하는 영어문장의 한글 해석"
+    - 예시
+        - topic_wrong: ["①", "③", "④"]
+        - topic_wrong_translation: ["① ①번 내용으로 출제된 영어 문장의 한글 해석 내용", "③ ③번 내용으로 출제된 영어 문장의 한글 해석 내용", "④ ④번 내용으로 출제된 영어 문장의 한글 해석 내용"]
+
+
 [JSON 형식]
 {{
-  "topic_passage": "원문 전문 (그대로)",
   "topic_options": ["① the importance of...", "② how to...", ... "⑫ ..."],
   "topic_correct": ["②", "④", ...],
-  "topic_wrong": ["①", "③", ...]
+  "topic_wrong": ["①", "③", ...],
+  "topic_wrong_translation": ["① ①번에 해당하는 영어 문장의 한글 해석 내용", "③ ③번에 해당하는 영어 문장의 한글 해석 내용", ...]
 }}"""
 
     data = call_claude_json(SYS_JSON, prompt, max_tokens=3000)
+    data["topic_passage"] = passage
     save_step(passage_dir, "step4_topic", data)
     return data
 
 # ============================================================
 # STEP 5: Lv.8 어법
+# => Stage 7-1 어법 | Stage 7-2 어법 최종 체크
 # ============================================================
+def _apply_critical_grammar_filters(data: dict) -> dict:
+    """사용자 명시 절대 금지 자리들을 강제 제거 + 재번호 매기기.
+    재생성 후에도 잘못된 자리가 들어오는 걸 막기 위해 별도 함수로 분리."""
+    final_bp = data.get("grammar_bracket_passage", "")
+    if not final_bp:
+        return data
+
+    all_br = re.findall(r'\((\d+)\)\[([^\]]+)\]', final_bp)
+    removed = []
+
+    for num_str, content in all_br:
+        parts = [p.strip().lower() for p in content.split('/')]
+        if len(parts) != 2:
+            continue
+        a, b = parts[0], parts[1]
+        should_remove = False
+        reason = ""
+
+        # 1. 시제 차이 (의미 차이)
+        tense_pairs = [
+            {'is', 'was'}, {'are', 'were'}, {'am', 'was'},
+            {'has', 'had'}, {'have', 'had'},
+            {'do', 'did'}, {'does', 'did'},
+            {'go', 'went'}, {'goes', 'went'},
+            {'come', 'came'}, {'comes', 'came'},
+            {'see', 'saw'}, {'sees', 'saw'},
+            {'know', 'knew'}, {'knows', 'knew'},
+        ]
+        if {a, b} in tense_pairs:
+            should_remove = True
+            reason = f"시제 차이"
+
+        # 2. 진행시제 (be + V-ing) 포함
+        if not should_remove:
+            def _has_be_ing(s):
+                words = s.strip().split()
+                return (len(words) == 2 and
+                        words[0] in {'is', 'are', 'was', 'were', 'am', 'be', 'been', 'being'} and
+                        words[1].endswith('ing'))
+            if _has_be_ing(a) or _has_be_ing(b):
+                should_remove = True
+                reason = "진행시제 포함"
+
+        # 3. 주어 자리 동명사 vs to부정사
+        if not should_remove:
+            is_ing_to = False
+            if a.endswith('ing') and b.startswith('to ') and len(b.split()) == 2:
+                is_ing_to = True
+            elif b.endswith('ing') and a.startswith('to ') and len(a.split()) == 2:
+                is_ing_to = True
+            if is_ing_to:
+                bracket_pos = final_bp.find(f'({num_str})[')
+                if bracket_pos >= 0:
+                    last_punct = max(
+                        final_bp.rfind('.', 0, bracket_pos),
+                        final_bp.rfind('!', 0, bracket_pos),
+                        final_bp.rfind('?', 0, bracket_pos),
+                    )
+                    words_before = final_bp[max(0, last_punct + 1):bracket_pos].strip().split()
+                    if len(words_before) <= 3:
+                        should_remove = True
+                        reason = "주어자리 동명사/to부정사"
+
+        # 4. 관계대명사 that vs which
+        if not should_remove:
+            if {a, b} == {'that', 'which'}:
+                should_remove = True
+                reason = "that vs which"
+
+        # 5. 부정/긍정 조동사 (could/couldn't 등)
+        if not should_remove:
+            negation_pairs = [
+                {'could', "couldn't"}, {'can', "can't"}, {'will', "won't"},
+                {'would', "wouldn't"}, {'should', "shouldn't"},
+                {'may', "may not"}, {'must', "mustn't"},
+                {'has', "hasn't"}, {'have', "haven't"}, {'had', "hadn't"},
+                {'do', "don't"}, {'does', "doesn't"}, {'did', "didn't"},
+                {'is', "isn't"}, {'are', "aren't"},
+                {'was', "wasn't"}, {'were', "weren't"},
+            ]
+            if {a, b} in negation_pairs:
+                should_remove = True
+                reason = "부정/긍정 의미 차이"
+
+        if should_remove:
+            correct_word = ""
+            for ans in data.get("grammar_bracket_answers", []):
+                if ans.get("num") == int(num_str):
+                    correct_word = ans.get("answer", "")
+                    break
+            if not correct_word:
+                correct_word = content.split('/')[0].strip()
+            if correct_word:
+                final_bp = re.sub(r'\(' + num_str + r'\)\[[^\]]+\]', correct_word, final_bp)
+                removed.append(int(num_str))
+                _safe_print(f"  🚫 [재차단] 괄호({num_str}): {reason} → '{correct_word}'")
+
+    if removed:
+        data["grammar_bracket_passage"] = final_bp
+        data["grammar_bracket_answers"] = [a for a in data.get("grammar_bracket_answers", []) if a.get("num") not in removed]
+        data["grammar_bracket_count"] = len(re.findall(r'\(\d+\)\[', final_bp))
+
+    # 재번호 매기기 (1부터 시작)
+    remaining_nums = [int(m) for m in re.findall(r'\((\d+)\)\[', data.get("grammar_bracket_passage", ""))]
+    expected_nums = list(range(1, len(remaining_nums) + 1))
+    if remaining_nums and remaining_nums != expected_nums:
+        renumber_map = dict(zip(remaining_nums, expected_nums))
+        new_passage = data["grammar_bracket_passage"]
+        for old_num in remaining_nums:
+            new_num = renumber_map[old_num]
+            if old_num != new_num:
+                new_passage = new_passage.replace(f'({old_num})[', f'(__TMP{new_num}__)[', 1)
+        new_passage = re.sub(r'\(__TMP(\d+)__\)\[', lambda m: f'({m.group(1)})[', new_passage)
+        new_answers = []
+        for ans in data.get("grammar_bracket_answers", []):
+            old_n = ans.get("num", 0)
+            if old_n in renumber_map:
+                ans["num"] = renumber_map[old_n]
+                new_answers.append(ans)
+        data["grammar_bracket_passage"] = new_passage
+        data["grammar_bracket_answers"] = new_answers
+        data["grammar_bracket_count"] = len(new_answers)
+
+    return data
+
+
+# ============================================================
+# 어법 괄호형 (현재 Lv.7-1) 분배 + 조립 헬퍼
+# ============================================================
+def _distribute_brackets(sent_count: int, total: int, max_per: int = 2) -> list:
+    """각 문장에 0~max_per개 무작위 분배. counts[i] 합계 = min(total, sent_count*max_per)."""
+    counts = [0] * sent_count
+    pool = list(range(sent_count)) * max_per
+    random.shuffle(pool)
+    for i in pool[:min(total, len(pool))]:
+        counts[i] += 1
+    return counts
+
+
+def _assemble_bracket_passage(triples, sentences):
+    """
+    AI가 반환한 [[원문장, 정답, 오답], ...] 를 받아
+    grammar_bracket_passage 문자열 + grammar_bracket_answers 리스트로 변환.
+    50% 확률로 정답 좌우 swap.
+
+    Returns: (bracket_passage_str, bracket_answers_list)
+    """
+    if not isinstance(triples, list) or not sentences:
+        return "", []
+
+    bracketed = list(sentences)
+    answers = []
+    n = 0
+
+    for triple in triples:
+        if not (isinstance(triple, (list, tuple)) and len(triple) >= 3):
+            continue
+        src_sent, ans, wrong = triple[0], triple[1], triple[2]
+        if not (isinstance(src_sent, str) and isinstance(ans, str) and isinstance(wrong, str)):
+            continue
+        if not (ans.strip() and wrong.strip()):
+            continue
+        # 매칭: 정확히 일치하는 문장 우선, 실패 시 strip 후 비교
+        idx = -1
+        if src_sent in sentences:
+            idx = sentences.index(src_sent)
+        else:
+            stripped = src_sent.strip()
+            for i, s in enumerate(sentences):
+                if s.strip() == stripped:
+                    idx = i
+                    break
+        if idx == -1:
+            continue
+        if ans not in bracketed[idx]:
+            continue
+        n += 1
+        # 50% 확률로 정답 좌우 swap
+        if random.random() < 0.5:
+            bracket_form = f"({n})[{wrong} / {ans}]"
+        else:
+            bracket_form = f"({n})[{ans} / {wrong}]"
+        bracketed[idx] = bracketed[idx].replace(ans, bracket_form, 1)
+        logger.debug(f"STAGE 7-1 | STEP 1 | 괄호 추가한 문장 확인: {bracketed[idx]}")
+        answers.append({"num": n, "answer": ans, "wrong": wrong})
+
+    return " ".join(bracketed), answers
+
+
 def step5_grammar(passage: str, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step5_grammar")
     if cached:
@@ -1017,149 +1246,93 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
 
     sentences = split_sentences(passage)
     sent_count = len(sentences)
-    error_count = max(5, min(8, sent_count))  # 최소 5개, 최대 8개
-    bracket_count = min(14, sent_count * 2)  # 문장당 최대 2개 괄호, 최대 14개 (A4 페이지 넘침 방지)
-    # bracket_count = sent_count * 2  # 문장당 최대 2개 괄호 / 예: 12문장이면 최대 24개 괄호 문제 + 24개 답안 박스가 생성됩니다.
+    word_count = len(passage.split())
+
+    # ★ 지문 길이에 따라 최소 괄호 수 동적 계산 (사용자 명시 요구)
+    #   박스 4줄(~80단어) → 최소 2개 / 6줄(~120단어) → 최소 3개 / 그 이상 → 최소 8개
+    if word_count <= 80:
+        min_brackets = 2
+    elif word_count <= 120:
+        min_brackets = 3
+    else:
+        min_brackets = 8
+
+    bracket_count = sent_count  # 문장당 1개 → 합계 = 총 문장 수
+    # ★ 8-1 괄호 분배: AI 호출 전에 어느 문장에 몇 개 출제할지 코드가 결정
+    bracket_dist = _distribute_brackets(sent_count, bracket_count, max_per=1)
+    bracket_dist_lines = "\n".join(
+        f"- 문장 {i}번 (\"{sentences[i][:60]}{'...' if len(sentences[i])>60 else ''}\") → {bracket_dist[i]}개"
+        for i in range(sent_count)
+    )
+    logger.debug(f"STAGE 7-1 | STEP 1 | 지문 {word_count}단어 / {sent_count}문장 → 최소 {min_brackets}개, 권장 {bracket_count}개, 분배 {bracket_dist}")
     
-    _safe_print("  step5: generating Lv.8 grammar...")
-    prompt = f"""다음 영어 지문으로 어법 문제 2종류를 생성하세요.
+    logger.debug("  step5: generating Lv.8 grammar...")
+    prompt = PROMPT_TEMPLATE.format(
+        sent_count=sent_count,
+        passage=passage,
+        bracket_count=bracket_count,
+        bracket_dist_lines=bracket_dist_lines,
+    )
 
-[원문 - 총 {sent_count}개 문장]
-{passage}
+    # ★ v14: Supabase grammar_points 자동 학습 시스템 (stage7-1 어법 출제용)
+    # 한국 수능·내신 빈출 어법 함정을 시스템 프롬프트에 동적 주입
+    # → 어법 괄호 출제 시 사용자 9가지 + 김대균 영문법 핵심을 우선 활용
+    sys_prompt_stage7 = SYS_JSON
+    grammar_addendum = _load_grammar_points_for_prompt()
+    if grammar_addendum:
+        sys_prompt_stage7 = SYS_JSON + "\n\n" + grammar_addendum
+        logger.debug(f"  step5: grammar_points 주입됨 ({len(grammar_addendum):,} chars)")
 
-[⚠️ 가장 중요한 규칙]
-1. 원문은 정확히 {sent_count}개 문장입니다
-2. 출력 지문도 반드시 정확히 {sent_count}개 문장이어야 합니다
-3. 절대 문장을 추가/삭제/분리/합치기 하지 마세요
-4. 원문 문장에 괄호나 오류만 삽입하고, 나머지는 원문 그대로 유지
-5. 문장 수가 부족하면 오류/괄호 수를 줄이세요 (문장 추가는 절대 금지!)
-6. 새로운 문장을 만들어 넣지 마세요! 원문에 있는 문장만 사용!
-7. 출력 결과의 문장을 하나씩 세어보고, {sent_count}개가 아니면 수정하세요
+    def _ai_call():
+        """call_claude_json + 8-1 triples → string 조립을 한 번에."""
+        d = call_claude_json(sys_prompt_stage7, prompt, max_tokens=4000)
+        triples = d.get("grammar_bracket_passage", [])
+        logger.debug(f"STAGE 7-1 | STEP 1 | AI 응답의 triples 값 확인\n{triples}")
+        bracket_str, bracket_answers = _assemble_bracket_passage(triples, sentences)
+        logger.debug(f"STAGE 7-1 | STEP 1 | 최종으로 만들어진 지문\n{bracket_str}\n최종으로 만들어진 정답지 데이터\n{bracket_answers}")
+        d["grammar_bracket_passage"] = bracket_str
+        d["grammar_bracket_answers"] = bracket_answers
+        d["grammar_bracket_count"] = len(bracket_answers)
+        return d    
 
-[어법 오류 출제 금지 유형 - 아래는 오류가 아님, 절대 괄호로 출제하지 마세요!]
-- start/continue/love/like/hate 뒤: to부정사 = ing (둘 다 허용)
-- 주어 자리: to부정사 = 동명사 (둘 다 허용)
-- help + 목적어 + 목적격보어: to부정사 = 동사원형 (둘 다 허용) → handle / to handle 출제 금지!
-- help + 동사원형/to부정사: help draw = help to draw (둘 다 허용) → draw / to draw 출제 금지!
-- 지각동사(see/watch/hear/feel/notice) + 목적어 + 동사원형/현재분사 (둘 다 허용) → look / looking 출제 금지!
-- 사역동사(make/let/have) + 목적어 + 동사원형 (이것만 정답, 단 have는 p.p.도 가능)
-- and/or 병렬구조에서 to 생략: to A and B = to A and to B (둘 다 허용) → to draw / draw, to label / label 출제 금지!
-- as ~ as 원급: 형용사/부사는 문맥으로 판단 (단순 형태만으로 오류 불가)
-- 목적격 관계대명사: who = whom (둘 다 허용, 단 전치사 바로 뒤는 whom만)
-- 목적격 관계대명사 생략: which/that/who(m) 생략 가능 → which we / we, that we / we 출제 금지!
-- 지시대명사 those/these: "those that ~", "those who ~"에서 those는 대명사(=the ones)이므로 that/where 등으로 바꿔 출제하면 안 됨! 원문에 those가 있으면 those 그대로 유지!
-- 관계부사 자리: "the reason(s) why/that", "the place where", "the time when"에서 why/that/where/when을 서로 바꿔 출제 금지! 원문 그대로 유지!
-- whom / who 선택 문제: [whom / who], [who / whom] 출제 절대 금지! (둘 다 허용되므로)
-- ⚠ 위 유형으로 괄호를 만들면 둘 다 정답이 되어 문제가 성립하지 않습니다!
-- ⚠ 특히 help/지각동사/병렬구조는 가장 흔한 실수입니다. 반드시 피하세요!
-- 과거 vs 과거진행: 문맥상 둘 다 자연스러운 경우 출제 금지! (예: practiced / was practicing — 기간 부사와 함께 쓰이면 둘 다 가능)
-- 성별 불명확: 지문에서 성별 특정 불가능한 경우 his/her, him/her 출제 금지! (사람 이름이 명확할 때만 가능)
-- 고유명사+s: 고유명사 뒤에 -s 붙이는 문제 출제 금지! (예: Walthamstow / Walthamstows)
-- 선택지에 정답 반드시 포함: 정답이 선택지에 없으면 문제 성립 불가! (예: 정답이 those인데 [that / where] 제시 → 절대 금지!)
-- 관계부사 why/where/when 선택지: 정답이 why인데 [which / where]를 제시하면 안 됨! 반드시 정답이 선택지에 포함되어야 함!
+    data = _ai_call()
 
-[어법 괄호형 Lv.8-1]
-- 원문 {sent_count}개 문장 모두 포함 (출제 안 하는 문장도 원문 그대로)
-- {bracket_count}개 괄호: (N)[정답 / 오답] 형태 ← 반드시 이 형식! 예: (1)[looked / look]
-- ⚠ 괄호가 없으면 출제 실패입니다! 반드시 (숫자)[A / B] 형태의 괄호를 삽입하세요!
-- 한 문장에 여러 괄호 가능
-- 정답이 왼쪽인 경우 50%, 오른쪽인 경우 50%가 되도록 반드시 균등 배치 (예: 10개면 5개는 정답이 왼쪽, 5개는 오른쪽)
-- 출제: 시제, 대명사, 동명사, to부정사, 형용사/부사, 관계대명사, 분사, 사역동사 등
-
-[어법 서술형 Lv.8-2]
-- 원문 {sent_count}개 문장 모두 포함
-- 실제 출제 가능한 오류만 삽입 (위 금지 유형 제외)
-- 반드시 최소 5개 이상 오류 삽입 (지문이 짧아도 최소 5개!)
-- 한 문장에 최대 1개 오류
-- 오류를 삽입한 실제 개수를 grammar_error_count에 정확히 기록할 것
-- 오류 개수 = grammar_error_answers 배열 길이와 반드시 일치
-- ⚠ 8-2 오류 삽입 부분 외의 텍스트는 원문과 100% 동일해야 함! AI가 주변 단어를 무의식적으로 바꾸지 말 것!
-- ⚠ 8-1, 8-2 모두 원문에 없는 문장을 절대 추가하지 말 것! 원문 문장 수 = 출력 문장 수 반드시 일치!
-
-[JSON 형식]
-{{
-  "grammar_bracket_passage": "괄호 포함 전체 지문 (정확히 {sent_count}문장)",
-  "grammar_bracket_count": {bracket_count},
-  "grammar_bracket_answers": [{{"num":1, "answer":"go", "wrong":"will go"}}, ...],
-  "grammar_error_passage": "오류 포함 전체 지문 (정확히 {sent_count}문장)",
-  "grammar_error_count": 실제삽입개수,
-  "grammar_error_answers": [{{"num":1, "original":"watch", "error":"watching"}}, ...]
-}}"""
-
-    data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
-    
-    # 🔒 검증: 문장 수 체크
-    for key in ['grammar_bracket_passage', 'grammar_error_passage']:
-        gen_text = data.get(key, '')
-        gen_sents = len(split_sentences(gen_text))
-        if gen_sents != sent_count:
-            _safe_print(f"  WARNING: {key}: {gen_sents} sentences (original {sent_count}), retrying...")
-            cache_path = passage_dir / "step5_grammar.json"
-            if cache_path.exists():
-                cache_path.unlink()
-            data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
-            break
-    
-    
-    # 🔒 최종 가드: 8-1/8-2에서 원문에 없는 문장이 추가되었는지 확인
-    # 괄호/오류를 제거한 후 원문과 길이 비교 → 20% 이상 길어졌으면 원문 외 내용 추가된 것
-    def _strip_brackets(t: str) -> str:
-        """어법 괄호 (N)[A / B]를 정답만 남기고 제거"""
-        stripped = re.sub(r'\(\d+\)\[([^/\]]+)\s*/\s*[^\]]+\]', r'\1', t)
-        return re.sub(r'\s+', ' ', stripped).strip()
-    
-    orig_len = len(re.sub(r'\s+', '', passage))
-    
-    # 🔒 8-1 괄호 존재 검증: 괄호가 하나도 없으면 재시도 (최대 5회)
-    bracket_text = data.get("grammar_bracket_passage", "")
-    for _bracket_retry in range(5):
-        if bracket_text and re.search(r'\(\d+\)\[', bracket_text):
-            break
-        if _bracket_retry == 0 and not bracket_text:
-            break  # 지문 자체가 없으면 스킵
-        _safe_print(f"  WARNING: grammar_bracket_passage에 괄호 없음 → {_bracket_retry+1}차 재시도")
+    # 🔒 8-2 grammar_error_passage 검증
+    err_text = data.get("grammar_error_passage", "")
+    if err_text and len(split_sentences(err_text)) != sent_count:
+        _safe_print(f"  WARNING: grammar_error_passage 문장 수 {len(split_sentences(err_text))} != {sent_count}, retrying...")
         cache_path = passage_dir / "step5_grammar.json"
         if cache_path.exists():
             cache_path.unlink()
-        data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
-        bracket_text = data.get("grammar_bracket_passage", "")
+        data = _ai_call()
 
-    for key in ["grammar_bracket_passage", "grammar_error_passage"]:
-        gen_text = data.get(key, "")
-        if not gen_text:
-            continue
-        gen_sents_list = split_sentences(gen_text)
-        
-        # 문장 수 체크
-        if len(gen_sents_list) > sent_count:
-            _safe_print(f"  WARNING: {key}: {len(gen_sents_list)} sentences > original {sent_count}, trimming...")
-            data[key] = " ".join(gen_sents_list[:sent_count]).strip()
-        elif len(gen_sents_list) < sent_count:
-            _safe_print(f"  WARNING: {key}: {len(gen_sents_list)} sentences < original {sent_count}, using original")
-            data[key] = passage
-        
-        # 길이 체크: 괄호 제거 후 원문 대비 20% 이상 길면 내용 추가된 것
-        stripped = _strip_brackets(data.get(key, ""))
-        stripped_len = len(re.sub(r'\s+', '', stripped))
-        if orig_len > 0 and stripped_len > orig_len * 1.2:
-            _safe_print(f"  WARNING: {key} length {stripped_len} >> original {orig_len} (>20%), retrying...")
+    orig_len = len(re.sub(r'\s+', '', passage))
+    err_gen = data.get("grammar_error_passage", "")
+    if err_gen:
+        err_sents_list = split_sentences(err_gen)
+        if len(err_sents_list) > sent_count:
+            _safe_print(f"  WARNING: grammar_error_passage: {len(err_sents_list)} sentences > {sent_count}, trimming...")
+            data["grammar_error_passage"] = " ".join(err_sents_list[:sent_count]).strip()
+        elif len(err_sents_list) < sent_count:
+            _safe_print(f"  WARNING: grammar_error_passage: {len(err_sents_list)} sentences < {sent_count}, using original")
+            data["grammar_error_passage"] = passage
+
+        # 길이 체크: 원문 대비 20% 초과면 내용 추가된 것
+        err_clean_len = len(re.sub(r'\s+', '', data.get("grammar_error_passage", "")))
+        if orig_len > 0 and err_clean_len > orig_len * 1.2:
+            _safe_print(f"  WARNING: grammar_error_passage length {err_clean_len} >> {orig_len} (>20%), retrying...")
             cache_path = passage_dir / "step5_grammar.json"
             if cache_path.exists():
                 cache_path.unlink()
-            retry_data = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
-            retry_text = retry_data.get(key, "")
-            retry_stripped = _strip_brackets(retry_text)
-            retry_len = len(re.sub(r'\s+', '', retry_stripped))
-            if retry_len <= orig_len * 1.2:
-                data[key] = retry_text
-                # 관련 답안도 갱신
-                if "bracket" in key:
-                    data["grammar_bracket_answers"] = retry_data.get("grammar_bracket_answers", data.get("grammar_bracket_answers", []))
-                else:
-                    data["grammar_error_answers"] = retry_data.get("grammar_error_answers", data.get("grammar_error_answers", []))
-                _safe_print(f"  ✅ {key} retry successful (length {retry_len})")
+            retry_data = _ai_call()
+            retry_text = retry_data.get("grammar_error_passage", "")
+            retry_clean_len = len(re.sub(r'\s+', '', retry_text))
+            if retry_clean_len <= orig_len * 1.2:
+                data["grammar_error_passage"] = retry_text
+                data["grammar_error_answers"] = retry_data.get("grammar_error_answers", data.get("grammar_error_answers", []))
+                logger.info(f"  OK: grammar_error_passage retry successful (length {retry_clean_len})")
             else:
-                _safe_print(f"  ⚠ {key} retry still too long ({retry_len}), keeping best version")
+                logger.warning(f"STAGE 7-1 | STEP 2 | grammar_error_passage retry still too long ({retry_clean_len}), keeping best version")
 # ★ 서술형: 무의미 항목 제거 (error == original인 경우)
     raw_errors = data.get("grammar_error_answers", [])
     valid_errors = [a for a in raw_errors if isinstance(a, dict) and a.get("error", "").strip() != a.get("original", "").strip()]
@@ -1179,7 +1352,7 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     if actual_error_count == 0:
         _safe_print("  ⚠️ 8-2 오류 0개! 원문 그대로 출력됨 → 재시도...")
         for _err_retry in range(3):
-            data3 = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
+            data3 = _ai_call()
             errs3 = data3.get("grammar_error_answers", [])
             if len(errs3) >= 3:
                 data["grammar_error_passage"] = data3.get("grammar_error_passage", data.get("grammar_error_passage", ""))
@@ -1187,56 +1360,9 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
                 data["grammar_error_count"] = len(errs3)
                 _safe_print(f"  ✅ 8-2 재시도 성공: {len(errs3)}개 오류")
                 break
-            _safe_print(f"  ⚠ 8-2 재시도 {_err_retry+1} 실패 ({len(errs3)}개)")
+            logger.debug(f"  ⚠ 8-2 재시도 {_err_retry+1} 실패 ({len(errs3)}개)")
 
-    # ★ bracket_count를 지문 내 실제 괄호 수로 보정 (오답박스 수 = 지문 괄호 수)
-    actual_brackets = data.get("grammar_bracket_answers", [])
-    bracket_passage = data.get("grammar_bracket_passage", "")
-    # 지문에서 실제 (N)[...] 패턴 수를 카운트
-    actual_bracket_in_text = len(re.findall(r'\(\d+\)\[', bracket_passage))
-    if actual_bracket_in_text > 0 and actual_bracket_in_text != len(actual_brackets):
-        _safe_print(f"  WARNING: 지문 괄호 {actual_bracket_in_text}개 ≠ answers {len(actual_brackets)}개 → 지문 기준으로 보정")
-        # answers가 더 많으면 지문 괄호 수에 맞춰 자름
-        if len(actual_brackets) > actual_bracket_in_text:
-            # 지문에 실제 존재하는 번호만 유지
-            text_nums = set(int(m) for m in re.findall(r'\((\d+)\)\[', bracket_passage))
-            actual_brackets = [a for a in actual_brackets if a.get("num") in text_nums]
-            data["grammar_bracket_answers"] = actual_brackets
-    data["grammar_bracket_count"] = actual_bracket_in_text if actual_bracket_in_text > 0 else len(actual_brackets)
-
-    # ★ 빈 선택지 괄호 제거: (N)[/ text] 또는 (N)[text /] 같은 불량 괄호
-    bp = data.get("grammar_bracket_passage", "")
-    if bp:
-        bad_brackets = re.findall(r'\((\d+)\)\[([^\]]*)\]', bp)
-        removed_bad = []
-        for num_str, content in bad_brackets:
-            parts = [p.strip() for p in content.split('/')]
-            # 2개로 깔끔하게 나눠지지 않는 경우도 처리
-            if len(parts) >= 2:
-                left = parts[0].strip()
-                right = '/'.join(parts[1:]).strip()  # / 가 여러개면 오른쪽 합치기
-                if not left or not right:
-                    good_text = left if left else right
-                    bp = re.sub(r'\(' + num_str + r'\)\[[^\]]+\]', good_text, bp)
-                    removed_bad.append(int(num_str))
-                    _safe_print(f"  🚫 빈 선택지 괄호({num_str}) 제거: [{content}]")
-            elif len(parts) == 1:
-                # / 자체가 없음 → 괄호 제거
-                bp = re.sub(r'\(' + num_str + r'\)\[[^\]]+\]', content, bp)
-                removed_bad.append(int(num_str))
-                _safe_print(f"  🚫 잘못된 괄호({num_str}) 제거: [{content}]")
-        if removed_bad:
-            data["grammar_bracket_passage"] = bp
-            data["grammar_bracket_answers"] = [a for a in data.get("grammar_bracket_answers", []) if a.get("num") not in removed_bad]
-            # 재번호
-            remaining = re.findall(r'\((\d+)\)\[', bp)
-            new_count = len(remaining)
-            data["grammar_bracket_count"] = new_count
-            _safe_print(f"  ✅ 불량 괄호 {len(removed_bad)}개 제거 (남은 괄호: {new_count}개)")
-
-
-
-    # ★ 8-1 괄호 자동 검증: 둘 다 정답인 괄호를 올바른 출제로 교체
+    # ★ 8-1 괄호 검증(알고리즘): 둘 다 정답인 괄호를 올바른 출제로 교체
     bracket_passage_val = data.get("grammar_bracket_passage", "")
     bracket_answers_val = data.get("grammar_bracket_answers", [])
     if bracket_passage_val and bracket_answers_val:
@@ -1323,9 +1449,12 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
                 a_is_ing = a.endswith('ing') and a.lower() not in _ing_base_verbs
                 b_is_ing = b.endswith('ing') and b.lower() not in _ing_base_verbs
                 
-                if a_is_ing or b_is_ing:
-                    ing_form = a_raw if a_is_ing else b_raw
-                    base_form = b_raw if a_is_ing else a_raw
+                # ★ 진짜 ~ing형이 아니면 이 분기는 처리 대상 아님 (bring/brings 같은 경우)
+                if not (a_is_ing or b_is_ing):
+                    continue
+                
+                ing_form = a_raw if a_is_ing else b_raw
+                base_form = b_raw if a_is_ing else a_raw
                 # 원형과 ing가 쌍인지 확인
                 if _make_ing(base_form.lower()) == ing_form.lower() or \
                    a.endswith('ing') and (_get_base(a) == b or a[:-3] == b) or \
@@ -1418,37 +1547,22 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             
             _safe_print(f"  ✅ 둘 다 정답 괄호 {len(fixed_nums)}개 처리 완료 (남은 괄호: {actual_after}개)")
     
-    # ★ 8-1 정답 좌우 진짜 랜덤 shuffle (각 괄호 개별 50% 확률)
-    import re as _re, random as _rand_sh
-    bracket_answers = data.get("grammar_bracket_answers", [])
-    bracket_text = data.get("grammar_bracket_passage", "")
-    if bracket_answers and bracket_text:
-        result = bracket_text
-        for ans in bracket_answers:
-            num = ans.get("num", 0)
-            if _rand_sh.random() < 0.5:  # 50% 확률로 각각 독립적으로 swap
-                pat = _re.compile(r'\(' + str(num) + r'\)\[([^\]]+)\]')
-                def do_swap_81(m, n=num):
-                    parts = [p.strip() for p in m.group(1).split(' / ')]
-                    return f'({n})[{parts[1]} / {parts[0]}]' if len(parts)==2 else m.group(0)
-                result = pat.sub(do_swap_81, result)
-        data["grammar_bracket_passage"] = result
 
         # ★ grammar_bracket_passage / grammar_error_passage 중복 제거
     # API가 지문을 2번 붙여서 반환하는 경우 방어
-    for key in ["grammar_bracket_passage", "grammar_error_passage"]:
-        val = data.get(key, "")
-        if val:
-            half = len(val) // 2
-            # 앞절반과 뒷절반이 80% 이상 유사하면 앞절반만 사용
-            first_half = val[:half].strip()
-            second_half = val[half:].strip()
-            if first_half and second_half:
-                overlap = sum(1 for a, b in zip(first_half[-200:], second_half[:200]) if a == b)
-                similarity = overlap / min(200, len(first_half), len(second_half))
-                if similarity > 0.7:
-                    _safe_print(f"  WARNING: {key} appears duplicated, trimming...")
-                    data[key] = first_half
+    # 중복 제거: AI가 grammar_error_passage를 2번 붙여 반환하는 경우 방어
+    # (8-1은 코드 조립이라 중복 불가능 — 검사 제외)
+    err_val = data.get("grammar_error_passage", "")
+    if err_val:
+        half = len(err_val) // 2
+        first_half = err_val[:half].strip()
+        second_half = err_val[half:].strip()
+        if first_half and second_half:
+            overlap = sum(1 for a, b in zip(first_half[-200:], second_half[:200]) if a == b)
+            similarity = overlap / min(200, len(first_half), len(second_half))
+            if similarity > 0.7:
+                _safe_print(f"  WARNING: grammar_error_passage appears duplicated, trimming...")
+                data["grammar_error_passage"] = first_half
 
     # ★ 최종 지시대명사(those/these) 복원 — 모든 괄호 처리 후 마지막에 실행
     # AI가 those를 [that/where], [where/that], [those/that] 등으로 만든 뒤
@@ -1480,6 +1594,328 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             data["grammar_bracket_count"] = len(re.findall(r'\(\d+\)\[', final_bp))
             _safe_print(f"  ✅ 지시대명사 {len(removed_demo)}개 복원 완료")
 
+   # ★ "바로 옆 자리" 금지 자동 제거 (대명사+동사, 조동사+동사, be+분사 등)
+    final_bp_na = data.get("grammar_bracket_passage", "")
+    if final_bp_na:
+        all_br_na = re.findall(r'\((\d+)\)\[([^\]]+)\]', final_bp_na)
+        removed_na = []
+        # 금지 단어 패턴: 괄호 바로 앞 단어가 이런 거면 "바로 옆" 자리
+        forbidden_left = {
+            # 인칭대명사 + 부정대명사
+            'i', 'you', 'he', 'she', 'it', 'we', 'they', 'one',
+            # 지시대명사
+            'this', 'that', 'these', 'those',
+            # 조동사
+            'will', 'would', 'can', 'could', 'shall', 'should', 'may', 'might', 'must',
+            # 완료시제
+            'has', 'have', 'had',
+            # 진행/수동
+            'is', 'are', 'was', 'were', 'am', 'be', 'been', 'being',
+            # do
+            'do', 'does', 'did',
+        }
+        for num_str, content in all_br_na:
+            bracket_pos = final_bp_na.find(f'({num_str})[')
+            if bracket_pos < 1:
+                continue
+            # 괄호 바로 앞 텍스트 추출 (괄호 직전 5단어)
+            before_text = final_bp_na[max(0, bracket_pos-50):bracket_pos].rstrip()
+            words_before = before_text.split()
+            if not words_before:
+                continue
+            # 마지막 단어 (구두점 제거, 소문자)
+            last_word = re.sub(r'[^\w]', '', words_before[-1]).lower()
+            # 부사 1개만 끼어있는 경우도 체크: "they also" → also 무시하고 they 봄
+            common_adverbs = {'also', 'always', 'often', 'never', 'still', 'just', 
+                             'only', 'really', 'quite', 'very', 'rather', 'now',
+                             'then', 'too', 'so', 'even', 'already', 'yet',
+                             'usually', 'sometimes', 'generally', 'typically',
+                             'simply', 'merely', 'truly', 'actually'}
+            check_word = last_word
+            if last_word in common_adverbs and len(words_before) >= 2:
+                # 부사면 그 앞 단어 체크
+                check_word = re.sub(r'[^\w]', '', words_before[-2]).lower()
+            
+            if check_word in forbidden_left:
+                # "바로 옆" 자리 → 괄호 제거
+                # 정답 단어로 복원 (answers에서 찾기)
+                correct_word = ""
+                for ans in data.get("grammar_bracket_answers", []):
+                    if ans.get("num") == int(num_str):
+                        correct_word = ans.get("answer", "")
+                        break
+                if not correct_word:
+                    # answers에 없으면 첫 번째 선지를 정답으로 사용
+                    parts = [p.strip() for p in content.split('/')]
+                    correct_word = parts[0] if parts else ""
+                
+                if correct_word:
+                    final_bp_na = re.sub(r'\(' + num_str + r'\)\[[^\]]+\]', correct_word, final_bp_na)
+                    removed_na.append(int(num_str))
+                    _safe_print(f"  🚫 '바로 옆' 자리 괄호({num_str}) 제거: 앞 단어='{check_word}' → '{correct_word}'")
+        
+        if removed_na:
+            data["grammar_bracket_passage"] = final_bp_na
+            data["grammar_bracket_answers"] = [a for a in data.get("grammar_bracket_answers", []) if a.get("num") not in removed_na]
+            data["grammar_bracket_count"] = len(re.findall(r'\(\d+\)\[', final_bp_na))
+            _safe_print(f"  ✅ '바로 옆' 자리 {len(removed_na)}개 제거 완료")
+
+  # ★ "바로 옆 자리" 금지 자동 제거 (인칭대명사+동사, 조동사+동사, be+분사 등)
+    final_bp_na = data.get("grammar_bracket_passage", "")
+    if final_bp_na:
+        all_br_na = re.findall(r'\((\d+)\)\[([^\]]+)\]', final_bp_na)
+        removed_na = []
+        forbidden_left = {
+            'i', 'you', 'he', 'she', 'it', 'we', 'they', 'one',
+            'this', 'that', 'these', 'those',
+            'will', 'would', 'can', 'could', 'shall', 'should', 'may', 'might', 'must',
+            'has', 'have', 'had',
+            'is', 'are', 'was', 'were', 'am', 'be', 'been', 'being',
+            'do', 'does', 'did',
+        }
+        common_adverbs = {'also', 'always', 'often', 'never', 'still', 'just', 
+                         'only', 'really', 'quite', 'very', 'rather', 'now',
+                         'then', 'too', 'so', 'even', 'already', 'yet',
+                         'usually', 'sometimes', 'generally', 'typically',
+                         'simply', 'merely', 'truly', 'actually', 'not'}
+        for num_str, content in all_br_na:
+            bracket_pos = final_bp_na.find(f'({num_str})[')
+            if bracket_pos < 1:
+                continue
+            before_text = final_bp_na[max(0, bracket_pos-50):bracket_pos].rstrip()
+            words_before = before_text.split()
+            if not words_before:
+                continue
+            last_word = re.sub(r'[^\w]', '', words_before[-1]).lower()
+            check_word = last_word
+            if last_word in common_adverbs and len(words_before) >= 2:
+                check_word = re.sub(r'[^\w]', '', words_before[-2]).lower()
+            
+            if check_word in forbidden_left:
+                correct_word = ""
+                for ans in data.get("grammar_bracket_answers", []):
+                    if ans.get("num") == int(num_str):
+                        correct_word = ans.get("answer", "")
+                        break
+                if not correct_word:
+                    parts = [p.strip() for p in content.split('/')]
+                    correct_word = parts[0] if parts else ""
+                
+                if correct_word:
+                    final_bp_na = re.sub(r'\(' + num_str + r'\)\[[^\]]+\]', correct_word, final_bp_na)
+                    removed_na.append(int(num_str))
+                    _safe_print(f"  🚫 '바로 옆' 자리 괄호({num_str}) 제거: 앞 단어='{check_word}' → '{correct_word}'")
+        
+        if removed_na:
+            data["grammar_bracket_passage"] = final_bp_na
+            data["grammar_bracket_answers"] = [a for a in data.get("grammar_bracket_answers", []) if a.get("num") not in removed_na]
+            data["grammar_bracket_count"] = len(re.findall(r'\(\d+\)\[', final_bp_na))
+            _safe_print(f"  ✅ '바로 옆' 자리 {len(removed_na)}개 제거 완료")
+
+    # ★ 의미 차이 쌍(부정/긍정 조동사 등) 자동 제거 — 어법이 아닌 의미 문제
+    final_bp_neg = data.get("grammar_bracket_passage", "")
+    if final_bp_neg:
+        all_br_neg = re.findall(r'\((\d+)\)\[([^\]]+)\]', final_bp_neg)
+        removed_neg = []
+        # 부정/긍정 쌍: 의미가 반대인 단어들
+        negation_pairs = [
+            # 조동사 부정/긍정
+            ('could', "couldn't"), ('could', 'could not'),
+            ('can', "can't"), ('can', 'cannot'),
+            ('will', "won't"), ('will', 'will not'),
+            ('would', "wouldn't"), ('would', 'would not'),
+            ('should', "shouldn't"), ('should', 'should not'),
+            ('may', "may not"), ('might', "mightn't"), ('might', 'might not'),
+            ('must', "mustn't"), ('must', 'must not'),
+            # be동사 부정/긍정
+            ('is', "isn't"), ('are', "aren't"), ('was', "wasn't"), ('were', "weren't"),
+            ('is', 'is not'), ('are', 'are not'),
+            # 일반 조동사 부정/긍정
+            ('has', "hasn't"), ('have', "haven't"), ('had', "hadn't"),
+            ('do', "don't"), ('does', "doesn't"), ('did', "didn't"),
+        ]
+        # 추상명사 + s 패턴
+        uncountable_nouns = {
+            'well-being', 'advice', 'information', 'knowledge', 'equipment',
+            'furniture', 'research', 'evidence', 'progress', 'news', 'feedback',
+            'homework', 'baggage', 'luggage', 'machinery', 'staff', 'traffic',
+        }
+        for num_str, content in all_br_neg:
+            parts = [p.strip().lower() for p in content.split('/')]
+            if len(parts) != 2:
+                continue
+            a, b = parts[0], parts[1]
+            should_remove = False
+            reason = ""
+            # 1. 부정/긍정 쌍 체크
+            for pos, neg in negation_pairs:
+                if (a == pos and b == neg) or (a == neg and b == pos):
+                    should_remove = True
+                    reason = f"의미 차이 (부정/긍정): {a}/{b}"
+                    break
+            # 2. 추상명사 + s 체크
+            if not should_remove:
+                for noun in uncountable_nouns:
+                    if (a == noun and b == noun + 's') or (a == noun + 's' and b == noun):
+                        should_remove = True
+                        reason = f"추상명사 복수형: {a}/{b}"
+                        break
+            if should_remove:
+                # 정답 단어로 복원
+                correct_word = ""
+                for ans in data.get("grammar_bracket_answers", []):
+                    if ans.get("num") == int(num_str):
+                        correct_word = ans.get("answer", "")
+                        break
+                if not correct_word:
+                    correct_word = content.split('/')[0].strip()
+                if correct_word:
+                    final_bp_neg = re.sub(r'\(' + num_str + r'\)\[[^\]]+\]', correct_word, final_bp_neg)
+                    removed_neg.append(int(num_str))
+                    _safe_print(f"  🚫 의미 차이 괄호({num_str}) 제거: {reason} → '{correct_word}'")
+        if removed_neg:
+            data["grammar_bracket_passage"] = final_bp_neg
+            data["grammar_bracket_answers"] = [a for a in data.get("grammar_bracket_answers", []) if a.get("num") not in removed_neg]
+            data["grammar_bracket_count"] = len(re.findall(r'\(\d+\)\[', final_bp_neg))
+            _safe_print(f"  ✅ 의미 차이 괄호 {len(removed_neg)}개 제거 완료")
+
+    # ★ 추가 자동 제거: 시제 차이 / 주어자리 동명사·to부정사 / 관계대명사 that-which 쌍 / 진행시제
+    final_bp_extra = data.get("grammar_bracket_passage", "")
+    if final_bp_extra:
+        all_br_extra = re.findall(r'\((\d+)\)\[([^\]]+)\]', final_bp_extra)
+        removed_extra = []
+        for num_str, content in all_br_extra:
+            parts = [p.strip().lower() for p in content.split('/')]
+            if len(parts) != 2:
+                continue
+            a, b = parts[0], parts[1]
+            should_remove = False
+            reason = ""
+
+            # 1. 시제 차이 페어 (의미 차이일 뿐, 어법 X)
+            tense_pairs_set = [
+                {'is', 'was'}, {'are', 'were'}, {'am', 'was'},
+                {'has', 'had'}, {'have', 'had'},
+                {'do', 'did'}, {'does', 'did'},
+                {'go', 'went'}, {'goes', 'went'},
+                {'come', 'came'}, {'comes', 'came'},
+                {'see', 'saw'}, {'sees', 'saw'},
+                {'know', 'knew'}, {'knows', 'knew'},
+            ]
+            if {a, b} in tense_pairs_set:
+                should_remove = True
+                reason = f"시제 차이 (의미 차이): {a}/{b}"
+
+            # ★ 1-2. 진행시제 (be + V-ing) 페어 차단
+            # 한쪽이 "is/are/was/were/am + V-ing" 형태 + 다른 쪽이 단순 동사 → 진행 vs 단순 시제 차이
+            # 예: "was taking" / "took", "is studying" / "studies"
+            if not should_remove:
+                def _has_be_ing(s):
+                    words = s.strip().split()
+                    return (len(words) == 2 and
+                            words[0] in {'is', 'are', 'was', 'were', 'am', 'be', 'been', 'being'} and
+                            words[1].endswith('ing'))
+                if _has_be_ing(a) or _has_be_ing(b):
+                    should_remove = True
+                    reason = f"진행시제 포함 (어법 X, 의미 차이): {a}/{b}"
+
+            # 2. 주어자리 동명사 vs to부정사 (X-ing / to X) — 어근 비교 없이 패턴만 체크
+            if not should_remove:
+                is_ing_to_pair = False
+                if a.endswith('ing') and b.startswith('to ') and len(b.split()) == 2:
+                    is_ing_to_pair = True
+                elif b.endswith('ing') and a.startswith('to ') and len(a.split()) == 2:
+                    is_ing_to_pair = True
+                if is_ing_to_pair:
+                    # 위치 확인: 문장 시작 부근이면 주어 자리
+                    bracket_pos = final_bp_extra.find(f'({num_str})[')
+                    if bracket_pos >= 0:
+                        last_punct = max(
+                            final_bp_extra.rfind('.', 0, bracket_pos),
+                            final_bp_extra.rfind('!', 0, bracket_pos),
+                            final_bp_extra.rfind('?', 0, bracket_pos),
+                        )
+                        words_before = final_bp_extra[max(0, last_punct + 1):bracket_pos].strip().split()
+                        # 문장 시작 ~ 3단어 이내면 주어 자리로 간주
+                        if len(words_before) <= 3:
+                            should_remove = True
+                            reason = f"주어자리 동명사 vs to부정사 (둘 다 가능): {a}/{b}"
+
+            # 3. 관계대명사 that vs which 쌍 (사용자 명시 금지 자리)
+            if not should_remove:
+                if {a, b} == {'that', 'which'}:
+                    should_remove = True
+                    reason = f"관계대명사 자리 that vs which (둘 다 가능): {a}/{b}"
+
+            if should_remove:
+                # 정답 단어로 복원
+                correct_word = ""
+                for ans in data.get("grammar_bracket_answers", []):
+                    if ans.get("num") == int(num_str):
+                        correct_word = ans.get("answer", "")
+                        break
+                if not correct_word:
+                    correct_word = content.split('/')[0].strip()
+                if correct_word:
+                    final_bp_extra = re.sub(r'\(' + num_str + r'\)\[[^\]]+\]', correct_word, final_bp_extra)
+                    removed_extra.append(int(num_str))
+                    _safe_print(f"  🚫 추가 차단 괄호({num_str}) 제거: {reason} → '{correct_word}'")
+        if removed_extra:
+            data["grammar_bracket_passage"] = final_bp_extra
+            data["grammar_bracket_answers"] = [a for a in data.get("grammar_bracket_answers", []) if a.get("num") not in removed_extra]
+            data["grammar_bracket_count"] = len(re.findall(r'\(\d+\)\[', final_bp_extra))
+            _safe_print(f"  ✅ 추가 차단 괄호 {len(removed_extra)}개 제거 완료")
+
+    # ★ "뒤에 by" 능동/수동 자동 제거 — 뒤에 by 행위자 있으면 수동태 1초 컷
+    final_bp_by = data.get("grammar_bracket_passage", "")
+    if final_bp_by:
+        all_br_by = re.findall(r'\((\d+)\)\[([^\]]+)\]', final_bp_by)
+        removed_by = []
+        for num_str, content in all_br_by:
+            # 능/수동 쌍인지 확인 (한쪽이 p.p. 형태이거나 are/was/is/were 포함)
+            parts = [p.strip().lower() for p in content.split('/')]
+            if len(parts) != 2:
+                continue
+            is_voice_pair = False
+            # 패턴 1: be동사 포함 (are replaced / replace)
+            for p in parts:
+                if 'are ' in p or 'is ' in p or 'was ' in p or 'were ' in p or 'be ' in p or 'been ' in p:
+                    is_voice_pair = True
+                    break
+            # 패턴 2: ed/en vs ing 쌍 (caused / causing)
+            if not is_voice_pair:
+                ends = [p.split()[-1] if p.split() else '' for p in parts]
+                has_ed = any(e.endswith('ed') or e.endswith('en') for e in ends)
+                has_ing = any(e.endswith('ing') for e in ends)
+                if has_ed and has_ing:
+                    is_voice_pair = True
+            if not is_voice_pair:
+                continue
+            # 괄호 뒤 텍스트 50자 안에 "by 단어"가 있는지
+            bracket_pos = final_bp_by.find(f'({num_str})[')
+            close_pos = final_bp_by.find(']', bracket_pos)
+            if close_pos < 0:
+                continue
+            after_text = final_bp_by[close_pos+1:close_pos+50].lower().strip()
+            if re.match(r'^\s*by\s+\w', after_text):
+                # 뒤에 by 행위자 → 수동태 1초 컷 → 괄호 제거
+                correct_word = ""
+                for ans in data.get("grammar_bracket_answers", []):
+                    if ans.get("num") == int(num_str):
+                        correct_word = ans.get("answer", "")
+                        break
+                if not correct_word:
+                    correct_word = content.split('/')[0].strip()
+                if correct_word:
+                    final_bp_by = re.sub(r'\(' + num_str + r'\)\[[^\]]+\]', correct_word, final_bp_by)
+                    removed_by.append(int(num_str))
+                    _safe_print(f"  🚫 '뒤에 by' 능/수동 괄호({num_str}) 제거: 뒤='{after_text[:30]}' → '{correct_word}'")
+        if removed_by:
+            data["grammar_bracket_passage"] = final_bp_by
+            data["grammar_bracket_answers"] = [a for a in data.get("grammar_bracket_answers", []) if a.get("num") not in removed_by]
+            data["grammar_bracket_count"] = len(re.findall(r'\(\d+\)\[', final_bp_by))
+            _safe_print(f"  ✅ '뒤에 by' 능/수동 {len(removed_by)}개 제거 완료")
+
     # ★ whom/who 둘다정답 괄호 제거
     final_bp3 = data.get("grammar_bracket_passage", "")
     if final_bp3:
@@ -1502,27 +1938,90 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             data["grammar_bracket_answers"] = [a for a in data.get("grammar_bracket_answers", []) if a.get("num") not in removed_ww]
             data["grammar_bracket_count"] = len(re.findall(r'\(\d+\)\[', final_bp3))
 
-    # ★ 최종 괄호 수 체크: 모든 제거 후 8개 미만이면 재생성
-    final_bracket_count = data.get("grammar_bracket_count", 0)
-    if 0 < final_bracket_count < 8:
-        _safe_print(f"  ⚠️ 최종 괄호 {final_bracket_count}개 < 8개 → 재생성 시도...")
-        data_retry = call_claude_json(SYS_JSON, prompt, max_tokens=4000)
-        retry_bp = data_retry.get("grammar_bracket_passage", "")
-        retry_count = len(re.findall(r'\(\d+\)\[', retry_bp))
-        if retry_count >= 8:
-            data["grammar_bracket_passage"] = retry_bp
-            data["grammar_bracket_answers"] = data_retry.get("grammar_bracket_answers", [])
-            data["grammar_bracket_count"] = retry_count
-            data["grammar_error_passage"] = data_retry.get("grammar_error_passage", data.get("grammar_error_passage", ""))
-            data["grammar_error_answers"] = data_retry.get("grammar_error_answers", data.get("grammar_error_answers", []))
-            data["grammar_error_count"] = len(data["grammar_error_answers"])
-            _safe_print(f"  ✅ 재생성 성공: 괄호 {retry_count}개")
+    # 최종 번호 재정의: (1)부터 시작하도록 번호 정리
+    final_bp_renum = data.get("grammar_bracket_passage", "")
+    if final_bp_renum:
+        remaining_nums = [int(m) for m in re.findall(r'\((\d+)\)\[', final_bp_renum)]
+        expected_nums = list(range(1, len(remaining_nums) + 1))
+        if remaining_nums and remaining_nums != expected_nums:
+            renumber_map = dict(zip(remaining_nums, expected_nums))
+            new_passage = final_bp_renum
+            # 1단계: 임시 마커 선언
+            for old_num in remaining_nums:
+                new_num = renumber_map[old_num]
+                if old_num != new_num:
+                    new_passage = new_passage.replace(f'({old_num})[', f'(__TMP{new_num}__)[', 1)
+            # 2단계: 임시 마커 -> 최종 번호
+            new_passage = re.sub(r'\(__TMP(\d+)__\)\[', lambda m: f'({m.group(1)})[', new_passage)
+            # answers도 재번호
+            new_answers = []
+            for ans in data.get("grammar_bracket_answers", []):
+                old_n = ans.get("num", 0)
+                if old_n in renumber_map:
+                    ans["num"] = renumber_map[old_n]
+                    new_answers.append(ans)
+            data["grammar_bracket_passage"] = new_passage
+            data["grammar_bracket_answers"] = new_answers
+            data["grammar_bracket_count"] = len(new_answers)
+            logger.info(f"INFO | STAGE 8 | 최종 번호 매기기 완료: {dict(list(renumber_map.items())[:5])}...")
+
+
+    # ★★ 최종 안전장치: 항상 핵심 차단 한 번 더 (캐시되기 전)
+    # data = _apply_critical_grammar_filters(data) 테스트1: 안전장치 제거.
 
     save_step(passage_dir, "step5_grammar", data)
     return data
 
 # ============================================================
+# 내용일치 part: 셔플 후 데이터 매칭 (kr/en 공용)
+# ============================================================
+def _shuffle_content_match(items, answers, ai_wrong, ai_wrong_trans):
+    """
+    content_match_{kr|en}을 셔플하면서 answer/wrong/wrong_trans 라벨을 동시 동기화.
+
+    Returns:
+        (new_items, new_answer, new_wrong, new_wrong_trans)
+    """
+    if not items:
+        return list(items), list(answers), list(ai_wrong), list(ai_wrong_trans)
+
+    label_strip = re.compile(r'^[①②③④⑤⑥⑦⑧⑨⑩]\s*')
+    answers_set = set(answers)
+
+    original_texts = [label_strip.sub('', it).strip() for it in items]
+    correct_flags = [_CIRCLE_NUMS[i] in answers_set for i in range(len(original_texts))]
+
+    # 셔플
+    pairs = list(zip(original_texts, correct_flags))
+    random.shuffle(pairs)
+    shuffled = [p[0] for p in pairs]
+
+    # {새 라벨: 오답 본문} dict
+    trans_by_new = {}
+    for old_label, trans in zip(ai_wrong, ai_wrong_trans):
+        if old_label not in _CIRCLE_NUMS:
+            continue
+        old_idx = _CIRCLE_NUMS.index(old_label)
+        if not (0 <= old_idx < len(original_texts)):
+            continue
+        text = original_texts[old_idx]
+        new_idx = shuffled.index(text)
+        body = label_strip.sub('', trans).strip()
+        trans_by_new[_CIRCLE_NUMS[new_idx]] = body
+
+    new_wrong = [_CIRCLE_NUMS[i] for i in range(len(pairs)) if not pairs[i][1]]
+
+    return (
+        [f"{_CIRCLE_NUMS[i]} {shuffled[i]}" for i in range(len(pairs))],
+        [_CIRCLE_NUMS[i] for i in range(len(pairs)) if pairs[i][1]],
+        new_wrong,
+        [f"{lbl} {trans_by_new[lbl]}" for lbl in new_wrong if lbl in trans_by_new],
+    )
+
+
+# ============================================================
 # STEP 6: Lv.9 어휘심화 + 내용일치
+# => (변경) Stage 8: 어휘 심화 | Stage 9: 내용 일치
 # ============================================================
 def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
     cached = load_step(passage_dir, "step6_vocab_content")
@@ -1530,7 +2029,7 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
         _safe_print("  step6: using cache")
         return cached
 
-    _safe_print("  step6: generating Lv.9 vocab...")
+    logger.info("INFO | STAGE 6 | generating Lv.9 vocab...")
     prompt = f"""다음 영어 지문으로 어휘 심화 + 내용 일치 문제를 생성하세요.
 
 [지문]
@@ -1564,6 +2063,27 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
 - 한국어와 영어 선지의 순서는 서로 다르게 랜덤 배치
 - 10개 미만이면 실패로 간주됨. 반드시 ①②③④⑤⑥⑦⑧⑨⑩ 10개 모두 작성할 것
 
+[content_match_kr_wrong_trans, content_match_en_wrong_trans에 대한 지침]
+- 각 content_match_kr_wrong_trans과 content_match_en_wrong_trans은 오답의 번호에 대해 올바른 원래 정답인 string값들을 가진 list이다.
+- 오답으로 출제된 문제에 대해 원래 정답인 내용을 말한다.(한글에는 한글 내용, 영어에는 영어 내용)
+    - 설명(content_match_kr_wrong_trans)
+        - 예시 데이터 형식
+            - content_match_kr_wrong: ["②", "③", "⑤", ...]
+            - content_match_kr_wrong_trans: ["① 원문의 한글 해석에서 ①번에 해당하는 오답이 아닌 원래 정답의 문장", "④ 원문의 한글 해석에서 ④번에 해당하는 오답이 아닌 원래 정답의 문장", "⑥ 원문의 한글 해석에서 ⑥번에 해당하는 오답이 아닌 원래 정답의 문장", ...]
+        - content_match_kr_wrong_trans의 실제 데이터 예시
+            - 문제로 작성된 내용: "① 화산 진흙이나 남극의 얼음 아래에서는 생물체를 찾을 수 없다."
+            - content_match_kr_wrong_trans에 들어갈 내용: "① 화산 진흙이나 남극의 얼음 아래에서는 생물체를 발견될 수 있다." (실제 옳은 해석)
+    - 설명(content_match_en_wrong_trans)
+        - 예시 데이터 형식
+            - content_match_en_wrong: ["②", "④", ...]
+            - content_match_en_wrong_trans: ["① 원문(영어)에서 ①번에 해당하는 오답이 아닌 원래 정답의 문장", "③ 원문(영어)에서 ③번에 해당하는 오답이 아닌 원래 정답의 문장", ...]
+        - content_match_en_wrong_trans의 실제 데이터 예시
+            - 문제로 작성된 내용: "④ Guests must select 'Travel Packages' in the reservation form."
+            - content_match_en_wrong_trans에 들어갈 내용: "④ Select "Vacation Packages" in the reservation form." (문제가 되는 내용을 만들기 위해 사용한 원래 문장)
+
+[content_match_kr, content_match_en 생성 지침]
+- 단순 이중 부정한 내용을 정답이라고 제출하지 말 것.(지문의 '부정+부정'의 문장을 '긍정+긍정'으로 바꾸어서 문제로 출제하여 정답에 포함시키지 말 것, 원문 명제를 단순히 이중 부정, 완곡한 부정, 부정어 결합, 또는 ‘~와 무관하지 않다’, ‘~하지 않는 것은 아니다’, ‘~라고 보기 어렵다’ 등의 표현으로 바꾸어 원문과 사실상 같은 의미가 되거나 같은 정답으로 인정될 수 있는 단순 문장은 생성하지 않는다.)
+
 [JSON 형식]
 {{
   "vocab_advanced_passage": "괄호 포함 지문",
@@ -1572,8 +2092,12 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
   "vocab_partb_answers": [{{"num":1, "correct":["considered", "perceived"], "wrong":["overlooked", "neglected", "dismissed"]}}, ...],
   "content_match_kr": ["① ...", "② ...", "③ ...", "④ ...", "⑤ ...", "⑥ ...", "⑦ ...", "⑧ ...", "⑨ ...", "⑩ ..."],
   "content_match_kr_answer": ["②", "③", "⑤", ...],
+  "content_match_kr_wrong": ["①", "④", "⑥", ...],
+  "content_match_kr_wrong_trans": ["① ...", "④ ...", "⑥ ...", ...],
   "content_match_en": ["① ...", "② ...", "③ ...", "④ ...", "⑤ ...", "⑥ ...", "⑦ ...", "⑧ ...", "⑨ ...", "⑩ ..."],
-  "content_match_en_answer": ["②", "④", ...]
+  "content_match_en_answer": ["②", "④", ...],
+  "content_match_en_wrong": ["①", "③", ...],
+  "content_match_en_wrong_trans": ["① ...", "③ ...", ...]
 }}"""
 
     data = call_claude_json(SYS_JSON_KR, prompt, max_tokens=6000)
@@ -1590,15 +2114,15 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
         if len(data2.get("content_match_en", [])) >= en_count:
             data["content_match_en"] = data2.get("content_match_en", data.get("content_match_en", []))
             data["content_match_en_answer"] = data2.get("content_match_en_answer", data.get("content_match_en_answer", []))
-    kr_items = data.get("content_match_kr", [])
-    kr_answers = set(data.get("content_match_kr_answer", []))
-    if kr_items:
-        kr_texts = [re.sub(r'^[①②③④⑤⑥⑦⑧⑨⑩]\s*', '', item) for item in kr_items]
-        kr_correct = [_CIRCLE_NUMS[i] in kr_answers for i in range(len(kr_texts))]
-        kr_pairs = list(zip(kr_texts, kr_correct))
-        random.shuffle(kr_pairs)
-        data["content_match_kr"] = [f"{_CIRCLE_NUMS[i]} {kr_pairs[i][0]}" for i in range(len(kr_pairs))]
-        data["content_match_kr_answer"] = [_CIRCLE_NUMS[i] for i in range(len(kr_pairs)) if kr_pairs[i][1]]
+    (data["content_match_kr"],
+     data["content_match_kr_answer"],
+     data["content_match_kr_wrong"],
+     data["content_match_kr_wrong_trans"]) = _shuffle_content_match(
+        data.get("content_match_kr", []),
+        data.get("content_match_kr_answer", []),
+        data.get("content_match_kr_wrong", []),
+        data.get("content_match_kr_wrong_trans", []),
+    )
 
     # ★ Part B choices 안에서 정답 위치 랜덤화
     vocab_partb = data.get("vocab_partb", [])
@@ -1616,19 +2140,16 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
     data["vocab_partb"] = vocab_partb
     data["vocab_partb_answers"] = vocab_partb_answers
 
-    # Part B 영어 선지 셔플 (번호는 오름차순 유지, 문장만 랜덤)
-    en_items = data.get("content_match_en", [])
-    en_answers = set(data.get("content_match_en_answer", []))
-    if en_items:
-        # 번호와 문장 분리
-        texts = [re.sub(r'^[①②③④⑤⑥⑦⑧⑨⑩]\s*', '', item) for item in en_items]
-        is_correct = [_CIRCLE_NUMS[i] in en_answers for i in range(len(texts))]
-        # 문장+정답 쌍을 셔플
-        pairs = list(zip(texts, is_correct))
-        random.shuffle(pairs)
-        # 번호 재부여 + 정답 갱신
-        data["content_match_en"] = [f"{_CIRCLE_NUMS[i]} {pairs[i][0]}" for i in range(len(pairs))]
-        data["content_match_en_answer"] = [_CIRCLE_NUMS[i] for i in range(len(pairs)) if pairs[i][1]]
+    # 내용일치 영어 선지 셔플 (번호 재부여 + answer/wrong/wrong_trans 동기화)
+    (data["content_match_en"],
+     data["content_match_en_answer"],
+     data["content_match_en_wrong"],
+     data["content_match_en_wrong_trans"]) = _shuffle_content_match(
+        data.get("content_match_en", []),
+        data.get("content_match_en_answer", []),
+        data.get("content_match_en_wrong", []),
+        data.get("content_match_en_wrong_trans", []),
+    )
 
     # ★ 9-1 Part A 5개 미만이면 재시도 (최소 5개 강제)
     actual_parta = data.get("vocab_parta_answers", [])
@@ -1649,34 +2170,33 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
     data["vocab_parta_count"] = len(actual_parta)
 
     # ★ 9-1 Part A 정답 좌우 진짜 랜덤 shuffle (각 괄호 개별 50% 확률)
-    import re as _re2, random as _rand_va
     va_passage = data.get("vocab_advanced_passage", "")
     va_answers = data.get("vocab_parta_answers", [])
     if va_passage and va_answers:
         result_va = va_passage
         for ans in va_answers:
             num = ans.get("num", "")
-            if _rand_va.random() < 0.5:  # 50% 확률로 각각 독립적으로 swap
-                pat = _re2.compile(r'\(' + str(num) + r'\)\[([^\]]+)\]')
+            if random.random() < 0.5:  # 50% 확률로 각각 독립적으로 swap
+                pat = re.compile(r'\(' + str(num) + r'\)\[([^\]]+)\]')
                 def do_swap_va(m, n=num):
                     parts = [p.strip() for p in m.group(1).split(' / ')]
                     return f'({n})[{parts[1]} / {parts[0]}]' if len(parts)==2 else m.group(0)
                 result_va = pat.sub(do_swap_va, result_va)
         data["vocab_advanced_passage"] = result_va
 
-        save_step(passage_dir, "step6_vocab_content", data)
+    save_step(passage_dir, "step6_vocab_content", data)
     return data
 
 # ============================================================
 # STEP 7: Stage 10 영작 (API 불필요 - 프로그래밍으로 처리)
 # ============================================================
-def step7_writing(sentences: list, translation: str, passage_dir: Path, sentence_translations: list = None) -> dict:
+def step7_writing(sentences: list, passage_dir: Path, sentence_translations: list = None) -> dict:
     cached = load_step(passage_dir, "step7_writing")
     if cached:
-        _safe_print("  step7: using cache")
+        _safe_print("  Stage 10 영작: using cache")
         return cached
 
-    _safe_print("  step7: generating Lv.10 writing...")
+    _safe_print("  Stage 10 영작 | Lv.10 writing...")
     # 대화문 여부 확인
     is_dialogue = _is_dialogue(sentences)
     
@@ -1782,71 +2302,152 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
     # 정답 HTML 생성 (레벨별 블록화)
     blocks = []
 
-    # Lv.1
-    blocks.append('<div class="ablock"><p class="ast">Stage 1 어휘 테스트</p>'
-                   '<p>A. (어휘 테스트 정답은 학생이 직접 확인)</p></div>')
+    # Lv.4(구 Stage 7의 정답: 정답 번호들+오답의 해석)
+    stage4_data = all_data.get("step4") or {}
+    correct_number = ', '.join(stage4_data.get("topic_correct") or [])
+    wrong_list = stage4_data.get("topic_wrong_translation") or []
+    wrong_items = []
+    for i in wrong_list:
+        wrong_items.append(f'<p>{i}</p>')
+    
+    wrong_translation = ''.join(wrong_items)
+
+    logger.debug(f"DEBUG | STAGE 4 |오답 선지 해석 DATA CHECK\n{wrong_translation}\n")
+
+    blocks.append(
+        '<div class="ablock">'
+        '<p class="ast">Stage 4 수업 직후 정리</p>'
+        f'<p>[STEP 1 - 주제문 직접 쓰기]<br>정답: {correct_number}</p>'
+        '<p>[오답 선지 해석]</p>'
+        f'{wrong_translation}'
+        '</div>'
+    )
 
     # Lv.5
     s2 = all_data.get("step2", {})
-    blocks.append(f'<div class="ablock"><p class="ast">Stage 5 순서 배열</p>'
-                   f'<p>정답: {s2.get("order_answer","")}</p>'
-                   f'<p>삽입 정답: {s2.get("insert_answer","")}</p>'
-                   f'<p>전체 배열: {s2.get("full_order_answer","")}</p></div>')
+    blocks.append(f'<div class="ablock">'
+                  '<p class="ast">Stage 5 순서 배열</p>'
+                  f'<p>[A. 순서 배열]<br>정답: {s2.get("order_answer","")}</p>'
+                  f'<p>[B. 문장 삽입]<br>정답: {s2.get("insert_answer","")}</p>'
+                  f'<p>[심화 - 문장 순서 배열]<br>정답: {s2.get("full_order_answer","")}</p>'
+                  '</div>'
+    )
 
     # Lv.6
-    s3 = all_data.get("step3", {})
-    correct = ', '.join(s3.get("blank_correct", []))
-    blocks.append(f'<div class="ablock"><p class="ast">Stage 6 빈칸 추론</p>'
-                   f'<p>정답: {correct}</p></div>')
+    s3 = all_data.get("step3") or {}
+    correct = ', '.join(s3.get("blank_correct") or [])
+    wrong_list6 = s3.get("blank_wrong_translation") or []
 
-    # Lv.7
-    s4 = all_data.get("step4", {})
-    correct = ', '.join(s4.get("topic_correct", []))
-    blocks.append(f'<div class="ablock"><p class="ast">Stage 7 주제 찾기</p>'
-                   f'<p>정답: {correct}</p></div>')
+    logger.debug(f"DEBUG | STAGE 6 | DATA가 있는가? CHECK\n{wrong_list6}\n")
 
-    # Lv.8 괄호
-    s5 = all_data.get("step5", {})
-    lv8_bracket = ['<div class="ablock"><p class="ast">Stage 8 어법 (괄호)</p>']
-    for a in s5.get("grammar_bracket_answers", []):
-        if isinstance(a, dict):
-            lv8_bracket.append(f'<p>({a.get("num","")}) {a.get("answer","")}</p>')
-    lv8_bracket.append('</div>')
-    blocks.append(''.join(lv8_bracket))
+    wrong_items6 = []
+    for i in wrong_list6:
+        wrong_items6.append(f'<p>{i}</p>')
+    
+    stage6_wrong = ''.join(wrong_items6)
+    
+    logger.debug(f"DEBUG | STAGE 6 |오답 선지 해석 DATA CHECK\n{stage6_wrong}\n")
 
-    # Stage 8 서술형 (해설 없이 오류→정답만)
-    lv8_error = ['<div class="ablock"><p class="ast">Stage 8 서술형</p>']
-    for a in s5.get("grammar_error_answers", []):
-        if isinstance(a, dict):
-            lv8_error.append(f'<p>({a.get("num","")}) {a.get("original","")}</p>')
-    lv8_error.append('</div>')
-    blocks.append(''.join(lv8_error))
+    blocks.append(f'<div class="ablock">'
+                  '<p class="ast">Stage 6 빈칸 추론</p>'
+                   f'<p>[STEP 2]<br>정답: {correct}</p>'
+                   '<p>[오답 선지 해석]</p>'
+                   f'{stage6_wrong}'
+                   '</div>')
 
-    # Lv.9-1 Part A
-    s6 = all_data.get("step6", {})
-    lv9a = ['<div class="ablock"><p class="ast">Stage 9-1 어휘 Part A</p>']
-    for a in s6.get("vocab_parta_answers", []):
-        if isinstance(a, dict):
-            lv9a.append(f'<p>({a.get("num","")}) {a.get("answer","")}</p>')
-    lv9a.append('</div>')
-    blocks.append(''.join(lv9a))
+    # Lv.7-1 (step1 / step2 정답 3단/2단 나열)
+    stage7_data = all_data.get("step5") or {}
+    stage7_step1_correct_list = stage7_data.get("grammar_bracket_answers") or []
+    stage7_step2_error_list = stage7_data.get("grammar_error_answers") or []
 
-    # Lv.9-1 Part B + Lv.9-2
-    lv9b = ['<div class="ablock"><p class="ast">Stage 9-1 어휘 Part B</p>']
-    for a in s6.get("vocab_partb_answers", []):
-        if isinstance(a, dict):
-            correct_list = ', '.join(a.get("correct", []))
-            lv9b.append(f'<p>{a.get("num","")}: {correct_list}</p>')
-    lv9b.append('</div>')
-    blocks.append(''.join(lv9b))
+    step1_items = []
+    for i in range(0, len(stage7_step1_correct_list), 3):
+        chunk = stage7_step1_correct_list[i:i+3]
+        line = ' '.join(f'({c.get("num")}) {c.get("answer")}' for c in chunk)
+        step1_items.append(f'<p>{line}</p>')
+    
+    stage7_step1_answer = ''.join(step1_items)
+    
+    step2_items = []
+    for i in range(0, len(stage7_step2_error_list), 2):
+        chunk = stage7_step2_error_list[i:i+2]
+        line = ' '.join(
+            f'({c.get("num")}) {c.get("error")} → {c.get("original")}' for c in chunk
+        )
+        step2_items.append(f'<p>{line}</p>')
+    
+    stage7_step2_answer = ''.join(step2_items)
+    
+    blocks.append(f'<div class="ablock"><p class="ast">Stage 7-1 어법</p>'
+                  '<p>[STEP 1]</p>'
+                  f'<ul>{stage7_step1_answer}</ul>'
+                  '<p>[STEP 2]</p>'
+                  f'<ul>{stage7_step2_answer}</ul>'
+                  '</div>'
+                  )
+    
+    # Stage 8 어휘 (Part A / Part B 정답만: 3단/2단 구성의 정답지)
+    stage8_data = all_data.get("step6")
+    stage8_partA_list = stage8_data.get("vocab_parta_answers")
+    stage8_partB_list = stage8_data.get("vocab_partb_answers")
 
-    kr_ans = ', '.join(s6.get("content_match_kr_answer", []))
-    en_ans = ', '.join(s6.get("content_match_en_answer", []))
-    lv92 = ['<div class="ablock"><p class="ast">Stage 9-2 내용일치</p>']
-    lv92.append(f'<p>한국어: {kr_ans}</p>')
-    lv92.append(f'<p>영어: {en_ans}</p>')
-    lv92.append('</div>')
-    blocks.append(''.join(lv92))
+    partA_items = []
+    for i in range(0, len(stage8_partA_list), 3):
+        chunk = stage8_partA_list[i:i+3]
+        stage8_partA_answers = ' '.join(f'({c.get("num")}) {c.get("answer")}' for c in chunk)
+        partA_items.append(f'<p>{stage8_partA_answers}</p>')
+    
+    insert_data8_A = ''.join(partA_items)
+
+    partB_items = []
+    for i in range(0, len(stage8_partB_list), 2):
+        chunck = stage8_partB_list[i:i+2]
+        stage8_partB_answers = ' '.join(f'({c.get("num")}) {', '.join(c.get("correct"))}' for c in chunck)
+        partB_items.append(f'<p>{stage8_partB_answers}</p>')
+    
+    insert_data_8_B = ''.join(partB_items)
+
+    blocks.append('<div class="ablock"><p class="ast">Stage 8 어휘</p>'
+                  '<p>[Part A]</p>'
+                  f'<ul>{insert_data8_A}</ul>'
+                  '<p>[Part B]</p>'
+                  f'<ul>{insert_data_8_B}</ul>'
+                  '</div>'
+                )
+
+    # Lv.9 - step2 정답 (정답: 번호만 / 오답: 번호+한글해석문장)
+    stage9_data = all_data.get("step6") or {}
+    correct_numbers_kor = ', '.join(stage9_data.get("content_match_kr_answer") or [])
+    wrong_kr_list = stage9_data.get("content_match_kr_wrong_trans") or []
+    correct_numbers_eng = ', '.join(stage9_data.get("content_match_en_answer") or [])
+    wrong_eng_list = stage9_data.get("content_match_en_wrong_trans") or []
+
+    kor_items = []
+    for i in wrong_kr_list:
+        kor_items.append(f'<p>{i}</p>')
+    
+    stage9_wrong_kor = ''.join(kor_items)
+
+    eng_items = []
+    for i in wrong_eng_list:
+        eng_items.append(f'<p>{i}</p>')
+
+    stage9_wrong_eng = ''.join(eng_items)
+
+    logger.debug(f"DEBUG | STAGE 9 |오답 선지 해석 KOR/ENG DATA CHECK\nKOR> {stage6_wrong}\nENG> {stage9_wrong_eng}\n")
+
+    blocks.append(
+          '<div class="ablock"><p class="ast">Stage 9 내용 일치</p>'
+          '<p>[STEP 2 - Part A. 한국어]</p>'
+          f'<p>정답: {correct_numbers_kor}</p>'
+          '<p>[오답 선지 해설 및 정답]</p>'
+          f'{stage9_wrong_kor}'
+          '<p>[STEP 2 - Part B. English]</p>'
+          f'<p>정답: {correct_numbers_eng}</p>'
+          '<p>[오답 선지 해설 및 정답]</p>'
+          f'{stage9_wrong_eng}'
+          '</div>'
+      )
 
     # Lv.10
     s7 = all_data.get("step7", {})
@@ -1918,7 +2519,7 @@ def merge_to_template_data(passage: str, meta: dict, all_steps: dict) -> dict:
         # Lv.5 순서/삽입
         "order_intro": s2.get("order_intro", ""),
         "order_paragraphs": s2.get("order_paragraphs", []),
-        "order_choices": s2.get("order_choices", []),
+        # "order_choices": s2.get("order_choices", []),
         "insert_sentence": s2.get("insert_sentence", ""),
         "insert_passage": s2.get("insert_passage", ""),
         "full_order_blocks": s2.get("full_order_blocks", []),
@@ -2010,6 +2611,8 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
             meta['user_translations'] = kr_lines
             _safe_print(f"  passage_text에서 해석 {len(kr_lines)}줄 추출")
 
+    logger.debug(f"DEBUG | process_passage | 한국어 해석 후처리 CHECK\n1. 문장분리 풀번역\n> {kr_lines}\n2. meta data check\n> {meta['user_translations']}")
+
     _safe_print(f"\n{'='*50}")
     _safe_print(f"Processing: {passage_id} ({meta.get('challenge_title','')})")
     _safe_print(f"{'='*50}")
@@ -2019,9 +2622,11 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
     sentences = _merge_short_dialogue(sentences)
     all_steps = {}
 
-    # Step 1: 기본 분석
-    user_tr = meta.get("user_translations", None)
-    all_steps["step1"] = step1_basic_analysis(passage, passage_dir, user_translations=user_tr)
+    # Step 1: 기본 분석xx
+    user_tr = meta.get("user_translations")
+    all_steps["step1"] = step1_basic_analysis(passage, passage_dir, full_translation=kr_text, user_translations=kr_lines)
+
+    # 지문을 한문장씩 나눈 list -> sentences_from_api
     sentences_from_api = all_steps["step1"].get("sentences", sentences)
 
     # Step 2: Lv.5 순서/삽입
@@ -2056,7 +2661,10 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
             pass
     translation = all_steps["step1"].get("translation", "")
     sentence_translations = all_steps["step1"].get("sentence_translations", [])
-    all_steps["step7"] = step7_writing(sentences_from_api, translation, passage_dir, sentence_translations)
+    
+    logger.debug(f"DEBUG | translation와 sentence_translations 비교\ntranslation> {translation}\nsentence_translations> {sentence_translations}")
+
+    all_steps["step7"] = step7_writing(sentences=sentences_from_api, passage_dir=passage_dir, sentence_translations=sentence_translations)
 
     # Step 8: 정답
     all_steps["step8"] = step8_answers(all_steps, passage_dir)
@@ -2251,15 +2859,28 @@ def merge_html_files(output_dir=None):
     style_match = _re.search(r'<style[^>]*>(.*?)</style>', first_html, _re.DOTALL)
     css = style_match.group(1) if style_match else ""
     
-    # 각 파일에서 <body> 내용만 추출
+    # 첫 번째 파일에서 자바스크립트 추출 (한 번만 넣기 위해)
+    extracted_script = ""
+    if html_files:
+        first_html = html_files[0].read_text(encoding='utf-8')
+        script_match = _re.search(r'<script>.*?</script>', first_html, _re.DOTALL)
+        if script_match:
+            extracted_script = script_match.group(0)
+    
+   # 각 파일에서 <body> 내용만 추출 (단, <script>...</script> 제거)
     all_bodies = []
-    for hf in html_files:
+    for idx, hf in enumerate(html_files):
         html = hf.read_text(encoding='utf-8')
         body_match = _re.search(r'<body[^>]*>(.*?)</body>', html, _re.DOTALL)
         if body_match:
-            all_bodies.append(body_match.group(1))
+            body_content = body_match.group(1)
+            # ⚠️ <script>...</script> 제거: 합본 시 자바스크립트가 여러 번 들어가면 paginate가 중복 실행되어 layout 깨짐
+            body_content = _re.sub(r'<script>.*?</script>', '', body_content, flags=_re.DOTALL)
+            # ⚠️ page-break-before div 제거: .page의 page-break-after: always 와 이중으로 작용해 빈 페이지 생성
+            # 자연스러운 .page 분할에만 의존
+            all_bodies.append(body_content)
     
-    # 합친 HTML 생성
+    # 합친 HTML 생성 (자바스크립트는 마지막에 한 번만)
     merged_path = _unique_path(output_dir, merge_name.replace('.html', ''), '.html')
     merged = f"""<!DOCTYPE html>
 <html lang="ko">
@@ -2272,6 +2893,7 @@ def merge_html_files(output_dir=None):
 </head>
 <body>
 {''.join(all_bodies)}
+{extracted_script}
 </body>
 </html>"""
     
@@ -2339,41 +2961,83 @@ if __name__ == "__main__":
 # ★ 비밀노트 (Secret Note) - 수정된 코드
 # ============================================================
 
-SYS_SECRET_NOTE_A = """You are an English passage analyzer for Korean high school students preparing for exams in ONE WEEK.
-Your analysis must be precise, academic, and exam-ready. Every output should look like a correct answer choice on a standardized test.
+SYS_SECRET_NOTE_A = """You are an expert English teacher preparing Korean high school students for their FINAL EXAM.
+Analyze the passage and return structured study materials.
 
-Return ONLY valid JSON with NO markdown, NO backticks, NO explanation.
+=== CRITICAL RULES ===
+1. VOCABULARY: Select 10 key words. Each must have:
+   - exactly 5 synonyms (middle/high school level, 중고등 수준)
+   - 3 antonyms with Korean meaning in parentheses
+   
+2. TOPICS (주제): 3 different topic statements with Korean translation
+   - Express what the passage is ABOUT
+   - LONG complete phrases (15-25 words), like 수능 format
+   - Example: "The essential role of accumulated agricultural knowledge in transforming solar energy into consumable food"
+
+3. TITLES (제목): 3 creative titles - 수능 24번 STYLE with Korean translation
+   - MUST BE LONG with subtitle (콜론 사용)
+   - Example: "From Sunlight to Supper: The Knowledge Revolution in Food Production"
+   - NOT short titles like "Food and Knowledge" - TOO SHORT!
+
+4. MAIN_POINTS (요지): 3 statements in KOREAN only
+   - State the key message/lesson of the passage
+   - LONG complete sentences in natural Korean (40-60 characters)
+   - Must be detailed and comprehensive
+
+5. ONE_SENTENCE_SUMMARY: A SINGLE English sentence that captures the entire passage
+   - MUST have at least 2 clauses (절이 2개 이상)
+   - MUST be 30-40 words (not too short!)
+   - MUST include ALL key content of the passage
+   - Example: "While information itself cannot be eaten, food represents solar energy transformed through millennia of accumulated agricultural knowledge, enabling human flourishing."
+
+6. SUMMARY_KR: Korean translation of the one_sentence_summary
+   - Natural Korean, not translation-style
+   - Must convey the same meaning as the English summary
+
+7. PARAPHRASE: Rewrite the ENTIRE passage in different words
+   - SAME number of sentences as original
+   - SIMILAR word count as original
+   - COMPLETELY different vocabulary and sentence structures
+
+=== JSON FORMAT ===
+Return ONLY valid JSON:
 {
-  "flow": "지문의 논리적 흐름을 한국어로 서술. 핵심 단계를 → 로 연결. 예: 문제 제기 → 사례 제시 → 해결책 → 결론",
-  "summary_kr": "지문 핵심 내용을 한국어 1-2문장으로 요약. 주어+서술어 완전한 문장.",
-  "summary_en": "One English sentence of 50-70 words. Include key argument, evidence, and conclusion.",
-  "background": ["배경지식1: 한 줄 설명","배경지식2","배경지식3","배경지식4","배경지식5"],
-  "analogies": ["비유나 예시1 (한국어, 지문 내용과 직접 연결)","비유나 예시2"],
-  "related_topics": ["연관주제1: 한 줄 설명","연관주제2","연관주제3","연관주제4","연관주제5"],
-  "proverbs": [{"en":"English proverb1","kr":"한국어 의미"},{"en":"English proverb2","kr":"한국어 의미2"},{"en":"English proverb3","kr":"한국어 의미3"}],
-  "main_points": [
-    {"en":"Complete English sentence stating the main claim clearly and definitively (exam-style answer)","kr":"핵심 주장을 명확하게 서술한 완전한 한국어 문장 (수능 선택지 스타일)"},
-    {"en":"MP2","kr":"번역2"},
-    {"en":"MP3","kr":"번역3"}
+  "vocabulary": [
+    {
+      "word": "flourish",
+      "synonyms": ["thrive", "prosper", "bloom", "succeed", "grow"],
+      "antonyms": ["wither (시들다)", "decline (쇠퇴하다)", "perish (소멸하다)"]
+    }
+  ],
+  "topics": [
+    {"en": "The essential role of accumulated agricultural knowledge in transforming solar energy into consumable food", "kr": "축적된 농업 지식이 태양 에너지를 먹을 수 있는 음식으로 변환하는 데 있어서의 핵심적인 역할"},
+    {"en": "Topic 2...", "kr": "주제 2 번역"},
+    {"en": "Topic 3...", "kr": "주제 3 번역"}
   ],
   "titles": [
-    {"en":"English title: concise, exam-style, clearly states the topic and main claim","kr":"한국어 제목: 수능 주제문처럼 명확하고 간결하게"},
-    {"en":"Title2","kr":"번역2"},
-    {"en":"Title3","kr":"번역3"}
+    {"en": "From Sunlight to Supper: The Knowledge Revolution in Food Production", "kr": "햇빛에서 저녁 식사까지: 식량 생산의 지식 혁명"},
+    {"en": "Title 2...", "kr": "제목 2 번역"},
+    {"en": "Title 3...", "kr": "제목 3 번역"}
   ],
-  "figurative_phrases": [
-    {"phrase":"figurative expression from passage","explanation":"수사법 이름 + 효과 (한국어)"},
-    {"phrase":"phrase2","explanation":"설명2"},
-    {"phrase":"phrase3","explanation":"설명3"}
+  "main_points": [
+    "요지 1 - 40-60자의 완전한 한국어 문장",
+    "요지 2 - 40-60자의 완전한 한국어 문장",
+    "요지 3 - 40-60자의 완전한 한국어 문장"
   ],
-  "vocabulary": [{"word":"word1","synonyms":["s1","s2","s3","s4","s5"],"antonyms":["a1","a2","a3","a4","a5"]}]
+  "one_sentence_summary": "A single sentence of 30-40 words with at least 2 clauses that captures all key content...",
+  "summary_kr": "위 영어 요약의 자연스러운 한국어 번역...",
+  "paraphrase": "Full passage rewritten in different words..."
 }
-Rules:
-- main_points: 수능 시험 선택지처럼 명확하고 단정적인 문장. 모호한 표현 금지.
-- titles: 수능 주제·제목 찾기 정답처럼 핵심 주장이 뚜렷하게 드러나야 함.
-- vocabulary must have exactly 10 words.
-- proverbs must have exactly 3 items.
-- Return ONLY valid JSON."""
+
+IMPORTANT:
+- vocabulary: exactly 10 words, each with exactly 5 synonyms and 3 antonyms (with Korean meaning)
+- topics: exactly 3 items (LONG phrases, 15-25 words each)
+- titles: exactly 3 items (수능 24번 style with colon, 10-15 words)
+- main_points: exactly 3 items (Korean only, 40-60 characters each)
+- one_sentence_summary: ONE sentence, 2+ clauses, 30-40 words
+- summary_kr: Korean translation of the summary
+- paraphrase: FULL passage rewritten
+- Return ONLY valid JSON. No markdown, no backticks."""
 
 
 SYS_SECRET_NOTE_B = """You are an expert English teacher preparing Korean high school students for their FINAL EXAM in ONE WEEK.
@@ -2473,13 +3137,13 @@ def generate_secret_note_b(passage: str, passage_dir: Path, translation: str = "
     return data
 
 
-def render_secret_note(passages_data: list, note_type: str, school_name: str) -> str:
+def render_secret_note(passages_data: list, note_type: str, school_name: str, teacher_name: str = "") -> str:
     """비밀노트 HTML 렌더링 (Jinja2)"""
     from jinja2 import Environment, FileSystemLoader
     template_file = f"secret_note_type_{note_type.lower()}.html"
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)))
     tmpl = env.get_template(template_file)
-    return tmpl.render(passages=passages_data, school_name=school_name)
+    return tmpl.render(passages=passages_data, school_name=school_name, teacher_name=teacher_name)
 
 
 # ============================================================
@@ -2571,3 +3235,1107 @@ def generate_secret_note_c(passage: str, passage_dir: Path, translation: str = "
     save_step(passage_dir, "secret_note_c", data)
     return data
 
+
+# ════════════════════════════════════════════════════════════════════
+# 0회독 — 수업 전 분석 (4페이지 완전 분석)
+# ────────────────────────────────────────────────────────────────────
+# 선생님 본인 수업 준비용. 비밀노트 A/B/C와 별개 기능.
+# - 시스템 프롬프트: SYS_PRECLASS_ANALYSIS (v4)
+# - 생성 함수:      generate_preclass_analysis()
+# - 렌더 함수:      render_preclass_analysis() (preclass_analysis.html)
+# - 후처리:        _rebalance_grammar_boxes(), _passage_marked_to_html()
+# ════════════════════════════════════════════════════════════════════
+
+SYS_PRECLASS_ANALYSIS = """You are an expert Korean high-school English teacher producing exam-preparation analysis at the quality of Pyeongga-won (수능·평가원) standard.
+
+Return ONE JSON object — no markdown, no backticks, no commentary.
+
+═════════════════════════════════════════════════
+## ABSOLUTE RULES (8 STRICT RULES)
+═════════════════════════════════════════════════
+
+### RULE 1 — PASSAGE IS SACRED (원문 절대 보존)
+`passage_marked` reproduces the input passage VERBATIM. After stripping all `[[...]]` markers, the cleaned text must equal the input CHARACTER-BY-CHARACTER.
+- NO adding sentences/phrases/words not in input.
+- NO paraphrasing, summarizing, or "completing" the passage.
+
+### RULE 2 — MARKER SCOPE = 1~3 WORDS ONLY
+Every `[[GRAMMAR]]`, `[[VOCAB]]`, `[[IMPL]]` marker wraps ONLY 1~3 words.
+
+**MARKER FORMAT (CRITICAL):**
+- GRAMMAR: use circled numerals — `[[GRAMMAR:n=①]]...[[/GRAMMAR]]`, `[[GRAMMAR:n=②]]`, etc.
+  (You may also use plain numbers: `[[GRAMMAR:n=1]]`, `[[GRAMMAR:n=2]]` — both work.)
+- VOCAB: use circled letters — `[[VOCAB:l=ⓐ]]...[[/VOCAB]]`, `[[VOCAB:l=ⓑ]]`, etc.
+  (You may also use plain letters: `[[VOCAB:l=a]]`, `[[VOCAB:l=b]]` — both work.)
+- IMPL: no numbering — `[[IMPL]]...[[/IMPL]]`
+
+Examples of CORRECT narrow marking:
+- 관계대명사 what → just "what"
+- not A but B → just "not...but rather" or "but rather"
+- such as → "such as" (2 words)
+- 동명사 부정 → "not taking" (2 words)
+- 가주어 it → "It's" (1 word)
+- 관계대명사 that → just "that"
+- 계속적 which → ", which"
+- 동명사 주어 → "Being moderate"
+
+### RULE 3 — BOX MERGING ABSOLUTE MAX = 2
+Each box's `num` field: "①" or at most "②③" (2 merged max). NEVER 3+.
+If you'd merge 3+, create SEPARATE boxes instead.
+
+### RULE 4 — ALL 4 BOX-SLOTS MUST BE FILLED
+`grammar_p1.left`, `grammar_p1.right`, `grammar_p2.left`, `grammar_p2.right` — ALL FOUR must have 3~4 boxes each. Total 12~14 boxes.
+
+Distribution for 12 grammar_notes: 3+3+3+3 (p1.L=①②③ / p1.R=④⑤⑥ / p2.L=⑦⑧⑨ / p2.R=⑩⑪⑫)
+Distribution for 13: 3+4+3+3 or 4+3+3+3
+
+### RULE 5 — MARKER COUNT IN PASSAGE = NOTES COUNT (★ABSOLUTE — NO EXCEPTIONS★)
+
+**3가지 마커 모두 반드시 본문에 표시해야 한다. 어법(빨간)만 마킹하고 어휘(파랑)·함축(검정) 마커를 빼먹는 것은 절대 금지.**
+
+In `passage_marked`, ALL THREE marker types must appear in the body:
+
+| 마커 종류 | 본문 내 개수 | 대응 항목 |
+|---|---|---|
+| `[[GRAMMAR:n=N]]...[[/GRAMMAR]]` | = len(grammar_notes) | 보통 12~14개 |
+| `[[VOCAB:l=L]]...[[/VOCAB]]` | **= len(vocab_notes) = 정확히 10개** | 어휘 노트와 1:1 매칭 |
+| `[[IMPL]]...[[/IMPL]]` | **= len(implication_box.expressions) = 6~7개** | implication 표현 1:1 매칭 |
+
+★ ENFORCEMENT ★
+- 본문에 VOCAB 마커가 10개 미만이면 SELF-CHECK 실패 → 다시 본문 스캔해서 어휘 위치 찾기
+- 본문에 IMPL 마커가 6개 미만이면 SELF-CHECK 실패 → implication_box.expressions 각 표현을 본문에서 찾아 마킹
+- vocab_notes·implication_box를 만들었다면, 그 단어/표현이 본문에 반드시 있다 → 본문에서 위치 찾아 마커로 감싸라
+
+**IMPL 마커 가이드 (★검은 밑줄 = 함축 빈칸 흐름★)**
+검은 밑줄은 다음 4가지 중 본문에 실제 등장하는 6~7개를 마킹:
+1. 핵심 비유·은유·구체 표현 (예: "compare apples to oranges", "yesterday-you")
+2. 전환점 신호어 직후의 핵심구 (예: "Instead, ~", "However, ~")
+3. 주제 응축 표현 / 필자 주장 (예: "the only fair comparison is ~", "it's you")
+4. 빈칸 출제 후보 구문 (논리 단계의 결정적 어구)
+
+implication_box.expressions의 각 expr 필드는 본문에서 정확히 그 표현으로 마킹된 부분이어야 함.
+
+### RULE 6 — GRAMMAR_NOTES COUNT = STRICT 12~14 (절대 7~10개 안됨)
+**MINIMUM 12, ABSOLUTE FLOOR. If you find fewer than 12, you MUST re-scan the passage.**
+
+You MUST systematically scan the passage for ALL these categories:
+
+**카테고리 A — 동사 관련 (Verbs)**
+- 수일치 (S-V agreement, 부분표현+V, 동명사 주어 등)
+- 시제 (과거/현재완료/대과거/미래완료)
+- 능동/수동 (수동태 다양한 형태, by 생략, 진행수동 등)
+- 사역동사 (make/have/let + O + V/p.p.)
+- 지각동사 (see/hear + O + V/V-ing/p.p.)
+- 가정법 (현재/과거/혼합/도치)
+
+**카테고리 B — 준동사 (Verbals)**
+- to부정사 (명사적·형용사적·부사적; "S+V+to-V" 5형식 동사 포함)
+- 동명사 (주어/목적어/보어/전치사 뒤)
+- 분사 (현재/과거; 명사 수식; 보어)
+- 분사구문 (능동·수동·완료·접속사+분사)
+
+**카테고리 C — 관계사·접속사**
+- 관계대명사 (who/which/that, 제한적 vs 계속적, 소유격 whose)
+- 관계부사 (when/where/why/how)
+- what (관계대명사 vs 의문사)
+- 접속사 that vs 동격 that vs 관계대명사 that
+- 양보·조건 부사절 (no matter how, even if, unless 등)
+
+**카테고리 D — 특수구문**
+- 가주어 it ~ 진주어 to-V/that
+- **가목적어 it ~ 진목적어 to-V/that** ★ABSOLUTELY DO NOT MISS★
+  - 5형식 동사(make/find/think/consider/believe/feel) + it + 형용사/명사 + to-V (or that S+V)
+  - 본문 예: "makes it impossible to recycle", "find it difficult to V", "consider it necessary to V"
+  - **빨간 밑줄 대상: "it" 부분과 "to-V" 부분 모두 (또는 it만)**
+- It-cleft 강조구문 (It is X that ~)
+- so~that / such~that
+- 도치 (부정어 도치, only 도치, so/neither 도치)
+- 동격 (쉼표/of/that/to-V)
+- 비교 (원급/비교급/최상급, 비교급 강조, the 비교급 the 비교급)
+
+**카테고리 E — 자주 출제되는 어구 구문 ★ABSOLUTELY DO NOT MISS★**
+- **prevent/keep/stop/prohibit/discourage A from V-ing** ← 매번 빼먹지 말 것
+- **be expected to V / be likely to V / be supposed to V**
+- **make/find/consider/think/believe + it + 형/명 + to-V** ← ★가목적어 it ★ 매번 빼먹지 말 것
+- **make/find/consider + O + OC(형용사/명사)** ← 일반 5형식
+- **부분표현 + of + N + V** (most/all/some/half/the rest of)
+- **It takes 사람 시간 to-V**
+- **the way (how) S+V / the reason why**
+- **as if / as though**
+
+**카테고리 F — 어휘구문·전치사**
+- such as / including (예시)
+- not A but B / not only A but also B (대조·병렬)
+- 전치사 + 동명사 (be used to V-ing, look forward to V-ing 등)
+- by V-ing / despite + N · in spite of
+
+**SCAN EVERY SENTENCE.** For each sentence, identify at least 1-2 grammar points if possible. Aim for 12-14 distinct points.
+
+### RULE 7 — TOPICS / TITLES (★ABSOLUTE — NO EXCEPTIONS★)
+
+**topics와 titles는 동일한 크기·무게여야 한다. 한 번에 시각적으로 보아 비슷한 길이여야 한다.**
+
+#### HARD LIMITS (위반 시 self-check 실패 → 재작성)
+- **topics 영어: 6~10 단어. ABSOLUTE MAX 10 단어. 100자 이내. (이전 12 → 10으로 더 축소)**
+- **titles 영어: 6~10 단어. ABSOLUTE MAX 10 단어.**
+- **topics_kr: 한국어 15자 이내**
+- **titles_kr: 한국어 15자 이내**
+- 한 줄 분량 (절대 두 줄로 넘어가지 않아야 함)
+
+#### topics/titles 작성 원칙
+- NEVER "When X happens, Y" / "How X affects Y" / "The importance of X"
+- 추상명사 or 동명사로 시작 (Self-comparison, Harnessing, Beyond Petroleum 등)
+- topics와 titles **둘 다 콜론(:) 사용 가능**, **둘 다 동일 길이·무게**
+- topics가 titles보다 길면 안 됨 — 한 번에 봐서 비슷해야 함
+
+#### [O] 좋은 예시 (이 정도 길이만 허용)
+- topics: "Self-comparison as the only meaningful growth metric" (7 단어, 49자)
+- topics: "Knowledge as the engine of solar energy conversion" (8 단어, 49자)
+- titles: "Beyond Petroleum: The Rise of Plant-Based Alternatives" (7 단어, 53자)
+- titles_kr: "햇빛에서 저녁까지: 지식의 혁명" (15자)
+
+#### [X] 절대 금지 예시 (이렇게 길면 즉시 재작성)
+- "Corporate adoption of biodegradable alternatives to conventional synthetic materials reflects growing consumer environmental consciousness and regulatory pressure" (25 단어 ❌ — 즉시 압축)
+- "Revolutionary sustainable packaging materials derived from marine organisms are replacing traditional petroleum-based products across multiple industries" (18 단어 ❌)
+- "How human civilization has flourished by developing sophisticated methods to capture solar energy" (14 단어 ❌)
+
+#### SELF-CHECK (출력 직전 반드시 확인)
+□ topics 3개 모두 ≤ 10 단어인가? (단어 수 세어보기)
+□ titles 3개 모두 ≤ 10 단어인가?
+□ topics_kr / titles_kr 모두 ≤ 15자인가?
+□ topics와 titles의 길이가 한 눈에 비슷한가? (topics가 titles 2배 이상이면 FAIL)
+→ **하나라도 위반이면 그 항목을 압축해서 다시 작성**
+
+#### ★ 생성 절차 (반드시 이 순서로) ★
+1. 먼저 titles 3개를 만든다 (각 6~10 단어).
+2. **topics는 각 title과 1:1로 짝지어, 같은 길이(±2 단어)로 만든다.**
+3. topics[0]를 만들 때 titles[0]를 보고 "이것과 비슷한 길이인가?" 확인.
+4. topics가 길어지려 하면, 핵심 명사구만 남기고 부연(분사구문·관계절·콤마 뒤)을 모두 제거.
+→ [X] "Corporate adoption of biodegradable alternatives reflects growing consumer consciousness and regulatory pressure"
+→ [O] "Corporate adoption of biodegradable material alternatives" (핵심만, 6단어)
+
+### RULE 8 — NO EMOJIS
+Use [O], [X], ?, ■, ●, ★ instead of ✅, ❌, ❓.
+
+═════════════════════════════════════════════════
+## VOCABULARY FORMAT
+═════════════════════════════════════════════════
+
+### `vocab_notes` (PAGE A, 10 items) — 수능 기본~중급
+{"letter": "ⓐ", "word": "moderation",
+ "syns": [["temperance","절제"], ["balance","균형"]],
+ "ants": [["excess","과잉"]]}
+
+### `vocab_detail` (PAGE C, 6 items) — ★편입영어/GRE 수준 고난도★
+Each item:
+- letter, word, ko
+- **syns: 4개 — 전부 고급 어휘. 학생이 사전 찾아야 하는 수준.**
+  - **syns[0]: 수능 상위~편입 입문** (예: difficult→demanding)
+  - **syns[1]: 편입 중급** (예: difficult→onerous)
+  - **syns[2]: 편입 고급~GRE** (예: difficult→arduous)
+  - **syns[3]: GRE/희귀어휘 또는 2번째 뜻** (예: difficult→intractable, formidable)
+
+★★ 절대 규칙 — 위반 시 FAIL ★★
+1. **쉬운 단어(중학~수능 기본) 절대 금지**: hard, big, good, easy, fast, large, small, main, important 같은 건 syns에 넣지 마라. 이런 건 학생이 이미 안다 → 추가 자료로 줄 가치 없음.
+2. **편입영어·GRE 수준 또는 다의어의 잘 안 쓰이는 2·3번째 뜻을 활용하라.**
+   - 예: "interest" → syns에 "stake(이해관계)", "dividend(배당)" 같은 2번뜻
+   - 예: "address" → "tackle(다루다)", "broach(꺼내다)" 같은 고급 의미
+3. 학생이 "어? 이 단어가 이런 뜻도 있어?" 하고 놀랄 만한 어휘여야 한다.
+
+[O] 좋은 예시 (전부 고난도):
+{"word": "increase", "ko": "증가하다",
+ "syns": [["augment","증대시키다"], ["escalate","고조되다"], ["proliferate","급증하다"], ["burgeon","급성장하다"]]}
+{"word": "important", "ko": "중요한",
+ "syns": [["pivotal","중추적인"], ["paramount","가장 중요한"], ["salient","두드러진"], ["cardinal","기본적인"]]}
+
+[X] 절대 금지 (너무 쉬움):
+{"word": "alternative", "syns": [["substitute","대체물"], ["replacement","교체물"], ["option","선택"], ["choice","선택"]]}
+ → option, choice는 중학생도 안다 ❌❌❌ 이런 거 주지 마라
+
+- **`def_en`**: English 영영풀이, 8~15 words. (메인 단어 바로 아래 배치됨)
+- **`ex_short`**: 짧은 예문, 8~12 words.
+
+### `theme_vocab` (PAGE C 하단, 6 items)
+동일하게 편입/GRE 수준. 쉬운 동의어 금지.
+
+═════════════════════════════════════════════════
+## JSON SCHEMA (return EXACTLY this structure)
+═════════════════════════════════════════════════
+{
+  "passage_marked": "...",
+  "topics": [3 SHORT phrases, **6~10 words each, MAX 10 words, ≤ 100 chars**. Same length/weight as titles. Abstract noun-phrase or compressed proposition. NEVER long explanatory propositions],
+  "titles": [3 titles, **6~10 words each, MAX 10 words**. Colon style allowed],
+  "topics_kr": [3 natural Korean, **≤ 15 자 each**, same length as titles_kr],
+  "titles_kr": [3 natural Korean titles, **≤ 15 자 each**],
+  "grammar_notes": [{"num":"①","tag":"...","desc":"..."}],
+  "vocab_notes": [{"letter":"ⓐ","word":"...","syns":[...],"ants":[...]}],
+  "grammar_p1": {
+    "left": [{"num":"①","title":"...","lines":[
+       {"text":"전체 어법 핵심 원리를 한 줄로 설명 (예: 'to부정사가 동사 뒤에서 명사 역할')","is_ex":false},
+       {"text":"[패턴] 구체적 공식 (예: 'V + to-V = ~할 것을 V하다')","is_ex":false},
+       {"text":"본문 적용 또는 [O] 예문 (영어 문장)","is_ex":true},
+       {"text":"★ 교체(+) 변형/대체 표현","is_ex":false},
+       {"text":"cf. 혼동되는 비교 포인트","is_ex":false}
+    ]}],
+    "right": [3~4 boxes]
+  },
+  "grammar_p2": {"left":[3~4 boxes],"right":[3~4 boxes]},
+  "implication_box": {
+    "flow_4panel": [
+      {"stage": "도입", "label_en": "Setup", "text_kr": "글이 어떤 상황·문제로 시작되는지. **1~2문장, 50~80자 (절대 80자 초과 금지)**, ~해요체. 박스에 들어가야 하므로 짧고 강렬하게.", "key_phrase": "본문의 이 단계 핵심 영어 (3~6단어)"},
+      {"stage": "전개", "label_en": "Development", "text_kr": "어떤 논리·예시로 발전. **1~2문장, 50~80자**, ~해요체", "key_phrase": "본문 핵심 (3~6단어)"},
+      {"stage": "전환", "label_en": "Turn", "text_kr": "어디서 방향이 바뀌는지 — 역접·대조·강조. **1~2문장, 50~80자**, ~해요체", "key_phrase": "전환점 영어 표현 (Instead/However 등 포함, 3~6단어)"},
+      {"stage": "결론", "label_en": "Conclusion", "text_kr": "글쓴이의 최종 입장·주장. **1~2문장, 50~80자**, ~해요체", "key_phrase": "결론부 핵심 (3~6단어)"}
+    ],
+    "blank_candidates": [
+      "★ 정확히 3개만 (절대 3개 초과 금지) ★",
+      {"sentence": "본문에서 빈칸으로 출제하기 좋은 중요 문장 (원문 그대로, 영어)", "paraphrase": "이 문장이 빈칸/변형으로 출제될 때 paraphrasing 될 수 있는 형태 (영어)", "why": "왜 이 문장이 빈칸 출제 포인트인지 한 줄 (한국어)"},
+      {"sentence": "두 번째 중요 문장", "paraphrase": "패러프레이즈", "why": "이유"},
+      {"sentence": "세 번째 중요 문장", "paraphrase": "패러프레이즈", "why": "이유"}
+    ],
+    "implicit_meanings": [
+      "★ 정확히 3개만 (절대 3개 초과 금지) ★",
+      {"expr": "본문의 비유적·함축적 표현 (영어 원문)", "literal": "표면적 의미 (한국어)", "implied": "글에서 빗댄/함축한 진짜 의미 (한국어)", "implied_en": "그 함축 의미를 영어로 다시 표현 (paraphrase, 영어 한 문장)"},
+      {"expr": "두 번째 함축 표현", "literal": "표면 의미", "implied": "함축 의미", "implied_en": "영어 paraphrase"},
+      {"expr": "세 번째 함축 표현", "literal": "표면 의미", "implied": "함축 의미", "implied_en": "영어 paraphrase"}
+    ],
+    "summary": {
+      "en": "본문 전체를 정확히 40 단어(35~45 허용)로 요약한 영어 한 단락. 주제+핵심논거+결론 포함. 학술적이되 명료하게.",
+      "kr": "위 영어 요약의 자연스러운 한국어 번역 (한 단락)"
+    },
+    "theme_summary": "주제를 응축한 2~3문장 (이전 1문장 → 2배로 확대). 글의 핵심 주장 + 그것이 왜 중요한지 + 대비/함의까지. 80~120자 한국어."
+  },
+  "vocab_detail": {
+    "left": [{"letter":"ⓐ","word":"...","ko":"...","syns":[4],"ants":[3],"def_en":"...","ex_short":"..."}],
+    "right": [3 items]
+  },
+  "theme_vocab": {
+    "left": [{"word":"...","ko":"...","syns":[2~3],"def_en":"...","ex_short":"..."}],
+    "right": [3 items]
+  }
+}
+
+═════════════════════════════════════════════════
+## SELF-CHECK BEFORE RETURNING
+═════════════════════════════════════════════════
+□ passage_marked stripped of [[...]] = input character-by-character?
+□ Every [[...]] marker wraps 1~3 words only?
+□ Every box's num is "X" or "XY" (max 2 merged)?
+□ grammar_p1.left/right ≥ 3 AND grammar_p2.left/right ≥ 3?
+□ Count of [[GRAMMAR]] = len(grammar_notes)?
+□ **Count of [[VOCAB]] in passage_marked = len(vocab_notes) = 10?** ★MOST MISSED CHECK★
+□ **Count of [[IMPL]] in passage_marked = len(implication_box.expressions) = 6~7?** ★MOST MISSED CHECK★
+□ Every vocab_detail/theme_vocab has def_en (8~15w) AND ex_short (8~12w)?
+□ **All 3 topics ≤ 10 words AND ≤ 100 chars?** ★ABSOLUTE — RE-WRITE IF VIOLATED★
+□ **All 3 topics_kr ≤ 15 chars (Korean)?** ★ABSOLUTE — RE-WRITE IF VIOLATED★
+□ **topics와 titles 길이가 한 눈에 비슷한가?** (한쪽이 다른쪽 1.5배 이상이면 FAIL)
+
+★★★ MARKER COMPLETENESS — DO NOT SKIP ★★★
+파란 밑줄(VOCAB)과 검은 밑줄(IMPL)은 빨간 밑줄(GRAMMAR)만큼 중요하다.
+vocab_notes 10개를 만들었으면 본문에 VOCAB 마커도 정확히 10개 있어야 한다.
+implication_box.expressions 6~7개를 만들었으면 본문에 IMPL 마커도 정확히 6~7개 있어야 한다.
+**만약 본문에 마커가 부족하면 → 단어/표현을 본문에서 다시 찾아서 마커 추가 → 재검토.**
+
+★★★ FINAL CHECK — GRAMMAR_NOTES COUNT ★★★
+□ len(grammar_notes) >= 12?
+   If < 12: RE-SCAN. Common missed points:
+   • prevent/keep/stop A from V-ing
+   • to-V 부사적 용법 (목적: "in order to V")
+   • 현재완료 수동 (have been + p.p.)
+   • 형용사적 to-V (N + to-V)
+   • be expected to V / be likely to V
+   • 분사구문 (V-ing... = 접속사 + S + V)
+   • 부분표현 + V 수일치 (most/all of N + V)
+   • such as (예시 표현)
+   • 관계대명사 계속적 용법 (, which)
+   • 동격 of (the city of Seoul, the idea of V-ing)
+
+If still < 12 after re-scan, BREAK COMPOUND structures into separate notes:
+- "have been successfully turned into" → 1) 현재완료 수동 + 2) turn A into B
+- "preventing food from sticking to paper" → 1) 분사구문 + 2) prevent A from V-ing
+
+Return ONLY the JSON object.
+"""
+
+
+def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
+    """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
+    # v12: topics 강제 압축(제목 길이) + 어휘 편입/GRE급 + 영영 단어밑 배치 + 솔루션 페이지 통합 — v11 캐시 무효화
+    cached = load_step(passage_dir, "preclass_analysis_v14")
+    if cached:
+        _safe_print("  ✅ preclass_analysis_v14 캐시 사용")
+        return cached
+    _safe_print("  📕 preclass_analysis 생성 중...")
+
+    prompt = f"Analyze this passage for Korean high-school exam preparation (Level-MeUp 4-page pre-class note):\n\n{passage}"
+    if translation:
+        prompt += f"\n\n[Reference Korean translation - use this to ensure accurate Korean translations]:\n{translation}"
+
+    # v4: Supabase grammar_points 자동 fetch → 시스템 프롬프트 동적 주입
+    # 한국 수능·내신 빈출 어법 + 김대균 영문법 정제 데이터를 매 호출마다 적용
+    sys_prompt = SYS_PRECLASS_ANALYSIS
+    grammar_addendum = _load_grammar_points_for_prompt()
+    if grammar_addendum:
+        sys_prompt = sys_prompt + "\n\n" + grammar_addendum
+        _safe_print(f"  📚 grammar_points 주입됨 ({len(grammar_addendum):,} chars)")
+
+    # 출력이 큰 스키마 — max_tokens 넉넉히
+    data = call_claude_json(sys_prompt, prompt, max_tokens=16000)
+
+    # 후처리 1 — 박스 균형 자동 보정
+    data = _rebalance_grammar_boxes(data)
+
+    # ★ v14 후처리 1.5 — 빈칸/함축 정확히 3개로 제한 (IMPL 마커 수집보다 먼저)
+    data = _enforce_count_3(data)
+
+    # ★ v6 후처리 2 — 가주어/가목적어/It-cleft 패턴 자동 감지 → grammar_notes 강제 추가
+    data = _inject_dummy_it_notes(data, passage)
+
+    # ★ v6 후처리 3 — IMPL 마커 본문 자동 보정 (먼저 — 긴 표현이 우선)
+    # v9: implicit_meanings(함축 표현) + blank_candidates(빈칸 문장)에서 마킹 소스 수집
+    impl_box = data.get("implication_box", {}) or {}
+    impl_sources = []
+    for im in impl_box.get("implicit_meanings", []) or []:
+        if isinstance(im, dict) and im.get("expr"):
+            impl_sources.append({"expr": im["expr"]})
+    for bc in impl_box.get("blank_candidates", []) or []:
+        if isinstance(bc, dict) and bc.get("sentence"):
+            impl_sources.append({"expr": bc["sentence"]})
+    data["passage_marked"] = _ensure_implication_markers(
+        data.get("passage_marked", ""),
+        impl_sources,
+    )
+
+    # ★ v6 후처리 4 — VOCAB 마커 본문 자동 보정 (IMPL 영역 안의 단어는 자동 회피)
+    # AI가 vocab_notes만 만들고 본문 마커 빼먹은 경우, 자동 삽입
+    data["passage_marked"] = _ensure_vocab_markers(
+        data.get("passage_marked", ""),
+        data.get("vocab_notes", []),
+    )
+
+    # 후처리 5 — passage_marked → passage_html 변환 (Jinja2에서 |safe)
+    data["passage_html"] = _passage_marked_to_html(data.get("passage_marked", ""), passage)
+
+    # ★ v9 후처리 6 — topics 길이 검증 (위반 시 콘솔 경고)
+    data = _check_topics_length(data)
+
+    # ★ v13 후처리 7 — 요약문 40단어 이내 강제
+    data = _enforce_summary_length(data, max_words=40)
+
+    save_step(passage_dir, "preclass_analysis_v14", data)
+    return data
+
+
+def _load_grammar_points_for_prompt() -> str:
+    """Supabase grammar_points 테이블에서 활성 어법 포인트를 fetch하여
+    시스템 프롬프트에 부착할 텍스트로 변환.
+    
+    - 우선순위 5(★★★★★)부터 3(★★★)까지 모두 포함
+    - 카테고리별로 그룹화
+    - 실패 시 빈 문자열 반환 (안전)
+    """
+    try:
+        import httpx
+        url = os.environ.get("SUPABASE_URL", "")
+        key = os.environ.get("SUPABASE_KEY", "")
+        if not url or not key:
+            return ""
+        
+        headers = {
+            "apikey": key,
+            "Authorization": f"Bearer {key}",
+        }
+        # priority DESC, category 순으로 가져오기. priority >= 3 만
+        endpoint = (
+            f"{url}/rest/v1/grammar_points"
+            "?active=eq.true&priority=gte.3"
+            "&select=category,subcategory,priority,name,pattern,example_good,example_bad,why_important,trap_warning,prohibited_analysis,trigger_keywords,notes"
+            "&order=priority.desc,category.asc"
+        )
+        with httpx.Client(timeout=10) as client:
+            resp = client.get(endpoint, headers=headers)
+        if resp.status_code != 200:
+            return ""
+        rows = resp.json()
+        if not isinstance(rows, list) or len(rows) == 0:
+            return ""
+    except Exception as e:
+        _safe_print(f"  ⚠️ grammar_points fetch 실패: {str(e)[:100]}")
+        return ""
+    
+    # 카테고리별로 그룹화
+    by_cat: dict = {}
+    for r in rows:
+        cat = r.get("category", "기타")
+        by_cat.setdefault(cat, []).append(r)
+    
+    # 시스템 프롬프트 부착용 텍스트 생성
+    lines = [
+        "═" * 60,
+        "## 📚 한국 수능·내신 빈출 어법 함정 (반드시 우선 적용)",
+        "═" * 60,
+        "",
+        "본문 분석 시 다음 어법 포인트를 우선적으로 발견하라.",
+        "특히 '★ trap_warning'과 '🚫 prohibited_analysis'는 절대 위반 금지.",
+        "지문에 trigger_keywords가 보이면 즉시 해당 어법으로 분석할 것.",
+        "",
+    ]
+    star_map = {5: "★★★★★", 4: "★★★★", 3: "★★★", 2: "★★", 1: "★"}
+    
+    for cat, items in by_cat.items():
+        lines.append(f"### [{cat}]")
+        for it in items:
+            star = star_map.get(it.get("priority", 3), "★★★")
+            name = it.get("name", "")
+            pattern = it.get("pattern") or ""
+            ex_good = it.get("example_good") or ""
+            ex_bad = it.get("example_bad") or ""
+            trap = it.get("trap_warning") or ""
+            prohibited = it.get("prohibited_analysis") or ""
+            keywords = it.get("trigger_keywords") or []
+            notes = it.get("notes") or ""
+            
+            lines.append(f"- **{star} {name}**")
+            if pattern:
+                lines.append(f"  - 패턴: {pattern}")
+            if ex_good:
+                lines.append(f"  - [O] {ex_good}")
+            if ex_bad:
+                lines.append(f"  - [X] {ex_bad}")
+            if trap:
+                lines.append(f"  - ⚠️ {trap}")
+            if prohibited:
+                lines.append(f"  - 🚫 금지: {prohibited}")
+            if keywords:
+                kw_str = ", ".join(keywords[:8])
+                lines.append(f"  - 🔑 trigger: {kw_str}")
+            if notes:
+                lines.append(f"  - 💡 {notes}")
+        lines.append("")
+    
+    lines.extend([
+        "═" * 60,
+        "## 적용 규칙 (RECAP)",
+        "═" * 60,
+        "1. 위 어법 중 본문 trigger_keywords에 해당하는 것은 무조건 grammar_notes에 포함",
+        "2. prohibited_analysis 위반 절대 금지 (잘못된 해설 방지)",
+        "3. 생략구문 분석 시 생략된 부분을 [I was], [it is], [have] 같이 대괄호로 명시",
+        "4. 의미상 주어 + 동명사 패턴 (someone V-ing)은 단순 분사가 아닌 동명사로 분석",
+        "5. 한국 수능·내신 빈출 어법 (도치/의미상주어/대동사/조동사 등) 우선 포함",
+    ])
+    
+    return "\n".join(lines)
+
+
+def render_preclass_analysis(passages_data: list, school_name: str) -> str:
+    """0회독 HTML 렌더링 (preclass_analysis.html 템플릿 사용)."""
+    from jinja2 import Environment, FileSystemLoader
+    env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)))
+    tmpl = env.get_template("preclass_analysis.html")
+    return tmpl.render(passages=passages_data, school_name=school_name)
+
+
+def _rebalance_grammar_boxes(data: dict) -> dict:
+    """grammar_p1/p2 박스가 4분면에 균등 분배되도록 보정 + num 순서로 정렬."""
+    try:
+        p1 = data.get("grammar_p1", {}) or {}
+        p2 = data.get("grammar_p2", {}) or {}
+        all_boxes = (
+            (p1.get("left", []) or []) + (p1.get("right", []) or [])
+            + (p2.get("left", []) or []) + (p2.get("right", []) or [])
+        )
+        n = len(all_boxes)
+        if n < 4:
+            return data
+
+        # num 기준 정렬 — "①②"처럼 합쳐진 경우 첫 번째 마크 기준
+        CIRCLE_ORDER = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮"
+        def _sort_key(box):
+            num = (box.get("num") or "").strip()
+            for i, c in enumerate(CIRCLE_ORDER):
+                if c in num:
+                    return i
+            return 999
+        all_boxes_sorted = sorted(all_boxes, key=_sort_key)
+
+        # 12개 이상이면 균등 분배 (3+3+3+3 또는 3+4+3+3)
+        if n >= 12:
+            q = n // 4
+            r = n % 4
+            slots = [q + (1 if i < r else 0) for i in range(4)]
+        else:
+            # 12 미만이면 기존 분배 유지하되 num 순서로만 재정렬
+            slots = [
+                len(p1.get("left", [])) or 1,
+                len(p1.get("right", [])) or 1,
+                len(p2.get("left", [])) or 1,
+                len(p2.get("right", [])) or 1,
+            ]
+            total = sum(slots)
+            if total != n:
+                q = n // 4; r = n % 4
+                slots = [q + (1 if i < r else 0) for i in range(4)]
+
+        idx = 0
+        new_p1_l = all_boxes_sorted[idx:idx+slots[0]]; idx += slots[0]
+        new_p1_r = all_boxes_sorted[idx:idx+slots[1]]; idx += slots[1]
+        new_p2_l = all_boxes_sorted[idx:idx+slots[2]]; idx += slots[2]
+        new_p2_r = all_boxes_sorted[idx:idx+slots[3]]
+        data["grammar_p1"] = {"left": new_p1_l, "right": new_p1_r}
+        data["grammar_p2"] = {"left": new_p2_l, "right": new_p2_r}
+    except Exception as e:
+        _safe_print(f"  ⚠️ rebalance 실패: {e}")
+    return data
+
+
+# ═══════════════════════════════════════════════════════════════════
+# v6 후처리 — AI가 빠뜨린 VOCAB/IMPL 마커와 가주어/가목적어 패턴 자동 보정
+# ═══════════════════════════════════════════════════════════════════
+
+def _find_in_marked(marked: str, search: str) -> tuple:
+    """marked 텍스트에서 [[...]] 마커를 무시하고 search 찾기.
+    매치 영역이 어떤 마커 영역(GRAMMAR/VOCAB/IMPL) 안이거나, 매치 영역 안에 
+    마커가 들어가 있으면 다음 매치 시도. 모두 충돌하면 None.
+    
+    중첩 마커는 HTML 변환이 지원 안 되므로 회피.
+    
+    Returns: (start_in_marked, end_in_marked, matched_text) or None
+    """
+    import re as _re
+    
+    # plain text 추출 + 위치 매핑 + 마커 안인지 flag
+    plain_chars = []
+    pos_map = []  # plain[i] -> marked의 위치
+    in_marker = []  # plain[i]가 마커 영역(GRAMMAR/VOCAB/IMPL) 안에 있는지
+    
+    depth = 0
+    i = 0
+    while i < len(marked):
+        if marked[i:i+2] == "[[":
+            end = marked.find("]]", i)
+            if end > 0:
+                tag = marked[i:end+2]
+                if tag.startswith("[[/"):
+                    depth = max(0, depth - 1)
+                else:
+                    depth += 1
+                i = end + 2
+                continue
+        plain_chars.append(marked[i])
+        pos_map.append(i)
+        in_marker.append(depth > 0)
+        i += 1
+    
+    plain = "".join(plain_chars)
+    pattern = _re.compile(_re.escape(search), _re.IGNORECASE)
+    
+    # 모든 매치 시도 — 첫 번째 충돌 없는 매치 사용
+    for sm in pattern.finditer(plain):
+        if sm.end() > len(pos_map):
+            continue
+        # 매치 영역이 마커 안에 있으면 패스 (중첩 회피)
+        if any(in_marker[sm.start():sm.end()]):
+            continue
+        s_start = pos_map[sm.start()]
+        s_end = pos_map[sm.end() - 1] + 1
+        region = marked[s_start:s_end]
+        # 매치 영역 내에 마커 시작/끝 있는지 체크 (있으면 충돌)
+        if "[[" in region or "]]" in region:
+            continue
+        return (s_start, s_end, region)
+    
+    return None
+
+
+def _ensure_vocab_markers(passage_marked: str, vocab_notes: list) -> str:
+    """vocab_notes의 각 단어가 passage_marked에 [[VOCAB]] 마커로 감싸져 있는지 확인하고,
+    없으면 본문에서 단어 첫 등장 위치를 찾아 자동으로 [[VOCAB:l=L]]word[[/VOCAB]] 삽입.
+    
+    AI가 vocab_notes는 만들었지만 본문에 마커를 빠뜨리는 문제 해결.
+    """
+    if not passage_marked or not vocab_notes:
+        return passage_marked
+    
+    CIRCLED_ALPHA = "ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞ"
+    added = 0
+    
+    for idx, v in enumerate(vocab_notes):
+        if not isinstance(v, dict):
+            continue
+        word = (v.get("word") or "").strip()
+        if not word:
+            continue
+        letter = (v.get("letter") or "").strip()
+        # letter가 원알파벳 아니면 idx로 보정
+        if not letter or letter[0] not in CIRCLED_ALPHA:
+            if idx < len(CIRCLED_ALPHA):
+                letter = CIRCLED_ALPHA[idx]
+            else:
+                continue
+        else:
+            letter = letter[0]
+        
+        # 이미 마커가 있는지 체크 (l=letter 또는 plain letter 형태 모두)
+        l_idx = CIRCLED_ALPHA.index(letter)
+        plain_letter = chr(ord('a') + l_idx)
+        if (f"[[VOCAB:l={letter}]]" in passage_marked or 
+            f"[[VOCAB:l={plain_letter}]]" in passage_marked):
+            continue  # 이미 마커 있음
+        
+        # plain text 검색 (마커 영역 회피)
+        result = _find_in_marked(passage_marked, word)
+        if not result:
+            continue
+        
+        s_start, s_end, matched_text = result
+        wrapped = f"[[VOCAB:l={letter}]]{matched_text}[[/VOCAB]]"
+        passage_marked = passage_marked[:s_start] + wrapped + passage_marked[s_end:]
+        added += 1
+    
+    if added > 0:
+        _safe_print(f"  🔵 VOCAB 마커 자동 보정: {added}개 추가")
+    return passage_marked
+
+
+def _ensure_implication_markers(passage_marked: str, expressions: list) -> str:
+    """implication_box.expressions의 각 표현이 passage_marked에 [[IMPL]] 마커로 감싸져
+    있는지 확인하고, 없으면 본문에서 자동으로 [[IMPL]]...[[/IMPL]] 삽입.
+    
+    검색은 마커 영역을 무시하고 plain text로 진행 (마커와 충돌 시 다음 매치 시도).
+    """
+    import re as _re
+    if not passage_marked or not expressions:
+        return passage_marked
+    
+    added = 0
+    
+    for e in expressions:
+        if not isinstance(e, dict):
+            continue
+        expr = (e.get("expr") or "").strip()
+        if not expr or len(expr) < 3:
+            continue
+        # 앞쪽 기호 제거 (■ 같은 거)
+        expr = _re.sub(r'^[■●★◆□○·\s]+', '', expr).strip()
+        if not expr:
+            continue
+        
+        # 이미 마커 있는지 (정확히 같은 텍스트를 IMPL로 감싼 게 있는지)
+        if f"[[IMPL]]{expr}[[/IMPL]]" in passage_marked:
+            continue
+        # 대소문자 무관도 체크
+        if _re.search(r'\[\[IMPL\]\]' + _re.escape(expr) + r'\[\[/IMPL\]\]', 
+                      passage_marked, _re.IGNORECASE):
+            continue
+        
+        # 본문에서 정확히 그 표현 찾기 (마커 영역 회피)
+        # 너무 긴 표현은 핵심 부분만으로도 시도
+        words = expr.split()
+        candidates = [expr]
+        if len(words) > 5:
+            candidates.append(' '.join(words[:5]))
+            candidates.append(' '.join(words[:4]))
+            candidates.append(' '.join(words[:3]))
+        elif len(words) > 3:
+            candidates.append(' '.join(words[:3]))
+        
+        for cand in candidates:
+            result = _find_in_marked(passage_marked, cand)
+            if result:
+                s_start, s_end, matched_text = result
+                wrapped = f"[[IMPL]]{matched_text}[[/IMPL]]"
+                passage_marked = passage_marked[:s_start] + wrapped + passage_marked[s_end:]
+                added += 1
+                break
+    
+    if added > 0:
+        _safe_print(f"  ⚫ IMPL 마커 자동 보정: {added}개 추가")
+    return passage_marked
+
+
+def _check_it_cleft_and_dummy(passage: str, grammar_notes: list, passage_marked: str) -> list:
+    """본문에서 가주어/가목적어/It-cleft 패턴을 자동 감지.
+    grammar_notes에 해당 패턴이 없으면 추가 후보를 반환.
+    
+    감지 패턴:
+    1. 가주어 it ~ to-V/that:  It is/was + 형용사/명사 + (for X) + to-V/that S+V
+    2. 가목적어 it ~ to-V:  V + it + 형용사/명사 + to-V  (make/find/think/consider + it)
+    3. It-cleft 강조구문:  It is/was + X + that/who + 동사
+    """
+    import re as _re
+    
+    # 이미 grammar_notes에 가주어/가목적어/cleft 관련이 있는지 검사
+    existing_tags = []
+    for n in grammar_notes or []:
+        if isinstance(n, dict):
+            tag = (n.get("tag") or "") + " " + (n.get("desc") or "")
+            existing_tags.append(tag)
+    existing_text = " ".join(existing_tags).lower()
+    
+    has_dummy_subj = any(k in existing_text for k in ["가주어", "dummy subject", "it ~ to-v"])
+    has_dummy_obj = any(k in existing_text for k in ["가목적어", "dummy object"])
+    has_cleft = any(k in existing_text for k in ["it-cleft", "it cleft", "분열문", "강조구문"])
+    
+    detected = []
+    
+    # 패턴 1: 가주어 it
+    p1 = _re.compile(
+        r"\bIt\s+(?:is|was|seems|appears|becomes|became|remained|remains)\s+"
+        r"(?:not\s+)?(?:\w+\s+){1,3}(?:to\s+\w+|that\s+\w+)",
+        _re.IGNORECASE
+    )
+    for m in p1.finditer(passage):
+        if not has_dummy_subj and not has_cleft:
+            detected.append({
+                "type": "dummy_subj",
+                "tag": "가주어 it ~ 진주어 to-V/that",
+                "match": m.group(0)[:60],
+                "pos": m.start(),
+            })
+    
+    # 패턴 2: 가목적어 it
+    p2 = _re.compile(
+        r"\b(?:makes?|made|making|finds?|found|finding|thinks?|thought|considers?|considered|"
+        r"believes?|believed|deems?|deemed|feels?|felt)\s+it\s+"
+        r"(?:\w+\s+){0,3}(?:to\s+\w+|that\s+\w+)",
+        _re.IGNORECASE
+    )
+    for m in p2.finditer(passage):
+        if not has_dummy_obj:
+            detected.append({
+                "type": "dummy_obj",
+                "tag": "가목적어 it ~ 진목적어 to-V",
+                "match": m.group(0)[:60],
+                "pos": m.start(),
+            })
+    
+    # 패턴 3: It-cleft (it is X that + V)
+    p3 = _re.compile(
+        r"\bIt\s+(?:is|was)\s+\w+(?:\s+\w+){0,5}\s+that\s+(?:\w+\s+)?(?:do|does|did|is|was|are|were|has|have|had|can|could|will|would|may|might|\w+ed|\w+s)\b",
+        _re.IGNORECASE
+    )
+    for m in p3.finditer(passage):
+        if not has_cleft:
+            # 가주어와 겹칠 수 있으니 위치로 dedup
+            already = any(d["pos"] == m.start() for d in detected)
+            if not already:
+                detected.append({
+                    "type": "cleft",
+                    "tag": "It-cleft 강조구문 (It is X that ~)",
+                    "match": m.group(0)[:60],
+                    "pos": m.start(),
+                })
+    
+    return detected
+
+
+def _inject_dummy_it_notes(data: dict, passage: str) -> dict:
+    """가주어/가목적어/It-cleft가 본문에 있는데 grammar_notes에 없으면 강제 추가."""
+    grammar_notes = data.get("grammar_notes", [])
+    passage_marked = data.get("passage_marked", "")
+    detected = _check_it_cleft_and_dummy(passage, grammar_notes, passage_marked)
+    
+    if not detected:
+        return data
+    
+    CIRCLED_NUMS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮"
+    added = 0
+    
+    # dedup by type
+    seen_types = set()
+    for d in detected:
+        if d["type"] in seen_types:
+            continue
+        seen_types.add(d["type"])
+        
+        # 번호 할당 (이미 있는 마지막 번호 + 1)
+        next_idx = len(grammar_notes)
+        if next_idx >= len(CIRCLED_NUMS):
+            break  # 15개 초과 방지
+        num = CIRCLED_NUMS[next_idx]
+        
+        # desc 작성
+        if d["type"] == "dummy_subj":
+            desc = f'It+be+형/명+to-V/that: it=가주어, to-V/that절=진주어 (본문: "{d["match"]}...")'
+        elif d["type"] == "dummy_obj":
+            desc = f'V+it+형/명+to-V: it=가목적어, to-V=진목적어 (본문: "{d["match"]}...")'
+        else:  # cleft
+            desc = f'It is/was + X + that ~: X 강조 (분열문). 제거해도 문장 성립 (본문: "{d["match"]}...")'
+        
+        grammar_notes.append({
+            "num": num,
+            "tag": d["tag"],
+            "desc": desc,
+        })
+        added += 1
+    
+    if added > 0:
+        _safe_print(f"  🔴 가주어/가목적어/It-cleft 패턴 자동 감지: {added}개 추가")
+        data["grammar_notes"] = grammar_notes
+    
+    return data
+
+
+def _shorten_one_topic_en(text: str, target_words: int) -> str:
+    """영어 topic을 target_words 근처로 압축. 자연 절단점 우선."""
+    import re as _re
+    if not isinstance(text, str):
+        return text
+    text = text.strip()
+    if len(text.split()) <= target_words + 2:
+        return text
+    # 1. 콜론 앞 (제목형이면 핵심은 콜론 앞)
+    if ':' in text:
+        before = text.split(':', 1)[0].strip()
+        if 3 <= len(before.split()) <= target_words + 3:
+            return before
+    # 2. 분사구문/관계절/콤마 신호어 앞에서 절단
+    for marker in [
+        r',\s+(?:demonstrating|reflecting|indicating|representing|suggesting|revealing|while|which|that|where|whereby)\b',
+        r'\s+(?:demonstrating|reflecting|indicating|representing|suggesting|revealing)\b',
+        r',\s+',
+    ]:
+        m = _re.search(marker, text)
+        if m:
+            cand = text[:m.start()].strip().rstrip(',;:')
+            if 3 <= len(cand.split()) <= target_words + 3:
+                return cand
+    # 3. 전치사구 앞 (across/throughout/for 등 부연)에서 절단
+    for prep in [' across ', ' throughout ', ' for ', ' in order ', ' so as ']:
+        idx = text.find(prep)
+        if idx > 0:
+            cand = text[:idx].strip()
+            if 3 <= len(cand.split()) <= target_words + 3:
+                return cand
+    # 4. 어절 강제 절단 (target_words개)
+    cut = ' '.join(text.split()[:target_words]).rstrip(',;:')
+    # 끝이 전치사·관사·접속사로 끝나면 그 단어 제거 (어색함 방지)
+    _TRAIL = {'of','to','from','for','in','on','at','by','with','and','or',
+              'the','a','an','that','which','as','into','across','through'}
+    parts = cut.split()
+    while parts and parts[-1].lower() in _TRAIL:
+        parts.pop()
+    return ' '.join(parts) if parts else cut
+
+
+def _shorten_one_topic_kr(text: str, target_chars: int) -> str:
+    """한국어 topic을 target_chars 근처로 압축. 어절 경계 + 연결어미."""
+    if not isinstance(text, str):
+        return text
+    text = text.strip()
+    if len(text) <= target_chars + 3:
+        return text
+    # 연결어미·구두점 뒤에서 절단
+    for marker in ['하며 ', '되며 ', '이며 ', '하고 ', '되고 ', '으로 ', '에서 ', ', ', '이는 ', '하는 ', '되는 ']:
+        idx = text.find(marker)
+        if 6 <= idx <= target_chars + 4:
+            return text[:idx + len(marker)].strip()
+    # 어절 경계로 target_chars까지
+    words = text.split(' ')
+    out = ''
+    for w in words:
+        if len(out) + len(w) + 1 > target_chars:
+            break
+        out = (out + ' ' + w).strip()
+    return out if len(out) >= 5 else text[:target_chars].strip()
+
+
+def _check_topics_length(data: dict) -> dict:
+    """★ topics를 titles 길이에 맞춰 강제 압축 (제목의 1/3 수준).
+    
+    선생님 반복 요청: 주제문 3문장이 너무 김 → 제목과 비슷한 짧은 길이로.
+    시스템 프롬프트로 안 되므로 코드에서 확실히 자른다.
+    """
+    topics = data.get("topics", [])
+    titles = data.get("titles", [])
+    topics_kr = data.get("topics_kr", [])
+    titles_kr = data.get("titles_kr", [])
+
+    # 목표 길이 = 대응하는 title 길이 (없으면 8단어)
+    fixed_en, fixed_kr = 0, 0
+
+    new_topics = []
+    for i, t in enumerate(topics):
+        if not isinstance(t, str):
+            new_topics.append(t); continue
+        # 대응 title 단어 수 (기준)
+        if i < len(titles) and isinstance(titles[i], str):
+            target = max(6, len(titles[i].split()))
+        else:
+            target = 8
+        before_len = len(t.split())
+        shortened = _shorten_one_topic_en(t, target)
+        if len(shortened.split()) < before_len:
+            fixed_en += 1
+        new_topics.append(shortened)
+    if new_topics:
+        data["topics"] = new_topics
+
+    new_kr = []
+    for i, t in enumerate(topics_kr):
+        if not isinstance(t, str):
+            new_kr.append(t); continue
+        if i < len(titles_kr) and isinstance(titles_kr[i], str):
+            target = max(12, len(titles_kr[i]))
+        else:
+            target = 18
+        before = len(t)
+        shortened = _shorten_one_topic_kr(t, target)
+        if len(shortened) < before:
+            fixed_kr += 1
+        new_kr.append(shortened)
+    if new_kr:
+        data["topics_kr"] = new_kr
+
+    if fixed_en or fixed_kr:
+        _safe_print(f"  ✂️ topics 자동 압축: 영어 {fixed_en}건, 한글 {fixed_kr}건 (제목 길이에 맞춤)")
+    return data
+
+
+def _enforce_summary_length(data: dict, max_words: int = 40) -> dict:
+    """요약문(summary.en)을 40단어 이내로 강제 절단.
+    
+    선생님 요청: 요약이 너무 김 → 항상 40단어 이내. 시스템 프롬프트가 안 지켜져서 코드 강제.
+    문장 경계를 존중하며 40단어 넘는 마지막 문장은 통째로 제거.
+    """
+    import re as _re
+    impl = data.get("implication_box", {})
+    if not isinstance(impl, dict):
+        return data
+    summary = impl.get("summary", {})
+    if not isinstance(summary, dict):
+        return data
+    en = summary.get("en", "")
+    if not isinstance(en, str) or not en.strip():
+        return data
+
+    words = en.split()
+    if len(words) <= max_words:
+        return data
+
+    # 문장 단위로 누적하다가 40단어 넘으면 직전까지만 (문장 완결성 유지)
+    sentences = _re.split(r'(?<=[.!?])\s+', en.strip())
+    kept, count = [], 0
+    for s in sentences:
+        w = len(s.split())
+        if count + w <= max_words:
+            kept.append(s)
+            count += w
+        else:
+            break
+    if kept:
+        result = ' '.join(kept).strip()
+    else:
+        # 첫 문장조차 40단어 초과 → 어절로 강제 절단 후 마침표
+        result = ' '.join(words[:max_words]).rstrip(',;:') + '.'
+
+    summary["en"] = result
+    impl["summary"] = summary
+    data["implication_box"] = impl
+    _safe_print(f"  ✂️ 요약문 압축: {len(words)}단어 → {len(result.split())}단어 (40 이내 강제)")
+    return data
+
+
+def _enforce_count_3(data: dict) -> dict:
+    """blank_candidates와 implicit_meanings를 정확히 3개로 강제.
+    
+    선생님 요청: 함축이 3~5개로 들쭉날쭉 → 빈칸·함축 둘 다 정확히 3개씩만.
+    AI가 3개 초과 생성하면 앞 3개만 남기고 자른다.
+    문자열 등 dict가 아닌 항목(스키마 설명 잔재)은 제거.
+    """
+    impl = data.get("implication_box", {})
+    if not isinstance(impl, dict):
+        return data
+    for key in ("blank_candidates", "implicit_meanings"):
+        items = impl.get(key, [])
+        if isinstance(items, list):
+            # dict 항목만 남기고 (스키마 설명 문자열 제거)
+            dicts = [x for x in items if isinstance(x, dict)]
+            if len(dicts) != len(items) or len(dicts) > 3:
+                _safe_print(f"  ✂️ {key}: {len(items)}개 → {min(len(dicts),3)}개로 정리")
+            impl[key] = dicts[:3]
+    data["implication_box"] = impl
+    return data
+
+
+def _passage_marked_to_html(marked: str, original: str = "") -> str:
+    """passage_marked의 [[GRAMMAR/VOCAB/IMPL]] 마커를 HTML span으로 변환.
+
+    Claude가 n=①(원숫자) 대신 n=1(일반숫자), l=ⓐ 대신 l=a로 출력해도 호환되도록
+    정규식이 두 형태 모두 매칭. 출력 시 원숫자/원알파벳으로 자동 변환.
+
+    원본 길이를 초과하는 부분은 잘라낸다 (Claude가 끝에 추가 문장을 붙였을 때 대비).
+    """
+    import re as _re
+    import html as _html
+
+    orig_len = len(original.strip()) if original else None
+
+    # 원숫자/원알파벳 변환 테이블
+    CIRCLED_NUMS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮"
+    CIRCLED_ALPHA = "ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞ"
+
+    def _to_circled_num(s: str) -> str:
+        """'1' → '①', '①' → '①' (이미 원숫자면 그대로)."""
+        s = s.strip()
+        if s and s[0] in CIRCLED_NUMS:
+            return s
+        try:
+            n = int(s)
+            if 1 <= n <= 15:
+                return CIRCLED_NUMS[n - 1]
+        except ValueError:
+            pass
+        return s  # 못 변환하면 원본 유지
+
+    def _to_circled_alpha(s: str) -> str:
+        """'a' → 'ⓐ', 'ⓐ' → 'ⓐ'."""
+        s = s.strip()
+        if s and s[0] in CIRCLED_ALPHA:
+            return s
+        if len(s) == 1 and 'a' <= s.lower() <= 'o':
+            return CIRCLED_ALPHA[ord(s.lower()) - ord('a')]
+        return s
+
+    out = []
+    plain_len = 0
+    # 일반 숫자/알파벳 + 유니코드 원숫자/원알파벳 모두 허용
+    pattern = _re.compile(
+        r'\[\[(GRAMMAR:n=([0-9]+|[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮]+)'
+        r'|VOCAB:l=([a-oA-O]|[ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞ])'
+        r'|IMPL)\]\]'
+        r'([\s\S]*?)'
+        r'\[\[/(GRAMMAR|VOCAB|IMPL)\]\]'
+    )
+    last_end = 0
+    for m in pattern.finditer(marked):
+        if m.start() > last_end:
+            plain = marked[last_end:m.start()]
+            if orig_len and plain_len + len(plain) > orig_len:
+                plain = plain[:max(0, orig_len - plain_len)]
+                out.append(_html.escape(plain))
+                plain_len += len(plain)
+                return "".join(out)
+            out.append(_html.escape(plain))
+            plain_len += len(plain)
+
+        kind = m.group(1)
+        inner = m.group(4)
+        if kind.startswith("GRAMMAR"):
+            num = _to_circled_num(m.group(2))
+            out.append(f'<span class="gr">{_html.escape(inner)}</span><sup class="sup-r">{num}</sup>')
+        elif kind.startswith("VOCAB"):
+            letter = _to_circled_alpha(m.group(3))
+            out.append(f'<span class="vc">{_html.escape(inner)}</span><sup class="sup-b">{letter}</sup>')
+        else:  # IMPL
+            out.append(f'<span class="im">{_html.escape(inner)}</span>')
+        plain_len += len(inner)
+        last_end = m.end()
+
+    if last_end < len(marked):
+        tail = marked[last_end:]
+        if orig_len and plain_len + len(tail) > orig_len:
+            tail = tail[:max(0, orig_len - plain_len)]
+        out.append(_html.escape(tail))
+
+    return "".join(out)

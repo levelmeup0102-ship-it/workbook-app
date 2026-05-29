@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<style>
+:root {
+  --primary: #1A6BB5; --accent: #C0621A; --green: #1A7D40;
+  --red: #B91C1C; --purple: #6A1B9A; --border: #C2CBD6;
+  --bg-passage: #F3F5F7; --bg-yellow: #FFF3C0;
+  --bg-orange: #FCEADE; --bg-blue: #D4E8F7; --bg-purple: #F3E5F5;
+}
+@page {
+  size: A4;
+  margin: 11mm 13mm 22mm 13mm;
+  @bottom-right {
+    content: element(footer-logo);
+    margin-right: 0;
+    margin-bottom: 0;
+  }
+}
+.footer-logo { position: running(footer-logo); }
+.footer-logo img {
+  height: 28mm;
+  vertical-align: bottom;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Noto Sans CJK KR','Noto Sans KR','Malgun Gothic',sans-serif;
+  font-size: 9.5pt; color: #111; line-height: 1.55;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.q-page { page-break-after: always; }
+.hdr {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 4px; border-bottom: 2px solid var(--primary); margin-bottom: 10px;
+  gap: 8px;
+}
+.hdr-title { font-weight: bold; font-size: 11.5pt; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+.hdr-logo { height: 18px; vertical-align: middle; }
+.hdr-right { font-size: 8.5pt; color: #555; }
+.var-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #1A6BB5, #C0621A);
+  color: white; padding: 1.5px 9px; border-radius: 10px;
+  font-size: 7.5pt; font-weight: bold; margin-left: 6px;
+}
+
+/* 지문 박스 */
+.psg-box {
+  border: 1px solid var(--border); border-radius: 5px;
+  background: var(--bg-passage); padding: 9px 13px;
+  font-size: 9pt; line-height: 1.75; margin-bottom: 11px;
+  text-align: justify;
+}
+.psg-lead {
+  margin-bottom: 5px; font-weight: 500;
+}
+.psg-chunk {
+  margin-top: 4px; padding-left: 8px; text-indent: -3px;
+}
+.psg-chunk .chunk-label {
+  font-weight: bold; color: var(--primary); margin-right: 3px;
+}
+.psg-box .blank-mark {
+  display: inline-block;
+  border: 1px solid #888; padding: 0 6px;
+  border-radius: 2px; background: white;
+  font-weight: bold; color: var(--accent); margin: 0 1px;
+}
+/* ⭐ Q5 빈칸 - 지문 안에 직접 표시 (밑줄 1개만, ⑤ 표시 없음) */
+.core-blank-inline {
+  display: inline-block;
+  padding: 0 8px;
+  color: var(--purple);
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.two-col {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px;
+}
+.col-left { border-right: 1px dashed #DDD; padding-right: 10px; }
+.col-right { padding-left: 6px; }
+.col-header {
+  font-size: 8.5pt; font-weight: bold; letter-spacing: 0.5px;
+  padding: 3px 8px; margin-bottom: 7px; border-radius: 3px;
+}
+.col-l-hdr { background: var(--bg-blue); color: var(--primary); border-left: 3px solid var(--primary); }
+.col-r-hdr { background: var(--bg-orange); color: var(--accent); border-left: 3px solid var(--accent); }
+.q-num {
+  display: inline-block; background: var(--primary); color: white;
+  width: 18px; height: 18px; border-radius: 4px;
+  font-size: 9pt; font-weight: bold;
+  text-align: center; line-height: 18px;
+  margin-right: 5px; vertical-align: middle;
+}
+.q-num.write { background: var(--accent); }
+.q-num.core { background: var(--purple); }
+.q-title {
+  font-weight: bold; font-size: 9.5pt; color: #111;
+  margin-bottom: 5px; margin-top: 12px;
+}
+.q-title:first-of-type { margin-top: 0; }
+
+.opt { font-size: 8.7pt; padding: 2px 4px; line-height: 1.55; }
+.opt-num { color: var(--primary); font-weight: bold; }
+.opt-num.purple { color: var(--purple); }
+.opts-order {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2px 6px;
+  font-size: 8.5pt; margin-bottom: 6px;
+}
+
+.statements { margin-bottom: 6px; }
+.stmt-item {
+  font-size: 8.5pt; line-height: 1.5; margin-bottom: 2px;
+  padding-left: 17px; text-indent: -17px;
+}
+.stmt-label {
+  display: inline-block; width: 13px; font-weight: bold;
+  color: var(--primary); text-indent: 0;
+}
+.opts-count {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  font-size: 8.5pt; margin-top: 4px;
+}
+.opts-count .opt { padding: 0; }
+
+.bogi {
+  border: 1.5px solid var(--accent); border-radius: 4px;
+  background: var(--bg-yellow); padding: 6px 9px;
+  font-size: 8.3pt; line-height: 1.6; margin: 4px 0 5px;
+}
+.bogi-label { font-weight: bold; color: var(--accent); margin-right: 4px; font-size: 8pt; }
+.fill-row { display: flex; align-items: flex-start; gap: 8px; margin: 6px 0; }
+.fill-row b {
+  width: 24px; flex-shrink: 0; font-size: 9.5pt; color: var(--accent);
+  padding-top: 2mm; font-weight: bold;
+}
+.fill-line-big {
+  flex: 1; border: 1px solid #999; border-radius: 3px; background: #fff;
+  height: 12mm;
+  background-image:
+    repeating-linear-gradient(to bottom,
+      transparent 0, transparent 5.5mm,
+      #ddd 5.5mm, #ddd 6mm);
+}
+
+/* 답지 */
+.ans-start { page-break-before: always; }
+.ans-hdr {
+  background: linear-gradient(135deg, #fef3c7, #fed7aa);
+  border-left: 4px solid var(--accent);
+  padding: 6px 11px; margin-bottom: 7px; border-radius: 0 4px 4px 0;
+}
+.ans-hdr .hdr-title { color: var(--accent); font-size: 11pt; }
+.ans-block {
+  border: 1px solid #DDD; border-radius: 4px;
+  padding: 4px 7px; margin-bottom: 4px; background: #FAFAFA;
+  page-break-inside: avoid; break-inside: avoid;
+}
+.ans-block-title {
+  font-size: 9.5pt; font-weight: bold; color: var(--accent);
+  padding-bottom: 1px; margin-bottom: 2px; border-bottom: 1px solid #DDD;
+}
+.ans-row {
+  display: flex; align-items: center; gap: 5px;
+  padding: 1px 0; font-size: 7.8pt;
+}
+.ans-row b.q-name { width: 60px; flex-shrink: 0; font-size: 7.8pt; }
+.ans-row .ans-val {
+  font-weight: bold; color: var(--accent); font-size: 8.7pt;
+  padding: 0 5px; background: var(--bg-orange); border-radius: 3px;
+}
+.ans-row .ans-detail { color: #555; font-size: 7.3pt; flex: 1; }
+.blank-ans-grid {
+  display: grid; grid-template-columns: auto 1fr; gap: 0px 8px;
+  margin: 1px 0; font-size: 7.8pt;
+}
+.blank-ans-grid b { color: var(--primary); }
+.blank-ans-grid .ans-val {
+  color: var(--accent); font-weight: bold;
+  padding: 0 5px; background: var(--bg-orange); border-radius: 3px;
+  display: inline-block; font-size: 7.8pt;
+}
+.expl-box {
+  background: #F8F9FB; border-left: 2.5px solid var(--primary);
+  padding: 2px 6px; margin: 1.5px 0;
+  font-size: 7.3pt; line-height: 1.35;
+}
+.expl-label { font-weight: bold; color: var(--primary); margin-right: 3px; }
+.expl-label.purple { color: var(--purple); }
+
+/* ★★★ NEW: A 답지 컴팩트 행 (정답+해설 통합) ★★★ */
+.ans-row-c {
+  display: grid;
+  grid-template-columns: 56px 28px 1fr;
+  grid-template-rows: auto auto;
+  gap: 1px 6px;
+  padding: 3px 0;
+  border-bottom: 1px dashed #E5E5E5;
+  align-items: baseline;
+}
+.ans-row-c:last-child { border-bottom: none; }
+.ans-row-c b.q-name {
+  grid-column: 1; grid-row: 1;
+  font-size: 7.8pt; color: var(--accent); font-weight: bold;
+}
+.ans-row-c .ans-val {
+  grid-column: 2; grid-row: 1;
+  font-weight: bold; color: var(--accent); font-size: 8.7pt;
+  padding: 0 5px; background: var(--bg-orange); border-radius: 3px;
+  text-align: center;
+}
+.ans-row-c .ans-text {
+  grid-column: 3; grid-row: 1;
+  color: #333; font-size: 7.7pt; line-height: 1.35;
+}
+.ans-row-c .ans-write {
+  display: inline-block;
+  background: var(--bg-orange); color: var(--accent);
+  padding: 0 5px; border-radius: 3px; font-weight: bold;
+}
+.ans-row-c .ans-note {
+  grid-column: 2 / -1; grid-row: 2;
+  color: #777; font-size: 6.9pt; line-height: 1.3;
+  padding-left: 4px;
+  border-left: 2px solid #DDD;
+  margin-top: 1px;
+}
+.ans-row-c .ans-note b {
+  color: var(--accent);
+  font-size: 6.9pt;
+}
+
+.match-tbl { width: 100%; border-collapse: collapse; margin: 2px 0; font-size: 6.7pt; }
+.match-tbl th {
+  background: var(--bg-blue); padding: 1.5px 4px; text-align: left;
+  border: 1px solid var(--border); font-size: 6.7pt;
+}
+.match-tbl td {
+  padding: 1.5px 4px; border: 1px solid var(--border); vertical-align: top;
+  font-size: 6.7pt; line-height: 1.3;
+}
+.match-tbl td.x-mark { color: var(--red); font-weight: bold; text-align: center; }
+.match-tbl td.o-mark { color: var(--green); font-weight: bold; text-align: center; }
+.match-tbl .stmt-kr { color: #555; font-style: italic; }
+.match-tbl .stmt-why { color: var(--accent); }
+.match-tbl .stmt-why-true { color: var(--green); }
+.grammar-note {
+  background: #FFF8E1; border: 1px solid #FFE082; border-radius: 3px;
+  padding: 2.5px 6px; margin: 1.5px 0; font-size: 7pt; line-height: 1.4;
+}
+.grammar-note b { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="footer-logo">
+  {% if logo_url %}<img src="{{ logo_url }}" alt="레벨미업">{% endif %}
+</div>
+
+{% for item in passages %}
+<div class="q-page">
+  <div class="hdr">
+    <span class="hdr-title">
+      {% if logo_url %}<img class="hdr-logo" src="{{ logo_url }}" alt="레벨미업">{% endif %}
+      변형문제 — 유형 A <span class="var-badge">📝 TOPIC+ORDER+MATCH+CORE+FILL</span>
+    </span>
+    <span class="hdr-right">{{ item.label }}</span>
+  </div>
+
+  {# 지문: (a)(b)(c)(d) 줄바꿈 + Q5 빈칸 ⑤가 지문 안에 삽입 #}
+  <div class="psg-box">
+    <div class="psg-lead">{{ item.data.lead | safe }}</div>
+    {% for chunk in item.data.chunks %}
+      <div class="psg-chunk">
+        <span class="chunk-label">{{ chunk[0] }}</span>{{ chunk[1] | safe }}
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="two-col">
+
+    <div class="col-left">
+      <div class="col-header col-l-hdr">[ 객관식 — 내용 이해 ]</div>
+
+      <div class="q-title"><span class="q-num">1</span> 윗글의 주제로 가장 적절한 것은?</div>
+      <div>
+        {% for opt in item.data.topic_options %}
+        <div class="opt"><span class="opt-num">{{ ['①','②','③','④','⑤'][loop.index0] }}</span> {{ opt }}</div>
+        {% endfor %}
+      </div>
+
+      <div class="q-title"><span class="q-num">2</span> 윗글의 (a)~(d)를 글의 흐름에 맞는 순서로 가장 적절하게 배열한 것은?</div>
+      <div class="opts-order">
+        {% for opt in item.data.order_options %}
+        <div class="opt"><span class="opt-num">{{ ['①','②','③','④','⑤'][loop.index0] }}</span> {{ opt }}</div>
+        {% endfor %}
+      </div>
+
+      {% if item.data.core_blank_options %}
+      <div class="q-title"><span class="q-num core">3</span> 윗글의 빈칸에 들어갈 말로 가장 적절한 것은?</div>
+      <div>
+        {% for opt in item.data.core_blank_options %}
+        <div class="opt"><span class="opt-num purple">{{ ['①','②','③','④','⑤'][loop.index0] }}</span> {{ opt }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="col-right">
+      <div class="col-header col-r-hdr">[ 일치판단 / 빈칸 서술 ]</div>
+
+      <div class="q-title"><span class="q-num">4</span> 윗글의 내용과 <span style="color:var(--red);">일치하지 않는</span> 진술의 개수는?</div>
+      <div class="statements">
+        {% for stmt in item.data.statements %}
+        <div class="stmt-item"><span class="stmt-label">{{ stmt[0] }}.</span> {{ stmt[1] }}</div>
+        {% endfor %}
+      </div>
+      <div class="opts-count">
+        <div class="opt"><span class="opt-num">①</span> 1개</div>
+        <div class="opt"><span class="opt-num">②</span> 2개</div>
+        <div class="opt"><span class="opt-num">③</span> 3개</div>
+        <div class="opt"><span class="opt-num">④</span> 4개</div>
+        <div class="opt"><span class="opt-num">⑤</span> 5개</div>
+      </div>
+
+      <div class="q-title"><span class="q-num write">5</span> 빈칸 (A), (B)에 들어갈 표현을 &lt;보기&gt;의 단어를 사용하여 본문에 나온 그대로 순서대로 쓰시오.</div>
+      <div class="bogi">
+        <span class="bogi-label">&lt;보기&gt;</span>{{ item.data.bogi | join(' / ') }}
+      </div>
+      <div class="fill-row"><b>(A)</b><span class="fill-line-big"></span></div>
+      <div class="fill-row"><b>(B)</b><span class="fill-line-big"></span></div>
+    </div>
+
+  </div>
+</div>
+{% endfor %}
+
+<div class="ans-start">
+  <div class="ans-hdr">
+    <div class="hdr-title">
+      {% if logo_url %}<img class="hdr-logo" src="{{ logo_url }}" alt="레벨미업">{% endif %}
+      변형문제 (유형 A) — 정답·해설 <span class="var-badge">📝 ANSWERS</span>
+    </div>
+  </div>
+
+  {% for item in passages %}
+    <div class="ans-block">
+      <div class="ans-block-title">▶ {{ item.label }}</div>
+
+      <div class="ans-row-c">
+        <b class="q-name">Q1.주제</b>
+        <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.topic_correct] }}</span>
+        <span class="ans-text">{{ item.data.topic_options[item.data.topic_correct] }}</span>
+        <span class="ans-note">{{ item.data.topic_explain }}</span>
+      </div>
+
+      <div class="ans-row-c">
+        <b class="q-name">Q2.순서</b>
+        <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.order_correct] }}</span>
+        <span class="ans-text">{{ item.data.order_options[item.data.order_correct] }}</span>
+        <span class="ans-note">{{ item.data.order_explain }}</span>
+      </div>
+
+      {% if item.data.core_blank_correct is defined and item.data.core_blank_correct is not none %}
+      <div class="ans-row-c">
+        <b class="q-name">Q3.핵심빈칸</b>
+        <span class="ans-val" style="color:var(--purple); background:var(--bg-purple);">{{ ['①','②','③','④','⑤'][item.data.core_blank_correct] }}</span>
+        <span class="ans-text">{{ item.data.core_blank_options[item.data.core_blank_correct] }}</span>
+        <span class="ans-note">원문: "{{ item.data.core_blank_target }}" — {{ item.data.core_blank_explain }}</span>
+      </div>
+      {% endif %}
+
+      <div class="ans-row-c">
+        <b class="q-name">Q4.불일치</b>
+        <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.mismatch_count - 1] }}</span>
+        <span class="ans-text">{{ item.data.mismatch_count }}개 — {% for s in item.data.statements %}{% if not s[2] %}{{ s[0] }}{% if not loop.last %}, {% endif %}{% endif %}{% endfor %}</span>
+        <span class="ans-note">{% for stmt in item.data.statements %}{% set kr_pair = item.data.statements_kr[loop.index0] if item.data.statements_kr else ['', ''] %}<b>{{ stmt[0] }}</b>({{ 'O' if stmt[2] else 'X' }}) {{ kr_pair[1] if kr_pair[1] else '' }}{% if not loop.last %} / {% endif %}{% endfor %}</span>
+      </div>
+
+      <div class="ans-row-c">
+        <b class="q-name">Q5(A)</b>
+        <span class="ans-text"><span class="ans-write">{{ item.data.blank_A }}</span></span>
+        <span class="ans-note">{{ item.data.blank_explain_A | safe }}</span>
+      </div>
+      <div class="ans-row-c">
+        <b class="q-name">Q5(B)</b>
+        <span class="ans-text"><span class="ans-write">{{ item.data.blank_B }}</span></span>
+        <span class="ans-note">{{ item.data.blank_explain_B | safe }}</span>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+</body>
+</html>

@@ -8,9 +8,9 @@ STEP_VERSIONS = {
     "step1_basic": "v4",
     "step2_order": "v10",
     "step3_blank": "v6",
-    "step4_topic": "v4",
+    "step4_topic": "v5",
     "step5_grammar": "v15",
-    "step6_vocab_content": "v6",
+    "step6_vocab_content": "v7",
     "step7_writing": "v4",
     "step8_answers": "v10",
     "secret_note_a": "v4",  # v4: 유의어 5개, paraphrase 템플릿에서 삭제
@@ -1020,7 +1020,10 @@ def step4_topic(passage: str, passage_dir: Path) -> dict:
 - 선지 12개: 정답 5개 + 오답 7개
 - 선지는 반드시 영어로 작성 (한국어 금지)
 - 정답: 주제문 키워드를 유의어로 치환한 영어 표현
-- 오답: 지문 미언급, 부분적 내용, 왜곡 (영어)
+- ★오답 원칙: 오답의 소재·단어는 지문 안에서 가져오되, 글의 메시지/결론을 명백히 뒤집을 것
+  · 금지: 지문 근거로 우길 수 있는 "부분적으로 맞는 내용" (채점 분쟁 원인)
+  · 금지: 지문에 없는 생뚱맞은 소재 (너무 쉬움)
+  · 뒤집은 지점은 글의 요지와 1:1 대조 시 "명백한 거짓"이어야 함
 - 추론적 사고 금지: 글에서 직접 언급된 내용만 정답
 - 각 선지는 30단어 이내로 간결하게
 
@@ -2062,6 +2065,13 @@ def step6_vocab_content(passage: str, passage_dir: Path) -> dict:
 - content_match_en: 반드시 정확히 10개 영어 선지 (①~⑩). 5개 미만 금지! 일치 3~5개 + 불일치 5~7개
 - 한국어와 영어 선지의 순서는 서로 다르게 랜덤 배치
 - 10개 미만이면 실패로 간주됨. 반드시 ①②③④⑤⑥⑦⑧⑨⑩ 10개 모두 작성할 것
+- ★불일치(오답) 원칙: 오답의 소재·단어는 지문 안에서 가져올 것 (지문에 없는 새 소재 금지 — 너무 쉬움)
+  · 1순위 방식: 지문의 실제 한 문장을 골라 사실 한 곳만 정반대로 뒤집기
+    (긍정↔부정 / 지문 속 A를 지문 속 B로 / 주체·대상·장소·횟수 바꿔치기)
+  · 이렇게 하면 원래 옳은 문장이 그대로 남아 wrong_trans가 정확해짐
+  · 금지: 단어 하나만 살짝 비틀어 헷갈리게 / 지문 근거로 우길 수 있는 부분적 사실
+  · 불일치 선지는 지문 한 문장과 1:1 대조 시 "명백한 거짓"이어야 함
+
 
 [content_match_kr_wrong_trans, content_match_en_wrong_trans에 대한 지침]
 - 각 content_match_kr_wrong_trans과 content_match_en_wrong_trans은 오답의 번호에 대해 올바른 원래 정답인 string값들을 가진 list이다.

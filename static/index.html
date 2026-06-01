@@ -1310,6 +1310,7 @@ function pcUpdateButtonLabel() {
 }
 
 function pcDownloadMerged(schoolName) {
+  console.log('[pcDownloadMerged v2] 페이지당 2지문 + 답지 모음 모드');
   if (!window._lastPcResults || !window._lastPcResults.length) return;
   const results = window._lastPcResults;
   const css = (results[0].html.match(/<style[^>]*>([\s\S]*?)<\/style>/) || ['',''])[1];
@@ -1403,7 +1404,7 @@ function pcDownloadMerged(schoolName) {
     }
   }
   
-  const merged = `<!DOCTYPE html>\n<html lang="ko">\n<head>\n<meta charset="UTF-8">\n<title>${schoolName} ${docTitle}</title>\n<style>\n${css}\n</style>\n</head>\n<body>\n${mergedBody}\n</body>\n</html>`;
+  const merged = `<!DOCTYPE html>\n<html lang="ko">\n<head>\n<meta charset="UTF-8">\n<title>${schoolName} ${docTitle}</title>\n<!-- pcDownloadMerged_v2: ${mode} mode, ${results.length} passages -->\n<style>\n${css}\n</style>\n</head>\n<body>\n${mergedBody}\n</body>\n</html>`;
   const blob = new Blob([merged], {type:'text/html; charset=utf-8'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href=url; a.download=`${schoolName}_${fnameBase}.html`; a.click();

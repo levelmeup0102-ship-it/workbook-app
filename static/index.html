@@ -199,6 +199,22 @@ textarea:focus { border-color: #4A90D9; outline: none; }
             <input type="text" id="pc-school-name" placeholder="레벨미업학원" value="레벨미업학원"
               style="width:100%;padding:8px 10px;border:2px solid #fbbf24;border-radius:6px;font-size:12px;outline:none;margin-top:4px;">
           </div>
+          <!-- ★ 추출 모드 선택 -->
+          <div style="background:#fffbeb;border:1.5px dashed #fbbf24;border-radius:6px;padding:8px 10px;margin-bottom:10px;">
+            <div style="font-size:11px;font-weight:700;color:#b45309;margin-bottom:6px;">📋 추출 모드</div>
+            <label style="display:flex;align-items:center;font-size:12px;color:#444;margin-bottom:4px;cursor:pointer;">
+              <input type="radio" name="pc-mode" value="preclass" checked onchange="pcUpdateButtonLabel()" style="margin-right:6px;accent-color:#f59e0b;">
+              📕 0회독 자료만 (수업 전 분석)
+            </label>
+            <label style="display:flex;align-items:center;font-size:12px;color:#444;margin-bottom:4px;cursor:pointer;">
+              <input type="radio" name="pc-mode" value="sentence_order" onchange="pcUpdateButtonLabel()" style="margin-right:6px;accent-color:#f59e0b;">
+              🔀 한 문장 순서배열만 (수업 후 시험용)
+            </label>
+            <label style="display:flex;align-items:center;font-size:12px;color:#444;cursor:pointer;">
+              <input type="radio" name="pc-mode" value="both" onchange="pcUpdateButtonLabel()" style="margin-right:6px;accent-color:#f59e0b;">
+              📦 둘 다 (0회독 + 순서배열)
+            </label>
+          </div>
           <button class="btn btn-orange" id="pc-btn-d" onclick="doPreclass()" disabled style="width:100%;background:#f59e0b;">
             📕 0회독 자료 생성
           </button>
@@ -1247,10 +1263,11 @@ async function doPreclass() {
     progressText.textContent = `생성 중... ${completed+1}/${passages.length} — ${p.unit} ${p.id}  (40~60초 소요)`;
     progressFill.style.width = `${(completed/passages.length)*100}%`;
     try {
-      // 백엔드는 /api/secret-note 라우트에서 type=D 분기 처리
+      // 백엔드는 /api/secret-note 라우트에서 type=D + mode 분기 처리
+      const pcMode = (document.querySelector('input[name="pc-mode"]:checked') || {}).value || 'preclass';
       const res = await fetch(API+'/api/secret-note', {
         method: 'POST', headers: headers(),
-        body: JSON.stringify({type:'D', school_name: schoolName, passages:[{book:p.book,unit:p.unit,id:p.id}]})
+        body: JSON.stringify({type:'D', mode: pcMode, school_name: schoolName, passages:[{book:p.book,unit:p.unit,id:p.id}]})
       });
       const data = await res.json();
       if (data.ok) results.push({id:`${p.unit} ${p.id}`,status:'success',html:data.html,filename:data.filename});
@@ -1280,14 +1297,40 @@ async function doPreclass() {
   btn.disabled = false;
 }
 
+function pcUpdateButtonLabel() {
+  const mode = (document.querySelector('input[name="pc-mode"]:checked') || {}).value || 'preclass';
+  const btn = document.getElementById('pc-btn-d');
+  if (!btn) return;
+  const labels = {
+    'preclass': '📕 0회독 자료 생성',
+    'sentence_order': '🔀 한 문장 순서배열 생성',
+    'both': '📦 0회독 + 순서배열 생성',
+  };
+  btn.textContent = labels[mode] || labels.preclass;
+}
+
 function pcDownloadMerged(schoolName) {
   if (!window._lastPcResults || !window._lastPcResults.length) return;
   const css = (window._lastPcResults[0].html.match(/<style[^>]*>([\s\S]*?)<\/style>/) || ['',''])[1];
   const bodies = window._lastPcResults.map(r => (r.html.match(/<body[^>]*>([\s\S]*?)<\/body>/) || ['',r.html])[1]);
-  const merged = `<!DOCTYPE html>\n<html lang="ko">\n<head>\n<meta charset="UTF-8">\n<title>${schoolName} 0회독 수업전분석 합본</title>\n<style>\n${css}\n</style>\n</head>\n<body>\n${bodies.join('\n')}\n</body>\n</html>`;
+  // ★ 현재 선택된 모드에 따라 합본 제목·파일명 다르게
+  const mode = (document.querySelector('input[name="pc-mode"]:checked') || {}).value || 'preclass';
+  const titleMap = {
+    'preclass': '0회독 수업전분석 합본',
+    'sentence_order': '한문장 순서배열 합본',
+    'both': '0회독+순서배열 합본',
+  };
+  const fnameMap = {
+    'preclass': '0회독_수업전분석_합본',
+    'sentence_order': '한문장순서배열_합본',
+    'both': '0회독_순서배열_합본',
+  };
+  const docTitle = titleMap[mode] || titleMap.preclass;
+  const fnameBase = fnameMap[mode] || fnameMap.preclass;
+  const merged = `<!DOCTYPE html>\n<html lang="ko">\n<head>\n<meta charset="UTF-8">\n<title>${schoolName} ${docTitle}</title>\n<style>\n${css}\n</style>\n</head>\n<body>\n${bodies.join('\n')}\n</body>\n</html>`;
   const blob = new Blob([merged], {type:'text/html; charset=utf-8'});
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url; a.download=`${schoolName}_0회독_수업전분석_합본.html`; a.click();
+  const a = document.createElement('a'); a.href=url; a.download=`${schoolName}_${fnameBase}.html`; a.click();
   URL.revokeObjectURL(url);
 }
 

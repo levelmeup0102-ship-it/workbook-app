@@ -3737,12 +3737,199 @@ def _load_grammar_points_for_prompt() -> str:
     return "\n".join(lines)
 
 
-def render_preclass_analysis(passages_data: list, school_name: str) -> str:
-    """0회독 HTML 렌더링 (preclass_analysis.html 템플릿 사용)."""
+def _split_sentences_for_ordering(passage: str) -> list:
+    """지문을 자연스러운 문장 단위로 분리.
+    
+    영어 마침표/물음표/느낌표 + 따옴표 처리. 약어(Mr. Dr. e.g. 등)는 분리 안 함.
+    너무 짧은 조각(<= 6단어)은 직전 문장과 합침.
+    """
+    import re as _re
+    text = (passage or "").strip()
+    if not text:
+        return []
+    
+    # 약어 보호 (마침표를 임시 토큰으로)
+    ABBR = [
+        "Mr.", "Mrs.", "Ms.", "Dr.", "Prof.", "Sr.", "Jr.", "St.",
+        "e.g.", "i.e.", "etc.", "vs.", "U.S.", "U.K.", "U.S.A.",
+        "Inc.", "Ltd.", "Co.", "Corp.", "No.", "Vol.",
+    ]
+    placeholder = "§"
+    protected = text
+    for ab in ABBR:
+        protected = protected.replace(ab, ab.replace(".", placeholder))
+    
+    # 문장 경계: 마침표/물음표/느낌표 + 공백 + 대문자
+    parts = _re.split(r'(?<=[.!?])(?=[\s"\'])\s*(?=["\']?[A-Z])', protected)
+    parts = [p.replace(placeholder, ".").strip() for p in parts if p.strip()]
+    
+    # 너무 짧은 단편만 앞 문장과 합치기
+    # - 3단어 이하 AND 마침표로 끝나지 않으면 (불완전 단편) → 병합
+    # - 5단어짜리 완결 문장은 독립 문장으로 인정 (병합 안 함)
+    merged = []
+    for p in parts:
+        wc = len(p.split())
+        is_fragment = (wc <= 3) and (not p.rstrip().endswith(('.', '!', '?', '"', "'")))
+        if merged and is_fragment:
+            merged[-1] = merged[-1] + " " + p
+        else:
+            merged.append(p)
+    return merged
+
+
+def generate_sentence_order(passage: str, passage_id: str = "") -> dict:
+    """지문을 문장 단위로 분리·랜덤 섞기 → 순서배열 문제 데이터 생성.
+    
+    Returns:
+        {"shuffled":[{"label":"(A)","text":"..."}], "answer":["(B)","(D)",...], "n":6, "skipped":False}
+    
+    안전 보장:
+    1. 셔플 결과는 절대 원본 순서와 동일하지 않음 (최후엔 강제 스왑)
+    2. 첫 문장이 (A)인 평이한 결과도 회피 (학생이 의심하기 좋은 패턴)
+    3. passage_id + 본문 해시로 시드 견고화 → 본문 다르면 시드 무조건 다름
+    """
+    import random as _rand
+    import hashlib as _hash
+    
+    sents = _split_sentences_for_ordering(passage)
+    n = len(sents)
+    if n < 3:
+        return {"shuffled": [], "answer": [], "n": 0, "skipped": True}
+    if n > 10:
+        sents = sents[:10]
+        n = 10
+    
+    # ★ 시드 견고화: passage_id가 같아도 본문이 다르면 다른 시드
+    # passage_id만 쓰면 빈 문자열/같은 문자열로 인한 충돌 가능
+    body_hash = _hash.md5(passage.encode("utf-8")).hexdigest()[:12]
+    seed_src = f"{passage_id}::{body_hash}"
+    rng = _rand.Random(seed_src)
+    
+    LABELS = ["(A)", "(B)", "(C)", "(D)", "(E)", "(F)", "(G)", "(H)", "(I)", "(J)"]
+    original = list(range(n))
+    
+    # ★ 셔플 시도 최대 20회 — 다음 조건 모두 통과해야 채택:
+    #   조건1: 원본 순서와 동일하지 않을 것 [0,1,2,3,4,5] 금지
+    #   조건2: 첫 문장이 원본 첫 문장이 아닐 것 (학생이 의심하기 쉬운 패턴)
+    #   조건3: 최소 절반 이상이 원래 위치가 아닐 것 (너무 약한 셔플 회피)
+    shuffled_indices = None
+    for attempt in range(20):
+        candidate = original.copy()
+        rng.shuffle(candidate)
+        if candidate == original:
+            continue
+        # 조건2: 첫 위치가 원본 0번이면 약한 셔플 — 회피
+        if candidate[0] == 0:
+            continue
+        # 조건3: 원래 위치와 일치하는 문장 수가 절반 초과면 약함
+        same_count = sum(1 for i in range(n) if candidate[i] == i)
+        if same_count > n // 2:
+            continue
+        shuffled_indices = candidate
+        break
+    
+    # ★ 최후 안전망: 위 조건을 만족 못 했으면 인위적으로 만든다
+    if shuffled_indices is None:
+        # 원본 reverse → 이건 100% 원본과 다르고 첫 위치도 0이 아님
+        shuffled_indices = list(reversed(original))
+        # 그 다음 rng로 한 번 더 추가 셔플 (단조로움 방지) — 단 원본과 다른지 재검증
+        for _ in range(10):
+            candidate = shuffled_indices.copy()
+            rng.shuffle(candidate)
+            if candidate != original and candidate[0] != 0:
+                shuffled_indices = candidate
+                break
+        # 그래도 안 되면(극희박) 인접 두 위치 강제 스왑
+        if shuffled_indices == original or shuffled_indices[0] == 0:
+            shuffled_indices = original.copy()
+            shuffled_indices[0], shuffled_indices[-1] = shuffled_indices[-1], shuffled_indices[0]
+    
+    shuffled = [
+        {"label": LABELS[i], "text": sents[shuffled_indices[i]]}
+        for i in range(n)
+    ]
+    
+    answer = []
+    for orig_idx in range(n):
+        pos = shuffled_indices.index(orig_idx)
+        answer.append(LABELS[pos])
+    
+    return {"shuffled": shuffled, "answer": answer, "n": n, "skipped": False}
+
+
+def render_preclass_analysis(passages_data: list, school_name: str,
+                              include_sentence_order: bool = False,
+                              sentence_order_only: bool = False) -> str:
+    """0회독 HTML 렌더링 (preclass_analysis.html 템플릿 사용).
+    
+    Args:
+        passages_data: 본문 데이터 리스트 (각 item에 label, data 필드)
+        school_name: 학교명
+        include_sentence_order: True면 0회독 자료 끝에 순서배열 문제·정답지 추가
+        sentence_order_only: True면 0회독 자료 생략하고 순서배열만 출력
+                              (자동으로 include_sentence_order=True 처리)
+    
+    호출 패턴:
+        # 0회독만
+        render_preclass_analysis(data, school)
+        
+        # 0회독 + 순서배열 (한 파일에 합쳐서)
+        render_preclass_analysis(data, school, include_sentence_order=True)
+        
+        # 순서배열만 (별도 파일)
+        render_preclass_analysis(data, school, sentence_order_only=True)
+    """
     from jinja2 import Environment, FileSystemLoader
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)))
     tmpl = env.get_template("preclass_analysis.html")
-    return tmpl.render(passages=passages_data, school_name=school_name)
+    
+    # sentence_order_only면 include_sentence_order도 자동 True
+    if sentence_order_only:
+        include_sentence_order = True
+    
+    # 순서배열 옵션이 켜져 있으면 각 본문에 sentence_order 데이터 부착
+    if include_sentence_order:
+        import re as _re_so
+        # ★ 정답 중복 회피용 추적
+        used_answers = []  # 이미 사용된 answer 튜플 모음
+        
+        for idx, item in enumerate(passages_data):
+            data = item.get("data", {}) or {}
+            passage_raw = data.get("passage", "") or data.get("passage_text", "")
+            if not passage_raw:
+                marked = data.get("passage_marked", "")
+                passage_raw = _re_so.sub(r'\[\[/?(?:GRAMMAR|VOCAB|IMPL)[^\]]*\]\]', '', marked)
+                passage_raw = _re_so.sub(r'\s+', ' ', passage_raw).strip()
+            # 학생 보기용 — 위첨자(①~⑳, ⓐ~ⓩ) 제거
+            passage_clean = _re_so.sub(r'[\u2460-\u2473\u24B6-\u24E9]', '', passage_raw)
+            passage_clean = _re_so.sub(r'\s+', ' ', passage_clean).strip()
+            if not passage_clean:
+                continue
+            
+            base_pid = item.get("label", "") + ":" + (item.get("passage_id","") or "")
+            
+            # ★ 정답 중복이면 시드 변경하면서 재생성 (최대 10회)
+            so_result = None
+            for retry in range(10):
+                pid = f"{base_pid}::r{retry}" if retry > 0 else base_pid
+                so_result = generate_sentence_order(passage_clean, passage_id=pid)
+                # skipped거나 본문 너무 짧으면 그대로 사용
+                if so_result.get("skipped") or so_result.get("n", 0) < 3:
+                    break
+                ans_tuple = tuple(so_result.get("answer", []))
+                if ans_tuple not in used_answers:
+                    used_answers.append(ans_tuple)
+                    break
+                # 중복이면 다른 시드로 재시도
+            
+            item["sentence_order"] = so_result
+    
+    return tmpl.render(
+        passages=passages_data,
+        school_name=school_name,
+        include_sentence_order=include_sentence_order,
+        sentence_order_only=sentence_order_only,
+    )
 
 
 def _rebalance_grammar_boxes(data: dict) -> dict:

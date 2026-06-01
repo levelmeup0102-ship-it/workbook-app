@@ -579,10 +579,100 @@ body {
 }
 .tv-def { color: #333333; }
 .tv-ex { color: var(--gr); font-style: italic; }
+
+/* ═══════════════ 한 문장 순서배열 ═══════════════ */
+.so-page { /* 별도 페이지 */ }
+.so-hdr {
+  font-weight: bold; font-size: 14pt; color: var(--black);
+  padding-bottom: 5px;
+  border-bottom: 2.5px solid #333333;
+  margin-bottom: 14px;
+}
+
+.so-block {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background: #FAFAFA;
+  border: 1px solid #DDDDDD;
+  border-radius: 5px;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+.so-block:last-child { margin-bottom: 0; }
+.so-label {
+  font-weight: bold; font-size: 11pt; color: #1565C0;
+  margin-bottom: 4px;
+}
+.so-instruction {
+  font-size: 9pt; color: var(--gr2);
+  font-family: 'Pretendard','Noto Sans KR','Noto Sans CJK KR',sans-serif;
+  margin-bottom: 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px dashed #CCCCCC;
+}
+.so-sentence {
+  font-family: 'Source Serif Pro','Noto Serif','Liberation Serif',serif;
+  font-size: 9.5pt; line-height: 1.45;
+  margin-bottom: 4px;
+  color: var(--dark);
+  padding-left: 4px;
+}
+.so-mark {
+  font-weight: bold; color: #C2185B;
+  margin-right: 6px;
+  font-family: 'Source Serif Pro','Noto Serif',serif;
+  font-size: 10pt;
+}
+.so-text { color: var(--dark); }
+.so-answer-line {
+  margin-top: 10px; padding-top: 7px;
+  border-top: 1px dashed #CCCCCC;
+  font-family: 'Source Serif Pro','Noto Serif',serif;
+  font-size: 9.5pt; color: #1565C0;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+/* 정답 모음 페이지 */
+.so-answer-page { /* 별도 페이지 */ }
+.so-answer-hdr { border-bottom-color: #D32F2F; color: #B71C1C; }
+.so-answer-note {
+  font-size: 9pt; color: var(--gr2);
+  font-family: 'Pretendard','Noto Sans KR','Noto Sans CJK KR',sans-serif;
+  margin-bottom: 14px;
+  padding: 6px 10px;
+  background: #FFF8E1;
+  border-left: 3px solid #FFB300;
+  border-radius: 3px;
+}
+.so-answer-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.so-answer-table tr {
+  border-bottom: 1px solid #E0E0E0;
+}
+.so-answer-table tr:last-child { border-bottom: none; }
+.so-ans-label {
+  font-weight: bold; font-size: 10.5pt; color: #1565C0;
+  padding: 9px 12px 9px 4px;
+  white-space: nowrap;
+  vertical-align: middle;
+  width: 30%;
+}
+.so-ans-seq {
+  font-family: 'Source Serif Pro','Noto Serif',serif;
+  font-size: 11pt; color: #B71C1C;
+  font-weight: bold;
+  padding: 9px 4px;
+  letter-spacing: 2px;
+}
 </style>
 </head>
 <body>
 
+{# ═══ 0회독 본체 (순서배열 단독 모드면 건너뜀) ═══ #}
+{% if not sentence_order_only %}
 {% for item in passages %}
 {# ───────────────────── PAGE A — 지문 + 4박스 + 노트 ───────────────────── #}
 <div class="page">
@@ -878,6 +968,56 @@ body {
 </div>
 
 {% endfor %}
+{% endif %}
+{# ═══ 0회독 본체 끝 ═══ #}
+
+{# ════════════════ 한 문장 순서배열 (옵션) ════════════════ #}
+{% if include_sentence_order %}
+
+{# skipped 아닌 본문만 모아서 2개씩 짝지어 배치 #}
+{% set so_items = [] %}
+{% for item in passages %}
+  {% if item.sentence_order and not item.sentence_order.skipped %}
+    {% set _ = so_items.append(item) %}
+  {% endif %}
+{% endfor %}
+
+{% for item in so_items %}
+{% if loop.index0 % 2 == 0 %}
+<div class="page so-page">
+  <div class="so-hdr">●  한 문장 순서배열</div>
+{% endif %}
+  <div class="so-block">
+    <div class="so-label">{{ item.label }}</div>
+    <div class="so-instruction">아래 문장들을 글의 흐름에 맞게 순서대로 배열하시오.</div>
+    {% for s in item.sentence_order.shuffled %}
+    <div class="so-sentence">
+      <span class="so-mark">{{ s.label }}</span>
+      <span class="so-text">{{ s.text }}</span>
+    </div>
+    {% endfor %}
+    <div class="so-answer-line">정답: ____ → ____ → ____ → ____ → ____{% if item.sentence_order.n >= 6 %} → ____{% endif %}{% if item.sentence_order.n >= 7 %} → ____{% endif %}{% if item.sentence_order.n >= 8 %} → ____{% endif %}{% if item.sentence_order.n >= 9 %} → ____{% endif %}{% if item.sentence_order.n >= 10 %} → ____{% endif %}</div>
+  </div>
+{% if loop.index0 % 2 == 1 or loop.last %}
+</div>
+{% endif %}
+{% endfor %}
+
+{# 정답 모음 페이지 — 모든 본문의 정답을 한 페이지에 #}
+<div class="page so-answer-page">
+  <div class="so-hdr so-answer-hdr">●  한 문장 순서배열 — 정답</div>
+  <div class="so-answer-note">출력 후 잘라서 시험·정답 호출용으로 사용하세요.</div>
+  <table class="so-answer-table">
+    {% for item in so_items %}
+    <tr>
+      <td class="so-ans-label">{{ item.label }}</td>
+      <td class="so-ans-seq">{{ item.sentence_order.answer | join(' → ') }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+{% endif %}
 
 </body>
 </html>

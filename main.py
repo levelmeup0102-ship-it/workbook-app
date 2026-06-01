@@ -599,6 +599,8 @@ async def secret_note(request: Request):
     school_name  = (body.get("school_name") or "레벨미업학원").strip()
     teacher_name = (body.get("teacher_name") or "").strip()   # 강사명 (선택)
     passages_in  = body.get("passages") or []
+    # ★ 0회독(D) 전용 옵션: "preclass"(기본·0회독만) / "both"(0회독+순서배열) / "sentence_order"(순서배열만)
+    pc_mode      = (body.get("mode") or "preclass").lower()
     # passages_in: [{"book":"...", "unit":"...", "id":"..."}]
 
     if not passages_in:
@@ -663,8 +665,19 @@ async def secret_note(request: Request):
 
     # 유형 D는 별도 템플릿(preclass_analysis.html) + 다른 파일명
     if note_type == "D":
-        html = pl.render_preclass_analysis(passages_data, school_name)
-        return {"ok": True, "html": html, "filename": "0회독_수업전분석.html"}
+        # ★ pc_mode에 따라 render 옵션 다르게 호출
+        if pc_mode == "sentence_order":
+            html = pl.render_preclass_analysis(passages_data, school_name,
+                                                sentence_order_only=True)
+            filename = "한문장순서배열.html"
+        elif pc_mode == "both":
+            html = pl.render_preclass_analysis(passages_data, school_name,
+                                                include_sentence_order=True)
+            filename = "0회독_수업전분석_순서배열포함.html"
+        else:  # "preclass" (기본 — 0회독만)
+            html = pl.render_preclass_analysis(passages_data, school_name)
+            filename = "0회독_수업전분석.html"
+        return {"ok": True, "html": html, "filename": filename}
 
     html = pl.render_secret_note(passages_data, note_type, school_name, teacher_name)
     return {"ok": True, "html": html, "filename": f"비밀노트_유형{note_type}.html"}

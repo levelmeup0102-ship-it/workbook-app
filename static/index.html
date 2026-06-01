@@ -1311,9 +1311,9 @@ function pcUpdateButtonLabel() {
 
 function pcDownloadMerged(schoolName) {
   if (!window._lastPcResults || !window._lastPcResults.length) return;
-  const css = (window._lastPcResults[0].html.match(/<style[^>]*>([\s\S]*?)<\/style>/) || ['',''])[1];
-  const bodies = window._lastPcResults.map(r => (r.html.match(/<body[^>]*>([\s\S]*?)<\/body>/) || ['',r.html])[1]);
-  // ★ 현재 선택된 모드에 따라 합본 제목·파일명 다르게
+  const results = window._lastPcResults;
+  const css = (results[0].html.match(/<style[^>]*>([\s\S]*?)<\/style>/) || ['',''])[1];
+  
   const mode = (document.querySelector('input[name="pc-mode"]:checked') || {}).value || 'preclass';
   const titleMap = {
     'preclass': '0회독 수업전분석 합본',
@@ -1327,7 +1327,83 @@ function pcDownloadMerged(schoolName) {
   };
   const docTitle = titleMap[mode] || titleMap.preclass;
   const fnameBase = fnameMap[mode] || fnameMap.preclass;
-  const merged = `<!DOCTYPE html>\n<html lang="ko">\n<head>\n<meta charset="UTF-8">\n<title>${schoolName} ${docTitle}</title>\n<style>\n${css}\n</style>\n</head>\n<body>\n${bodies.join('\n')}\n</body>\n</html>`;
+  
+  // ─────────────────────────────────────
+  // 각 결과 HTML에서 body 내용 추출
+  // ─────────────────────────────────────
+  const bodies = results.map(r => (r.html.match(/<body[^>]*>([\s\S]*?)<\/body>/) || ['',r.html])[1]);
+  
+  let mergedBody = '';
+  
+  if (mode === 'preclass') {
+    // 0회독만 — 그대로 이어붙이면 됨
+    mergedBody = bodies.join('\n');
+  } else {
+    // sentence_order 또는 both — so-block과 답지를 모아서 재구성
+    
+    // 1) 0회독 본체 (so-page와 so-answer-page 제외한 부분)만 추출 (both 모드용)
+    const preclassBodies = bodies.map(b => {
+      let cleaned = b;
+      // so-page 페이지 제거
+      cleaned = cleaned.replace(/<div class="page so-page"[^>]*>[\s\S]*?<\/div>\s*(?=<div class="page|$)/g, '');
+      // so-answer-page 페이지 제거
+      cleaned = cleaned.replace(/<div class="page so-answer-page"[^>]*>[\s\S]*?<\/div>\s*(?=<div class="page|$)/g, '');
+      return cleaned;
+    });
+    
+    // 2) 모든 본문에서 so-block만 추출 (라벨과 정답 정보 보존)
+    const allBlocks = [];  // [{label, blockHtml, answer}]
+    bodies.forEach((b, idx) => {
+      // so-block 추출
+      const blockMatches = [...b.matchAll(/<div class="so-block">([\s\S]*?)<\/div>\s*(?=<div class="so-block|<div class="so-answer-line">|<\/div>\s*<\/div>\s*<div class="page so-answer)/g)];
+      // 위 정규식이 복잡하니 더 간단하게 — so-block 단위로
+      const simpleMatches = [...b.matchAll(/<div class="so-block">[\s\S]*?<div class="so-answer-line">[\s\S]*?<\/div>\s*<\/div>/g)];
+      simpleMatches.forEach(m => allBlocks.push({html: m[0], passageLabel: results[idx].id}));
+    });
+    
+    // 3) 모든 본문의 정답 행 추출 (so-answer-table의 tr들)
+    const allAnswerRows = [];
+    bodies.forEach((b, idx) => {
+      // so-answer-table 내부 tr 추출
+      const tableMatch = b.match(/<table class="so-answer-table">([\s\S]*?)<\/table>/);
+      if (tableMatch) {
+        const trMatches = [...tableMatch[1].matchAll(/<tr>[\s\S]*?<\/tr>/g)];
+        trMatches.forEach(m => allAnswerRows.push(m[0]));
+      }
+    });
+    
+    // 4) 페이지당 2개씩 so-block 묶어서 페이지 재구성
+    let soPages = '';
+    for (let i = 0; i < allBlocks.length; i += 2) {
+      soPages += '<div class="page so-page">\n';
+      soPages += '  <div class="so-hdr">●  한 문장 순서배열</div>\n';
+      soPages += '  ' + allBlocks[i].html + '\n';
+      if (allBlocks[i+1]) {
+        soPages += '  ' + allBlocks[i+1].html + '\n';
+      }
+      soPages += '</div>\n';
+    }
+    
+    // 5) 정답 페이지 (모든 정답 한 페이지에)
+    let answerPage = '';
+    if (allAnswerRows.length) {
+      answerPage = '<div class="page so-answer-page">\n';
+      answerPage += '  <div class="so-hdr so-answer-hdr">●  한 문장 순서배열 — 정답</div>\n';
+      answerPage += '  <div class="so-answer-note">출력 후 잘라서 시험·정답 호출용으로 사용하세요.</div>\n';
+      answerPage += '  <table class="so-answer-table">\n';
+      answerPage += allAnswerRows.join('\n');
+      answerPage += '\n  </table>\n</div>\n';
+    }
+    
+    if (mode === 'sentence_order') {
+      mergedBody = soPages + answerPage;
+    } else {
+      // both: 0회독 본체 → 순서배열 페이지 → 정답 페이지
+      mergedBody = preclassBodies.join('\n') + soPages + answerPage;
+    }
+  }
+  
+  const merged = `<!DOCTYPE html>\n<html lang="ko">\n<head>\n<meta charset="UTF-8">\n<title>${schoolName} ${docTitle}</title>\n<style>\n${css}\n</style>\n</head>\n<body>\n${mergedBody}\n</body>\n</html>`;
   const blob = new Blob([merged], {type:'text/html; charset=utf-8'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href=url; a.download=`${schoolName}_${fnameBase}.html`; a.click();

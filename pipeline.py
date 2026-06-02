@@ -3604,9 +3604,9 @@ Return ONLY the JSON object.
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
     # v12: topics 강제 압축(제목 길이) + 어휘 편입/GRE급 + 영영 단어밑 배치 + 솔루션 페이지 통합 — v11 캐시 무효화
-    cached = load_step(passage_dir, "preclass_analysis_v17")
+    cached = load_step(passage_dir, "preclass_analysis_v18")
     if cached:
-        _safe_print("  ✅ preclass_analysis_v17 캐시 사용")
+        _safe_print("  ✅ preclass_analysis_v18 캐시 사용")
         return cached
     _safe_print("  📕 preclass_analysis 생성 중...")
 
@@ -3669,7 +3669,7 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     # ★ v13 후처리 7 — 요약문 40단어 이내 강제
     data = _enforce_summary_length(data, max_words=40)
 
-    save_step(passage_dir, "preclass_analysis_v17", data)
+    save_step(passage_dir, "preclass_analysis_v18", data)
     return data
 
 
@@ -4251,6 +4251,83 @@ def _filter_bad_vocab(data: dict) -> dict:
     return data
 
 
+def _find_in_marker_and_split(passage_marked: str, word: str, vocab_letter: str) -> str:
+    """단어가 IMPL/GRAMMAR 마커 안에 갇혀있을 때, 그 마커를 단어 위치에서 쪼개고
+    중간에 [[VOCAB:l=X]]단어[[/VOCAB]] 삽입.
+    
+    예: 'Such real-world [[IMPL]]clues offer the[[/IMPL]] visitor'에서 'clues'를 어휘로 마킹하면:
+        → 'Such real-world [[IMPL]]'+ [[VOCAB:l=ⓐ]]clues[[/VOCAB]] + '[[IMPL]] offer the[[/IMPL]] visitor'
+        실제로는: 'Such real-world [[IMPL]][[/IMPL]][[VOCAB:l=ⓐ]]clues[[/VOCAB]][[IMPL]] offer the[[/IMPL]]'
+        간단히: 마커 내부 텍스트만 분할
+    
+    실패 시 None 반환.
+    """
+    import re as _re
+    
+    # 마커 토큰화 (마커 시작·종료·내부 텍스트 분리)
+    # 마커 패턴: [[TAG:k=v]]...[[/TAG]] 또는 [[TAG]]...[[/TAG]]
+    token_re = _re.compile(
+        r'(\[\[(?:GRAMMAR|VOCAB|IMPL)(?::[^\]]+)?\]\])'  # 시작 마커
+        r'([^\[]*?)'                                       # 내부 텍스트 (간단히 - 비-중첩 가정)
+        r'(\[\[/(?:GRAMMAR|VOCAB|IMPL)\]\])'              # 종료 마커
+    )
+    
+    # IMPL과 GRAMMAR 마커만 대상 (VOCAB은 이미 마킹된 거니까)
+    target_re = _re.compile(
+        r'(\[\[(?:GRAMMAR|IMPL)(?::[^\]]+)?\]\])([^\[]*?)(\[\[/(?:GRAMMAR|IMPL)\]\])'
+    )
+    
+    word_pat = _re.compile(r'\b' + _re.escape(word) + r'\b', _re.IGNORECASE)
+    # 굴절형도 같이
+    word_variants = [word, word + 's', word + 'ed', word + 'ing', word + 'es']
+    if word.endswith('e'):
+        word_variants.append(word + 'd')
+        word_variants.append(word[:-1] + 'ing')
+    
+    for m in target_re.finditer(passage_marked):
+        open_tag = m.group(1)
+        inner = m.group(2)
+        close_tag = m.group(3)
+        
+        # inner에 단어가 있는지 (단어 경계 적용)
+        for variant in word_variants:
+            inner_pat = _re.compile(r'\b' + _re.escape(variant) + r'\b', _re.IGNORECASE)
+            wm = inner_pat.search(inner)
+            if not wm:
+                continue
+            
+            # 마커를 분할: 시작마커 + 앞부분 + 종료마커 + VOCAB마커 + 시작마커 + 뒷부분 + 종료마커
+            before_word = inner[:wm.start()]
+            matched = inner[wm.start():wm.end()]
+            after_word = inner[wm.end():]
+            
+            # 새 텍스트 구성
+            parts = []
+            # 마커 종류 판단 (GRAMMAR? IMPL?)
+            is_grammar = open_tag.startswith("[[GRAMMAR")
+            
+            if before_word.strip():
+                parts.append(f"{open_tag}{before_word}{close_tag}")
+            # 어휘 마커
+            parts.append(f"[[VOCAB:l={vocab_letter}]]{matched}[[/VOCAB]]")
+            if after_word.strip():
+                # ★ GRAMMAR 마커가 분할되는 경우 — 두 번째는 위첨자 숨김(split=1)
+                # IMPL은 위첨자 없으니 그대로
+                if is_grammar and before_word.strip():
+                    # 시작 태그에 split=1 추가 (예: [[GRAMMAR:n=⑤]] → [[GRAMMAR:n=⑤,split=1]])
+                    second_open = open_tag.replace("]]", ",split=1]]")
+                    parts.append(f"{second_open}{after_word}{close_tag}")
+                else:
+                    parts.append(f"{open_tag}{after_word}{close_tag}")
+            
+            replacement = "".join(parts)
+            # 원본 마커 영역만 교체
+            new_passage = passage_marked[:m.start()] + replacement + passage_marked[m.end():]
+            return new_passage
+    
+    return None
+
+
 def _ensure_vocab_markers(passage_marked: str, vocab_notes: list) -> str:
     """vocab_notes의 각 단어가 passage_marked에 [[VOCAB]] 마커로 감싸져 있는지 확인하고,
     없으면 본문에서 단어 첫 등장 위치를 찾아 자동으로 [[VOCAB:l=L]]word[[/VOCAB]] 삽입.
@@ -4318,6 +4395,16 @@ def _ensure_vocab_markers(passage_marked: str, vocab_notes: list) -> str:
         # ★ 시도 3: 단어 경계 없이 substring 매치 (multi-word phrase / 하이픈 단어 등)
         if not result:
             result = _find_in_marked(passage_marked, word, word_boundary=False)
+        
+        # ★ v18 시도 4: 다른 마커(IMPL/GRAMMAR) 영역 안에 갇혀있는 단어 — 마커를 쪼개서 어휘 삽입
+        # AI가 'Such real-world clues offer the' 같은 긴 함축을 잡으면 'clues' 같은 어휘가 갇힘
+        if not result:
+            result = _find_in_marker_and_split(passage_marked, word, letter)
+            if result:
+                # 이 경로는 본문 자체를 재구성하므로 직접 반환된 새 passage_marked 사용
+                passage_marked = result
+                added += 1
+                continue
         
         if not result:
             not_found.append(word)
@@ -4738,8 +4825,9 @@ def _passage_marked_to_html(marked: str, original: str = "") -> str:
     out = []
     plain_len = 0
     # 일반 숫자/알파벳 + 유니코드 원숫자/원알파벳 모두 허용
+    # GRAMMAR는 ,split=1 같은 추가 attribute가 붙을 수 있음
     pattern = _re.compile(
-        r'\[\[(GRAMMAR:n=([0-9]+|[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮]+)'
+        r'\[\[(GRAMMAR:n=([0-9]+|[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮]+)(?:,split=(\d+))?'
         r'|VOCAB:l=([a-oA-O]|[ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞ])'
         r'|IMPL)\]\]'
         r'([\s\S]*?)'
@@ -4758,12 +4846,17 @@ def _passage_marked_to_html(marked: str, original: str = "") -> str:
             plain_len += len(plain)
 
         kind = m.group(1)
-        inner = m.group(4)
+        inner = m.group(5)  # ★ inner 그룹 번호 변경 (split 그룹 추가됨)
         if kind.startswith("GRAMMAR"):
             num = _to_circled_num(m.group(2))
-            out.append(f'<span class="gr">{_html.escape(inner)}</span><sup class="sup-r">{num}</sup>')
+            split_marker = m.group(3)  # split=1이면 위첨자 숨김
+            if split_marker:
+                # 분할된 두 번째 조각 — 밑줄만, 위첨자 없음
+                out.append(f'<span class="gr">{_html.escape(inner)}</span>')
+            else:
+                out.append(f'<span class="gr">{_html.escape(inner)}</span><sup class="sup-r">{num}</sup>')
         elif kind.startswith("VOCAB"):
-            letter = _to_circled_alpha(m.group(3))
+            letter = _to_circled_alpha(m.group(4))  # ★ group 번호 변경
             out.append(f'<span class="vc">{_html.escape(inner)}</span><sup class="sup-b">{letter}</sup>')
         else:  # IMPL
             out.append(f'<span class="im">{_html.escape(inner)}</span>')

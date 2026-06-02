@@ -611,6 +611,7 @@ async def secret_note(request: Request):
     import pipeline as pl
     pl.DATA_DIR = DATA_DIR
     pl.TEMPLATE_DIR = Path(".")
+    import topic_background as tb   # ★ 수업배경자료
 
     passages_data = []
     for p in passages_in:
@@ -648,17 +649,23 @@ async def secret_note(request: Request):
         elif note_type == "C":
             note_data = pl.generate_secret_note_c(passage_text, passage_dir, translation)
         elif note_type == "D":
-            # 유형 D — 0회독 (수업 전 4페이지 완전 분석)
-            note_data = pl.generate_preclass_analysis(passage_text, passage_dir, translation)
+            if pc_mode == "topic":
+                note_data = None   # ★ 수업배경자료는 LLM 생성 안 함 (조각 조립)
+            else:
+                # 유형 D — 0회독 (수업 전 4페이지 완전 분석)
+                note_data = pl.generate_preclass_analysis(passage_text, passage_dir, translation)
         else:  # B가 기본
             note_data = pl.generate_secret_note_b(passage_text, passage_dir, translation)
 
-        passages_data.append({
+        item = {
             "label":       label,
             "passage":     passage_text,
             "translation": translation,
             "data":        note_data,
-        })
+        }
+        if note_type == "D" and pc_mode == "topic":
+            item["topic"] = pl.load_step(passage_dir, tb.TOPIC_STEP_NAME)
+        passages_data.append(item)
 
     if not passages_data:
         raise HTTPException(404, "처리 가능한 지문 없음")
@@ -666,6 +673,9 @@ async def secret_note(request: Request):
     # 유형 D는 별도 템플릿(preclass_analysis.html) + 다른 파일명
     if note_type == "D":
         # ★ pc_mode에 따라 render 옵션 다르게 호출
+        if pc_mode == "topic":   # ★ 수업배경자료 (조각 조립, LLM 미사용)
+            html = tb.render_topic_background(passages_data, school_name)
+            return {"ok": True, "html": html, "filename": "수업배경자료.html"}
         if pc_mode == "sentence_order":
             html = pl.render_preclass_analysis(passages_data, school_name,
                                                 sentence_order_only=True)

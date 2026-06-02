@@ -3604,9 +3604,9 @@ Return ONLY the JSON object.
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
     # v12: topics 강제 압축(제목 길이) + 어휘 편입/GRE급 + 영영 단어밑 배치 + 솔루션 페이지 통합 — v11 캐시 무효화
-    cached = load_step(passage_dir, "preclass_analysis_v16")
+    cached = load_step(passage_dir, "preclass_analysis_v17")
     if cached:
-        _safe_print("  ✅ preclass_analysis_v16 캐시 사용")
+        _safe_print("  ✅ preclass_analysis_v17 캐시 사용")
         return cached
     _safe_print("  📕 preclass_analysis 생성 중...")
 
@@ -3669,7 +3669,7 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     # ★ v13 후처리 7 — 요약문 40단어 이내 강제
     data = _enforce_summary_length(data, max_words=40)
 
-    save_step(passage_dir, "preclass_analysis_v16", data)
+    save_step(passage_dir, "preclass_analysis_v17", data)
     return data
 
 
@@ -4142,6 +4142,39 @@ def _filter_bad_vocab(data: dict) -> dict:
     vocab_detail = data.get("vocab_detail", []) or []
     passage_marked = data.get("passage_marked", "") or ""
     
+    # ★ v17 강화: 정확 매칭 외에 5가지 패턴으로 부적절 판정
+    def _is_bad_vocab(w: str) -> tuple:
+        """부적절한 어휘인지 판정. (True/False, 사유) 반환."""
+        wl = w.strip().lower()
+        if not wl:
+            return True, "빈 단어"
+        if len(wl) <= 1:
+            return True, "1글자"
+        if wl.isdigit() or all(c.isdigit() or c in '.,%-' for c in wl):
+            return True, "숫자/수치"
+        if wl in FORBIDDEN:
+            return True, "기능어/평이단어"
+        # 관사·전치사로 시작 ("the general population", "a new approach")
+        first_word = wl.split()[0]
+        if first_word in {'the', 'a', 'an', 'this', 'that', 'these', 'those', 
+                          'his', 'her', 'its', 'their', 'our', 'my', 'your'}:
+            return True, "관사·대명사로 시작"
+        # 모두 대문자로 시작하는 복합 고유명사 ("Voice Assistants", "Ride-Hailing Apps")
+        original_words = w.strip().split()
+        if len(original_words) >= 2:
+            caps = sum(1 for ow in original_words if ow and ow[0].isupper())
+            if caps >= 2:
+                return True, "복합 고유명사"
+        # 1단어인데 첫 글자 대문자 (Apple, Google, Korea 등 고유명사 가능성)
+        if len(original_words) == 1 and w.strip() and w.strip()[0].isupper():
+            # 일반 명사도 첫 단어면 대문자일 수 있으니, 모두 대문자거나 특정 패턴만 거름
+            if w.strip().isupper():  # 전부 대문자 (NASA, USA, AI 같은 약어)
+                return True, "대문자 약어"
+        # 5단어 이상의 긴 구문 (구절은 어휘로 부적합)
+        if len(original_words) >= 5:
+            return True, "긴 구문(어휘 부적합)"
+        return False, ""
+    
     # vocab_notes 필터링
     removed = []
     cleaned_notes = []
@@ -4149,12 +4182,12 @@ def _filter_bad_vocab(data: dict) -> dict:
         if not isinstance(v, dict):
             cleaned_notes.append(v)
             continue
-        word = (v.get("word") or "").strip().lower()
+        word_orig = (v.get("word") or "").strip()
+        is_bad, reason = _is_bad_vocab(word_orig)
         # 빈 단어, 1글자, 숫자만, 기능어/평이단어 제거
-        if (not word or len(word) <= 1 or word.isdigit() 
-            or word in FORBIDDEN):
+        if is_bad:
             letter = (v.get("letter") or "").strip()
-            removed.append((letter, v.get("word", "")))
+            removed.append((letter, v.get("word", ""), reason))
             # 본문에서도 해당 VOCAB 마커 제거
             if letter and letter[0] in CIRCLED_ALPHA:
                 l = letter[0]
@@ -4177,10 +4210,10 @@ def _filter_bad_vocab(data: dict) -> dict:
         if not isinstance(v, dict):
             cleaned_detail.append(v)
             continue
-        word = (v.get("word") or "").strip().lower()
-        if (not word or len(word) <= 1 or word.isdigit() 
-            or word in FORBIDDEN):
-            removed.append((v.get("letter",""), v.get("word",""), "detail"))
+        word_orig = (v.get("word") or "").strip()
+        is_bad, reason = _is_bad_vocab(word_orig)
+        if is_bad:
+            removed.append((v.get("letter",""), v.get("word",""), f"detail/{reason}"))
             continue
         cleaned_detail.append(v)
     

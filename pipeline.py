@@ -3571,9 +3571,9 @@ Return ONLY the JSON object.
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
     # v12: topics 강제 압축(제목 길이) + 어휘 편입/GRE급 + 영영 단어밑 배치 + 솔루션 페이지 통합 — v11 캐시 무효화
-    cached = load_step(passage_dir, "preclass_analysis_v14")
+    cached = load_step(passage_dir, "preclass_analysis_v15")
     if cached:
-        _safe_print("  ✅ preclass_analysis_v14 캐시 사용")
+        _safe_print("  ✅ preclass_analysis_v15 캐시 사용")
         return cached
     _safe_print("  📕 preclass_analysis 생성 중...")
 
@@ -3632,7 +3632,7 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     # ★ v13 후처리 7 — 요약문 40단어 이내 강제
     data = _enforce_summary_length(data, max_words=40)
 
-    save_step(passage_dir, "preclass_analysis_v14", data)
+    save_step(passage_dir, "preclass_analysis_v15", data)
     return data
 
 
@@ -3989,12 +3989,16 @@ def _rebalance_grammar_boxes(data: dict) -> dict:
 # v6 후처리 — AI가 빠뜨린 VOCAB/IMPL 마커와 가주어/가목적어 패턴 자동 보정
 # ═══════════════════════════════════════════════════════════════════
 
-def _find_in_marked(marked: str, search: str) -> tuple:
+def _find_in_marked(marked: str, search: str, word_boundary: bool = False) -> tuple:
     """marked 텍스트에서 [[...]] 마커를 무시하고 search 찾기.
     매치 영역이 어떤 마커 영역(GRAMMAR/VOCAB/IMPL) 안이거나, 매치 영역 안에 
     마커가 들어가 있으면 다음 매치 시도. 모두 충돌하면 None.
     
     중첩 마커는 HTML 변환이 지원 안 되므로 회피.
+    
+    Args:
+        word_boundary: True면 단어 경계로만 매치 (\\b...\\b) — 짧은 단어가 다른 단어 안에 
+                       substring으로 들어가는 것 방지 (예: 'imagine'이 'imagines' 안에 매치되지 않게)
     
     Returns: (start_in_marked, end_in_marked, matched_text) or None
     """
@@ -4024,7 +4028,10 @@ def _find_in_marked(marked: str, search: str) -> tuple:
         i += 1
     
     plain = "".join(plain_chars)
-    pattern = _re.compile(_re.escape(search), _re.IGNORECASE)
+    if word_boundary:
+        pattern = _re.compile(r'\b' + _re.escape(search) + r'\b', _re.IGNORECASE)
+    else:
+        pattern = _re.compile(_re.escape(search), _re.IGNORECASE)
     
     # 모든 매치 시도 — 첫 번째 충돌 없는 매치 사용
     for sm in pattern.finditer(plain):
@@ -4049,12 +4056,15 @@ def _ensure_vocab_markers(passage_marked: str, vocab_notes: list) -> str:
     없으면 본문에서 단어 첫 등장 위치를 찾아 자동으로 [[VOCAB:l=L]]word[[/VOCAB]] 삽입.
     
     AI가 vocab_notes는 만들었지만 본문에 마커를 빠뜨리는 문제 해결.
+    
+    ★ v15 강화: 단어가 그대로 안 매치되면 단복수·과거형·-ing 형태도 자동 시도.
     """
     if not passage_marked or not vocab_notes:
         return passage_marked
     
     CIRCLED_ALPHA = "ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞ"
     added = 0
+    not_found = []
     
     for idx, v in enumerate(vocab_notes):
         if not isinstance(v, dict):
@@ -4079,9 +4089,38 @@ def _ensure_vocab_markers(passage_marked: str, vocab_notes: list) -> str:
             f"[[VOCAB:l={plain_letter}]]" in passage_marked):
             continue  # 이미 마커 있음
         
-        # plain text 검색 (마커 영역 회피)
-        result = _find_in_marked(passage_marked, word)
+        # ★ 시도 1: 원형 그대로 검색 (단어 경계 적용 — 'imagine'이 'imagines' 안에 매치되지 않게)
+        result = _find_in_marked(passage_marked, word, word_boundary=True)
+        
+        # ★ 시도 2: 굴절형 (단복수, -ing, -ed, -s) — 단어 경계 적용
         if not result:
+            candidates = []
+            if word.endswith('y') and len(word) > 1 and word[-2] not in 'aeiou':
+                # study -> studies, studied
+                candidates.append(word[:-1] + 'ies')
+                candidates.append(word[:-1] + 'ied')
+            if word.endswith('e'):
+                # use -> used, using
+                candidates.append(word + 'd')
+                candidates.append(word[:-1] + 'ing')
+            else:
+                # walk -> walked, walking
+                candidates.append(word + 'ed')
+                candidates.append(word + 'ing')
+            candidates.append(word + 's')
+            candidates.append(word + 'es')
+            
+            for cand in candidates:
+                result = _find_in_marked(passage_marked, cand, word_boundary=True)
+                if result:
+                    break
+        
+        # ★ 시도 3: 단어 경계 없이 substring 매치 (multi-word phrase / 하이픈 단어 등)
+        if not result:
+            result = _find_in_marked(passage_marked, word, word_boundary=False)
+        
+        if not result:
+            not_found.append(word)
             continue
         
         s_start, s_end, matched_text = result
@@ -4091,6 +4130,8 @@ def _ensure_vocab_markers(passage_marked: str, vocab_notes: list) -> str:
     
     if added > 0:
         _safe_print(f"  🔵 VOCAB 마커 자동 보정: {added}개 추가")
+    if not_found:
+        _safe_print(f"  ⚠️ VOCAB 마커 추가 실패 (본문에 없거나 충돌): {not_found}")
     return passage_marked
 
 

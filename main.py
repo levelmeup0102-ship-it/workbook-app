@@ -591,10 +591,28 @@ async def set_notice(request: Request):
 # ============================================================
 @app.post("/api/secret-note")
 async def secret_note(request: Request):
-    """비밀노트 / 0회독 생성: type A (한국어 종합) / B (영어 중심) / C (어휘+분석) / D (0회독 수업 전 4페이지 분석)"""
+    """비밀노트 / 0회독 생성: type A (한국어 종합) / B (영어 중심) / C (어휘+분석) / D (0회독 수업 전 4페이지 분석)
+    
+    ★ 에러 시 JSON 응답으로 반환 (Internal Server Error HTML 방지) — 프론트에 명확한 에러 메시지 표시
+    """
     _verify(request)
-    body = await request.json()
+    try:
+        body = await request.json()
+        return await _secret_note_impl(body)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        # 서버 로그 — 어디서 깨졌는지 정확히 파악용
+        print(f"[/api/secret-note ERROR] {type(e).__name__}: {e}\n{tb}", flush=True)
+        # 프론트 — 한 줄 요약만
+        last_line = tb.strip().splitlines()[-1] if tb else ""
+        return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:200]} ({last_line[:150]})"}
 
+
+async def _secret_note_impl(body: dict):
+    """secret-note 실제 처리 로직 (예외 처리 분리)"""
     note_type    = (body.get("type") or "B").upper()          # "A", "B", "C", or "D"
     school_name  = (body.get("school_name") or "레벨미업학원").strip()
     teacher_name = (body.get("teacher_name") or "").strip()   # 강사명 (선택)

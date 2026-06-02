@@ -3621,10 +3621,31 @@ Return ONLY the JSON object.
 
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
-    # v12: topics 강제 압축(제목 길이) + 어휘 편입/GRE급 + 영영 단어밑 배치 + 솔루션 페이지 통합 — v11 캐시 무효화
-    cached = load_step(passage_dir, "preclass_analysis_v20")
+    # v21: 캐시 로드 후 어휘 마커 보정 마이그레이션 추가
+    cached = load_step(passage_dir, "preclass_analysis_v22")
     if cached:
-        _safe_print("  ✅ preclass_analysis_v20 캐시 사용")
+        _safe_print("  ✅ preclass_analysis_v22 캐시 사용")
+        # ★ v21 마이그레이션 — 캐시에 본문 어휘 마커가 부족하면 후처리 다시 실행
+        try:
+            pm = cached.get("passage_marked", "") or ""
+            vn = cached.get("vocab_notes", []) or []
+            vocab_count_in_passage = pm.count("[[VOCAB:l=")
+            expected_count = len([v for v in vn if isinstance(v, dict) and v.get("word")])
+            if expected_count > 0 and vocab_count_in_passage < expected_count:
+                _safe_print(f"  🔵 캐시 어휘 마커 부족 ({vocab_count_in_passage}/{expected_count}) — 후처리 재실행")
+                cached = _filter_bad_vocab(cached)
+                cached["passage_marked"] = _ensure_vocab_markers(
+                    cached.get("passage_marked", ""),
+                    cached.get("vocab_notes", []),
+                )
+                cached["passage_html"] = _passage_marked_to_html(
+                    cached.get("passage_marked", ""), passage
+                )
+                # 마이그레이션 결과 다시 저장
+                save_step(passage_dir, "preclass_analysis_v22", cached)
+                _safe_print(f"  ✅ 캐시 마이그레이션 완료")
+        except Exception as e:
+            _safe_print(f"  ⚠️ 캐시 마이그레이션 실패: {e}")
         return cached
     _safe_print("  📕 preclass_analysis 생성 중...")
 
@@ -3687,7 +3708,7 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     # ★ v13 후처리 7 — 요약문 40단어 이내 강제
     data = _enforce_summary_length(data, max_words=40)
 
-    save_step(passage_dir, "preclass_analysis_v20", data)
+    save_step(passage_dir, "preclass_analysis_v22", data)
     return data
 
 
@@ -3950,13 +3971,25 @@ def render_preclass_analysis(passages_data: list, school_name: str,
         
         for idx, item in enumerate(passages_data):
             data = item.get("data", {}) or {}
-            passage_raw = data.get("passage", "") or data.get("passage_text", "")
-            if not passage_raw:
-                marked = data.get("passage_marked", "")
+            
+            # ★ v21 수정: 순서배열 텍스트 소스 우선순위 변경
+            # passage_marked가 가장 안전 (AI가 마커 단 원본) — 마커만 떼면 100% 원본
+            # passage / passage_text 필드는 후처리 과정에서 변형됐을 수 있어 마지막 순서
+            passage_raw = ""
+            marked = data.get("passage_marked", "") or ""
+            if marked:
+                # 마커 제거 → 순수 원본 텍스트
                 passage_raw = _re_so.sub(r'\[\[/?(?:GRAMMAR|VOCAB|IMPL)[^\]]*\]\]', '', marked)
                 passage_raw = _re_so.sub(r'\s+', ' ', passage_raw).strip()
+            
+            # 백업: passage_marked 없으면 다른 필드
+            if not passage_raw:
+                passage_raw = data.get("passage", "") or data.get("passage_text", "") or ""
+            
             # 학생 보기용 — 위첨자(①~⑳, ⓐ~ⓩ) 제거
             passage_clean = _re_so.sub(r'[\u2460-\u2473\u24B6-\u24E9]', '', passage_raw)
+            # HTML 엔티티 정리
+            passage_clean = passage_clean.replace('&#x27;', "'").replace('&quot;', '"').replace('&amp;', '&')
             passage_clean = _re_so.sub(r'\s+', ' ', passage_clean).strip()
             if not passage_clean:
                 continue

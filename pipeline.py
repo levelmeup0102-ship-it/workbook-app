@@ -3623,9 +3623,9 @@ Return ONLY the JSON object.
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
     # v21: 캐시 로드 후 어휘 마커 보정 마이그레이션 추가
-    cached = load_step(passage_dir, "preclass_analysis_v22")
+    cached = load_step(passage_dir, "preclass_analysis_v23")
     if cached:
-        _safe_print("  ✅ preclass_analysis_v22 캐시 사용")
+        _safe_print("  ✅ preclass_analysis_v23 캐시 사용")
         # ★ v21 마이그레이션 — 캐시에 본문 어휘 마커가 부족하면 후처리 다시 실행
         try:
             pm = cached.get("passage_marked", "") or ""
@@ -3643,7 +3643,7 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
                     cached.get("passage_marked", ""), passage
                 )
                 # 마이그레이션 결과 다시 저장
-                save_step(passage_dir, "preclass_analysis_v22", cached)
+                save_step(passage_dir, "preclass_analysis_v23", cached)
                 _safe_print(f"  ✅ 캐시 마이그레이션 완료")
         except Exception as e:
             _safe_print(f"  ⚠️ 캐시 마이그레이션 실패: {e}")
@@ -3664,52 +3664,80 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
 
     # 출력이 큰 스키마 — max_tokens 넉넉히
     data = call_claude_json(sys_prompt, prompt, max_tokens=16000)
-
+    
+    # ★ 후처리 안전 실행 헬퍼 — 에러 시 함수명·에러내용 로깅하고 다음 단계로
+    def _safe_post(step_name, fn):
+        try:
+            return fn()
+        except Exception as e:
+            import traceback as _tb
+            _safe_print(f"  ⚠️ [후처리 실패] {step_name}: {type(e).__name__}: {str(e)[:200]}")
+            _safe_print(f"     {_tb.format_exc().splitlines()[-3] if _tb.format_exc().splitlines() else ''}")
+            return None
+    
     # 후처리 1 — 박스 균형 자동 보정
-    data = _rebalance_grammar_boxes(data)
+    _r = _safe_post("_rebalance_grammar_boxes", lambda: _rebalance_grammar_boxes(data))
+    if _r is not None: data = _r
+    
+    # ★ v14 후처리 1.5 — 빈칸/함축 정확히 3개로 제한
+    _r = _safe_post("_enforce_count_3", lambda: _enforce_count_3(data))
+    if _r is not None: data = _r
+    
+    # ★ v6 후처리 2 — 가주어/가목적어/It-cleft 패턴
+    _r = _safe_post("_inject_dummy_it_notes", lambda: _inject_dummy_it_notes(data, passage))
+    if _r is not None: data = _r
+    
+    # ★ v6 후처리 3 — IMPL 마커 본문 자동 보정
+    try:
+        impl_box = data.get("implication_box", {}) or {}
+        impl_sources = []
+        for im in impl_box.get("implicit_meanings", []) or []:
+            if isinstance(im, dict) and im.get("expr"):
+                impl_sources.append({"expr": im["expr"]})
+        for bc in impl_box.get("blank_candidates", []) or []:
+            if isinstance(bc, dict) and bc.get("sentence"):
+                impl_sources.append({"expr": bc["sentence"]})
+        data["passage_marked"] = _ensure_implication_markers(
+            data.get("passage_marked", ""),
+            impl_sources,
+        )
+    except Exception as e:
+        _safe_print(f"  ⚠️ [후처리 실패] _ensure_implication_markers: {type(e).__name__}: {str(e)[:200]}")
 
-    # ★ v14 후처리 1.5 — 빈칸/함축 정확히 3개로 제한 (IMPL 마커 수집보다 먼저)
-    data = _enforce_count_3(data)
+    # ★ v16 후처리 3.5 — vocab_notes 부적절 어휘 제거
+    _r = _safe_post("_filter_bad_vocab", lambda: _filter_bad_vocab(data))
+    if _r is not None: data = _r
 
-    # ★ v6 후처리 2 — 가주어/가목적어/It-cleft 패턴 자동 감지 → grammar_notes 강제 추가
-    data = _inject_dummy_it_notes(data, passage)
+    # ★ v6 후처리 4 — VOCAB 마커 본문 자동 보정
+    try:
+        data["passage_marked"] = _ensure_vocab_markers(
+            data.get("passage_marked", ""),
+            data.get("vocab_notes", []),
+        )
+    except Exception as e:
+        _safe_print(f"  ⚠️ [후처리 실패] _ensure_vocab_markers: {type(e).__name__}: {str(e)[:200]}")
 
-    # ★ v6 후처리 3 — IMPL 마커 본문 자동 보정 (먼저 — 긴 표현이 우선)
-    # v9: implicit_meanings(함축 표현) + blank_candidates(빈칸 문장)에서 마킹 소스 수집
-    impl_box = data.get("implication_box", {}) or {}
-    impl_sources = []
-    for im in impl_box.get("implicit_meanings", []) or []:
-        if isinstance(im, dict) and im.get("expr"):
-            impl_sources.append({"expr": im["expr"]})
-    for bc in impl_box.get("blank_candidates", []) or []:
-        if isinstance(bc, dict) and bc.get("sentence"):
-            impl_sources.append({"expr": bc["sentence"]})
-    data["passage_marked"] = _ensure_implication_markers(
-        data.get("passage_marked", ""),
-        impl_sources,
-    )
+    # 후처리 5 — passage_marked → passage_html 변환
+    try:
+        data["passage_html"] = _passage_marked_to_html(data.get("passage_marked", ""), passage)
+    except Exception as e:
+        _safe_print(f"  ⚠️ [후처리 실패] _passage_marked_to_html: {type(e).__name__}: {str(e)[:200]}")
+        # 최소한 plain text라도
+        import html as _html_fallback
+        import re as _re_fallback
+        pm = data.get("passage_marked", "") or ""
+        plain = _re_fallback.sub(r'\[\[/?(?:GRAMMAR|VOCAB|IMPL)[^\]]*\]\]', '', pm)
+        data["passage_html"] = _html_fallback.escape(plain)
 
-    # ★ v16 후처리 3.5 — vocab_notes에서 부적절 어휘(기능어/대명사/평이단어) 제거
-    # 선생님 지적: AI가 'that', 'general public' 같은 걸 어휘로 골라버림
-    data = _filter_bad_vocab(data)
+    # ★ v9 후처리 6 — topics 길이 검증
+    _r = _safe_post("_check_topics_length", lambda: _check_topics_length(data))
+    if _r is not None: data = _r
 
-    # ★ v6 후처리 4 — VOCAB 마커 본문 자동 보정 (IMPL 영역 안의 단어는 자동 회피)
-    # AI가 vocab_notes만 만들고 본문 마커 빼먹은 경우, 자동 삽입
-    data["passage_marked"] = _ensure_vocab_markers(
-        data.get("passage_marked", ""),
-        data.get("vocab_notes", []),
-    )
+    # ★ v13 후처리 7 — 요약문 40단어 강제
+    _r = _safe_post("_enforce_summary_length", lambda: _enforce_summary_length(data, max_words=40))
+    if _r is not None: data = _r
 
-    # 후처리 5 — passage_marked → passage_html 변환 (Jinja2에서 |safe)
-    data["passage_html"] = _passage_marked_to_html(data.get("passage_marked", ""), passage)
-
-    # ★ v9 후처리 6 — topics 길이 검증 (위반 시 콘솔 경고)
-    data = _check_topics_length(data)
-
-    # ★ v13 후처리 7 — 요약문 40단어 이내 강제
-    data = _enforce_summary_length(data, max_words=40)
-
-    save_step(passage_dir, "preclass_analysis_v22", data)
+    save_step(passage_dir, "preclass_analysis_v23", data)
     return data
 
 
@@ -4177,7 +4205,13 @@ def _filter_bad_vocab(data: dict) -> dict:
     기능어·고유명사·평이한 표현을 vocab_notes로 골라버리는 문제 해결.
     
     제거된 vocab은 passage_marked의 VOCAB 마커도 함께 제거 (일관성).
+    
+    ★ 안정성: 모든 비정상 입력에도 견디게 — data가 dict 아니거나 필드 누락 시 그대로 반환.
     """
+    # 입력 검증 — 비정상이면 그대로 반환
+    if not isinstance(data, dict):
+        return data
+    
     import re as _re
     
     # 절대 vocab 후보가 될 수 없는 단어 (소문자 기준)

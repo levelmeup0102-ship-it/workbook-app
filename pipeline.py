@@ -3622,9 +3622,9 @@ Return ONLY the JSON object.
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
     # v12: topics 강제 압축(제목 길이) + 어휘 편입/GRE급 + 영영 단어밑 배치 + 솔루션 페이지 통합 — v11 캐시 무효화
-    cached = load_step(passage_dir, "preclass_analysis_v19")
+    cached = load_step(passage_dir, "preclass_analysis_v20")
     if cached:
-        _safe_print("  ✅ preclass_analysis_v19 캐시 사용")
+        _safe_print("  ✅ preclass_analysis_v20 캐시 사용")
         return cached
     _safe_print("  📕 preclass_analysis 생성 중...")
 
@@ -3687,7 +3687,7 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     # ★ v13 후처리 7 — 요약문 40단어 이내 강제
     data = _enforce_summary_length(data, max_words=40)
 
-    save_step(passage_dir, "preclass_analysis_v19", data)
+    save_step(passage_dir, "preclass_analysis_v20", data)
     return data
 
 
@@ -4187,8 +4187,16 @@ def _filter_bad_vocab(data: dict) -> dict:
     CIRCLED_ALPHA = "ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞ"
     
     vocab_notes = data.get("vocab_notes", []) or []
-    vocab_detail = data.get("vocab_detail", []) or []
+    vocab_detail_raw = data.get("vocab_detail", []) or []
     passage_marked = data.get("passage_marked", "") or ""
+    
+    # ★ v19 버그 픽스: vocab_detail이 dict({left:[], right:[]}) 형태로 올 수도 있고
+    # flat list로 올 수도 있음. 필터링은 flat list로 하지만 원래 구조 보존.
+    vocab_detail_is_dict = isinstance(vocab_detail_raw, dict)
+    if vocab_detail_is_dict:
+        vocab_detail = (vocab_detail_raw.get("left", []) or []) + (vocab_detail_raw.get("right", []) or [])
+    else:
+        vocab_detail = vocab_detail_raw if isinstance(vocab_detail_raw, list) else []
     
     # ★ v17 강화: 정확 매칭 외에 5가지 패턴으로 부적절 판정
     def _is_bad_vocab(w: str) -> tuple:
@@ -4294,7 +4302,17 @@ def _filter_bad_vocab(data: dict) -> dict:
             passage_marked = tmp
     
     data["vocab_notes"] = cleaned_notes
-    data["vocab_detail"] = cleaned_detail
+    # ★ v19 버그 픽스: vocab_detail이 원래 dict 구조였으면 left/right로 복원
+    if vocab_detail_is_dict:
+        # 좌우 균등 분배 (총 6개 기준 3+3)
+        n = len(cleaned_detail)
+        mid = (n + 1) // 2
+        data["vocab_detail"] = {
+            "left": cleaned_detail[:mid],
+            "right": cleaned_detail[mid:],
+        }
+    else:
+        data["vocab_detail"] = cleaned_detail
     data["passage_marked"] = passage_marked
     return data
 

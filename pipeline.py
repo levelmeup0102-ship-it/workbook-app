@@ -3299,6 +3299,24 @@ If you'd merge 3+, create SEPARATE boxes instead.
 Distribution for 12 grammar_notes: 3+3+3+3 (p1.L=①②③ / p1.R=④⑤⑥ / p2.L=⑦⑧⑨ / p2.R=⑩⑪⑫)
 Distribution for 13: 3+4+3+3 or 4+3+3+3
 
+★ 절대 규칙 — 어법 박스 묶기 금지 ★
+**각 어법 박스는 단 하나의 번호만 가진다.** 다음과 같이 두 개 이상 합치는 것 절대 금지:
+- ❌ `"num": "④⑤⑥"` (3개 합침) — FAIL
+- ❌ `"num": "⑦⑧"` (2개 합침) — FAIL
+- ❌ `"num": "①②"` (2개 합침) — FAIL
+- ✅ `"num": "④"`, `"num": "⑤"`, `"num": "⑥"` (각각 별도 박스)
+
+grammar_notes가 12개면 박스도 정확히 12개 (각각 ①, ②, ③ ... ⑫). 14개면 박스 14개.
+
+### RULE 4.5 — 함축(IMPL) 마커 길이 제한
+**[[IMPL]]...[[/IMPL]] 안의 내용은 5단어 이내로 한정.** 너무 길게 잡으면 어휘·어법 마커와 겹쳐서 표시가 깨진다.
+- ❌ `[[IMPL]]Such real-world clues offer the[[/IMPL]]` (7단어 — FAIL)
+- ❌ `[[IMPL]]And the more absorbed in a story a reader is[[/IMPL]]` (10단어 — FAIL)
+- ✅ `[[IMPL]]real-world clues[[/IMPL]]` (2단어)
+- ✅ `[[IMPL]]explore the human condition[[/IMPL]]` (4단어)
+
+핵심 비유·역접 신호어·주제 응축 표현만 짧게 잡아라.
+
 ### RULE 5 — MARKER COUNT IN PASSAGE = NOTES COUNT (★ABSOLUTE — NO EXCEPTIONS★)
 
 **3가지 마커 모두 반드시 본문에 표시해야 한다. 어법(빨간)만 마킹하고 어휘(파랑)·함축(검정) 마커를 빼먹는 것은 절대 금지.**
@@ -3604,9 +3622,9 @@ Return ONLY the JSON object.
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
     # v12: topics 강제 압축(제목 길이) + 어휘 편입/GRE급 + 영영 단어밑 배치 + 솔루션 페이지 통합 — v11 캐시 무효화
-    cached = load_step(passage_dir, "preclass_analysis_v18")
+    cached = load_step(passage_dir, "preclass_analysis_v19")
     if cached:
-        _safe_print("  ✅ preclass_analysis_v18 캐시 사용")
+        _safe_print("  ✅ preclass_analysis_v19 캐시 사용")
         return cached
     _safe_print("  📕 preclass_analysis 생성 중...")
 
@@ -3669,7 +3687,7 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     # ★ v13 후처리 7 — 요약문 40단어 이내 강제
     data = _enforce_summary_length(data, max_words=40)
 
-    save_step(passage_dir, "preclass_analysis_v18", data)
+    save_step(passage_dir, "preclass_analysis_v19", data)
     return data
 
 
@@ -3970,7 +3988,10 @@ def render_preclass_analysis(passages_data: list, school_name: str,
 
 
 def _rebalance_grammar_boxes(data: dict) -> dict:
-    """grammar_p1/p2 박스가 4분면에 균등 분배되도록 보정 + num 순서로 정렬."""
+    """grammar_p1/p2 박스가 4분면에 균등 분배되도록 보정 + num 순서로 정렬.
+    
+    ★ v18 추가: AI가 박스를 묶은 경우(예: num="④⑤⑥") 자동으로 분리.
+    """
     try:
         p1 = data.get("grammar_p1", {}) or {}
         p2 = data.get("grammar_p2", {}) or {}
@@ -3978,6 +3999,33 @@ def _rebalance_grammar_boxes(data: dict) -> dict:
             (p1.get("left", []) or []) + (p1.get("right", []) or [])
             + (p2.get("left", []) or []) + (p2.get("right", []) or [])
         )
+        
+        # ★ 묶인 박스 자동 분리 (num="④⑤⑥" → 박스 3개로 쪼개기)
+        import re as _re
+        CIRCLED_NUMS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮"
+        unrolled = []
+        split_count = 0
+        for box in all_boxes:
+            if not isinstance(box, dict):
+                unrolled.append(box)
+                continue
+            num = (box.get("num") or "").strip()
+            # 원숫자 모두 추출
+            nums_found = [c for c in num if c in CIRCLED_NUMS]
+            if len(nums_found) >= 2:
+                # 여러 번호 묶임 → 각각의 박스로 복제
+                for nf in nums_found:
+                    new_box = dict(box)
+                    new_box["num"] = nf
+                    unrolled.append(new_box)
+                split_count += len(nums_found) - 1
+            else:
+                unrolled.append(box)
+        
+        if split_count > 0:
+            _safe_print(f"  📕 묶인 어법 박스 자동 분리: {split_count}개 추가")
+        
+        all_boxes = unrolled
         n = len(all_boxes)
         if n < 4:
             return data

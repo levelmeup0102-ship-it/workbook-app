@@ -3432,9 +3432,42 @@ Use [O], [X], ?, ■, ●, ★ instead of ✅, ❌, ❓.
 ═════════════════════════════════════════════════
 
 ### `vocab_notes` (PAGE A, 10 items) — 수능 기본~중급
+
+★★★ 어휘 선정 절대 규칙 ★★★
+**다음 단어는 절대 vocab_notes로 선정하지 마라 (선정 시 FAIL):**
+- 기능어: that, which, who, whom, whose, where, when, why, how, what
+- 관사·전치사: the, a, an, of, in, on, at, by, for, with, from, to, into
+- 대명사: it, they, this, those, these, he, she, we, you, I
+- 접속사: and, or, but, so, because, although, while, if
+- be동사·조동사: is, are, was, were, will, would, can, could, should, must, have, has, had, do, does, did
+- 빈출 평이 단어: thing, way, place, time, day, year, people, world, life, work, make, go, come, get, take, put
+
+**vocab_notes에 선정해야 할 단어 (반드시 이런 단어를 골라라):**
+1. **글의 주장·핵심 메시지와 직결된 어휘** (예: empathy, perspective, autonomy)
+2. **수능·내신 빈출 고난도 어휘** (수능 3등급 이상 학생 기준 어려운 단어)
+3. **다의어 중 본문에서 특정 의미로 쓰인 단어** (예: "address"가 "다루다"로 쓰일 때)
+4. **학술적 추상명사·분사** (예: implementation, sustainability, fragmented)
+5. **본문에서 빈도가 낮지만 의미 핵심을 담는 명사·동사·형용사**
+
+선정 우선순위:
+- 명사 > 동사 > 형용사 > 부사 (이 순서로 선호)
+- **고유명사·지명·인명은 제외** (Mr. Smith, New York 같은 건 NO)
+- **숫자·연도·통계 수치 제외** (2023, 1,000명 같은 건 NO)
+
+[O] 좋은 vocab_notes 예시:
 {"letter": "ⓐ", "word": "moderation",
  "syns": [["temperance","절제"], ["balance","균형"]],
  "ants": [["excess","과잉"]]}
+{"letter": "ⓑ", "word": "empathy",
+ "syns": [["compassion","연민"], ["understanding","이해"]],
+ "ants": [["indifference","무관심"]]}
+
+[X] 절대 금지 예시:
+{"letter": "ⓐ", "word": "that"}          ❌ 기능어
+{"letter": "ⓐ", "word": "the"}           ❌ 관사
+{"letter": "ⓐ", "word": "Voice Assistants"} ❌ 고유명사·복합어
+{"letter": "ⓐ", "word": "general public"}   ❌ 너무 평이한 표현
+{"letter": "ⓐ", "word": "make"}           ❌ 빈출 평이 동사
 
 ### `vocab_detail` (PAGE C, 6 items) — ★편입영어/GRE 수준 고난도★
 Each item:
@@ -3571,9 +3604,9 @@ Return ONLY the JSON object.
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
     # v12: topics 강제 압축(제목 길이) + 어휘 편입/GRE급 + 영영 단어밑 배치 + 솔루션 페이지 통합 — v11 캐시 무효화
-    cached = load_step(passage_dir, "preclass_analysis_v15")
+    cached = load_step(passage_dir, "preclass_analysis_v16")
     if cached:
-        _safe_print("  ✅ preclass_analysis_v15 캐시 사용")
+        _safe_print("  ✅ preclass_analysis_v16 캐시 사용")
         return cached
     _safe_print("  📕 preclass_analysis 생성 중...")
 
@@ -3616,6 +3649,10 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
         impl_sources,
     )
 
+    # ★ v16 후처리 3.5 — vocab_notes에서 부적절 어휘(기능어/대명사/평이단어) 제거
+    # 선생님 지적: AI가 'that', 'general public' 같은 걸 어휘로 골라버림
+    data = _filter_bad_vocab(data)
+
     # ★ v6 후처리 4 — VOCAB 마커 본문 자동 보정 (IMPL 영역 안의 단어는 자동 회피)
     # AI가 vocab_notes만 만들고 본문 마커 빼먹은 경우, 자동 삽입
     data["passage_marked"] = _ensure_vocab_markers(
@@ -3632,7 +3669,7 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     # ★ v13 후처리 7 — 요약문 40단어 이내 강제
     data = _enforce_summary_length(data, max_words=40)
 
-    save_step(passage_dir, "preclass_analysis_v15", data)
+    save_step(passage_dir, "preclass_analysis_v16", data)
     return data
 
 
@@ -4049,6 +4086,136 @@ def _find_in_marked(marked: str, search: str, word_boundary: bool = False) -> tu
         return (s_start, s_end, region)
     
     return None
+
+
+def _filter_bad_vocab(data: dict) -> dict:
+    """vocab_notes에서 부적절한 어휘(기능어/대명사/관사/너무 평이한 단어) 제거.
+    
+    선생님 지적: AI가 'that', 'the', 'Voice Assistants', 'general public' 같은 
+    기능어·고유명사·평이한 표현을 vocab_notes로 골라버리는 문제 해결.
+    
+    제거된 vocab은 passage_marked의 VOCAB 마커도 함께 제거 (일관성).
+    """
+    import re as _re
+    
+    # 절대 vocab 후보가 될 수 없는 단어 (소문자 기준)
+    FORBIDDEN = {
+        # 기능어·의문사
+        'that', 'which', 'who', 'whom', 'whose', 'where', 'when', 'why', 'how', 'what',
+        # 관사·전치사
+        'the', 'a', 'an', 'of', 'in', 'on', 'at', 'by', 'for', 'with', 'from', 'to',
+        'into', 'onto', 'upon', 'over', 'under', 'about', 'between', 'among', 'through',
+        # 대명사
+        'it', 'its', 'they', 'them', 'their', 'this', 'these', 'those',
+        'he', 'him', 'his', 'she', 'her', 'we', 'us', 'our', 'you', 'your', 'i', 'my',
+        # 접속사
+        'and', 'or', 'but', 'so', 'yet', 'nor', 'because', 'although', 'though',
+        'while', 'whereas', 'if', 'unless', 'since', 'as',
+        # be동사·조동사
+        'is', 'are', 'was', 'were', 'be', 'been', 'being', 'am',
+        'will', 'would', 'can', 'could', 'shall', 'should', 'must', 'may', 'might',
+        'have', 'has', 'had', 'having',
+        'do', 'does', 'did', 'doing', 'done',
+        # 빈출 평이 단어
+        'thing', 'things', 'way', 'ways', 'place', 'places', 'time', 'times',
+        'day', 'days', 'year', 'years', 'people', 'person',
+        'world', 'life', 'lives', 'work', 'works',
+        'make', 'makes', 'made', 'making',
+        'go', 'goes', 'went', 'going',
+        'come', 'comes', 'came', 'coming',
+        'get', 'gets', 'got', 'getting',
+        'take', 'takes', 'took', 'taking',
+        'put', 'puts', 'putting',
+        'see', 'sees', 'saw', 'seen', 'seeing',
+        'say', 'says', 'said', 'saying',
+        'know', 'knows', 'knew', 'known',
+        'good', 'bad', 'big', 'small', 'large', 'little',
+        'new', 'old', 'high', 'low', 'long', 'short',
+        # 기타 너무 평이
+        'general public', 'voice assistants', 'computer vision', 
+        'natural language processing', 'text recognition', 'ride-hailing apps',
+    }
+    
+    CIRCLED_ALPHA = "ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞ"
+    
+    vocab_notes = data.get("vocab_notes", []) or []
+    vocab_detail = data.get("vocab_detail", []) or []
+    passage_marked = data.get("passage_marked", "") or ""
+    
+    # vocab_notes 필터링
+    removed = []
+    cleaned_notes = []
+    for idx, v in enumerate(vocab_notes):
+        if not isinstance(v, dict):
+            cleaned_notes.append(v)
+            continue
+        word = (v.get("word") or "").strip().lower()
+        # 빈 단어, 1글자, 숫자만, 기능어/평이단어 제거
+        if (not word or len(word) <= 1 or word.isdigit() 
+            or word in FORBIDDEN):
+            letter = (v.get("letter") or "").strip()
+            removed.append((letter, v.get("word", "")))
+            # 본문에서도 해당 VOCAB 마커 제거
+            if letter and letter[0] in CIRCLED_ALPHA:
+                l = letter[0]
+                # [[VOCAB:l=ⓐ]]word[[/VOCAB]] 패턴 제거 (단어만 남김)
+                pat1 = f"[[VOCAB:l={l}]]"
+                pat2 = "[[/VOCAB]]"
+                # 가장 가까운 [[/VOCAB]] 짝 찾아서 제거
+                start = passage_marked.find(pat1)
+                if start >= 0:
+                    end = passage_marked.find(pat2, start)
+                    if end >= 0:
+                        inner = passage_marked[start+len(pat1):end]
+                        passage_marked = passage_marked[:start] + inner + passage_marked[end+len(pat2):]
+            continue
+        cleaned_notes.append(v)
+    
+    # vocab_detail도 동일 필터
+    cleaned_detail = []
+    for v in vocab_detail:
+        if not isinstance(v, dict):
+            cleaned_detail.append(v)
+            continue
+        word = (v.get("word") or "").strip().lower()
+        if (not word or len(word) <= 1 or word.isdigit() 
+            or word in FORBIDDEN):
+            removed.append((v.get("letter",""), v.get("word",""), "detail"))
+            continue
+        cleaned_detail.append(v)
+    
+    if removed:
+        _safe_print(f"  ⚠️ 부적절한 vocab 제거: {removed}")
+        # letter 재할당 (제거 후 연속된 ⓐⓑⓒ로) — 본문 마커도 동기화
+        # 1) 현재 남은 vocab의 letter → 새 letter 매핑
+        notes_remap = {}  # old_letter -> new_letter
+        for new_idx, v in enumerate(cleaned_notes):
+            if isinstance(v, dict) and new_idx < len(CIRCLED_ALPHA):
+                old = (v.get("letter") or "").strip()
+                if old:
+                    old = old[0]
+                new_letter = CIRCLED_ALPHA[new_idx]
+                if old and old != new_letter:
+                    notes_remap[old] = new_letter
+                v["letter"] = new_letter
+        
+        for new_idx, v in enumerate(cleaned_detail):
+            if isinstance(v, dict) and new_idx < len(CIRCLED_ALPHA):
+                v["letter"] = CIRCLED_ALPHA[new_idx]
+        
+        # 2) 본문 VOCAB 마커도 동일하게 매핑 — 임시 placeholder 거쳐서 안전하게
+        if notes_remap:
+            tmp = passage_marked
+            for old_l, new_l in notes_remap.items():
+                tmp = tmp.replace(f"[[VOCAB:l={old_l}]]", f"[[VOCAB:l=__{old_l}__]]")
+            for old_l, new_l in notes_remap.items():
+                tmp = tmp.replace(f"[[VOCAB:l=__{old_l}__]]", f"[[VOCAB:l={new_l}]]")
+            passage_marked = tmp
+    
+    data["vocab_notes"] = cleaned_notes
+    data["vocab_detail"] = cleaned_detail
+    data["passage_marked"] = passage_marked
+    return data
 
 
 def _ensure_vocab_markers(passage_marked: str, vocab_notes: list) -> str:

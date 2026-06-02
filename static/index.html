@@ -123,6 +123,9 @@ textarea:focus { border-color: #4A90D9; outline: none; }
 .sn-result-item { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border:1px solid #ddd8fe; border-radius:8px; margin-bottom:6px; font-size:13px; background:white; }
 .btn-purple { background:#7c3aed; color:white; }
 .btn-purple:hover { background:#6d28d9; }
+.pc-mode-tabs{display:flex;gap:4px}
+.pc-mode-tab{flex:1;padding:8px 6px;font-size:12px;font-weight:700;border:1.5px solid #fbbf24;background:#fff;color:#b45309;border-radius:6px;cursor:pointer;transition:all .15s;line-height:1.2;}
+.pc-mode-tab.active{background:#f59e0b;color:#fff;border-color:#f59e0b}
 </style>
 </head>
 <body>
@@ -199,21 +202,15 @@ textarea:focus { border-color: #4A90D9; outline: none; }
             <input type="text" id="pc-school-name" placeholder="레벨미업학원" value="레벨미업학원"
               style="width:100%;padding:8px 10px;border:2px solid #fbbf24;border-radius:6px;font-size:12px;outline:none;margin-top:4px;">
           </div>
-          <!-- ★ 추출 모드 선택 -->
-          <div style="background:#fffbeb;border:1.5px dashed #fbbf24;border-radius:6px;padding:8px 10px;margin-bottom:10px;">
-            <div style="font-size:11px;font-weight:700;color:#b45309;margin-bottom:6px;">📋 추출 모드</div>
-            <label style="display:flex;align-items:center;font-size:12px;color:#444;margin-bottom:4px;cursor:pointer;">
-              <input type="radio" name="pc-mode" value="preclass" checked onchange="pcUpdateButtonLabel()" style="margin-right:6px;accent-color:#f59e0b;">
-              📕 0회독 자료만 (수업 전 분석)
-            </label>
-            <label style="display:flex;align-items:center;font-size:12px;color:#444;margin-bottom:4px;cursor:pointer;">
-              <input type="radio" name="pc-mode" value="sentence_order" onchange="pcUpdateButtonLabel()" style="margin-right:6px;accent-color:#f59e0b;">
-              🔀 한 문장 순서배열만 (수업 후 시험용)
-            </label>
-            <label style="display:flex;align-items:center;font-size:12px;color:#444;cursor:pointer;">
-              <input type="radio" name="pc-mode" value="both" onchange="pcUpdateButtonLabel()" style="margin-right:6px;accent-color:#f59e0b;">
-              📦 둘 다 (0회독 + 순서배열)
-            </label>
+          <!-- ★ 자료 종류 (탭) -->
+          <div style="background:#fffbeb;border:1.5px dashed #fbbf24;border-radius:6px;padding:8px;margin-bottom:8px;">
+            <div style="font-size:11px;font-weight:700;color:#b45309;margin-bottom:6px;">📋 자료 종류</div>
+            <div class="pc-mode-tabs">
+              <button type="button" class="pc-mode-tab active" data-mode="preclass" onclick="pcSetMode('preclass',this)">📕 0회독</button>
+              <button type="button" class="pc-mode-tab" data-mode="sentence_order" onclick="pcSetMode('sentence_order',this)">🔀 순서</button>
+              <button type="button" class="pc-mode-tab" data-mode="both" onclick="pcSetMode('both',this)">📦 0회독<br>+순서</button>
+              <button type="button" class="pc-mode-tab" data-mode="topic" onclick="pcSetMode('topic',this)">🎨 배경<br>지식</button>
+            </div>
           </div>
           <button class="btn btn-orange" id="pc-btn-d" onclick="doPreclass()" disabled style="width:100%;background:#f59e0b;">
             📕 0회독 자료 생성
@@ -1242,6 +1239,14 @@ function pcUpdateBtn() {
   document.getElementById('pc-btn-d').disabled = pcSelectedPassages.size === 0;
 }
 
+let pcMode = 'preclass';
+function pcSetMode(m, el){
+  pcMode = m;
+  document.querySelectorAll('.pc-mode-tab').forEach(b => b.classList.toggle('active', b === el));
+  pcUpdateButtonLabel();
+}
+function pcGetMode(){ return pcMode; }
+
 async function doPreclass() {
   const passages = [...pcSelectedPassages.values()];
   if (!passages.length) { toast('지문을 선택하세요'); return; }
@@ -1258,13 +1263,51 @@ async function doPreclass() {
   progress.classList.remove('hidden');
   resultsSection.classList.add('hidden'); resultsList.innerHTML = '';
 
+  // ★ 배경지식(수업배경자료): 선택 지문을 한 번에 묶어 요청 → iframe 미리보기
+  if (pcGetMode() === 'topic') {
+    progressText.textContent = `배경지식 조립 중... (${passages.length}개 지문)`;
+    progressFill.style.width = '40%';
+    try {
+      const res = await fetch(API + '/api/secret-note', {
+        method: 'POST', headers: headers(),
+        body: JSON.stringify({ type: 'D', mode: 'topic', school_name: schoolName,
+          passages: passages.map(p => ({ book: p.book, unit: p.unit, id: p.id })) })
+      });
+      const data = await res.json();
+      progressFill.style.width = '100%';
+      if (data.ok) {
+        progressText.textContent = '완료!';
+        resultsSection.classList.remove('hidden');
+        const enc = encodeURIComponent(data.html);
+        const srcdoc = data.html.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+        resultsList.innerHTML =
+          `<div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;">
+             <button class="btn btn-sm btn-orange" onclick="downloadHtml(\`${enc}\`,'${data.filename}')">📥 다운로드</button>
+             <button class="btn btn-sm" style="background:#eee;color:#333;" onclick="const w=window.open();w.document.write(decodeURIComponent('${enc}'));w.document.close();">↗ 새 창으로</button>
+           </div>
+           <iframe title="배경지식" sandbox="allow-scripts allow-popups"
+             style="width:100%;height:75vh;border:1px solid #e5e7eb;border-radius:8px;background:#fff;"
+             srcdoc="${srcdoc}"></iframe>`;
+      } else {
+        progressText.textContent = '실패';
+        resultsSection.classList.remove('hidden');
+        resultsList.innerHTML = `<div style="color:#dc2626;font-size:13px;padding:8px;">${data.detail || '생성 실패'}</div>`;
+      }
+    } catch (e) {
+      resultsSection.classList.remove('hidden');
+      resultsList.innerHTML = `<div style="color:#dc2626;font-size:13px;padding:8px;">${e.message}</div>`;
+    }
+    btn.disabled = false;
+    return;
+  }
+
   let completed = 0; const results = [];
   for (const p of passages) {
     progressText.textContent = `생성 중... ${completed+1}/${passages.length} — ${p.unit} ${p.id}  (40~60초 소요)`;
     progressFill.style.width = `${(completed/passages.length)*100}%`;
     try {
       // 백엔드는 /api/secret-note 라우트에서 type=D + mode 분기 처리
-      const pcMode = (document.querySelector('input[name="pc-mode"]:checked') || {}).value || 'preclass';
+      const pcMode = pcGetMode();
       const res = await fetch(API+'/api/secret-note', {
         method: 'POST', headers: headers(),
         body: JSON.stringify({type:'D', mode: pcMode, school_name: schoolName, passages:[{book:p.book,unit:p.unit,id:p.id}]})
@@ -1298,13 +1341,14 @@ async function doPreclass() {
 }
 
 function pcUpdateButtonLabel() {
-  const mode = (document.querySelector('input[name="pc-mode"]:checked') || {}).value || 'preclass';
+  const mode = pcGetMode();
   const btn = document.getElementById('pc-btn-d');
   if (!btn) return;
   const labels = {
     'preclass': '📕 0회독 자료 생성',
     'sentence_order': '🔀 한 문장 순서배열 생성',
     'both': '📦 0회독 + 순서배열 생성',
+    'topic': '🎨 배경지식 보기',
   };
   btn.textContent = labels[mode] || labels.preclass;
 }
@@ -1315,16 +1359,18 @@ function pcDownloadMerged(schoolName) {
   const results = window._lastPcResults;
   const css = (results[0].html.match(/<style[^>]*>([\s\S]*?)<\/style>/) || ['',''])[1];
   
-  const mode = (document.querySelector('input[name="pc-mode"]:checked') || {}).value || 'preclass';
+  const mode = pcGetMode();
   const titleMap = {
     'preclass': '0회독 수업전분석 합본',
     'sentence_order': '한문장 순서배열 합본',
     'both': '0회독+순서배열 합본',
+    'topic': '배경지식 합본',
   };
   const fnameMap = {
     'preclass': '0회독_수업전분석_합본',
     'sentence_order': '한문장순서배열_합본',
     'both': '0회독_순서배열_합본',
+    'topic': '배경지식_합본',
   };
   const docTitle = titleMap[mode] || titleMap.preclass;
   const fnameBase = fnameMap[mode] || fnameMap.preclass;

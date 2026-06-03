@@ -369,7 +369,7 @@ def generate_topic_background(passage: str, passage_dir, label: str = "",
     data = _drop_unverified_images(data)
     data.setdefault("chip", (label or "지문") + " 📘")
     data.setdefault("script_js", "")
-    data["_step_version"] = "v1"
+    data["_step_version"] = "v2"
 
     # 4b) 이미지: image_queries 로 위키에서 직접 확보해 첫 카드에 주입 (모델 <img> 의존 제거)
     try:

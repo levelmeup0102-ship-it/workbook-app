@@ -135,6 +135,9 @@ GEN_SYSTEM = """너는 한국 고등학교 영어 내신 강사를 위한 '수�
 - 톤: 친근한 한국어 구어체("~예요","~죠"). <b>는 핵심어에만. 사실 위주.
 - 절대 <style>,<script>,onclick,onerror,iframe,외부 CSS 금지. 위 클래스 외 새 class 만들지 말 것.
 - 이미지 src는 upload.wikimedia.org 외 금지.
+- 절대 <cite>, <sup>, <abbr>, <mark>, [1] 같은 인용/각주 표시를 넣지 마라. 검색 결과는 사실 확인에만 쓰고, 출력엔 인용 태그를 절대 포함하지 마라.
+- keyterm 은 정확히 <div class='kt'><h4>용어</h4><p>정의</p></div> 형식만 사용. kt-en/kt-ko/kt-desc 같은 클래스 만들지 마라.
+- ctitle/ctag/en/lab 은 반드시 <span> 으로 작성(<div> 금지).
 
 [overview_html]
 - <h3>{이모지} {지문번호} — {소재}</h3> + <div class='flow'>...<span class='node'>..</span><span class='ar'>→</span>..</div>
@@ -171,6 +174,42 @@ def _strip_dangerous(html: str) -> str:
             return ''  # 비허용 이미지는 통째 제거
         return tag
     html = _ALLOWED_IMG_RE.sub(_img, html)
+    return html
+
+def _normalize_markup(html: str) -> str:
+    """모델이 만든 마크업을 16강 디자인에 맞게 교정.
+    - <cite ...>...</cite> 등 군더더기 태그 제거(내용은 보존)
+    - <div class='ctitle'> → <span class='ctitle'> (ctitle/ctag/en 은 span 이어야 함)
+    - keyterm 의 .kt-en/.kt-ko/.kt-desc → <h4>+<p> 구조로 교정
+    - <b>비유:</b> 같은 잘못된 analogy → 그대로 두되 최소 정리
+    """
+    if not html: return ""
+    # cite/abbr/mark/small/time 등 인용·잡태그: 태그만 제거, 내용 유지
+    html = re.sub(r'</?(?:cite|abbr|mark|small|time|sup|sub|figure|figcaption|article|header|footer|main|aside)\b[^>]*>', '', html, flags=re.I)
+    # ctitle/ctag/en/lab/csub 등 인라인 라벨이 <div>로 온 경우 → <span>으로 통째 교정
+    # (이 클래스들은 내부에 다른 div를 품지 않는 단순 인라인이므로 여는~닫는 div를 한 번에 매칭)
+    def _to_span(cls, h):
+        # <div class='cls' ...>INNER</div>  (INNER에 또 다른 <div 없음) → <span class='cls'>INNER</span>
+        pat = re.compile(r"<div(\s+class=['\"]%s['\"][^>]*)>((?:(?!<div\b).)*?)</div>" % cls, re.I|re.S)
+        prev=None
+        while prev!=h:
+            prev=h; h=pat.sub(lambda m: "<span%s>%s</span>" % (m.group(1), m.group(2)), h)
+        return h
+    for cls in ("ctitle","ctag","en","lab"):
+        html = _to_span(cls, html)
+    # keyterm: <span class='kt-en'>A</span><span class='kt-ko'>B</span><span class='kt-desc'>C</span>
+    #          → <h4>A (B)</h4><p>C</p>
+    def _kt(m):
+        en = re.search(r"kt-en['\"]\s*>(.*?)<", m.group(0), re.S)
+        ko = re.search(r"kt-ko['\"]\s*>(.*?)<", m.group(0), re.S)
+        de = re.search(r"kt-desc['\"]\s*>(.*?)<", m.group(0), re.S)
+        en=(en.group(1).strip() if en else ""); ko=(ko.group(1).strip() if ko else ""); de=(de.group(1).strip() if de else "")
+        head = en + ((" ("+ko+")") if ko else "")
+        return "<div class='kt'><h4>%s</h4><p>%s</p></div>" % (head, de)
+    html = re.sub(r"<div class=['\"]kt['\"]>.*?</div>\s*(?=<div class=['\"]kt['\"]>|</div>)", _kt, html, flags=re.I|re.S)
+    # analogy 가 <b>비유:</b> 형태면 .ah 헤더로 살짝 정리
+    html = re.sub(r"<div class=['\"]analogy['\"]>\s*<b>\s*비유\s*:?\s*</b>",
+                  "<div class='analogy'><div class='ah'><span class='em'>비유</span>비유</div><p>", html, flags=re.I)
     return html
 
 def _drop_unverified_images(data: dict) -> dict:
@@ -214,16 +253,37 @@ def generate_topic_background(passage: str, passage_dir, label: str = "",
     anchor_hint = re.sub(r'[^0-9a-zA-Z]+', '_', (label or "x")).strip('_').lower() or "x"
     user = GEN_USER_TMPL.format(label=label or "지문", passage=passage.strip(),
                                 anchor_hint=anchor_hint)
-    raw = call_claude_with_search(GEN_SYSTEM, user, max_uses=max_uses)
 
-    # 3) JSON 파싱(견고)
-    txt = re.sub(r'^```json\s*','',raw.strip()); txt = re.sub(r'\s*```$','',txt).strip()
-    try:
-        data = json.loads(txt)
-    except Exception:
-        m = re.search(r'\{[\s\S]*\}', txt)
-        if not m: raise ValueError("topic_background JSON 파싱 실패")
-        data = json.loads(m.group())
+    def _try_parse(raw):
+        txt = re.sub(r'^```json\s*','',raw.strip()); txt = re.sub(r'\s*```$','',txt).strip()
+        try:
+            return json.loads(txt)
+        except Exception:
+            m = re.search(r'\{[\s\S]*\}', txt)
+            if not m: return None
+            try: return json.loads(m.group())
+            except Exception: return None
+
+    # 1차: web_search 켜고 생성 (토큰 넉넉히)
+    print(f"[topic_background] {label} 생성 시작 (web_search, max_uses={max_uses})", flush=True)
+    raw = call_claude_with_search(GEN_SYSTEM, user, max_uses=max_uses, max_tokens=20000)
+    data = _try_parse(raw)
+
+    # 2차 폴백: 파싱 실패 시 검색 끄고 한 번 더 (순수 JSON 유도)
+    if data is None:
+        print(f"[topic_background] {label} 1차 파싱 실패 → 검색 없이 재시도. raw앞부분: {raw[:160]!r}", flush=True)
+        try:
+            fb_user = user + "\n\n[중요] 이번엔 검색하지 말고, 위 지시의 JSON 객체 하나만 즉시 출력하라. 인용 태그 절대 금지."
+            body = {"model":MODEL,"max_tokens":20000,"temperature":0.2,
+                    "system":GEN_SYSTEM,"messages":[{"role":"user","content":fb_user}]}
+            fb = _curl_messages(body)
+            fbtexts = [b.get("text","") for b in fb.get("content",[]) if b.get("type")=="text"]
+            data = _try_parse("\n".join(fbtexts))
+        except Exception as e:
+            print(f"[topic_background] {label} 폴백 호출 에러: {e}", flush=True)
+
+    if data is None:
+        raise ValueError(f"topic_background JSON 파싱 최종 실패 ({label})")
 
     # 4) 보정 + 새니타이즈
     anchor = re.sub(r'[^0-9a-zA-Z_]+','', data.get("anchor") or f"tb_{anchor_hint}") or f"tb_{anchor_hint}"
@@ -236,13 +296,14 @@ def generate_topic_background(passage: str, passage_dir, label: str = "",
             sec = sec.replace("<section", f'<section id="{anchor}"', 1)
     else:
         sec = f'<section id="{anchor}">{sec}</section>'
-    data["section_html"] = _strip_dangerous(sec)
-    data["overview_html"] = _strip_dangerous(data.get("overview_html","") or "")
+    data["section_html"] = _normalize_markup(_strip_dangerous(sec))
+    data["overview_html"] = _normalize_markup(_strip_dangerous(data.get("overview_html","") or ""))
     data = _drop_unverified_images(data)
     data.setdefault("chip", (label or "지문") + " 📘")
     data.setdefault("script_js", "")   # 자동생성은 인터랙티브 JS 없음(정적 카드/표/비유/이미지)
     data["_step_version"] = "v1"
 
+    print(f"[topic_background] {label} 생성 완료 (img {len(data.get('images',[]))}개)", flush=True)
     # 5) 캐시 저장
     if save_step_fn is not None:
         try: save_step_fn(passage_dir, step_name, data)

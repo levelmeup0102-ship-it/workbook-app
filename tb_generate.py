@@ -91,6 +91,70 @@ def validate_image_url(url: str, timeout=8) -> bool:
         # 네트워크 검증 불가 환경 → 형식 통과로 인정
         return True
 
+# =========================================================================
+# Wikipedia 이미지 직접 조회 (백엔드에서 능동적으로 사진 확보)
+# =========================================================================
+def _curl_json(url: str, timeout=10):
+    try:
+        r = subprocess.run(['curl','-s','-L','--max-time',str(timeout),
+                            '-H','User-Agent: LevelMeUp-Workbook/1.0 (education)',
+                            url], capture_output=True, timeout=timeout+3)
+        out = r.stdout.decode('utf-8','replace')
+        if not out.strip(): return None
+        return json.loads(out)
+    except Exception:
+        return None
+
+def _norm_upload(u: str) -> str:
+    if not u: return ""
+    if u.startswith("//"): u = "https:" + u
+    return u
+
+def wiki_search_image(query: str, lang: str = "en", n: int = 1) -> list:
+    """위키 검색 → 썸네일(upload.wikimedia.org) URL 리스트. 실패 시 []"""
+    if not query: return []
+    import urllib.parse as _u
+    base = f"https://{lang}.wikipedia.org"
+    url = f"{base}/w/rest.php/v1/search/page?q={_u.quote(query)}&limit={max(1,n*2)}"
+    data = _curl_json(url)
+    out = []
+    if data and isinstance(data.get("pages"), list):
+        for p in data["pages"]:
+            th = (p or {}).get("thumbnail") or {}
+            src = _norm_upload(th.get("url",""))
+            if src and validate_image_url(src):
+                out.append({"url": src, "alt": p.get("title",""), "credit": "Wikimedia Commons",
+                            "title": p.get("title","")})
+            if len(out) >= n: break
+    return out
+
+def wiki_summary_image(title: str, lang: str = "en") -> dict | None:
+    """위키 페이지 요약의 대표 이미지(가능하면 원본). 실패 시 None"""
+    if not title: return None
+    import urllib.parse as _u
+    url = f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{_u.quote(title)}"
+    d = _curl_json(url)
+    if not d: return None
+    src = ((d.get("originalimage") or {}).get("source")
+           or (d.get("thumbnail") or {}).get("source") or "")
+    src = _norm_upload(src)
+    if src and validate_image_url(src):
+        return {"url": src, "alt": d.get("title", title), "credit": "Wikimedia Commons",
+                "title": d.get("title", title)}
+    return None
+
+def fetch_images_for(queries: list, lang_order=("en","ko"), max_imgs=2) -> list:
+    """여러 키워드로 위키 이미지 확보(중복 제거). queries: 모델이 준 이미지 검색어들."""
+    seen, out = set(), []
+    for q in queries:
+        if len(out) >= max_imgs: break
+        for lang in lang_order:
+            got = wiki_summary_image(q, lang) or (wiki_search_image(q, lang, 1) or [None])[0]
+            if got and got["url"] not in seen:
+                seen.add(got["url"]); out.append(got); break
+    return out
+
+
 if __name__ == "__main__":
     # 이미지 검증 단위 테스트 (네트워크)
     ok = "https://upload.wikimedia.org/wikipedia/commons/thumb/0/02/Albert_Einstein_1947.jpg/220px-Albert_Einstein_1947.jpg"
@@ -102,46 +166,50 @@ if __name__ == "__main__":
 # 생성 프롬프트 + 후처리
 # =========================================================================
 GEN_SYSTEM = """너는 한국 고등학교 영어 내신 강사를 위한 '수업배경자료' 제작자다.
-주어진 영어 지문 1개를 받아, 그 지문이 다루는 '소재(주제 대상)'의 배경을 깊이 파고드는
-학습 카드 묶음을 만든다. 인물이 아니라 소재(개념·장소·현상·연구) 중심으로 설명한다.
+영어 지문 1개를 받아, 그 지문의 핵심 '소재(개념·장소·현상·연구·인물)'의 배경을 파고드는 학습 카드를 만든다.
+목표는 백과사전이 아니라 "이 배경지식이 지문 독해와 내신 시험에 어떻게 쓰이는지"를 학생이 알게 하는 것.
 
 [사실 검증 — 매우 중요]
-- 학자 이름, 연도, 지명, 수치, 연구 출처 같은 사실은 반드시 web_search로 교차 확인한다.
-- 확인 안 된 사실은 쓰지 않는다. 추정·환각 금지.
-- 인물이나 장소가 핵심이면, web_search로 'Wikimedia Commons' 이미지를 찾는다.
-  반드시 upload.wikimedia.org 로 시작하는 직접 이미지 URL(.jpg/.png)만 사용한다.
-  없으면 이미지 없이 둔다(가짜 URL 절대 금지).
+- 학자/연도/지명/수치/연구/작품명 같은 사실은 반드시 web_search로 교차 확인한다. 확인 안 된 건 쓰지 않는다(환각 금지).
 
-[출력 형식 — JSON only]
-아래 키만 가진 JSON 하나만 출력한다. 코드블록/설명 금지.
+[수업 쓸모 — 반드시 지킬 것]
+- 카드마다 .inpassage 에 "이 배경이 지문 ❶❷ 문장 독해에 어떻게 연결되는지"를 구체적으로 적는다.
+- 마지막 카드는 .card danger 로 '시험 포인트' 카드를 만든다: 이 소재가 빈칸·순서·요약·어법으로 어떻게 변형 출제될지, 학생이 헷갈릴 함정은 무엇인지.
+- 'theme' 와 'overview' 는 지문의 논리 흐름(주제·전환)을 한 줄로 요약한다.
+
+[이미지 — 텍스트로 직접 넣지 말 것]
+- <img> 태그를 직접 만들지 마라. 대신 출력 JSON 의 "image_queries" 에 위키백과에서 찾을 검색어(영어 제목 우선)를 1~3개 넣어라.
+  예) 인물이면 정확한 영문 표제어("Ralph Bunche"), 장소·사물·작품이면 그 표제어("Cuju","Albert Bierstadt").
+- 서버가 그 검색어로 위키 이미지를 가져와 알맞은 카드에 자동으로 넣는다.
+
+[정형 인터랙티브 1개 — 반드시 포함]
+- 출력 JSON 의 "toggle" 에 핵심 대조/분류를 2~3개 항목으로 넣어라(탭 토글로 렌더된다). 형식:
+  "toggle": { "title":"질문/제목", "items":[ {"label":"버튼명","body":"설명(핵심어 <b>볼드</b>)"}, ... ] }
+- 지문 이해에 가장 도움되는 대조를 고른다(예: 두 개념 비교, 단계, 입장 차이).
+
+[출력 형식 — JSON only, 코드블록·설명·인용표시 금지]
 {
-  "anchor": "tb_xxx",                  // 영문/숫자/언더스코어 짧은 id
-  "chip": "8-4 관찰 드로잉 🎨",         // hero 칩 라벨 (지문번호 + 짧은소재 + 이모지 1개)
+  "anchor": "tb_xxx",
+  "chip": "지문번호 + 짧은소재 + 이모지 1개 (예: 7-3 노벨평화상 🏆)",
   "section_html": "<section id='tb_xxx'> ... </section>",
-  "overview_html": "<h3>... </h3><div class='flow'>...</div><p>...</p>",
-  "images": [ {"url":"https://upload.wikimedia.org/...","alt":"...","credit":"Wikimedia Commons"} ]
+  "overview_html": "<h3>{이모지} {지문번호} — {소재}</h3><div class='flow'><span class='node'>A</span><span class='ar'>→</span><span class='node'>B</span></div><p style='font-size:13.5px;color:#48605b;font-weight:600;margin-top:10px'>{한 줄 정리}</p>",
+  "image_queries": ["English Wikipedia title 1", "..."],
+  "toggle": { "title":"...", "items":[ {"label":"...","body":"..."} ] }
 }
 
-[section_html 작성 규칙 — 반드시 이 클래스만 사용]
-- 최상위는 <section id='{anchor}'> ... </section>.
+[section_html 규칙 — 아래 클래스만, 새 class 만들기 금지]
+- 최상위 <section id='{anchor}'>.
 - 순서: <div class='sec-num'>지문 · NN</div> → <h2><span class='bar'></span>{한글소제목}</h2>
-  → <div class='sec-en'>{영어 원제 추정}</div> → <span class='theme'>핵심 주제 — ...</span>
-  → 카드 2~4개(.card / .card amber|danger|blue|purple) → <div class='keyterm'> kt 2개 </div>
-- 카드 내부: .chead>(.ctitle>.en, .ctag), .csub, .cbody(<b>로 핵심어만), 필요시 .quote/.analogy/.ctable,
-  그리고 거의 항상 .inpassage(<span class='lab'>지문 속</span> ❶❷ 문장연결).
-- 어려운 개념엔 .analogy(비유) 또는 .ctable(비교표)를 넣어 직관적으로.
-- 인물/장소 이미지가 있으면 .fig 안에 <img src='{검증된 위키 URL}' alt='...' style='width:100%;border-radius:10px'>
-  + <div class='figcap'>설명 + 출처: Wikimedia Commons</div>.
-- 톤: 친근한 한국어 구어체("~예요","~죠"). <b>는 핵심어에만. 사실 위주.
-- 절대 <style>,<script>,onclick,onerror,iframe,외부 CSS 금지. 위 클래스 외 새 class 만들지 말 것.
-- 이미지 src는 upload.wikimedia.org 외 금지.
-- 절대 <cite>, <sup>, <abbr>, <mark>, [1] 같은 인용/각주 표시를 넣지 마라. 검색 결과는 사실 확인에만 쓰고, 출력엔 인용 태그를 절대 포함하지 마라.
-- keyterm 은 정확히 <div class='kt'><h4>용어</h4><p>정의</p></div> 형식만 사용. kt-en/kt-ko/kt-desc 같은 클래스 만들지 마라.
-- ctitle/ctag/en/lab 은 반드시 <span> 으로 작성(<div> 금지).
-
-[overview_html]
-- <h3>{이모지} {지문번호} — {소재}</h3> + <div class='flow'>...<span class='node'>..</span><span class='ar'>→</span>..</div>
-  + <p style='font-size:13.5px;color:#48605b;font-weight:600;margin-top:10px'>{한 줄 정리}</p>
+  → <div class='sec-en'>{영어 원제}</div> → <span class='theme'>핵심 주제 — ...</span>
+  → 카드 3~4개 → <div class='keyterm'><div class='kt'><h4>용어</h4><p>정의</p></div> 2개 </div>
+- 카드: <div class='card {amber|danger|blue|purple}'> 안에
+  <div class='chead'><span class='ctitle'>제목<span class='en'>English</span></span><span class='ctag'>라벨</span></div>
+  <div class='csub'>부제</div> <div class='cbody'>설명(<b>핵심어</b>만 볼드)</div>
+  필요시 <div class='quote'>"인용"<span class='ko'>번역</span></div> 또는 <div class='analogy'><div class='ah'><span class='em'>비유</span>제목</div><p>...</p></div>
+  또는 <table class='ctable'><thead><tr><th>..</th></tr></thead><tbody><tr><td class='lcell'>..</td><td>..</td></tr></tbody></table>
+  끝에 거의 항상 <div class='inpassage'><span class='lab'>지문 속</span> ❶❷ ...연결...</div>
+- ctitle/ctag/en/lab 은 반드시 <span>. <cite>/<sup>/각주/[1] 같은 인용표시 절대 금지.
+- 톤: 친근한 구어체("~예요","~죠"). <b>는 핵심어에만.
 """
 
 GEN_USER_TMPL = """다음은 분석할 영어 지문이다. 지문 번호: {label}
@@ -300,8 +368,74 @@ def generate_topic_background(passage: str, passage_dir, label: str = "",
     data["overview_html"] = _normalize_markup(_strip_dangerous(data.get("overview_html","") or ""))
     data = _drop_unverified_images(data)
     data.setdefault("chip", (label or "지문") + " 📘")
-    data.setdefault("script_js", "")   # 자동생성은 인터랙티브 JS 없음(정적 카드/표/비유/이미지)
+    data.setdefault("script_js", "")
     data["_step_version"] = "v1"
+
+    # 4b) 이미지: image_queries 로 위키에서 직접 확보해 첫 카드에 주입 (모델 <img> 의존 제거)
+    try:
+        queries = data.get("image_queries") or []
+        if isinstance(queries, str): queries = [queries]
+        # 모델이 그래도 넣은 검증된 이미지가 있으면 합치고, 없으면 위키 조회
+        existing = [im for im in (data.get("images") or []) if validate_image_url((im or {}).get("url",""))]
+        fetched = fetch_images_for([q for q in queries if q], max_imgs=2) if queries else []
+        all_imgs, seen = [], set()
+        for im in (existing + fetched):
+            u=(im or {}).get("url","")
+            if u and u not in seen:
+                seen.add(u); all_imgs.append(im)
+        data["images"] = all_imgs[:2]
+        # section_html 의 첫 .card 안 .cbody 뒤에 .fig 주입(이미 fig 있으면 스킵)
+        if data["images"] and "class='fig'" not in data["section_html"] and 'class="fig"' not in data["section_html"]:
+            im = data["images"][0]
+            fig = ("<div class='fig'><img src='%s' alt='%s' style='width:100%%;border-radius:10px'>"
+                   "<div class='figcap'>%s · 출처: Wikimedia Commons</div></div>") % (
+                   im["url"], _html.escape(im.get("alt","")), _html.escape(im.get("alt","")))
+            # 첫 번째 </div> 닫힘 전, 첫 cbody 다음에 넣기: 첫 .inpassage 앞에 삽입
+            idx = data["section_html"].find("class='inpassage'")
+            if idx != -1:
+                # inpassage 를 감싼 <div 시작 위치로 되돌아가 그 앞에 삽입
+                pre = data["section_html"].rfind("<div", 0, idx)
+                data["section_html"] = data["section_html"][:pre] + fig + data["section_html"][pre:]
+            else:
+                data["section_html"] = data["section_html"].replace("</section>", fig+"</section>",1)
+    except Exception as _e:
+        print(f"[topic_background] {label} 이미지 주입 경고: {_e}", flush=True)
+
+    # 4c) 정형 토글 → 인터랙티브 HTML + JS (안전한 템플릿)
+    try:
+        tg = data.get("toggle") or {}
+        items = tg.get("items") or []
+        items = [it for it in items if isinstance(it,dict) and it.get("label") and it.get("body")][:3]
+        if len(items) >= 2:
+            tid = "tg_" + re.sub(r'[^0-9a-zA-Z_]','',data["anchor"])
+            btns = "".join(
+                "<button data-k='%d'%s>%s</button>" % (i, (" class='on'" if i==0 else ""), _html.escape(it["label"]))
+                for i,it in enumerate(items))
+            box = ("<div class='interbox'><div class='ihead'><span class='tap'>TAP</span>%s</div>"
+                   "<div class='ctrls' id='%s_c'>%s</div><div class='panel' id='%s_p'></div></div>") % (
+                   _html.escape(tg.get("title","비교해 보세요")), tid, btns, tid)
+            # 토글 데이터(JS) — body 는 <b> 정도만 허용하므로 strip 후 사용
+            import json as _j
+            jdata = _j.dumps([{"t":it["label"],"d":_strip_dangerous(it["body"])} for it in items], ensure_ascii=False)
+            js = (
+                "(function(){var D=" + jdata + ";"
+                "var c=document.getElementById('" + tid + "_c'),p=document.getElementById('" + tid + "_p');"
+                "if(!c||!p)return;"
+                "function set(k){p.innerHTML='<span class=\"em\">'+D[k].t+'</span><br>'+D[k].d;"
+                "[].forEach.call(c.children,function(b){b.classList.toggle('on',(+b.dataset.k)===k);});}"
+                "c.addEventListener('click',function(e){if(e.target.dataset.k)set(+e.target.dataset.k);});"
+                "set(0);})();"
+            )
+            # keyterm 앞에 토글 삽입(없으면 section 끝)
+            ki = data["section_html"].rfind("<div class='keyterm'")
+            if ki == -1: ki = data["section_html"].rfind('<div class="keyterm"')
+            if ki != -1:
+                data["section_html"] = data["section_html"][:ki] + box + data["section_html"][ki:]
+            else:
+                data["section_html"] = data["section_html"].replace("</section>", box+"</section>",1)
+            data["script_js"] = (data.get("script_js","") + "\n" + js).strip()
+    except Exception as _e:
+        print(f"[topic_background] {label} 토글 빌드 경고: {_e}", flush=True)
 
     print(f"[topic_background] {label} 생성 완료 (img {len(data.get('images',[]))}개)", flush=True)
     # 5) 캐시 저장

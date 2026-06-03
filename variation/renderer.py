@@ -20,7 +20,7 @@ from jinja2 import Environment, FileSystemLoader
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_DIR = BASE_DIR
 STATIC_DIR = os.path.join(BASE_DIR, "static")
-LOGO_PATH = os.path.join(STATIC_DIR, "logo2.png")
+LOGO_PATH = os.path.join(STATIC_DIR, "logo3.png")
 
 
 # ============ 로고 → data URI ============

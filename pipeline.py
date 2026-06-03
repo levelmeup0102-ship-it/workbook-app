@@ -16,7 +16,7 @@ STEP_VERSIONS = {
     "secret_note_a": "v4",  # v4: 유의어 5개, paraphrase 템플릿에서 삭제
     "secret_note_b": "v1",
     "secret_note_c": "v5",  # v5: 유의어 6-7개, 고난도 4-5개, 요지 2배 길이, 가로 배치
-    "topic_background": "v2",  # ★ 수업배경자료 조각 (v2: cite제거·이미지주입·토글)
+    "topic_background": "v3",  # v3: 이미지 사이즈업·다중주입·keyterm 보강
 }
 import asyncio, json, os, sys, time, random, re, math, logging
 from stage7_1_step1_prompt import PROMPT_TEMPLATE

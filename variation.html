@@ -11,17 +11,28 @@
 }
 @page {
   size: A4;
-  margin: 11mm 13mm 22mm 13mm;
-  @bottom-right {
-    content: element(footer-logo);
-    margin-right: 0;
-    margin-bottom: 0;
-  }
+  margin: 11mm 13mm 11mm 13mm;
 }
-.footer-logo { position: running(footer-logo); }
-.footer-logo img {
-  height: 28mm;
-  vertical-align: bottom;
+.q-page, .ans-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 270mm;
+}
+.q-page > .page-footer,
+.ans-page > .page-footer {
+  margin-top: auto;
+}
+.page-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 5mm;
+  margin-top: 6mm;
+  border-top: 1px solid #DDD;
+}
+.page-footer .footer-logo-img { height: 10mm; }
+.page-footer .page-num {
+  font-size: 9pt; color: #555; font-weight: 500;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -30,6 +41,8 @@ body {
   -webkit-print-color-adjust: exact; print-color-adjust: exact;
 }
 .q-page { page-break-after: always; }
+.ans-page { page-break-after: always; }
+.ans-page:last-child { page-break-after: auto; }
 .hdr {
   display: flex; justify-content: space-between; align-items: center;
   padding-bottom: 4px; border-bottom: 2px solid var(--primary); margin-bottom: 10px;
@@ -48,8 +61,8 @@ body {
 /* 지문 박스 */
 .psg-box {
   border: 1px solid var(--border); border-radius: 5px;
-  background: var(--bg-passage); padding: 9px 13px;
-  font-size: 9pt; line-height: 1.75; margin-bottom: 11px;
+  background: var(--bg-passage); padding: 8px 12px;
+  font-size: 9pt; line-height: 1.6; margin-bottom: 7px;
   text-align: justify;
 }
 .psg-lead {
@@ -98,7 +111,7 @@ body {
 .q-num.core { background: var(--purple); }
 .q-title {
   font-weight: bold; font-size: 9.5pt; color: #111;
-  margin-bottom: 5px; margin-top: 12px;
+  margin-bottom: 4px; margin-top: 7px;
 }
 .q-title:first-of-type { margin-top: 0; }
 
@@ -138,11 +151,11 @@ body {
 }
 .fill-line-big {
   flex: 1; border: 1px solid #999; border-radius: 3px; background: #fff;
-  height: 12mm;
+  height: 10mm;
   background-image:
     repeating-linear-gradient(to bottom,
-      transparent 0, transparent 5.5mm,
-      #ddd 5.5mm, #ddd 6mm);
+      transparent 0, transparent 4.5mm,
+      #ddd 4.5mm, #ddd 5mm);
 }
 
 /* 답지 */
@@ -255,15 +268,13 @@ body {
 </head>
 <body>
 
-<div class="footer-logo">
-  {% if logo_url %}<img src="{{ logo_url }}" alt="레벨미업">{% endif %}
-</div>
+{% set N = passages|length %}
+{% set TOTAL_PAGES = N + ((N + 2) // 3) %}
 
 {% for item in passages %}
 <div class="q-page">
   <div class="hdr">
     <span class="hdr-title">
-      {% if logo_url %}<img class="hdr-logo" src="{{ logo_url }}" alt="레벨미업">{% endif %}
       변형문제 — 유형 A <span class="var-badge">📝 TOPIC+ORDER+MATCH+CORE+FILL</span>
     </span>
     <span class="hdr-right">{{ item.label }}</span>
@@ -334,18 +345,25 @@ body {
     </div>
 
   </div>
+
+  <div class="page-footer">
+    {% if logo_url %}<img class="footer-logo-img" src="{{ logo_url }}" alt="레벨미업">{% else %}<span></span>{% endif %}
+    <span class="page-num">{{ loop.index }} / {{ TOTAL_PAGES }}</span>
+  </div>
 </div>
 {% endfor %}
 
-<div class="ans-start">
+{% for group in passages | batch(3) %}
+<div class="ans-page{% if loop.first %} ans-start{% endif %}">
+  {% if loop.first %}
   <div class="ans-hdr">
     <div class="hdr-title">
-      {% if logo_url %}<img class="hdr-logo" src="{{ logo_url }}" alt="레벨미업">{% endif %}
       변형문제 (유형 A) — 정답·해설 <span class="var-badge">📝 ANSWERS</span>
     </div>
   </div>
+  {% endif %}
 
-  {% for item in passages %}
+  {% for item in group %}
     <div class="ans-block">
       <div class="ans-block-title">▶ {{ item.label }}</div>
 
@@ -391,7 +409,13 @@ body {
       </div>
     </div>
   {% endfor %}
+
+  <div class="page-footer">
+    {% if logo_url %}<img class="footer-logo-img" src="{{ logo_url }}" alt="레벨미업">{% else %}<span></span>{% endif %}
+    <span class="page-num">{{ N + loop.index }} / {{ TOTAL_PAGES }}</span>
+  </div>
 </div>
+{% endfor %}
 
 </body>
 </html>

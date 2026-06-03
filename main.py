@@ -629,7 +629,8 @@ async def _secret_note_impl(body: dict):
     import pipeline as pl
     pl.DATA_DIR = DATA_DIR
     pl.TEMPLATE_DIR = Path(".")
-    import topic_background as tb   # ★ 수업배경자료
+    import topic_background as tbk   # ★ 수업배경자료 렌더러
+    import tb_generate as tbg          # ★ 수업배경자료 자동 생성(web_search)
 
     passages_data = []
     for p in passages_in:
@@ -682,7 +683,16 @@ async def _secret_note_impl(body: dict):
             "data":        note_data,
         }
         if note_type == "D" and pc_mode == "topic":
-            item["topic"] = pl.load_step(passage_dir, tb.TOPIC_STEP_NAME)
+            # 캐시 우선, 없으면 web_search 기반 자동 생성
+            try:
+                item["topic"] = tbg.generate_topic_background(
+                    passage_text, passage_dir, label=label,
+                    save_step_fn=pl.save_step, load_step_fn=pl.load_step,
+                    step_name=tbk.TOPIC_STEP_NAME, max_uses=5,
+                )
+            except Exception as e:
+                item["topic"] = None
+                item["topic_error"] = str(e)[:200]
         passages_data.append(item)
 
     if not passages_data:
@@ -691,8 +701,8 @@ async def _secret_note_impl(body: dict):
     # 유형 D는 별도 템플릿(preclass_analysis.html) + 다른 파일명
     if note_type == "D":
         # ★ pc_mode에 따라 render 옵션 다르게 호출
-        if pc_mode == "topic":   # ★ 수업배경자료 (조각 조립, LLM 미사용)
-            html = tb.render_topic_background(passages_data, school_name)
+        if pc_mode == "topic":   # ★ 수업배경자료 (캐시 or 자동 생성, web_search)
+            html = tbk.render_topic_background(passages_data, school_name)
             return {"ok": True, "html": html, "filename": "수업배경자료.html"}
         if pc_mode == "sentence_order":
             html = pl.render_preclass_analysis(passages_data, school_name,

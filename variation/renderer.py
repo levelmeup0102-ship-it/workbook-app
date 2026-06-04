@@ -315,6 +315,11 @@ PRINT_HINT_STYLE = """
       page-break-after: auto !important;
       break-after: auto !important;
     }
+    /* 유형 A 끝 → 유형 B 시작: 새 섹션은 항상 새 페이지에서 시작 */
+    section.variation-section + section.variation-section {
+      page-break-before: always !important;
+      break-before: page !important;
+    }
   }
 </style>
 """
@@ -433,16 +438,16 @@ def _build_final_html(sections: List[tuple]) -> str:
                 seen_styles.add(tag)
                 all_head_parts.append(tag)
     
-    # 2) 각 섹션의 body 내용에서 페이지(.q-page / .ans-page) 단위로 문제/답지 분리
-    #    ★ 핵심 수정: 답지 div의 실제 클래스는 "ans-page ans-start" 이므로
-    #      따옴표 바로 뒤가 "ans-start"가 아니다. 클래스 토큰 단위로 매칭하고,
-    #      페이지 div 시작 위치 기준으로 잘라 q-page는 문제, ans-page는 답지로 분류한다.
-    #      (지문이 여러 개일 때 [문제][답지][문제][답지] 순서여도 정확히 분리됨)
+    # 2) 각 섹션의 body 내용에서 페이지 단위로 문제/답지 분리
+    #    ★ 답지 시작 div의 실제 클래스는 "ans-start" (ans-page 아님!) 이므로
+    #      page_pat에 ans-start를 반드시 포함해야 답지가 페이지로 인식되어
+    #      answers-combined로 취합된다. q-page는 문제, ans-start/ans-page는 답지.
+    #      (지문이 여러 개여서 [문제][답지][문제][답지] 순서여도 정확히 분리됨)
     question_parts = []  # 문제만 (.q-page)
-    answer_parts = []    # 답지만 (.ans-page)
+    answer_parts = []    # 답지만 (.ans-start)
 
     # 최상위 페이지 div 시작 태그 — 클래스 순서/추가 클래스에 무관하게 매칭
-    page_pat = re.compile(r'<div\s+class="(?P<kind>q-page|ans-page)[^"]*"', re.IGNORECASE)
+    page_pat = re.compile(r'<div\s+class="(?P<kind>q-page|ans-page|ans-start)[^"]*"', re.IGNORECASE)
 
     for type_name, html in sections:
         body_content = _extract_body_content(html)

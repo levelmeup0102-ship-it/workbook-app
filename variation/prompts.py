@@ -2,14 +2,14 @@
 variation/prompts.py
 변형문제 생성용 Claude 시스템 프롬프트
 """
-
+ 
 # ===================== 유형 A 프롬프트 =====================
 SYSTEM_PROMPT_A = """You are an expert Korean high school English variation problem generator for 레벨미업학원.
-
+ 
 Given an English passage, generate a variation problem set with 5 questions in EXACT JSON format below.
-
+ 
 # CRITICAL RULES (NEVER VIOLATE)
-
+ 
 0. **JSON OUTPUT — DOUBLE QUOTES HANDLING (READ THIS FIRST!)**:
    - When the original passage contains double quotes (e.g., 「cheated "God"」), you MUST handle them in JSON.
    - **RECOMMENDED**: Replace internal double quotes with single quotes in your JSON string values.
@@ -18,21 +18,24 @@ Given an English passage, generate a variation problem set with 5 questions in E
    - **OR** escape them with backslash: `"said that I \\"cheated God\\" to bring in lettuce"`
    - DO NOT output unescaped double quotes inside string values — this breaks JSON parsing!
    - Same rule for apostrophes and other special chars.
-
-1. **CHUNKS MUST BE SHUFFLED, NOT IN ORIGINAL ORDER**:
-   - Split passage into 4 logical chunks
-   - Label them (a), (b), (c), (d) in **SHUFFLED ORDER** (not the original passage order!)
-   - The "correct order" is what the original passage actually says
-   - Example: If passage is "P1 → P2 → P3 → P4", then label them like (a)=P3, (b)=P1, (c)=P4, (d)=P2
-   - And correct_order would be "(b)-(d)-(a)-(c)" (because b=P1, d=P2, a=P3, c=P4)
-   - **NEVER use "(a)-(b)-(c)-(d)" as the correct answer** — this makes the question pointless!
-   
-   ⚠️ ALL 4 CHUNKS MUST HAVE TEXT:
-   - (a), (b), (c), (d) — ALL four must contain actual passage text (at least 1 sentence each)
-   - NEVER leave (d) empty just because you used the first 3 chunks for the whole passage
-   - If passage is short, split it into 4 SMALLER pieces — never leave any chunk blank
-   - Each chunk should have at least 5 words of original text
-
+ 
+1. **SENTENCE-ORDER QUESTION — KOREAN CSAT STYLE (intro + (A)(B)(C))**:
+   - First take the FIRST 1-2 sentences of the passage as the "intro" (the given lead). Put <CORE_BLANK> in the intro.
+   - Split the REMAINING passage (everything after the intro) into EXACTLY 3 paragraphs.
+   - Label them (A), (B), (C) in **SHUFFLED ORDER** (not the original order!).
+   - "order_correct" is the order in which (A)(B)(C) actually appear in the original passage.
+   - Example: if the remaining text is "P1 → P2 → P3", label (A)=P2, (B)=P3, (C)=P1; correct order = "(C)-(A)-(B)".
+ 
+   ⚠️ NO DUPLICATION, NO OMISSION (CRITICAL — this was the #1 bug):
+   - intro + (the three paragraphs in correct order) MUST equal the ENTIRE original passage — no sentence repeated, none dropped.
+   - The intro sentence(s) MUST NEVER reappear inside (A), (B), or (C). Do NOT copy the intro into any paragraph.
+   - (A), (B), (C) — all three must contain real passage text (≥1 sentence / 5+ words each).
+ 
+   ⚠️ FIXED 5 CHOICES (renderer shows them; you only return the index 0-4):
+   - Choices are FIXED: 0=(A)-(C)-(B)  1=(B)-(A)-(C)  2=(B)-(C)-(A)  3=(C)-(A)-(B)  4=(C)-(B)-(A)
+   - "order_correct" = index (0-4) of the choice matching the original order.
+   - The correct order is NEVER "(A)-(B)-(C)" — shuffle so the answer is one of the 5 fixed choices.
+ 
 2. **Q5 BLANK_A and BLANK_B MUST BE LONG (each at least 5 words)**:
    - blank_A must be a phrase with AT LEAST 5 words from the passage
    - blank_B must be a phrase with AT LEAST 5 words from the passage
@@ -40,14 +43,15 @@ Given an English passage, generate a variation problem set with 5 questions in E
    - Pick MEANINGFUL phrases (entire clauses or noun phrases with modifiers), not just short bits
    - Example GOOD: blank_A="the area between the plants to maximize soil heating from the sun"
    - Example BAD (too short): blank_A="maximize soil heating"
-
+ 
 2-1. **Q5 BLANK_A and BLANK_B MUST BE SEPARATED IN THE PASSAGE**:
    - blank_A and blank_B cannot be back-to-back (adjacent) in the passage
    - There MUST be at least 3 words of original text BETWEEN blank_A and blank_B
-   - If you can't find two well-separated phrases, pick blank_A from one chunk and blank_B from a DIFFERENT chunk
-   - Example GOOD: blank_A is in chunk (a), blank_B is in chunk (c) — naturally separated
+   - If you can't find two well-separated phrases, pick blank_A from one paragraph and blank_B from a DIFFERENT paragraph
+   - Example GOOD: blank_A is in paragraph (A), blank_B is in paragraph (C) — naturally separated
+   - blank_A / blank_B go INSIDE (A)/(B)/(C), never in the intro
    - Example BAD: "and <BLANK_A> <BLANK_B>." — adjacent, no words between them
-
+ 
 3. **BOGI MUST EQUAL blank_A + blank_B WORDS EXACTLY (case-insensitive)**:
    - Take all words from blank_A + blank_B
    - Lowercase them
@@ -61,7 +65,7 @@ Given an English passage, generate a variation problem set with 5 questions in E
    - Example: blank_A = "the area between the plants" (5 words: 'the', 'area', 'between', 'the', 'plants')
      → bogi MUST include 'the' TWICE, not once!
    - Hyphenated words like "south-facing" stay as ONE token (don't split into "south" + "facing")
-
+ 
 3-1. **Q3 CORE_BLANK_TARGET MUST BE AT LEAST 3 WORDS**:
    - core_blank_target is the phrase that gets replaced by a blank in Q3
    - It MUST be at least 3 words (a meaningful phrase, not a single word)
@@ -69,27 +73,26 @@ Given an English passage, generate a variation problem set with 5 questions in E
    - Example GOOD: "compete with your own past performance" (6 words)
    - Example BAD: "microclimate" (1 word - way too short!)
    - Example BAD: "soil heating" (2 words - still too short)
-
+ 
+3-2. **Q3 CORE_BLANK PLACEMENT — put it in the intro**:
+   - Place the single <CORE_BLANK> inside the "intro" (the given lead). This is the required location.
+   - core_blank_target must be an EXACT substring of the intro text.
+ 
 4. **KOREAN EXPLANATIONS**: All *_explain fields must be in Korean.
-
+ 
 # OUTPUT FORMAT (JSON only, no markdown, no text outside JSON)
 {
   "id": "01",
   "title": "<short English title>",
-  "lead": "<first 1-2 sentences of passage, may contain <CORE_BLANK>>",
-  "chunks": [
-    ["(a)", "<chunk in SHUFFLED order — not the original first part!>"],
-    ["(b)", "<chunk in SHUFFLED order>"],
-    ["(c)", "<chunk in SHUFFLED order, may contain <BLANK_A> or <BLANK_B>>"],
-    ["(d)", "<chunk in SHUFFLED order>"]
+  "intro": "<given lead: first 1-2 sentences, contains <CORE_BLANK>. MUST NOT reappear in (A)/(B)/(C)>",
+  "paragraphs": [
+    ["(A)", "<paragraph in SHUFFLED order — may contain <BLANK_A> or <BLANK_B>>"],
+    ["(B)", "<paragraph in SHUFFLED order — may contain <BLANK_A> or <BLANK_B>>"],
+    ["(C)", "<paragraph in SHUFFLED order — may contain <BLANK_A> or <BLANK_B>>"]
   ],
   "topic_options": ["<5 plausible topic options in English>"],
   "topic_correct": <0-4 index>,
-  "order_options": [
-    "<5 plausible orderings — one is correct, the others are wrong>",
-    "<MUST include the correct order which is NOT (a)-(b)-(c)-(d)>"
-  ],
-  "order_correct": <0-4 — index of the correct order in order_options>,
+  "order_correct": <0-4 — index into FIXED choices: 0=(A)-(C)-(B) 1=(B)-(A)-(C) 2=(B)-(C)-(A) 3=(C)-(A)-(B) 4=(C)-(B)-(A)>,
   "statements": [
     ["가", "<English statement 1>", true_or_false_boolean],
     ["나", "...", true_or_false_boolean],
@@ -115,38 +118,38 @@ Given an English passage, generate a variation problem set with 5 questions in E
   "core_blank_correct": <0-4>,
   "core_blank_explain": "<Brief Korean explanation, one sentence>"
 }
-
+ 
 # VERIFICATION CHECKLIST (do BEFORE outputting)
-1. ✓ Is order_correct's order_options entry DIFFERENT from "(a)-(b)-(c)-(d)"? (Must be YES)
+1. ✓ Does intro + (A)(B)(C) in the correct order equal the WHOLE passage (no duplicate, no omission)? Does the intro NOT reappear in (A)/(B)/(C)?
 2. ✓ Does blank_A have at least 5 words?
 3. ✓ Does blank_B have at least 5 words?
 4. ✓ Are blank_A and blank_B SEPARATED by at least 5 words in the passage? (Not adjacent!)
 5. ✓ Does core_blank_target have at least 3 words?
 6. ✓ Does bogi contain exactly the words from blank_A + blank_B (lowercase, no punctuation)?
 7. ✓ Are all explanations in Korean and BRIEF (one sentence each)?
-
+ 
 Return ONLY the JSON object."""
-
-
+ 
+ 
 # ===================== 유형 B 프롬프트 =====================
 SYSTEM_PROMPT_B = """You are an expert Korean high school English variation problem generator for 레벨미업학원.
-
+ 
 Given an English passage, generate a variation problem set in EXACT JSON format below.
-
+ 
 # CRITICAL RULES (NEVER VIOLATE)
-
+ 
 0. **JSON OUTPUT — DOUBLE QUOTES HANDLING (READ THIS FIRST!)**:
    - When the original passage contains double quotes, replace them with single quotes in your JSON values.
    - Example: original `"cheated God"` → in JSON output: `'cheated God'`
    - DO NOT leave unescaped `"` characters inside JSON string values.
-
+ 
 0-1. **HYPHENATED WORDS — KEEP AS ONE TOKEN**:
    - If the original passage has hyphenated words like "south-facing", "well-known", "cost-effective":
      - In blank_A/blank_B: keep them as one token: `"south-facing slopes are warmer"`
      - In bogi: keep as one token: `["slopes", "are", "south-facing", "warmer"]` — NOT `["south", "facing"]`!
    - The bogi must use the SAME tokenization as blank_A/blank_B.
    - If you split "south-facing" into "south" + "facing" anywhere, you create a mismatch and the question fails.
-
+ 
 1. **MARKER DISTRIBUTION**: Place <MARK1>...<MARK5> at 5 different positions in passage_with_marks. 
    - There MUST be AT LEAST 3 words between every adjacent pair of markers
    - Markers MUST be spread across the ENTIRE passage, not clustered together
@@ -163,9 +166,9 @@ Given an English passage, generate a variation problem set in EXACT JSON format 
    - First marker NOT at the very beginning
    - Last marker NOT at the very end
    - Each marker has at least 3 words of original text on BOTH sides (between it and the next marker)
-
+ 
 2. **GIVEN SENTENCE**: Pick a key transition/summary sentence FROM the passage. Remove it. The position where it was must use <MARK(position_correct+1)>. So if position_correct=2, then MARK3 marks where given_sentence belongs.
-
+ 
 2-1. **Q3 SUMMARY_OPTIONS — EACH SLOT MUST BE A SINGLE WORD ONLY**:
    - Q3 = Korean college entrance exam style summary blank question (객관식)
    - **summary_template** is a one-sentence summary of the passage with (A) and (B) placeholders
@@ -191,7 +194,7 @@ Given an English passage, generate a variation problem set in EXACT JSON format 
    ["south-facing garden beds", "flat stones from beach"]
    ← WRONG! Each must be 1 word only.
    ```
-
+ 
 2-2. **★ CRITICAL: Q3 (summary_options) AND Q4 (blank_A/blank_B) ARE COMPLETELY SEPARATE QUESTIONS!**
    - Q3 = OBJECTIVE choice question with SHORT single-word options for (A)(B)
    - Q4 = WRITING question where students fill in LONG phrases (6+ words each)
@@ -204,7 +207,7 @@ Given an English passage, generate a variation problem set in EXACT JSON format 
    - blank_A = full phrase (6+ words)  ← Q4 writing answer
    - blank_B = full phrase (6+ words)  ← Q4 writing answer
    - blank_summary_bogi = shuffled words from blank_A + blank_B  ← Q4 word bank
-
+ 
 3. **Q4 BOGI MUST EQUAL blank_A + blank_B EXACTLY (word-by-word, case-insensitive)**:
    - Take all words from blank_A and blank_B
    - Lowercase them all
@@ -213,14 +216,14 @@ Given an English passage, generate a variation problem set in EXACT JSON format 
    - DO NOT add extra words. DO NOT remove words. Same exact word count.
    Example: blank_A="economic growth", blank_B="environmental cost"
    → blank_summary_bogi = ["cost", "growth", "economic", "environmental"] (4 words, shuffled, lowercase)
-
+ 
 3-1. **Q4 blank_A and blank_B MUST BE AT LEAST 6 WORDS EACH**:
    - blank_A must contain AT LEAST 6 words (meaningful phrase, not just a noun phrase)
    - blank_B must contain AT LEAST 6 words
    - Pick FULL CLAUSES or extended phrases, not short noun phrases
    - Example GOOD: blank_A="strategically arranged south-facing terraces with stone walls" (7 words)
    - Example BAD: blank_A="south-facing slopes" (2 words - way too short!)
-
+ 
 4. **Q5 BOGI MUST EQUAL topic_writing_answer EXACTLY (word-by-word, case-insensitive)**:
    - Take all words from topic_writing_answer (no punctuation)
    - Lowercase them all
@@ -228,22 +231,22 @@ Given an English passage, generate a variation problem set in EXACT JSON format 
    - That's topic_writing_bogi
    Example: topic_writing_answer="Effort drives success."
    → topic_writing_bogi = ["success", "drives", "effort"] (3 words, shuffled, lowercase, no period)
-
+ 
 4-1. **Q5 topic_writing_answer MUST BE AT LEAST 10 WORDS**:
    - topic_writing_answer is the full topic sentence to be written
    - It MUST contain AT LEAST 10 words (a complete topic statement, not just a short summary)
    - Include subject, verb, object, and modifiers
    - Example GOOD: "Strategic microclimate manipulation enables earlier cultivation in temperate regions through localized warming." (12 words)
    - Example BAD: "Strategic placement maximizes soil heating." (5 words - too short!)
-
+ 
 5. **TOPIC WRITING (Q5)**: VARY sentence patterns. AVOID always starting with "What ~ is/does". Use diverse openings:
    - "Thanks to X, ..." / "People can ..." / "A model serves ..." / "By doing X, ..."
    - Direct declarative
-
+ 
 6. **KOREAN EXPLANATIONS**: All *_explain fields in Korean.
-
+ 
 7. **JSON ONLY**: No markdown, no extra text.
-
+ 
 # OUTPUT FORMAT
 {
   "id": "<id>",
@@ -265,7 +268,7 @@ Given an English passage, generate a variation problem set in EXACT JSON format 
   "topic_writing_answer": "<full topic sentence>",
   "explain": "<Korean overall explanation>"
 }
-
+ 
 VERIFY BEFORE OUTPUT:
 - blank_A has at least 6 words
 - blank_B has at least 6 words
@@ -275,15 +278,15 @@ VERIFY BEFORE OUTPUT:
 - Same words (case-insensitive) appear in bogi and the answer
 - ★ Every (A) and (B) in summary_options is EXACTLY ONE WORD (no spaces, no phrases!)
 - ★ All five (A) values are different from each other; all five (B) values are different
-
+ 
 Return ONLY the JSON object."""
-
-
+ 
+ 
 # ===================== JSON 추출 헬퍼 =====================
 import re
 import json
-
-
+ 
+ 
 def _repair_quotes_in_json_strings(text: str) -> str:
     """JSON 문자열 값 안의 escape 안 된 따옴표를 자동 escape
     예: "key": "He said "hello" loudly" → "key": "He said \"hello\" loudly"
@@ -332,8 +335,8 @@ def _repair_quotes_in_json_strings(text: str) -> str:
             out.append(c)
             i += 1
     return "".join(out)
-
-
+ 
+ 
 def extract_json_from_response(text: str) -> dict:
     """Claude 응답에서 JSON 객체 추출 (따옴표 자동 복구 포함)"""
     text = text.strip()
@@ -374,3 +377,4 @@ def extract_json_from_response(text: str) -> dict:
                 raise ValueError(err_msg)
     
     raise ValueError(f"JSON 객체를 찾을 수 없음. 응답 일부: {text[:300]}")
+ 

@@ -65,10 +65,10 @@ def check_cutout_match(bogi: list, answer_parts: list, pid: str = "?", q_name: s
     return errors
 
 
-def check_marker_positions(passage_with_marks: str, pid: str = "?", min_between: int = 3, position_correct: int = None) -> list:
-    """마커 위치 분산 검증 (완화):
-    - 정답 마커 좌우는 반드시 분산되어야 함 (앞뒤 3단어+)
-    - 나머지 마커들은 1단어 이상이면 OK (distractor라서 너무 까다롭게 안 함)
+def check_marker_positions(passage_with_marks: str, pid: str = "?", min_between: int = 3, position_correct: int = None, position_count: int = None, strict: bool = True) -> list:
+    """마커 위치 검증:
+    - strict: 개수=position_count, 1..N 연속, 문장 경계에만, 한곳 몰림 금지
+    - 정답 마커 좌우는 항상 3단어+ 분산
     """
     errors = []
     positions = {}
@@ -76,31 +76,47 @@ def check_marker_positions(passage_with_marks: str, pid: str = "?", min_between:
         idx = passage_with_marks.find(f"<MARK{i}>")
         if idx >= 0:
             positions[i] = idx
-    
-    # 마커 최소 3개
-    if len(positions) < 3:
-        errors.append(f"[{pid}] 마커 수 부족: {len(positions)}개 (최소 3개)")
+    n = len(positions)
+
+    # 개수/연속성
+    if position_count in (4, 5):
+        if n != position_count:
+            errors.append(f"[{pid}] 마커 수 불일치: {n}개 (position_count={position_count})")
+        missing = [i for i in range(1, position_count + 1) if i not in positions]
+        if missing:
+            errors.append(f"[{pid}] 마커 누락: MARK{missing}")
+    if n < 4:
+        errors.append(f"[{pid}] 마커 수 부족: {n}개 (최소 4개)")
+    if n < 3:
         return errors
-    
+
     sorted_marks = sorted(positions.items(), key=lambda x: x[1])
-    # position_correct는 0-based 인덱스 → 정답 마커 번호 = sorted_marks[idx][0]
+
+    if strict:
+        # 문장 경계 검증: 각 마커 직전(다른 마커 제거 후)이 문장부호로 끝나야
+        for mnum, pos in positions.items():
+            before = re.sub(r"<MARK\d>", "", passage_with_marks[:pos]).rstrip()
+            if before and before[-1] not in '.!?"\')]':
+                errors.append(f"[{pid}] MARK{mnum} 문장 중간 배치 (직전: ...{before[-25:]})")
+        # 분산 검증: 첫~마지막 마커가 본문 전체의 40%+ 에 걸쳐야 (몰림 방지)
+        clean_len = len(re.sub(r"<MARK\d>", "", passage_with_marks))
+        span = sorted_marks[-1][1] - sorted_marks[0][1]
+        if clean_len > 0 and span < clean_len * 0.40:
+            errors.append(f"[{pid}] 마커들이 한곳에 몰림 (분산 부족: {span}/{clean_len})")
+
+    # 정답 마커 좌우 간격 (항상)
     correct_mark_num = None
     if position_correct is not None and 0 <= position_correct < len(sorted_marks):
         correct_mark_num = sorted_marks[position_correct][0]
-    
     for i in range(len(sorted_marks) - 1):
         m1, p1 = sorted_marks[i]
         m2, p2 = sorted_marks[i + 1]
         between = passage_with_marks[p1 + len(f"<MARK{m1}>"):p2]
         between = re.sub(r"<MARK\d>", "", between).strip()
         wc = len(between.split())
-        
-        # 정답 마커가 m1 또는 m2일 때만 엄격 (3단어 필요)
-        # 그 외 distractor끼리 가까운 건 OK (1단어 이상이면 패스)
-        is_correct_adjacent = (correct_mark_num is not None and 
+        is_correct_adjacent = (correct_mark_num is not None and
                               (m1 == correct_mark_num or m2 == correct_mark_num))
         threshold = min_between if is_correct_adjacent else 1
-        
         if wc < threshold:
             label = "정답 마커 인접" if is_correct_adjacent else "마커"
             errors.append(
@@ -246,6 +262,16 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
         v = data.get(key, -1)
         if not isinstance(v, int) or not (0 <= v <= 4):
             errors.append(f"[{pid}] {key} 범위 오류: {v}")
+
+    # position_count(4 or 5) + position_correct가 그 범위 안인지
+    pc = data.get("position_count")
+    if pc is not None:
+        if pc not in (4, 5):
+            errors.append(f"[{pid}] position_count는 4 또는 5여야 함: {pc}")
+        else:
+            pcorr = data.get("position_correct", -1)
+            if isinstance(pcorr, int) and not (0 <= pcorr < pc):
+                errors.append(f"[{pid}] position_correct({pcorr})가 position_count({pc}) 범위 밖")
     
     # ★ Q4 blank_A, blank_B 단어 수 (strict 6개, soft 2개)
     min_blank_words = 6 if strict else 2
@@ -298,7 +324,9 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
         if strict:
             errors += check_marker_positions(
                 data["passage_with_marks"], pid, min_between=3,
-                position_correct=data.get("position_correct")
+                position_correct=data.get("position_correct"),
+                position_count=data.get("position_count"),
+                strict=True,
             )
         else:
             # soft: 마커가 최소 2개만 있어도 OK

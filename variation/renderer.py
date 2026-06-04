@@ -122,6 +122,19 @@ def prepare_a_passage(data: dict, label: str) -> dict:
     }
 
 
+def to_plain_style(t: str) -> str:
+    """한국어 해석 극존칭(~합니다)을 평서체(~한다)로 변환. 문장 끝 어미만 안전 변환."""
+    if not t:
+        return t
+    s = str(t)
+    # 문장 끝(마침표/공백/괄호/줄끝) 직전의 존칭 어미만 변환
+    s = re.sub(r'됩니다(?=[.\s)\]]|$)', '된다', s)
+    s = re.sub(r'입니다(?=[.\s)\]]|$)', '이다', s)
+    s = re.sub(r'합니다(?=[.\s)\]]|$)', '한다', s)
+    s = re.sub(r'습니다(?=[.\s)\]]|$)', '다', s)
+    return s
+
+
 def prepare_b_passage(data: dict, label: str) -> dict:
     new_data = {**data, "passage_rendered": render_marks(data["passage_with_marks"])}
     
@@ -135,6 +148,10 @@ def prepare_b_passage(data: dict, label: str) -> dict:
         bogi_words(data.get("topic_writing_answer", "")),
         seed_str=data.get("topic_writing_answer", "")
     )
+    # 한국어 해석(Q3/Q4/Q5)을 평서체(~한다)로 통일 — 극존칭 제거
+    for _k in ("summary_template_kr", "blank_summary_template_kr", "topic_writing_kr"):
+        if new_data.get(_k):
+            new_data[_k] = to_plain_style(new_data[_k])
     
     return {
         "label": label,

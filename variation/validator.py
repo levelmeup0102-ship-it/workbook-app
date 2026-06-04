@@ -111,131 +111,116 @@ def check_marker_positions(passage_with_marks: str, pid: str = "?", min_between:
 
 # ====================== 유형 A 검증 (완화) ======================
 def validate_a(data: dict, original_passage: str = None, pid: str = "?") -> list:
-    """유형 A 검증 - 원문 보존은 검증하지 않음, 핵심 규칙만"""
+    """유형 A 검증 - 평가원 순서형 (intro + (A)(B)(C) 3문단 + 고정 5선지)"""
     errors = []
-    
-    # 필수 필드 존재 확인
-    required = ["lead", "chunks", "topic_options", "topic_correct",
-                "order_options", "order_correct", "statements",
-                "blank_A", "blank_B", "bogi"]
+
+    required = ["intro", "paragraphs", "topic_options", "topic_correct",
+                "order_correct", "statements", "blank_A", "blank_B", "bogi"]
     for f in required:
         if f not in data:
             errors.append(f"[{pid}] 필수 필드 누락: {f}")
             return errors
-    
-    # ★ 정답 순서가 (a)-(b)-(c)-(d) 원본 그대로면 거부
+
+    # Q2 order_correct: 고정 5선지 인덱스(0-4). (A)-(B)-(C)는 선지에 없어 자동 배제됨.
+    v = data.get("order_correct", -1)
+    if not isinstance(v, int) or not (0 <= v <= 4):
+        errors.append(f"[{pid}] Q2 order_correct 범위 오류(0-4여야 함): {v}")
+
+    # Q5 blank_A/B 단어 수 최소 5
     try:
-        correct_order_str = data["order_options"][data["order_correct"]]
-        # 공백 제거 후 비교
-        normalized = correct_order_str.replace(" ", "").replace("(", "").replace(")", "")
-        if normalized == "a-b-c-d":
-            errors.append(
-                f"[{pid}] Q2 순서 정답이 (a)-(b)-(c)-(d) 원본 그대로임 — 청크를 SHUFFLE해서 정답이 다른 순서가 되도록 해야 함"
-            )
-    except (IndexError, KeyError, AttributeError) as e:
-        errors.append(f"[{pid}] Q2 order_options/correct 형식 오류: {e}")
-    
-    # ★ blank_A, blank_B 단어 수 최소 5개 (사용자 요구 7개에서 완화 - 5회 실패 방지)
-    try:
-        wa = len(data["blank_A"].split())
-        wb = len(data["blank_B"].split())
+        wa = len(data["blank_A"].split()); wb = len(data["blank_B"].split())
         if wa < 5:
-            errors.append(f"[{pid}] Q5 blank_A 단어 수 부족 ({wa}개 < 5개) — 더 긴 구문을 선택할 것")
+            errors.append(f"[{pid}] Q5 blank_A 단어 수 부족 ({wa}개 < 5개)")
         if wb < 5:
-            errors.append(f"[{pid}] Q5 blank_B 단어 수 부족 ({wb}개 < 5개) — 더 긴 구문을 선택할 것")
+            errors.append(f"[{pid}] Q5 blank_B 단어 수 부족 ({wb}개 < 5개)")
     except (KeyError, AttributeError) as e:
         errors.append(f"[{pid}] blank_A/B 형식 오류: {e}")
-    
-    # ★ Q3 core_blank_target 단어 수 최소 3개 강제
+
+    # Q3 core_blank: 단어 수 최소 3 + <CORE_BLANK> 마커가 intro에 존재
     if data.get("core_blank_target"):
         try:
             cwc = len(data["core_blank_target"].split())
             if cwc < 3:
-                errors.append(
-                    f"[{pid}] Q3 core_blank_target 단어 수 부족 ({cwc}개 < 3개) "
-                    f"— '{data['core_blank_target']}' 대신 더 긴 구문을 선택할 것"
-                )
+                errors.append(f"[{pid}] Q3 core_blank_target 단어 수 부족 ({cwc}개 < 3개)")
         except (KeyError, AttributeError):
             pass
-        
-        # ★ 지문 안에 <CORE_BLANK> 마커가 들어가 있는지 확인 (lead 또는 chunks 어딘가)
-        try:
-            lead_text = data.get("lead", "")
-            chunks_text = " ".join([c[1] for c in data.get("chunks", []) if len(c) >= 2])
-            full_text = lead_text + " " + chunks_text
-            if "<CORE_BLANK>" not in full_text:
+        if "<CORE_BLANK>" not in data.get("intro", ""):
+            errors.append(f"[{pid}] Q3 <CORE_BLANK> 마커가 intro에 없음 — intro 안에 표시할 것")
+        # ★ Q3 정답 선지가 core_blank_target과 동일해야 함 (빈칸 범위 침범/중복 방지)
+        opts = data.get("core_blank_options"); ci = data.get("core_blank_correct"); tgt = data.get("core_blank_target")
+        if isinstance(opts, list) and isinstance(ci, int) and 0 <= ci < len(opts) and tgt:
+            _w = lambda t: re.sub(r"[^a-z0-9 ]", " ", str(t).lower()).split()
+            if _w(opts[ci]) != _w(tgt):
                 errors.append(
-                    f"[{pid}] Q3 <CORE_BLANK> 마커가 lead와 chunks 어디에도 없음 — "
-                    f"지문 안에서 '{data['core_blank_target']}' 위치를 <CORE_BLANK>로 표시해야 함"
+                    f"[{pid}] Q3 정답 선지가 core_blank_target과 불일치 — "
+                    f"선지에 빈칸 밖 단어가 섞였거나 범위가 다름 (정답='{opts[ci]}' vs 빈칸='{tgt}')"
                 )
-        except Exception as e:
-            errors.append(f"[{pid}] CORE_BLANK 마커 검증 예외: {e}")
-    
-    # ★ blank_A와 blank_B가 chunks 안에서 인접해 있으면 거부 (최소 3단어 사이에 - 완화)
+
+    # paragraphs 3개 + 각 텍스트 5단어 이상
+    paras = data.get("paragraphs")
+    if not isinstance(paras, list) or len(paras) != 3:
+        errors.append(f"[{pid}] paragraphs는 정확히 3개((A)(B)(C))여야 함")
+        paras = paras if isinstance(paras, list) else []
+    para_texts = []
+    for idx, ch in enumerate(paras):
+        if not isinstance(ch, list) or len(ch) < 2:
+            errors.append(f"[{pid}] paragraphs[{idx}] 형식 오류 (label, text 필요)")
+            continue
+        label, text = ch[0], ch[1]
+        para_texts.append(text or "")
+        if not text or not text.strip():
+            errors.append(f"[{pid}] paragraphs[{idx}] {label} 텍스트가 비어있음")
+        elif len(text.split()) < 5:
+            errors.append(f"[{pid}] paragraphs[{idx}] {label} 텍스트 너무 짧음 ({len(text.split())}단어 < 5)")
+
+    # ★★★ 중복 차단 (이번 핵심 버그): intro 문장이 (A)(B)(C)에 통째로 재등장하면 거부
+    def _norm(t):
+        t = re.sub(r"<[^>]+>", " ", t)
+        t = re.sub(r"[^a-zA-Z0-9 ]", " ", t.lower())
+        return re.sub(r"\s+", " ", t).strip()
+    intro_n = _norm(data.get("intro", ""))
+    if intro_n:
+        iw = intro_n.split()
+        probe = " ".join(iw[:8]) if len(iw) >= 8 else intro_n
+        for idx, txt in enumerate(para_texts):
+            if probe and probe in _norm(txt):
+                errors.append(
+                    f"[{pid}] intro 문장이 paragraphs[{idx}]에 중복 등장 — "
+                    f"주어진 글은 (A)/(B)/(C)에 다시 넣지 말 것 (누락·중복 0)"
+                )
+
+    # Q5 blank_A/B 인접 검증 (paragraphs 기준, 최소 3단어 사이)
     try:
-        chunks_text = " ".join([c[1] for c in data["chunks"] if len(c) >= 2])
-        ia = chunks_text.find("<BLANK_A>")
-        ib = chunks_text.find("<BLANK_B>")
+        ptext = " ".join(para_texts)
+        ia = ptext.find("<BLANK_A>"); ib = ptext.find("<BLANK_B>")
         if ia >= 0 and ib >= 0:
-            start = min(ia, ib) + len("<BLANK_A>")
-            end = max(ia, ib)
-            between_text = chunks_text[start:end]
-            between_text = between_text.replace("<BLANK_A>", "").replace("<BLANK_B>", "").strip()
-            wc_between = len(between_text.split()) if between_text else 0
-            if wc_between < 3:
-                errors.append(
-                    f"[{pid}] Q5 blank_A와 blank_B가 너무 가까움 (사이에 {wc_between}단어만 있음 < 3개) "
-                    f"— 서로 떨어진 두 구문을 선택할 것"
-                )
-    except (KeyError, AttributeError, TypeError) as e:
+            start = min(ia, ib) + len("<BLANK_A>"); end = max(ia, ib)
+            between = ptext[start:end].replace("<BLANK_A>", "").replace("<BLANK_B>", "").strip()
+            wc = len(between.split()) if between else 0
+            if wc < 3:
+                errors.append(f"[{pid}] Q5 blank_A와 blank_B가 너무 가까움 (사이 {wc}단어 < 3개)")
+    except Exception:
         pass
-    
-    # Q5 잘라쓰기 검증 (대소문자 무시)
+
+    # Q5 잘라쓰기(보기) 검증
     try:
-        errors += check_cutout_match(
-            data["bogi"],
-            [data["blank_A"], data["blank_B"]],
-            pid, "Q5(빈칸영작)"
-        )
+        errors += check_cutout_match(data["bogi"], [data["blank_A"], data["blank_B"]], pid, "Q5(빈칸영작)")
     except Exception as e:
         errors.append(f"[{pid}] Q5 보기 검증 예외: {e}")
-    
+
     # 정답 인덱스 범위
-    for key in ["topic_correct", "order_correct"]:
-        v = data.get(key, -1)
-        if not isinstance(v, int) or not (0 <= v <= 4):
-            errors.append(f"[{pid}] {key} 범위 오류: {v}")
-    
+    v = data.get("topic_correct", -1)
+    if not isinstance(v, int) or not (0 <= v <= 4):
+        errors.append(f"[{pid}] topic_correct 범위 오류: {v}")
     if data.get("core_blank_correct") is not None:
         v = data["core_blank_correct"]
         if not isinstance(v, int) or not (0 <= v <= 4):
             errors.append(f"[{pid}] core_blank_correct 범위 오류")
-    
+
     # statements 5개
     if not isinstance(data.get("statements"), list) or len(data["statements"]) != 5:
         errors.append(f"[{pid}] statements는 5개 항목이어야 함")
-    
-    # chunks 4개
-    if not isinstance(data.get("chunks"), list) or len(data["chunks"]) != 4:
-        errors.append(f"[{pid}] chunks는 4개 항목이어야 함")
-    else:
-        # ★ 각 chunk의 텍스트가 비어있지 않은지 확인 (Claude가 종종 (d)를 비움)
-        for idx, ch in enumerate(data["chunks"]):
-            if not isinstance(ch, list) or len(ch) < 2:
-                errors.append(f"[{pid}] chunks[{idx}] 형식 오류 (label, text 필요)")
-                continue
-            label, text = ch[0], ch[1]
-            if not text or not text.strip():
-                errors.append(
-                    f"[{pid}] chunks[{idx}] {label} 텍스트가 비어있음 — "
-                    f"4개 chunk 모두 원문 텍스트를 채워야 함"
-                )
-            elif len(text.split()) < 5:
-                errors.append(
-                    f"[{pid}] chunks[{idx}] {label} 텍스트 너무 짧음 ({len(text.split())}단어) — "
-                    f"최소 5단어 이상으로 4개 chunk 균등 분할"
-                )
-    
+
     return errors
 
 

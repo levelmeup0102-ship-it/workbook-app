@@ -170,7 +170,7 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
             _w = lambda t: re.sub(r"[^a-z0-9 ]", " ", str(t).lower()).split()
             if _w(opts[ci]) != _w(tgt):
                 errors.append(
-                    f"[{pid}] Q3 정답 선지가 core_blank_target과 불일치 — "
+                    f"[CRITICAL][{pid}] Q3 정답 선지가 core_blank_target과 불일치 — "
                     f"선지에 빈칸 밖 단어가 섞였거나 범위가 다름 (정답='{opts[ci]}' vs 빈칸='{tgt}')"
                 )
 
@@ -203,7 +203,7 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
         for idx, txt in enumerate(para_texts):
             if probe and probe in _norm(txt):
                 errors.append(
-                    f"[{pid}] intro 문장이 paragraphs[{idx}]에 중복 등장 — "
+                    f"[CRITICAL][{pid}] intro 문장이 paragraphs[{idx}]에 중복 등장 — "
                     f"주어진 글은 (A)/(B)/(C)에 다시 넣지 말 것 (누락·중복 0)"
                 )
 
@@ -223,8 +223,8 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
             restored += " " + t
         if _norm(restored) != _norm(original_passage):
             errors.append(
-                f"[{pid}] 순서형 복원 불일치 — intro+(A)(B)(C)를 정답순서로 이어붙여도 원문과 다름 "
-                f"(문장 재배치/병합/누락 의심). (A)(B)(C)는 원문 연속 구간만 담을 것."
+                f"[CRITICAL][{pid}] 순서형 복원 불일치 — intro+(A)(B)(C)를 정답순서로 이어붙여도 원문과 다름 "
+                f"(문장 재배치/병합/누락 또는 Q3 빈칸 위치 오류 의심). (A)(B)(C)는 원문 연속 구간만 담을 것."
             )
 
     # Q5 blank_A/B 인접 검증 (paragraphs 기준, 최소 3단어 사이)

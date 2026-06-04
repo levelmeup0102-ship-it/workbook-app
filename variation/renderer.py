@@ -92,11 +92,10 @@ def prepare_a_passage(data: dict, label: str) -> dict:
     return {
         "label": label,
         "data": {
-            "lead": convert_lead_a(data["lead"]),
-            "chunks": convert_chunks_a(data["chunks"]),
+            "intro": convert_lead_a(data["intro"]),
+            "paragraphs": convert_chunks_a(data["paragraphs"]),
             "topic_options": data["topic_options"],
             "topic_correct": data["topic_correct"],
-            "order_options": data["order_options"],
             "order_correct": data["order_correct"],
             "statements": [list(s) for s in data["statements"]],
             "statements_kr": data.get("statements_kr", []),

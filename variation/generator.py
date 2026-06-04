@@ -52,8 +52,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s3 = 스키마 v3 (유형A 순서형 복원검증 + 빈칸 밑줄 + 삽입 position_count) — 옛 캐시 자동 무효화
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s3"
+    # _s4 = 스키마 v4 (Q4 요약문 (A)(B) 빈칸 강제 + bogi 자동생성 + A 관대모드) — 옛 캐시 자동 무효화
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s4"
 
 
 # ============ Supabase 캐시 ============

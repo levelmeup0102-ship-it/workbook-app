@@ -20,7 +20,7 @@ from jinja2 import Environment, FileSystemLoader
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_DIR = BASE_DIR
 STATIC_DIR = os.path.join(BASE_DIR, "static")
-LOGO_PATH = os.path.join(STATIC_DIR, "logo3.png")
+LOGO_PATH = os.path.join(STATIC_DIR, "logo2.png")
 
 
 # ============ 로고 → data URI ============
@@ -92,11 +92,10 @@ def prepare_a_passage(data: dict, label: str) -> dict:
     return {
         "label": label,
         "data": {
-            "lead": convert_lead_a(data["lead"]),
-            "chunks": convert_chunks_a(data["chunks"]),
+            "intro": convert_lead_a(data["intro"]),
+            "paragraphs": convert_chunks_a(data["paragraphs"]),
             "topic_options": data["topic_options"],
             "topic_correct": data["topic_correct"],
-            "order_options": data["order_options"],
             "order_correct": data["order_correct"],
             "statements": [list(s) for s in data["statements"]],
             "statements_kr": data.get("statements_kr", []),
@@ -433,53 +432,63 @@ def _build_final_html(sections: List[tuple]) -> str:
                 seen_styles.add(tag)
                 all_head_parts.append(tag)
     
-    # 2) 각 섹션의 body 내용에서 문제부분(.q-page)과 답지부분(.ans-start) 분리
-    question_parts = []  # 문제만
-    answer_parts = []    # 답지만
-    
+    # 2) 각 섹션의 body 내용에서 페이지(.q-page / .ans-page) 단위로 문제/답지 분리
+    #    ★ 핵심 수정: 답지 div의 실제 클래스는 "ans-page ans-start" 이므로
+    #      따옴표 바로 뒤가 "ans-start"가 아니다. 클래스 토큰 단위로 매칭하고,
+    #      페이지 div 시작 위치 기준으로 잘라 q-page는 문제, ans-page는 답지로 분류한다.
+    #      (지문이 여러 개일 때 [문제][답지][문제][답지] 순서여도 정확히 분리됨)
+    question_parts = []  # 문제만 (.q-page)
+    answer_parts = []    # 답지만 (.ans-page)
+
+    # 최상위 페이지 div 시작 태그 — 클래스 순서/추가 클래스에 무관하게 매칭
+    page_pat = re.compile(r'<div\s+class="(?P<kind>q-page|ans-page)[^"]*"', re.IGNORECASE)
+
     for type_name, html in sections:
         body_content = _extract_body_content(html)
-        
-        # .ans-start로 시작하는 div를 추출 (답지 영역)
-        # body_content 안에서 <div class="ans-start"> ... </div> 매칭
-        ans_start_match = re.search(
-            r'<div\s+class="ans-start"[^>]*>',
-            body_content,
-            re.IGNORECASE
-        )
-        
-        if ans_start_match:
-            # ans-start 시작 위치 기준으로 분할
-            start_idx = ans_start_match.start()
-            question_html = body_content[:start_idx]
-            answer_html = body_content[start_idx:]
-            
-            # 답지의 마지막 </div>는 body 닫는 것까지 포함됐을 수 있어 그냥 유지
-            question_parts.append(
-                f'<section class="variation-section" data-type="{type_name}">\n'
-                f'{question_html}\n'
-                f'</section>'
-            )
-            # 답지에서 강제 page-break 제거를 위해 클래스 추가
-            answer_html_modified = answer_html.replace(
-                '<div class="ans-start"',
-                f'<div class="ans-start ans-merged" data-type="{type_name}"',
-                1
-            )
-            answer_parts.append(answer_html_modified)
-        else:
-            # 답지 없는 경우 (이상한 경우) 전체를 문제로 처리
+        matches = list(page_pat.finditer(body_content))
+
+        if not matches:
+            # 페이지 div를 못 찾으면 전체를 문제로 처리 (안전장치)
             question_parts.append(
                 f'<section class="variation-section" data-type="{type_name}">\n'
                 f'{body_content}\n'
                 f'</section>'
             )
-    
+            continue
+
+        q_blocks = []  # 이 섹션의 문제 페이지들
+        a_blocks = []  # 이 섹션의 답지 페이지들
+        for i, m in enumerate(matches):
+            start = m.start()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(body_content)
+            block = body_content[start:end]
+            if m.group("kind").lower() == "q-page":
+                q_blocks.append(block)
+            else:
+                a_blocks.append(block)
+
+        if q_blocks:
+            question_parts.append(
+                f'<section class="variation-section" data-type="{type_name}">\n'
+                + "\n".join(q_blocks) +
+                "\n</section>"
+            )
+        if a_blocks:
+            answer_parts.append("\n".join(a_blocks))
+
     # 3) 최종 HTML — 문제들 먼저, 답지들 마지막에 한 묶음으로
-    body_html = '\n'.join(question_parts)
+    body_html = "\n".join(question_parts)
     if answer_parts:
-        # 답지들 사이엔 page-break 없이 자연스럽게 흐름
-        body_html += '\n<div class="answers-combined">\n' + '\n'.join(answer_parts) + '\n</div>'
+        combined = "\n".join(answer_parts)
+        # 답지 시작 div(.ans-start)에 .ans-merged 부여 → CSS의 .answers-combined 규칙이
+        # page-break를 제어 (첫 답지만 새 페이지, 나머지는 자연스럽게 이어짐)
+        combined = re.sub(
+            r'(<div\s+class="[^"]*\bans-start\b)([^"]*")',
+            r'\1 ans-merged\2',
+            combined,
+            flags=re.IGNORECASE,
+        )
+        body_html += '\n<div class="answers-combined">\n' + combined + '\n</div>'
     
     final = f"""<!DOCTYPE html>
 <html lang="ko">

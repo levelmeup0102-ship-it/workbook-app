@@ -224,7 +224,11 @@ Given an English passage, generate a variation problem set in EXACT JSON format 
    
    Structure:
    - summary_template = "Strategic (A) of microclimate enables (B) of cultivation."  ← Q3 (short)
-   - blank_summary_template = "<longer summary with (A) and (B) for full phrase writing>"  ← Q4 (long)
+   - blank_summary_template = "<longer summary with literal (A) and (B) placeholders for full phrase writing>"  ← Q4 (long)
+     ★★ blank_summary_template MUST contain the literal placeholders "(A)" and "(B)" — these are BLANKS the student fills in.
+        DO NOT fill them in. DO NOT write the completed sentence. The (A) slot = where blank_A goes, the (B) slot = where blank_B goes.
+        WRONG (no blanks): "Athletes must practice controlled breathing to manage arousal."
+        RIGHT (has blanks): "Athletes must (A) to (B) during performance."
    - summary_options = 5 pairs of SINGLE WORDS  ← Q3 choices
    - blank_A = full phrase (6+ words)  ← Q4 writing answer
    - blank_B = full phrase (6+ words)  ← Q4 writing answer

@@ -102,6 +102,13 @@ Everything you generate must reflect that whole-passage understanding:
      If the intro is "wants to <CORE_BLANK> and compete and train", an option must be like
      "produce adrenaline" — NOT "produce adrenaline and compete and train" (that repeats the text after the blank!).
    - The correct option (index = core_blank_correct) MUST be EXACTLY equal to core_blank_target.
+   - ★★ IF YOU NEED 3+ WORDS, EXTEND THE BLANK EARLIER — do NOT leave those words in the intro.
+     The <CORE_BLANK> marker in the intro must cover the ENTIRE core_blank_target. Whatever words are in core_blank_target must NOT also appear right before/after the marker.
+     BAD: intro "...you to completely comprehend, much less <CORE_BLANK>" + target "completely comprehend, much less control"
+          (→ "completely comprehend, much less" sits in BOTH the intro and the target — overlap! The reader sees the answer twice.)
+     GOOD: intro "...you to <CORE_BLANK>" + target "completely comprehend, much less control"
+          (→ the marker swallows the whole phrase; nothing is duplicated.)
+     Rule: after you replace <CORE_BLANK> with core_blank_target, the intro must read EXACTLY like the original passage — no repeated words around the blank.
 
 3-4. **Q4 EVIDENCE — copy the proof sentence from the passage**:
    - For EACH statement (가~마), put in statements_evidence the EXACT English sentence/clause from the passage that proves or disproves it.
@@ -314,17 +321,17 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
   "topic_options": ["<5 topic options in English>"],
   "topic_correct": <0-4>,
   "summary_template": "<English summary with (A) and (B) placeholders>",
-  "summary_template_kr": "<Korean translation of the summary sentence with the correct (A)/(B) filled in>",
+  "summary_template_kr": "<Korean translation of the summary sentence with correct (A)/(B) filled in — use PLAIN declarative style ~한다/~이다, NEVER honorific ~합니다/~입니다>",
   "summary_options": [["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"]],
   "summary_correct": <0-4>,
   "blank_summary_template": "<same summary structure for Q4 writing>",
-  "blank_summary_template_kr": "<Korean translation of the Q4 summary sentence with blank_A/blank_B filled in>",
+  "blank_summary_template_kr": "<Korean translation of the Q4 summary with blank_A/blank_B filled in — PLAIN style ~한다/~이다, NOT ~합니다>",
   "blank_summary_bogi": ["<lowercase shuffled words from blank_A + blank_B>"],
   "blank_A": "<exact phrase for (A)>",
   "blank_B": "<exact phrase for (B)>",
   "topic_writing_bogi": ["<lowercase shuffled words from topic_writing_answer>"],
   "topic_writing_answer": "<full topic sentence>",
-  "topic_writing_kr": "<Korean translation of the topic sentence>",
+  "topic_writing_kr": "<Korean translation of the topic sentence — PLAIN style ~한다/~이다, NOT honorific ~합니다>",
   "explain": "<Korean overall explanation>"
 }
 

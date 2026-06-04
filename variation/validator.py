@@ -295,6 +295,15 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
             if isinstance(pcorr, int) and not (0 <= pcorr < pc):
                 errors.append(f"[{pid}] position_correct({pcorr})가 position_count({pc}) 범위 밖")
     
+    # ★ Q4 요약문 / Q3 요약문에 (A)(B) 빈칸 표시가 반드시 있어야 함 (완성문 금지)
+    #   strict/soft 무관 필수 — 빈칸이 없으면 문제 자체가 성립하지 않음
+    bst = str(data.get("blank_summary_template", "") or "")
+    if "(A)" not in bst or "(B)" not in bst:
+        errors.append(f"[{pid}] Q4 blank_summary_template에 (A)/(B) 빈칸이 없음 — 완성문 말고 (A)(B) placeholder를 남길 것")
+    sst = str(data.get("summary_template", "") or "")
+    if "(A)" not in sst or "(B)" not in sst:
+        errors.append(f"[{pid}] Q3 summary_template에 (A)/(B) 빈칸이 없음 — (A)(B) placeholder를 남길 것")
+
     # ★ Q4 blank_A, blank_B 단어 수 (strict 6개, soft 2개)
     min_blank_words = 6 if strict else 2
     try:

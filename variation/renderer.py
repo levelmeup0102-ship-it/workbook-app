@@ -99,6 +99,7 @@ def prepare_a_passage(data: dict, label: str) -> dict:
             "order_correct": data["order_correct"],
             "statements": [list(s) for s in data["statements"]],
             "statements_kr": data.get("statements_kr", []),
+            "statements_evidence": data.get("statements_evidence", []),
             "mismatch_count": data.get("mismatch_count", n_false),
             "blank_A": data["blank_A"],
             "blank_B": data["blank_B"],

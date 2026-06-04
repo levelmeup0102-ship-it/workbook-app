@@ -8,6 +8,13 @@ SYSTEM_PROMPT_A = """You are an expert Korean high school English variation prob
 
 Given an English passage, generate a variation problem set with 5 questions in EXACT JSON format below.
 
+# STEP 0 — READ THE WHOLE PASSAGE AND EXTRACT ITS LOGIC FIRST (before writing anything)
+Do NOT skim one sentence. First READ THE ENTIRE PASSAGE and work out: (1) the MAIN THESIS (the single claim the whole text argues), and (2) its LOGICAL SKELETON (cause→effect / property→consequence / contrast / paradox).
+Everything you generate must reflect that whole-passage understanding:
+  - The Q1 topic options and Q3 core-blank must target the passage's central logic, not a surface detail.
+  - The core_blank_target must be the phrase the WHOLE argument hinges on (the key concept), not a random noun phrase.
+  - Topic/title options must be abstract propositions capturing the thesis, in the style of CSAT 주제/요지 choices.
+
 # CRITICAL RULES (NEVER VIOLATE)
 
 0. **JSON OUTPUT — DOUBLE QUOTES HANDLING (READ THIS FIRST!)**:
@@ -163,6 +170,14 @@ SYSTEM_PROMPT_B = """You are an expert Korean high school English variation prob
 
 Given an English passage, generate a variation problem set in EXACT JSON format below.
 
+# STEP 0 — READ THE WHOLE PASSAGE AND EXTRACT ITS LOGIC FIRST (before writing anything)
+Do NOT look at one sentence and paraphrase it. First, READ THE ENTIRE PASSAGE and work out:
+  1. MAIN THESIS — the single claim the whole text argues (one sentence, in your head).
+  2. LOGICAL SKELETON — what is the CAUSE / PROPERTY, and what is its EFFECT / CONSEQUENCE / FUNCTION? Is there a contrast, paradox, or condition driving the argument?
+  3. Then build the Q3/Q4 summary sentence as a FRESH one-sentence reconstruction of that thesis+logic, drawn from the WHOLE passage — NOT a paraphrase of any single sentence, NOT the first/last line reworded.
+  4. Put the (A)(B) blanks on the two words that carry this logic (the cause/property word and the effect/function word). The correct answers are ABSTRACTIONS of the passage's meaning, never words copied from it.
+This is exactly how a Korean CSAT #40 summary is built: read the whole text → distill the argument → write a new one-sentence summary → blank the two logical pivots. The summary must read like it understood the passage's point, not like it skimmed one line.
+
 # CRITICAL RULES (NEVER VIOLATE)
 
 0. **JSON OUTPUT — DOUBLE QUOTES HANDLING (READ THIS FIRST!)**:
@@ -191,25 +206,39 @@ Given an English passage, generate a variation problem set in EXACT JSON format 
 
 2. **GIVEN SENTENCE**: Pick a key transition/summary sentence FROM the passage. Remove it. The sentence-gap where it was removed must be marked by <MARK(position_correct+1)>. So if position_correct=2, then MARK3 marks the gap where given_sentence belongs. position_correct MUST be a valid index: 0..(position_count-1).
 
+2-0. **★★★ CSAT Q40-STYLE SUMMARY DESIGN (applies to Q3 options AND Q4 blanks) ★★★**
+   The summary sentence and its blanks must follow the Korean CSAT (수능) #40 summary-question style. Study these authentic patterns:
+   - Passage "all other animals use one call for one message" → (A)=represents/(B)=fixed ("each call REPRESENTS a different message ... a FIXED set of sounds")
+   - Passage "synthetic ingredients are precisely controlled" → (A)=controllability/(B)=challenge ("The CONTROLLABILITY of production ... may CHALLENGE the assumption")
+   - Passage "concentrate on one subject after another, brain condenses knowledge" → (A)=enables/(B)=leaves ("Exploring one subject after another ENABLES remarkable work ... LEAVES room")
+
+   RULES (these fix the current weaknesses):
+   (a) ★ BLANK ON THE LOGICAL CORE, NOT SURFACE NOUNS. The blank must fall on the word that carries the sentence's *logic* — the abstract relation: a verb of causation/function (enables, diminishes, intensifies, constrains, reverses) or an abstract property noun (controllability, manageability, predictability, variability). NEVER blank a concrete surface noun lifted from the passage (e.g. breathing, training, competition, adrenaline). Those are too easy.
+   (b) ★ THE SUMMARY = ONE abstract sentence capturing the passage's CAUSE→EFFECT or PROPERTY→CONSEQUENCE relation. (A) usually = the cause/property, (B) = the effect/function. It must read like a 수능 40번 요약문, not a paraphrased first sentence.
+   (c) ★ THE CORRECT (A)/(B) MUST BE A PARAPHRASE — NEVER a word copied from the passage. Pull the answer UP a level of abstraction (passage "precisely controlled" → answer "controllability"; passage "break into small problems" → answer "manageability"). If the correct option word appears verbatim in the passage, it is WRONG — change it.
+   (d) ★ DISTRACTORS must be the SAME part of speech and individually plausible, but each must FAIL the passage's logic — NOT mere synonyms/antonyms of the answer. Avoid 5 near-synonyms (manage/control/handle/regulate/direct) — that makes the answer guessable. Mix in words that fit grammar but contradict or overstate the passage.
+   (e) ★ WORD LEVEL = GRE/upper-CSAT abstract vocabulary (finite, fixed, controllability, manageability, intensify, diminish, constrain, reciprocal, provisional). No basic words (increase, reduce, manage, activate).
+
 2-1. **Q3 SUMMARY_OPTIONS — EACH SLOT MUST BE A SINGLE WORD ONLY**:
    - Q3 = Korean college entrance exam style summary blank question (객관식)
-   - **summary_template** is a one-sentence summary of the passage with (A) and (B) placeholders
+   - **summary_template** is a one-sentence ABSTRACT summary of the passage with (A) and (B) placeholders on the LOGICAL CORE (see 2-0)
    - **Each (A) and each (B) in summary_options MUST be exactly ONE single word** — NOT a phrase
-   - All 5 (A) values must be DIFFERENT single words (one correct + 4 distractors)
+   - All 5 (A) values must be DIFFERENT single words (one correct + 4 distractors); the correct one is a PARAPHRASE, not a passage word
    - All 5 (B) values must be DIFFERENT single words (one correct + 4 distractors)
    - Content words only (nouns, adjectives, verbs) — never articles or prepositions alone
    
-   ⚠️ Example GOOD (summary_template + summary_options):
+   ⚠️ Example GOOD (CSAT Q40 style — abstract, paraphrased, logic-core blanks):
    ```
-   "summary_template": "Strategic (A) of microclimate enables (B) of cultivation in cold regions.",
+   "summary_template": "The (A) of synthetic ingredients may (B) the common assumption that natural ingredients are safer.",
    "summary_options": [
-     ["manipulation", "extension"],   ← each ONE word
-     ["control", "delay"],
-     ["observation", "expansion"],
-     ["measurement", "reduction"],
-     ["analysis", "improvement"]
+     ["controllability", "challenge"],   ← CORRECT: paraphrase of 'precisely controlled' + logic verb
+     ["affordability",   "support"],
+     ["accessibility",   "question"],
+     ["predictability",  "intensify"],
+     ["manageability",   "reverse"]
    ]
    ```
+   (Note: 'controllability' does NOT appear in the passage — it's an abstraction of "precisely controlled". 'challenge' = the logical function, not a copied word.)
    
    ⚠️ Example BAD (phrases instead of single words):
    ```

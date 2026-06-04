@@ -4001,24 +4001,32 @@ def render_preclass_analysis(passages_data: list, school_name: str,
         for idx, item in enumerate(passages_data):
             data = item.get("data", {}) or {}
             
-            # ★ v21 수정: 순서배열 텍스트 소스 우선순위 변경
-            # passage_marked가 가장 안전 (AI가 마커 단 원본) — 마커만 떼면 100% 원본
-            # passage / passage_text 필드는 후처리 과정에서 변형됐을 수 있어 마지막 순서
-            passage_raw = ""
-            marked = data.get("passage_marked", "") or ""
-            if marked:
-                # 마커 제거 → 순수 원본 텍스트
-                passage_raw = _re_so.sub(r'\[\[/?(?:GRAMMAR|VOCAB|IMPL)[^\]]*\]\]', '', marked)
-                passage_raw = _re_so.sub(r'\s+', ' ', passage_raw).strip()
+            # ★ v23 핵심 수정: Supabase 원문(item["passage"])을 최우선 사용
+            # 이유: 0회독 자료(data.passage_marked)는 AI가 마커 단 텍스트라 변형 가능성 있음
+            #      - 일부 문장이 누락되거나
+            #      - 키워드 메모가 섞이거나  
+            #      - 원문에 없는 문장이 추가되는 사고 발생
+            # main.py에서 Supabase passages 테이블의 원본을 item["passage"]에 그대로 저장하므로
+            # 이걸 직접 쓰는 게 100% 안전
+            passage_raw = (item.get("passage") or "").strip()
             
-            # 백업: passage_marked 없으면 다른 필드
+            # 백업1: item["passage"]가 비어있을 때만 data.passage / passage_text
             if not passage_raw:
-                passage_raw = data.get("passage", "") or data.get("passage_text", "") or ""
+                passage_raw = (data.get("passage") or data.get("passage_text") or "").strip()
             
-            # 학생 보기용 — 위첨자(①~⑳, ⓐ~ⓩ) 제거
+            # 백업2: 둘 다 없으면 마지막 수단으로 passage_marked에서 마커 제거
+            if not passage_raw:
+                marked = data.get("passage_marked", "") or ""
+                if marked:
+                    passage_raw = _re_so.sub(r'\[\[/?(?:GRAMMAR|VOCAB|IMPL)[^\]]*\]\]', '', marked)
+                    passage_raw = _re_so.sub(r'\s+', ' ', passage_raw).strip()
+            
+            # 학생 보기용 — 위첨자(①~⑳, ⓐ~ⓩ) 제거 + HTML 엔티티 정리
             passage_clean = _re_so.sub(r'[\u2460-\u2473\u24B6-\u24E9]', '', passage_raw)
-            # HTML 엔티티 정리
             passage_clean = passage_clean.replace('&#x27;', "'").replace('&quot;', '"').replace('&amp;', '&')
+            # ###해석### 안전망 — 혹시 섞여있으면 영어만
+            if "###해석###" in passage_clean:
+                passage_clean = passage_clean.split("###해석###", 1)[0]
             passage_clean = _re_so.sub(r'\s+', ' ', passage_clean).strip()
             if not passage_clean:
                 continue

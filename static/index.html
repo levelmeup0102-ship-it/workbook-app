@@ -1878,8 +1878,31 @@ async function doVariation() {
   let completed = 0;
   
   try {
-    progressText.textContent = `변형문제 생성 시작... (지문 ${passages.length}개 × 유형 ${types.length}개 = ${total}개 항목)`;
-    
+    // 1단계: 항목을 하나씩 생성 (각 요청이 짧아 타임아웃 회피)
+    const items = [];
+    for (const p of passages) for (const t of types) items.push({ p, t });
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      progressText.textContent = `생성 중... (${i+1}/${items.length}) ${it.p.id} · 유형 ${it.t}`;
+      progressFill.style.width = `${Math.round((i / items.length) * 90)}%`;
+      try {
+        const r = await fetch(API+'/api/variation/item', {
+          method: 'POST',
+          headers: { ...headers(), 'Content-Type':'application/json' },
+          body: JSON.stringify({ book: it.p.book, unit: it.p.unit, id: it.p.id, type: it.t })
+        });
+        // 개별 실패는 여기서 중단하지 않음 — 최종 합치기 단계에서 warnings로 모임
+        if (r.ok) { await r.json().catch(()=>{}); }
+      } catch (err) {
+        // 네트워크 오류도 무시하고 계속 — 다음 항목 진행
+        console.warn('item 생성 실패', it, err);
+      }
+    }
+
+    // 2단계: HTML 합치기 (위에서 캐시에 적재됨 → 캐시 히트로 즉시)
+    progressText.textContent = 'HTML 합치는 중...';
+    progressFill.style.width = '95%';
+
     const res = await fetch(API+'/api/variation', {
       method: 'POST',
       headers: { ...headers(), 'Content-Type':'application/json' },

@@ -265,6 +265,18 @@ body {
   line-height: 1.15;
 }
 
+
+/* 헤더 로고 텍스트 (LEVEL ME UP) */
+.hdr-logo-text {
+  font-family: 'Arial Black', 'Helvetica Neue', 'Noto Sans KR', sans-serif;
+  font-weight: 900;
+  font-size: 14pt;
+  letter-spacing: 0.5px;
+  color: #1a1a1a;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 </style>
 </head>
 <body>
@@ -277,7 +289,7 @@ body {
 <div class="q-page">
   <div class="hdr">
     <span class="hdr-title">
-      {% if logo_url %}<img class="hdr-logo" src="{{ logo_url }}" alt="레벨미업">{% endif %}
+      <span class="hdr-logo-text">LEVEL ME UP</span>
       변형문제 — 유형 A
     </span>
     <span class="hdr-right">{{ item.label }}</span>
@@ -356,7 +368,7 @@ body {
 <div class="ans-start">
   <div class="ans-hdr">
     <div class="hdr-title">
-      {% if logo_url %}<img class="hdr-logo" src="{{ logo_url }}" alt="레벨미업">{% endif %}
+      <span class="hdr-logo-text">LEVEL ME UP</span>
       변형문제 (유형 A) — 정답·해설
     </div>
   </div>

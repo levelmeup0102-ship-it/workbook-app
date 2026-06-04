@@ -370,6 +370,21 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
     except Exception as e:
         errors.append(f"[{pid}] 마커 검증 예외: {e}")
     
+    # ★ Q3 정답 (A)(B)가 본문 단어 그대로면 거부 (패러프레이즈/추상화 강제, strict만)
+    if strict and original_passage:
+        sc = data.get("summary_correct")
+        opts = data.get("summary_options")
+        if isinstance(opts, list) and isinstance(sc, int) and 0 <= sc < len(opts) \
+           and isinstance(opts[sc], list) and len(opts[sc]) >= 2:
+            psg_tokens = set(tokenize_for_comparison(original_passage))
+            for slot, w in zip(["(A)", "(B)"], opts[sc][:2]):
+                wt = tokenize_for_comparison(str(w))
+                if wt and all(t in psg_tokens for t in wt):
+                    errors.append(
+                        f"[{pid}] Q3 정답 {slot} '{w}'가 본문에 그대로 등장 — "
+                        f"본문 단어를 베끼지 말고 한 단계 추상화/패러프레이즈할 것"
+                    )
+
     # summary_options 5개 (필수)
     if not isinstance(data.get("summary_options"), list) or len(data["summary_options"]) < 2:
         errors.append(f"[{pid}] summary_options는 최소 2개 항목 필요")

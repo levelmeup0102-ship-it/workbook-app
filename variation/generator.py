@@ -9,6 +9,7 @@ variation/generator.py
 import os
 import hashlib
 import random
+import re
 import traceback
 from typing import Optional
 
@@ -281,7 +282,24 @@ def generate_variation_b(
             
             raw = call_claude(SYSTEM_PROMPT_B, user_msg)
             data = extract_json_from_response(raw)
-            
+
+            # ★ Q4/Q5 보기(bogi) 자동 생성: 답지 단어를 그대로 소문자·구두점제거하여 보기로 사용.
+            #   모델이 만든 보기는 무시 → 누락/잉여(예: 'for')/중복오류를 원천 차단.
+            def _bogi_from(text: str):
+                toks = re.sub(r'[.,;:!?"()]', ' ', str(text or "")).split()
+                return [t.lower() for t in toks if t]
+            try:
+                # Q4: blank_A + blank_B
+                q4 = _bogi_from(str(data.get("blank_A", "")) + " " + str(data.get("blank_B", "")))
+                if q4:
+                    data["blank_summary_bogi"] = q4
+                # Q5: topic_writing_answer
+                q5 = _bogi_from(data.get("topic_writing_answer", ""))
+                if q5:
+                    data["topic_writing_bogi"] = q5
+            except Exception:
+                pass
+
             # 마지막 시도면 strict=False (검증 풀어서라도 받아들임)
             is_last = (attempt == MAX_RETRIES)
             errors = validate_b(data, en_text, pid, strict=not is_last)

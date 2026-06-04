@@ -3623,9 +3623,9 @@ Return ONLY the JSON object.
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
     # v21: 캐시 로드 후 어휘 마커 보정 마이그레이션 추가
-    cached = load_step(passage_dir, "preclass_analysis_v23")
+    cached = load_step(passage_dir, "preclass_analysis_v24")
     if cached:
-        _safe_print("  ✅ preclass_analysis_v23 캐시 사용")
+        _safe_print("  ✅ preclass_analysis_v24 캐시 사용")
         # ★ v24 마이그레이션 — 캐시도 항상 지문↔상세 동기화 실행
         # 옛 캐시에 지문 마커 3개 / 상세 12개 같은 불일치 있을 수 있음
         try:
@@ -3649,10 +3649,12 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
                 cached.get("passage_marked", ""), passage
             )
             # 마이그레이션 결과 다시 저장
-            save_step(passage_dir, "preclass_analysis_v23", cached)
+            save_step(passage_dir, "preclass_analysis_v24", cached)
             _safe_print(f"  ✅ 캐시 마이그레이션 완료")
         except Exception as e:
-            _safe_print(f"  ⚠️ 캐시 마이그레이션 실패: {e}")
+            import traceback as _tb_mig
+            _safe_print(f"  ⚠️ 캐시 마이그레이션 실패: {type(e).__name__}: {e}")
+            _safe_print(f"     {_tb_mig.format_exc()}")
         return cached
     _safe_print("  📕 preclass_analysis 생성 중...")
 
@@ -3751,7 +3753,7 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     _r = _safe_post("_enforce_summary_length", lambda: _enforce_summary_length(data, max_words=40))
     if _r is not None: data = _r
 
-    save_step(passage_dir, "preclass_analysis_v23", data)
+    save_step(passage_dir, "preclass_analysis_v24", data)
     return data
 
 

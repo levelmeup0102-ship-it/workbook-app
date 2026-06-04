@@ -256,6 +256,20 @@ body {
 .expl-box.teal-side { border-left-color: var(--teal); }
 .expl-label { font-weight: bold; color: var(--purple); margin-right: 4px; }
 .expl-label.teal { color: var(--teal); }
+
+/* 수능 40번식 밑줄 빈칸 */
+.ublank {
+  display: inline-block;
+  min-width: 58px;
+  border-bottom: 1.6px solid #333;
+  text-align: center;
+  font-weight: 700;
+  color: #1a1a1a;
+  padding: 0 5px;
+  margin: 0 2px;
+  line-height: 1.15;
+}
+
 </style>
 </head>
 <body>
@@ -304,7 +318,7 @@ body {
       </div>
 
       <div class="q-title"><span class="q-num">3</span> 다음 글의 내용을 한 문장으로 요약하고자 한다. 빈칸 (A), (B)에 들어갈 말로 가장 적절한 것은?</div>
-      <div class="summary-template">{{ item.data.summary_template | safe }}</div>
+      <div class="summary-template">{{ item.data.summary_template | replace('(A)', '<span class="ublank">(A)</span>') | replace('(B)', '<span class="ublank">(B)</span>') | safe }}</div>
       <div class="opt-pair-hdr">
         <span></span>
         <span>(A)</span>
@@ -323,7 +337,7 @@ body {
       <div class="col-header col-wri-hdr">[ 서술형 ]</div>
 
       <div class="q-title"><span class="q-num write">4</span> 다음 요약문의 빈칸 (A), (B)에 들어갈 말을 &lt;보기&gt;의 단어를 모두 사용하여 완성하시오.</div>
-      <div class="summary-template">{{ item.data.blank_summary_template | safe }}</div>
+      <div class="summary-template">{{ item.data.blank_summary_template | replace('(A)', '<span class="ublank">(A)</span>') | replace('(B)', '<span class="ublank">(B)</span>') | safe }}</div>
       <div class="bogi">
         <span class="bogi-label">&lt;보기&gt;</span>{{ item.data.blank_summary_bogi | join(' / ') }}
       </div>

@@ -13,28 +13,15 @@
 }
 @page {
   size: A4;
-  margin: 11mm 13mm 11mm 13mm;
+  margin: 11mm 13mm 22mm 13mm;
+  @bottom-right {
+    content: element(footer-logo);
+    margin-right: 0; margin-bottom: 0;
+  }
 }
-.q-page, .ans-page {
-  display: flex;
-  flex-direction: column;
-  min-height: 270mm;
-}
-.q-page > .page-footer,
-.ans-page > .page-footer {
-  margin-top: auto;
-}
-.page-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: 5mm;
-  margin-top: 6mm;
-  border-top: 1px solid #DDD;
-}
-.page-footer .footer-logo-img { height: 8mm; }
-.page-footer .page-num {
-  font-size: 9pt; color: #555; font-weight: 500;
+.footer-logo { position: running(footer-logo); }
+.footer-logo img {
+  height: 28mm; vertical-align: bottom;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -43,8 +30,6 @@ body {
   -webkit-print-color-adjust: exact; print-color-adjust: exact;
 }
 .q-page { page-break-after: always; }
-.ans-page { page-break-after: always; }
-.ans-page:last-child { page-break-after: auto; }
 .hdr {
   display: flex; justify-content: space-between; align-items: center;
   padding-bottom: 4px; border-bottom: 2px solid var(--purple); margin-bottom: 10px;
@@ -88,8 +73,8 @@ body {
 
 .psg-box {
   border: 1px solid var(--border); border-radius: 5px;
-  background: var(--bg-passage); padding: 8px 12px;
-  font-size: 9pt; line-height: 1.65; margin-bottom: 7px;
+  background: var(--bg-passage); padding: 9px 13px;
+  font-size: 9pt; line-height: 1.8; margin-bottom: 11px;
   text-align: justify;
 }
 /* ⭐ 지문 안 위치 마커 - 동그라미 숫자만 (괄호 X) */
@@ -123,7 +108,7 @@ body {
 .q-num.teal { background: var(--teal); }
 .q-title {
   font-weight: bold; font-size: 9.5pt; color: #111;
-  margin-bottom: 4px; margin-top: 7px;
+  margin-bottom: 5px; margin-top: 11px;
 }
 .q-title:first-of-type { margin-top: 0; }
 
@@ -162,7 +147,7 @@ body {
   grid-template-columns: 22px 1fr 1fr;
   gap: 2px 6px;
   font-size: 8.7pt;
-  padding: 1px 4px;
+  padding: 1.5px 4px;
 }
 .opt-pair-item span { text-align: center; }
 .opt-pair-item span:first-child { text-align: left; }
@@ -213,11 +198,11 @@ body {
 .write-ans-row { margin: 4px 0 8px; }
 .write-ans-line {
   border: 1px solid #999; border-radius: 3px; background: #fff;
-  height: 12mm;
+  height: 14mm;
   background-image:
     repeating-linear-gradient(to bottom,
-      transparent 0, transparent 5.5mm,
-      #ddd 5.5mm, #ddd 6mm);
+      transparent 0, transparent 6.5mm,
+      #ddd 6.5mm, #ddd 7mm);
 }
 .write-ans-line.compact {
   height: 11mm;
@@ -235,16 +220,16 @@ body {
 .ans-hdr {
   background: linear-gradient(135deg, #fef3c7, #fed7aa);
   border-left: 4px solid var(--accent);
-  padding: 3px 11px; margin-bottom: 7px; border-radius: 0 4px 4px 0;
+  padding: 6px 11px; margin-bottom: 7px; border-radius: 0 4px 4px 0;
 }
-.ans-hdr .hdr-title { color: var(--accent); font-size: 10pt; }
+.ans-hdr .hdr-title { color: var(--accent); font-size: 11pt; }
 .ans-block {
   border: 1px solid #DDD; border-radius: 4px;
   padding: 5px 9px; margin-bottom: 5px; background: #FAFAFA;
   page-break-inside: avoid; break-inside: avoid;
 }
 .ans-block-title {
-  font-size: 8.5pt; font-weight: bold; color: var(--accent);
+  font-size: 9.5pt; font-weight: bold; color: var(--accent);
   padding-bottom: 2px; margin-bottom: 4px; border-bottom: 1px solid #DDD;
 }
 .ans-row {
@@ -254,9 +239,10 @@ body {
 .ans-row b.q-name { width: 75px; flex-shrink: 0; font-size: 8pt; padding-top: 1px; }
 .ans-row .ans-val {
   font-weight: bold; color: var(--accent); font-size: 8.7pt;
+  padding: 0 6px; background: var(--bg-orange); border-radius: 3px;
   flex-shrink: 0;
 }
-.ans-row .ans-val.teal { color: var(--teal); }
+.ans-row .ans-val.teal { color: var(--teal); background: var(--bg-given); }
 .ans-row .ans-detail { color: #555; font-size: 7.5pt; line-height: 1.5; flex: 1; }
 .ans-row .ans-write {
   color: #1a1a1a; font-size: 8.2pt; flex: 1; padding: 1px 0;
@@ -274,14 +260,16 @@ body {
 </head>
 <body>
 
-{% set N = passages|length %}
-{% set TOTAL_PAGES = N + ((N + 2) // 3) %}
+<div class="footer-logo">
+  {% if logo_url %}<img src="{{ logo_url }}" alt="레벨미업">{% endif %}
+</div>
 
 {% for item in passages %}
 <div class="q-page">
   <div class="hdr">
     <span class="hdr-title">
-      변형문제 — 유형 B <span class="var-badge">📝 SUMMARY+POSITION+WRITING</span>
+      {% if logo_url %}<img class="hdr-logo" src="{{ logo_url }}" alt="레벨미업">{% endif %}
+      변형문제 — 유형 B
     </span>
     <span class="hdr-right">{{ item.label }}</span>
   </div>
@@ -295,7 +283,7 @@ body {
       <div class="col-header col-obj-hdr">[ 객관식 ]</div>
 
       {# ⭐ Q1 - 문장 위치 추론 #}
-      <div class="q-title"><span class="q-num teal">1</span> 윗글의 주어진 문장이 들어갈 가장 적절한 곳은?</div>
+      <div class="q-title"><span class="q-num teal">1</span> 글의 흐름으로 보아, 주어진 문장이 들어가기에 가장 적절한 곳은?</div>
       <div class="given-box">
         <span class="given-label">주어진 문장</span>
         <div class="given-text">{{ item.data.given_sentence }}</div>
@@ -308,7 +296,7 @@ body {
         <span>⑤</span>
       </div>
 
-      <div class="q-title"><span class="q-num">2</span> 윗글의 주제로 가장 적절한 것은?</div>
+      <div class="q-title"><span class="q-num">2</span> 다음 글의 주제로 가장 적절한 것은?</div>
       <div class="opts-1col-stack">
         {% for opt in item.data.topic_options %}
         <div class="opt"><span class="opt-num">{{ ['①','②','③','④','⑤'][loop.index0] }}</span> {{ opt }}</div>
@@ -334,7 +322,7 @@ body {
     <div class="col-writing">
       <div class="col-header col-wri-hdr">[ 서술형 ]</div>
 
-      <div class="q-title"><span class="q-num write">4</span> 다음 요약문의 빈칸 (A), (B)에 들어갈 말을 &lt;보기&gt;에서 찾아 영작하시오.</div>
+      <div class="q-title"><span class="q-num write">4</span> 다음 요약문의 빈칸 (A), (B)에 들어갈 말을 &lt;보기&gt;의 단어를 모두 사용하여 완성하시오.</div>
       <div class="summary-template">{{ item.data.blank_summary_template | safe }}</div>
       <div class="bogi">
         <span class="bogi-label">&lt;보기&gt;</span>{{ item.data.blank_summary_bogi | join(' / ') }}
@@ -357,7 +345,7 @@ body {
       </div>
 
       {# Q5 - 주제문 영작 (이전 Q3이 Q5로 밀림) #}
-      <div class="q-title"><span class="q-num write">5</span> 다음 &lt;보기&gt;의 단어를 모두 사용하여 윗글의 주제문을 영작하시오.</div>
+      <div class="q-title"><span class="q-num write">5</span> &lt;보기&gt;의 단어를 모두 사용하여 글의 주제문을 영작하시오.</div>
       <div class="bogi">
         <span class="bogi-label">&lt;보기&gt;</span>{{ item.data.topic_writing_bogi | join(' / ') }}
       </div>
@@ -366,7 +354,7 @@ body {
         <div class="condition-list">
           ○ &lt;보기&gt;의 단어를 모두 한 번씩만 사용<br>
           ○ 단어를 변형 없이 사용<br>
-          ○ 글의 핵심 논지가 명확히 드러나도록
+          ○ 글의 핵심 논지가 명확히 드러나게 쓸 것
         </div>
       </div>
       <div class="write-ans-row">
@@ -376,25 +364,18 @@ body {
     </div>
 
   </div>
-
-  <div class="page-footer">
-    {% if logo_url %}<img class="footer-logo-img" src="{{ logo_url }}" alt="레벨미업">{% else %}<span></span>{% endif %}
-    <span class="page-num">{{ loop.index }} / {{ TOTAL_PAGES }}</span>
-  </div>
 </div>
 {% endfor %}
 
-{% for group in passages | batch(3) %}
-<div class="ans-page{% if loop.first %} ans-start{% endif %}">
-  {% if loop.first %}
+<div class="ans-start">
   <div class="ans-hdr">
     <div class="hdr-title">
-      변형문제 (유형 B) — 정답·해설 <span class="var-badge">📝 ANSWERS</span>
+      {% if logo_url %}<img class="hdr-logo" src="{{ logo_url }}" alt="레벨미업">{% endif %}
+      변형문제 (유형 B) — 정답·해설
     </div>
   </div>
-  {% endif %}
 
-  {% for item in group %}
+  {% for item in passages %}
     <div class="ans-block">
       <div class="ans-block-title">▶ {{ item.label }}</div>
 
@@ -436,13 +417,7 @@ body {
       {% endif %}
     </div>
   {% endfor %}
-
-  <div class="page-footer">
-    {% if logo_url %}<img class="footer-logo-img" src="{{ logo_url }}" alt="레벨미업">{% else %}<span></span>{% endif %}
-    <span class="page-num">{{ N + loop.index }} / {{ TOTAL_PAGES }}</span>
-  </div>
 </div>
-{% endfor %}
 
 </body>
 </html>

@@ -47,7 +47,7 @@ def get_logo_data_uri() -> str:
 def render_marks(text: str) -> str:
     circles = ['①', '②', '③', '④', '⑤']
     for i in range(1, 6):
-        text = text.replace(f"<MARK{i}>", f'<span class="pos-mark">{circles[i-1]}</span>')
+        text = text.replace(f"<MARK{i}>", f'<span class="pos-mark">(&nbsp;{circles[i-1]}&nbsp;)</span>')
     return text
 
 

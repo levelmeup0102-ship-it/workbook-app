@@ -44,7 +44,7 @@ body {
   color: white; padding: 1.5px 9px; border-radius: 10px;
   font-size: 7.5pt; font-weight: bold; margin-left: 6px;
 }
-
+ 
 /* ⭐ 주어진 문장 박스 (Q3 위에) - 청록색 */
 .given-box {
   border: 2px solid var(--teal);
@@ -70,7 +70,7 @@ body {
   color: #1a1a1a;
   padding-top: 2px;
 }
-
+ 
 .psg-box {
   border: 1px solid var(--border); border-radius: 5px;
   background: var(--bg-passage); padding: 9px 13px;
@@ -85,7 +85,7 @@ body {
   font-size: 11pt;
   margin: 0 2px;
 }
-
+ 
 .two-col {
   display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px;
 }
@@ -111,7 +111,7 @@ body {
   margin-bottom: 5px; margin-top: 11px;
 }
 .q-title:first-of-type { margin-top: 0; }
-
+ 
 .summary-template {
   background: #FFFCEB;
   border: 1px solid #F0E0A0;
@@ -131,7 +131,7 @@ body {
   color: var(--accent);
   margin: 0 1px;
 }
-
+ 
 .opt-pair-hdr {
   font-size: 7.5pt; color: #777; font-weight: bold;
   display: grid;
@@ -153,10 +153,10 @@ body {
 .opt-pair-item span:first-child { text-align: left; }
 .opt-num { color: var(--primary); font-weight: bold; }
 .opt-num.teal { color: var(--teal); }
-
+ 
 .opts-1col-stack { font-size: 9pt; }
 .opts-1col-stack .opt { padding: 2px 0; line-height: 1.5; }
-
+ 
 /* ⭐ Q3 위치 선지 - 동그라미 숫자만 가로로 (괄호 박스 X) */
 .opts-position {
   display: flex;
@@ -167,14 +167,14 @@ body {
   font-weight: bold;
   color: var(--teal);
 }
-
+ 
 .bogi {
   border: 1.5px solid var(--accent); border-radius: 4px;
   background: var(--bg-yellow); padding: 5px 9px;
   font-size: 8.3pt; line-height: 1.6; margin: 3px 0 4px;
 }
 .bogi-label { font-weight: bold; color: var(--accent); margin-right: 4px; font-size: 8pt; }
-
+ 
 .condition {
   font-size: 7.5pt; color: #555;
   border-left: 2px solid #DDD;
@@ -194,7 +194,7 @@ body {
   width: fit-content;
 }
 .condition-list { padding-left: 8px; }
-
+ 
 .write-ans-row { margin: 4px 0 8px; }
 .write-ans-line {
   border: 1px solid #999; border-radius: 3px; background: #fff;
@@ -215,7 +215,7 @@ body {
   font-size: 8.3pt; color: var(--accent); font-weight: bold;
   margin-bottom: 2px;
 }
-
+ 
 .ans-start { page-break-before: always; }
 .ans-hdr {
   background: linear-gradient(135deg, #fef3c7, #fed7aa);
@@ -259,31 +259,31 @@ body {
 </style>
 </head>
 <body>
-
+ 
 <div class="footer-logo">
   {% if logo_url %}<img src="{{ logo_url }}" alt="레벨미업">{% endif %}
 </div>
-
+ 
 {% for item in passages %}
 <div class="q-page">
   <div class="hdr">
     <span class="hdr-title">
       {% if logo_url %}<img class="hdr-logo" src="{{ logo_url }}" alt="레벨미업">{% endif %}
-      변형문제 — 유형 B <span class="var-badge">📝 SUMMARY+POSITION+WRITING</span>
+      변형문제 — 유형 B
     </span>
     <span class="hdr-right">{{ item.label }}</span>
   </div>
-
+ 
   {# ⭐ 지문 - 위치 마커 ①~⑤가 분산 배치됨 (Q3에 사용) #}
   <div class="psg-box">{{ item.data.passage_rendered | safe }}</div>
-
+ 
   <div class="two-col">
-
+ 
     <div class="col-objective">
       <div class="col-header col-obj-hdr">[ 객관식 ]</div>
-
+ 
       {# ⭐ Q1 - 문장 위치 추론 #}
-      <div class="q-title"><span class="q-num teal">1</span> 윗글의 주어진 문장이 들어갈 가장 적절한 곳은?</div>
+      <div class="q-title"><span class="q-num teal">1</span> 글의 흐름으로 보아, 주어진 문장이 들어가기에 가장 적절한 곳은?</div>
       <div class="given-box">
         <span class="given-label">주어진 문장</span>
         <div class="given-text">{{ item.data.given_sentence }}</div>
@@ -295,14 +295,14 @@ body {
         <span>④</span>
         <span>⑤</span>
       </div>
-
-      <div class="q-title"><span class="q-num">2</span> 윗글의 주제로 가장 적절한 것은?</div>
+ 
+      <div class="q-title"><span class="q-num">2</span> 다음 글의 주제로 가장 적절한 것은?</div>
       <div class="opts-1col-stack">
         {% for opt in item.data.topic_options %}
         <div class="opt"><span class="opt-num">{{ ['①','②','③','④','⑤'][loop.index0] }}</span> {{ opt }}</div>
         {% endfor %}
       </div>
-
+ 
       <div class="q-title"><span class="q-num">3</span> 다음 글의 내용을 한 문장으로 요약하고자 한다. 빈칸 (A), (B)에 들어갈 말로 가장 적절한 것은?</div>
       <div class="summary-template">{{ item.data.summary_template | safe }}</div>
       <div class="opt-pair-hdr">
@@ -318,11 +318,11 @@ body {
       </div>
       {% endfor %}
     </div>
-
+ 
     <div class="col-writing">
       <div class="col-header col-wri-hdr">[ 서술형 ]</div>
-
-      <div class="q-title"><span class="q-num write">4</span> 다음 요약문의 빈칸 (A), (B)에 들어갈 말을 &lt;보기&gt;에서 찾아 영작하시오.</div>
+ 
+      <div class="q-title"><span class="q-num write">4</span> 다음 요약문의 빈칸 (A), (B)에 들어갈 말을 &lt;보기&gt;의 단어를 모두 사용하여 완성하시오.</div>
       <div class="summary-template">{{ item.data.blank_summary_template | safe }}</div>
       <div class="bogi">
         <span class="bogi-label">&lt;보기&gt;</span>{{ item.data.blank_summary_bogi | join(' / ') }}
@@ -343,9 +343,9 @@ body {
         <div class="write-ans-prefix">(B) 정답:</div>
         <div class="write-ans-line"></div>
       </div>
-
+ 
       {# Q5 - 주제문 영작 (이전 Q3이 Q5로 밀림) #}
-      <div class="q-title"><span class="q-num write">5</span> 다음 &lt;보기&gt;의 단어를 모두 사용하여 윗글의 주제문을 영작하시오.</div>
+      <div class="q-title"><span class="q-num write">5</span> &lt;보기&gt;의 단어를 모두 사용하여 글의 주제문을 영작하시오.</div>
       <div class="bogi">
         <span class="bogi-label">&lt;보기&gt;</span>{{ item.data.topic_writing_bogi | join(' / ') }}
       </div>
@@ -354,7 +354,7 @@ body {
         <div class="condition-list">
           ○ &lt;보기&gt;의 단어를 모두 한 번씩만 사용<br>
           ○ 단어를 변형 없이 사용<br>
-          ○ 글의 핵심 논지가 명확히 드러나도록
+          ○ 글의 핵심 논지가 명확히 드러나게 쓸 것
         </div>
       </div>
       <div class="write-ans-row">
@@ -362,23 +362,23 @@ body {
         <div class="write-ans-line"></div>
       </div>
     </div>
-
+ 
   </div>
 </div>
 {% endfor %}
-
+ 
 <div class="ans-start">
   <div class="ans-hdr">
     <div class="hdr-title">
       {% if logo_url %}<img class="hdr-logo" src="{{ logo_url }}" alt="레벨미업">{% endif %}
-      변형문제 (유형 B) — 정답·해설 <span class="var-badge">📝 ANSWERS</span>
+      변형문제 (유형 B) — 정답·해설
     </div>
   </div>
-
+ 
   {% for item in passages %}
     <div class="ans-block">
       <div class="ans-block-title">▶ {{ item.label }}</div>
-
+ 
       <div class="ans-row">
         <b class="q-name">Q1. 문장위치</b>
         <span class="ans-val teal">{{ ['①','②','③','④','⑤'][item.data.position_correct] }}</span>
@@ -406,7 +406,7 @@ body {
         <b class="q-name">Q5. 주제영작</b>
         <span class="ans-write">{{ item.data.topic_writing_answer }}</span>
       </div>
-
+ 
       {% if item.data.position_explain %}
       <div class="expl-box teal-side">
         <span class="expl-label teal">Q1 해설</span>{{ item.data.position_explain }}
@@ -418,6 +418,7 @@ body {
     </div>
   {% endfor %}
 </div>
-
+ 
 </body>
 </html>
+ 

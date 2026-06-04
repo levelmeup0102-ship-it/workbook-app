@@ -64,11 +64,48 @@ class VariationRequest(BaseModel):
     passages: List[PassageRef]
     types: List[str]  # ['A'] / ['B'] / ['A','B']
     mode: str = "by-type"  # "by-type" or "by-passage"
+
+
+class VariationItemRequest(BaseModel):
+    book: str
+    unit: str
+    id: str
+    type: str  # 'A' or 'B'
     school_name: str = "레벨미업학원"
 
 
 # ============ 라우터 ============
 router = APIRouter(prefix="/api", tags=["variation"])
+
+
+@router.post("/variation/item")
+def create_variation_item(
+    req: VariationItemRequest,
+    _token_val: str = Depends(verify_token),
+):
+    """
+    변형문제 1개 항목(지문 1개 × 유형 1개)만 생성해서 캐시에 적재.
+    프런트가 항목을 하나씩 순차 호출 → 각 요청이 짧게 끝나 타임아웃 회피.
+    결과 데이터는 step_cache에 저장되고, 최종 /variation 호출 때 캐시 히트로 즉시 합쳐짐.
+    """
+    if not sb_client:
+        raise HTTPException(status_code=500, detail="Supabase 환경변수 미설정")
+    if req.type not in ("A", "B"):
+        raise HTTPException(status_code=400, detail=f"알 수 없는 유형: {req.type}")
+
+    text = fetch_passage_text(req.book, req.unit, req.id)
+    if text is None:
+        raise HTTPException(status_code=404, detail=f"지문을 찾을 수 없음: {req.book} / {req.unit} / {req.id}")
+
+    try:
+        if req.type == "A":
+            generate_variation_a(passage_text=text, pid=req.id, book=req.book, unit=req.unit)
+        else:
+            generate_variation_b(passage_text=text, pid=req.id, book=req.book, unit=req.unit)
+        return {"ok": True, "id": req.id, "type": req.type}
+    except Exception as e:
+        traceback.print_exc()
+        return {"ok": False, "id": req.id, "type": req.type, "error": str(e)}
 
 
 @router.post("/variation")

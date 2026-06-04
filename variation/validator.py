@@ -126,7 +126,7 @@ def check_marker_positions(passage_with_marks: str, pid: str = "?", min_between:
 
 
 # ====================== 유형 A 검증 (완화) ======================
-def validate_a(data: dict, original_passage: str = None, pid: str = "?") -> list:
+def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient: bool = False) -> list:
     """유형 A 검증 - 평가원 순서형 (intro + (A)(B)(C) 3문단 + 고정 5선지)"""
     errors = []
 
@@ -142,13 +142,14 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?") -> list
     if not isinstance(v, int) or not (0 <= v <= 4):
         errors.append(f"[{pid}] Q2 order_correct 범위 오류(0-4여야 함): {v}")
 
-    # Q5 blank_A/B 단어 수 최소 5
+    # Q5 blank_A/B 단어 수 최소 5 (관대모드 3)
+    min_bw = 3 if lenient else 5
     try:
         wa = len(data["blank_A"].split()); wb = len(data["blank_B"].split())
-        if wa < 5:
-            errors.append(f"[{pid}] Q5 blank_A 단어 수 부족 ({wa}개 < 5개)")
-        if wb < 5:
-            errors.append(f"[{pid}] Q5 blank_B 단어 수 부족 ({wb}개 < 5개)")
+        if wa < min_bw:
+            errors.append(f"[{pid}] Q5 blank_A 단어 수 부족 ({wa}개 < {min_bw}개)")
+        if wb < min_bw:
+            errors.append(f"[{pid}] Q5 blank_B 단어 수 부족 ({wb}개 < {min_bw}개)")
     except (KeyError, AttributeError) as e:
         errors.append(f"[{pid}] blank_A/B 형식 오류: {e}")
 
@@ -156,8 +157,9 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?") -> list
     if data.get("core_blank_target"):
         try:
             cwc = len(data["core_blank_target"].split())
-            if cwc < 3:
-                errors.append(f"[{pid}] Q3 core_blank_target 단어 수 부족 ({cwc}개 < 3개)")
+            min_cw = 2 if lenient else 3
+            if cwc < min_cw:
+                errors.append(f"[{pid}] Q3 core_blank_target 단어 수 부족 ({cwc}개 < {min_cw}개)")
         except (KeyError, AttributeError):
             pass
         if "<CORE_BLANK>" not in data.get("intro", ""):

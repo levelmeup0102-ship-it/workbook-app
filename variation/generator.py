@@ -53,8 +53,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s6 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s6"
+    # _s7 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s7"
 
 
 # ============ Supabase 캐시 ============
@@ -217,9 +217,12 @@ def generate_variation_a(
                 print(f"[VAR][A][{pid}] 생성 완료 (시도 {attempt}, {mode_str})")
                 return data
             last_errors = errors
-            if is_last and data:
+            has_critical = any("[CRITICAL]" in e for e in errors)
+            if is_last and data and not has_critical:
                 last_data = data
-                print(f"[VAR][A][{pid}] 마지막 시도도 실패했지만 데이터 보관: {len(errors)}건 위반")
+                print(f"[VAR][A][{pid}] 마지막 시도 실패했지만 경미한 오류뿐 → 데이터 보관: {len(errors)}건")
+            elif is_last and has_critical:
+                print(f"[VAR][A][{pid}] 마지막 시도에 치명적 오류(순서/빈칸/원문) → fallback 거부, 이 항목 생략")
             print(f"[VAR][A][{pid}] 시도 {attempt} 실패 ({len(errors)}건):")
             for err in errors[:5]:
                 print(f"    - {err[:200]}")
@@ -309,10 +312,13 @@ def generate_variation_b(
                 print(f"[VAR][B][{pid}] 생성 완료 (시도 {attempt}, {mode_str})")
                 return data
             last_errors = errors
-            # 마지막 시도이고 검증 실패면, 데이터를 저장해두고 마지막에 fallback 사용
-            if is_last and data:
+            has_critical = any("[CRITICAL]" in e for e in errors)
+            # 마지막 시도이고 경미한 오류뿐이면 fallback용으로 보관 (치명적이면 거부)
+            if is_last and data and not has_critical:
                 last_data = data
-                print(f"[VAR][B][{pid}] 마지막 시도도 실패했지만 데이터 보관: {len(errors)}건 위반")
+                print(f"[VAR][B][{pid}] 마지막 시도 실패했지만 경미한 오류뿐 → 데이터 보관: {len(errors)}건")
+            elif is_last and has_critical:
+                print(f"[VAR][B][{pid}] 마지막 시도에 치명적 오류 → fallback 거부, 이 항목 생략")
             print(f"[VAR][B][{pid}] 시도 {attempt} 실패 ({len(errors)}건):")
             for err in errors[:5]:
                 print(f"    - {err[:200]}")

@@ -51,8 +51,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s2 = 스키마 v2 (유형A 평가원 순서형 intro/paragraphs) — 옛 캐시 자동 무효화
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s2"
+    # _s3 = 스키마 v3 (유형A 순서형 복원검증 + 빈칸 밑줄 + 삽입 position_count) — 옛 캐시 자동 무효화
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s3"
 
 
 # ============ Supabase 캐시 ============
@@ -172,17 +172,16 @@ def generate_variation_a(
                 user_msg += (
                     "\n\n# ⚠️ PREVIOUS ATTEMPT FAILED — FIX THESE ERRORS:\n"
                     + "\n".join(f"  ✗ {e}" for e in last_errors[:5])
-                    + "\n\n# REMINDER OF CRITICAL CHECKS FOR TYPE A:\n"
-                    "  1. blank_A and blank_B must EACH have AT LEAST 5 words\n"
-                    "  2. blank_A and blank_B should be in DIFFERENT chunks (so they're separated by 3+ words)\n"
-                    "  3. bogi must contain EVERY SINGLE WORD from blank_A + blank_B — "
-                    "count articles ('the', 'a', 'an') and prepositions ('of', 'in', 'to') carefully!\n"
-                    "     Example: if blank_A is 'the area between the plants' (5 words including TWO 'the'), "
-                    "bogi must include 'the' TWICE, not once.\n"
-                    "  4. order_correct must NOT point to '(a)-(b)-(c)-(d)' — pick a SHUFFLED order\n"
-                    "  5. core_blank_target must have AT LEAST 3 words\n"
-                    "  6. ★ ALL 4 CHUNKS must have actual text — NEVER leave (d) or any chunk empty/blank!\n"
-                    "     Split the passage into 4 BALANCED pieces, each with 5+ words"
+                    + "\n\n# REMINDER OF CRITICAL CHECKS FOR TYPE A (sentence-order style):\n"
+                    "  1. intro = the given lead (first 1-2 sentences, with <CORE_BLANK>). It must NOT reappear in (A)/(B)/(C).\n"
+                    "  2. ★ (A)(B)(C) = exactly 3 paragraphs. Each must be a CONSECUTIVE run of whole sentences from the passage — "
+                    "NEVER merge sentences that are far apart in the original. Cut ONLY at sentence boundaries.\n"
+                    "  3. ★ RECONSTRUCTION TEST: intro + (A)(B)(C) reassembled in the order_correct sequence must EQUAL the original passage word-for-word "
+                    "(no reordering inside a paragraph, no merging distant sentences, no omission, no duplication).\n"
+                    "  4. order_correct = index 0-4 into FIXED choices (0=(A)-(C)-(B) 1=(B)-(A)-(C) 2=(B)-(C)-(A) 3=(C)-(A)-(B) 4=(C)-(B)-(A)); never (A)-(B)-(C).\n"
+                    "  5. blank_A and blank_B must EACH have AT LEAST 5 words, placed INSIDE (A)/(B)/(C) (not in intro), in different paragraphs.\n"
+                    "  6. bogi must contain EVERY SINGLE WORD from blank_A + blank_B — count articles ('the','a','an') and prepositions carefully.\n"
+                    "  7. core_blank_target must have AT LEAST 3 words; the Q3 correct option must equal core_blank_target exactly."
                 )
             
             raw = call_claude(SYSTEM_PROMPT_A, user_msg)

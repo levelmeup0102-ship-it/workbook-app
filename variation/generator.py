@@ -8,6 +8,7 @@ variation/generator.py
 """
 import os
 import hashlib
+import random
 import traceback
 from typing import Optional
 
@@ -161,6 +162,7 @@ def generate_variation_a(
             return cached
     
     last_errors = []
+    last_data = None
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             user_msg = (
@@ -189,13 +191,34 @@ def generate_variation_a(
             
             if "mismatch_count" not in data and "statements" in data:
                 data["mismatch_count"] = sum(1 for _, _, ok in data["statements"] if not ok)
-            
-            errors = validate_a(data, en_text, pid)
+
+            # ★ Q5 보기(bogi) 자동 생성: blank_A + blank_B의 모든 단어를 셔플해서 사용.
+            #   모델이 만든 bogi는 무시 → 보기 누락/변형으로 인한 불일치를 원천 차단.
+            try:
+                bw = (str(data.get("blank_A", "")) + " " + str(data.get("blank_B", ""))).split()
+                if bw:
+                    seed = int(hashlib.md5((pid + str(data.get("blank_A", ""))).encode()).hexdigest()[:8], 16)
+                    shuffled = list(bw)
+                    rng = random.Random(seed)
+                    for _ in range(5):
+                        rng.shuffle(shuffled)
+                        if shuffled != bw:
+                            break
+                    data["bogi"] = shuffled
+            except Exception:
+                pass
+
+            is_last = (attempt == MAX_RETRIES)
+            errors = validate_a(data, en_text, pid, lenient=is_last)
             if not errors:
                 save_cached(cache_key, "variation_a", data)
-                print(f"[VAR][A][{pid}] 생성 완료 (시도 {attempt})")
+                mode_str = "관대 모드" if is_last else "엄격 모드"
+                print(f"[VAR][A][{pid}] 생성 완료 (시도 {attempt}, {mode_str})")
                 return data
             last_errors = errors
+            if is_last and data:
+                last_data = data
+                print(f"[VAR][A][{pid}] 마지막 시도도 실패했지만 데이터 보관: {len(errors)}건 위반")
             print(f"[VAR][A][{pid}] 시도 {attempt} 실패 ({len(errors)}건):")
             for err in errors[:5]:
                 print(f"    - {err[:200]}")
@@ -203,6 +226,11 @@ def generate_variation_a(
             traceback.print_exc()
             last_errors = [f"예외: {e}"]
     
+    # ★ 5회 모두 실패해도 마지막 데이터가 있으면 그거라도 사용 (불완전한 A라도 없는 것보단 나음)
+    if last_data is not None:
+        save_cached(cache_key, "variation_a", last_data)
+        print(f"[VAR][A][{pid}] 관대 fallback 사용 ({MAX_RETRIES}회 실패)")
+        return last_data
     raise RuntimeError(f"유형 A 생성 실패 ({MAX_RETRIES}회). 마지막 오류:\n" + "\n".join(last_errors[:5]))
 
 

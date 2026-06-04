@@ -36,7 +36,7 @@ body {
   gap: 8px;
 }
 .hdr-title { font-weight: bold; font-size: 11.5pt; color: var(--primary); display: flex; align-items: center; gap: 8px; }
-.hdr-logo { height: 18px; vertical-align: middle; }
+.hdr-logo { height: 28px; vertical-align: middle; }
 .hdr-right { font-size: 8.5pt; color: #555; }
 .var-badge {
   display: inline-block;
@@ -355,14 +355,11 @@ body {
         <b class="q-name">Q1.주제</b>
         <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.topic_correct] }}</span>
         <span class="ans-text">{{ item.data.topic_options[item.data.topic_correct] }}</span>
-        <span class="ans-note">{{ item.data.topic_explain }}</span>
       </div>
 
       <div class="ans-row-c">
         <b class="q-name">Q2.순서</b>
         <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.order_correct] }}</span>
-        <span class="ans-text">{{ ['(A)-(C)-(B)','(B)-(A)-(C)','(B)-(C)-(A)','(C)-(A)-(B)','(C)-(B)-(A)'][item.data.order_correct] }}</span>
-        <span class="ans-note">{{ item.data.order_explain }}</span>
       </div>
 
       {% if item.data.core_blank_correct is defined and item.data.core_blank_correct is not none %}
@@ -370,7 +367,6 @@ body {
         <b class="q-name">Q3.핵심빈칸</b>
         <span class="ans-val" style="color:var(--purple); background:var(--bg-purple);">{{ ['①','②','③','④','⑤'][item.data.core_blank_correct] }}</span>
         <span class="ans-text">{{ item.data.core_blank_options[item.data.core_blank_correct] }}</span>
-        <span class="ans-note">원문: "{{ item.data.core_blank_target }}" — {{ item.data.core_blank_explain }}</span>
       </div>
       {% endif %}
 
@@ -378,18 +374,16 @@ body {
         <b class="q-name">Q4.불일치</b>
         <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.mismatch_count - 1] }}</span>
         <span class="ans-text">{{ item.data.mismatch_count }}개 — {% for s in item.data.statements %}{% if not s[2] %}{{ s[0] }}{% if not loop.last %}, {% endif %}{% endif %}{% endfor %}</span>
-        <span class="ans-note">{% for stmt in item.data.statements %}{% set kr_pair = item.data.statements_kr[loop.index0] if item.data.statements_kr else ['', ''] %}<b>{{ stmt[0] }}</b>({{ 'O' if stmt[2] else 'X' }}) {{ kr_pair[1] if kr_pair[1] else '' }}{% if not loop.last %} / {% endif %}{% endfor %}</span>
+        <span class="ans-note">{% for stmt in item.data.statements %}{% set kr = item.data.statements_kr[loop.index0] if item.data.statements_kr else ['',''] %}{% set ev = item.data.statements_evidence[loop.index0] if item.data.statements_evidence and (item.data.statements_evidence|length > loop.index0) else '' %}<b>{{ stmt[0] }}</b>({{ 'O' if stmt[2] else 'X' }}){% if ev %} 근거: "{{ ev }}"{% endif %}{% if kr[1] %} — {{ kr[1] }}{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</span>
       </div>
 
       <div class="ans-row-c">
         <b class="q-name">Q5(A)</b>
         <span class="ans-text"><span class="ans-write">{{ item.data.blank_A }}</span></span>
-        <span class="ans-note">{{ item.data.blank_explain_A | safe }}</span>
       </div>
       <div class="ans-row-c">
         <b class="q-name">Q5(B)</b>
         <span class="ans-text"><span class="ans-write">{{ item.data.blank_B }}</span></span>
-        <span class="ans-note">{{ item.data.blank_explain_B | safe }}</span>
       </div>
     </div>
   {% endfor %}

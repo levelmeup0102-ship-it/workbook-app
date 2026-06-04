@@ -3626,7 +3626,8 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     cached = load_step(passage_dir, "preclass_analysis_v23")
     if cached:
         _safe_print("  ✅ preclass_analysis_v23 캐시 사용")
-        # ★ v21 마이그레이션 — 캐시에 본문 어휘 마커가 부족하면 후처리 다시 실행
+        # ★ v24 마이그레이션 — 캐시도 항상 지문↔상세 동기화 실행
+        # 옛 캐시에 지문 마커 3개 / 상세 12개 같은 불일치 있을 수 있음
         try:
             pm = cached.get("passage_marked", "") or ""
             vn = cached.get("vocab_notes", []) or []
@@ -3639,12 +3640,17 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
                     cached.get("passage_marked", ""),
                     cached.get("vocab_notes", []),
                 )
-                cached["passage_html"] = _passage_marked_to_html(
-                    cached.get("passage_marked", ""), passage
-                )
-                # 마이그레이션 결과 다시 저장
-                save_step(passage_dir, "preclass_analysis_v23", cached)
-                _safe_print(f"  ✅ 캐시 마이그레이션 완료")
+            
+            # ★ v24 핵심 — 지문↔상세 동기화 (항상 실행, 옛 캐시도 보정됨)
+            cached = _sync_grammar_boxes_with_passage(cached)
+            cached = _sync_vocab_with_passage(cached)
+            
+            cached["passage_html"] = _passage_marked_to_html(
+                cached.get("passage_marked", ""), passage
+            )
+            # 마이그레이션 결과 다시 저장
+            save_step(passage_dir, "preclass_analysis_v23", cached)
+            _safe_print(f"  ✅ 캐시 마이그레이션 완료")
         except Exception as e:
             _safe_print(f"  ⚠️ 캐시 마이그레이션 실패: {e}")
         return cached
@@ -3716,6 +3722,14 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
         )
     except Exception as e:
         _safe_print(f"  ⚠️ [후처리 실패] _ensure_vocab_markers: {type(e).__name__}: {str(e)[:200]}")
+
+    # ★ v24 후처리 4.5 — 지문 마커 ↔ 상세 박스 동기화
+    # 선생님 지적: 지문 어법 ③번까지인데 상세 박스 ⑫번까지 나오는 문제
+    # 지문에 실제 마킹된 번호만 살리고 그 외 상세 박스 제거
+    _r = _safe_post("_sync_grammar_boxes_with_passage", lambda: _sync_grammar_boxes_with_passage(data))
+    if _r is not None: data = _r
+    _r = _safe_post("_sync_vocab_with_passage", lambda: _sync_vocab_with_passage(data))
+    if _r is not None: data = _r
 
     # 후처리 5 — passage_marked → passage_html 변환
     try:
@@ -4055,6 +4069,170 @@ def render_preclass_analysis(passages_data: list, school_name: str,
         include_sentence_order=include_sentence_order,
         sentence_order_only=sentence_order_only,
     )
+
+
+def _sync_grammar_boxes_with_passage(data: dict) -> dict:
+    """지문(passage_marked)의 어법 마커 개수에 맞춰 grammar_p1/p2 상세 박스를 잘라낸다.
+    
+    문제: AI가 지문에는 ①②③만 마킹하고, grammar_p1/p2에는 ①~⑫까지 12개 박스를 만드는 경우.
+    결과: 지문 마커는 3개인데 상세 설명은 12개 — 학생 혼란.
+    
+    해결: 지문에 실제 존재하는 마커 번호만 살리고, 그 외 박스는 제거.
+    """
+    if not isinstance(data, dict):
+        return data
+    
+    import re as _re
+    
+    passage_marked = data.get("passage_marked", "") or ""
+    if not passage_marked:
+        return data
+    
+    # 지문에 실제 존재하는 어법 번호 추출
+    # [[GRAMMAR:n=①]] 또는 [[GRAMMAR:n=1]] 또는 [[GRAMMAR:n=①,split=1]]
+    grammar_nums_in_passage = set()
+    for m in _re.finditer(r'\[\[GRAMMAR:n=([^,\]]+)', passage_marked):
+        raw_num = m.group(1).strip()
+        # 숫자면 원숫자로 변환 (예외 안전)
+        try:
+            if raw_num.isdigit():
+                n_int = int(raw_num)
+                if 1 <= n_int <= 20:
+                    if n_int <= 10:
+                        raw_num = chr(0x2460 + n_int - 1)
+                    elif n_int <= 15:
+                        raw_num = "⑪⑫⑬⑭⑮"[n_int - 11]
+                    else:
+                        raw_num = "⑯⑰⑱⑲⑳"[n_int - 16]
+        except (ValueError, IndexError):
+            pass
+        grammar_nums_in_passage.add(raw_num)
+    
+    if not grammar_nums_in_passage:
+        return data
+    
+    CIRCLE_ORDER = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
+    
+    # grammar_p1, grammar_p2의 모든 박스 모으기
+    p1 = data.get("grammar_p1", {}) or {}
+    p2 = data.get("grammar_p2", {}) or {}
+    all_boxes = (
+        (p1.get("left", []) or []) + (p1.get("right", []) or [])
+        + (p2.get("left", []) or []) + (p2.get("right", []) or [])
+    )
+    
+    # 지문에 있는 번호의 박스만 남김 + 번호 순으로 정렬
+    filtered = []
+    seen_nums = set()
+    for box in all_boxes:
+        if not isinstance(box, dict):
+            continue
+        num = (box.get("num") or "").strip()
+        # 박스 num에 포함된 원숫자 중 지문에 있는 것만
+        box_nums = [c for c in num if c in CIRCLE_ORDER]
+        if not box_nums:
+            continue
+        # 첫 번호가 지문에 있어야 박스 채택
+        first_num = box_nums[0]
+        if first_num in grammar_nums_in_passage and first_num not in seen_nums:
+            filtered.append(box)
+            seen_nums.add(first_num)
+    
+    # 번호 순으로 정렬
+    def _sort_key(box):
+        num = (box.get("num") or "").strip()
+        for i, c in enumerate(CIRCLE_ORDER):
+            if c in num:
+                return i
+        return 999
+    filtered.sort(key=_sort_key)
+    
+    removed_count = len(all_boxes) - len(filtered)
+    if removed_count > 0:
+        _safe_print(f"  📕 지문 마커 동기화: {len(all_boxes)}개 → {len(filtered)}개 (불일치 {removed_count}개 제거)")
+    
+    # 그리고 grammar_notes도 같이 정리
+    grammar_notes = data.get("grammar_notes", []) or []
+    filtered_notes = []
+    for note in grammar_notes:
+        if not isinstance(note, dict):
+            continue
+        num = (note.get("num") or "").strip()
+        note_nums = [c for c in num if c in CIRCLE_ORDER]
+        if not note_nums:
+            continue
+        if note_nums[0] in grammar_nums_in_passage:
+            filtered_notes.append(note)
+    filtered_notes.sort(key=_sort_key)
+    data["grammar_notes"] = filtered_notes
+    
+    # 박스 4분면 재분배
+    n = len(filtered)
+    if n == 0:
+        data["grammar_p1"] = {"left": [], "right": []}
+        data["grammar_p2"] = {"left": [], "right": []}
+        return data
+    
+    q = n // 4
+    r = n % 4
+    slots = [q + (1 if i < r else 0) for i in range(4)]
+    idx = 0
+    new_p1_l = filtered[idx:idx+slots[0]]; idx += slots[0]
+    new_p1_r = filtered[idx:idx+slots[1]]; idx += slots[1]
+    new_p2_l = filtered[idx:idx+slots[2]]; idx += slots[2]
+    new_p2_r = filtered[idx:idx+slots[3]]
+    data["grammar_p1"] = {"left": new_p1_l, "right": new_p1_r}
+    data["grammar_p2"] = {"left": new_p2_l, "right": new_p2_r}
+    
+    return data
+
+
+def _sync_vocab_with_passage(data: dict) -> dict:
+    """지문(passage_marked)의 어휘 마커 letter에 맞춰 vocab_notes를 잘라낸다.
+    
+    같은 원리 — 지문에 ⓐⓑⓒ만 있는데 vocab_notes에 ⓐ~ⓙ까지 10개면 ⓓⓔ... 제거.
+    """
+    if not isinstance(data, dict):
+        return data
+    
+    import re as _re
+    
+    passage_marked = data.get("passage_marked", "") or ""
+    if not passage_marked:
+        return data
+    
+    CIRCLED_ALPHA = "ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞ"
+    
+    # 지문에 실제 존재하는 어휘 letter 추출
+    vocab_letters_in_passage = set()
+    for m in _re.finditer(r'\[\[VOCAB:l=([^\]]+)\]\]', passage_marked):
+        raw_letter = m.group(1).strip()
+        # 알파벳이면 원알파벳으로 변환
+        if len(raw_letter) == 1 and raw_letter.isalpha():
+            idx_l = ord(raw_letter.lower()) - ord('a')
+            if 0 <= idx_l < len(CIRCLED_ALPHA):
+                raw_letter = CIRCLED_ALPHA[idx_l]
+        vocab_letters_in_passage.add(raw_letter)
+    
+    if not vocab_letters_in_passage:
+        return data
+    
+    # vocab_notes에서 지문에 있는 letter만 남김
+    vocab_notes = data.get("vocab_notes", []) or []
+    filtered = []
+    for v in vocab_notes:
+        if not isinstance(v, dict):
+            continue
+        letter = (v.get("letter") or "").strip()
+        if letter and letter[0] in vocab_letters_in_passage:
+            filtered.append(v)
+    
+    removed_count = len(vocab_notes) - len(filtered)
+    if removed_count > 0:
+        _safe_print(f"  🔵 지문 어휘 마커 동기화: {len(vocab_notes)}개 → {len(filtered)}개 (불일치 {removed_count}개 제거)")
+    
+    data["vocab_notes"] = filtered
+    return data
 
 
 def _rebalance_grammar_boxes(data: dict) -> dict:

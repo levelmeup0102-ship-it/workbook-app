@@ -51,7 +51,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}"
+    # _s2 = 스키마 v2 (유형A 평가원 순서형 intro/paragraphs) — 옛 캐시 자동 무효화
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s2"
 
 
 # ============ Supabase 캐시 ============

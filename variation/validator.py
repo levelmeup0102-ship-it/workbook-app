@@ -205,6 +205,26 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?") -> list
                     f"주어진 글은 (A)/(B)/(C)에 다시 넣지 말 것 (누락·중복 0)"
                 )
 
+    # ★★★ 순서형 복원 대조 (핵심): intro + (A)(B)(C)를 정답순서로 합치면 원문과 100% 일치해야 함.
+    #     떨어진 문장을 한 단락에 병합하거나, 문장을 재배치/누락/중복하면 여기서 걸린다.
+    if original_passage and isinstance(data.get("order_correct"), int) \
+       and 0 <= data["order_correct"] <= 4 and len(para_texts) == 3:
+        FIXED = [["A", "C", "B"], ["B", "A", "C"], ["B", "C", "A"], ["C", "A", "B"], ["C", "B", "A"]]
+        l2t = {}
+        for ch in paras:
+            if isinstance(ch, list) and len(ch) >= 2:
+                l2t[str(ch[0]).strip("() ").upper()] = ch[1] or ""
+        restored = (data.get("intro", "") or "").replace("<CORE_BLANK>", data.get("core_blank_target", "") or "")
+        for lbl in FIXED[data["order_correct"]]:
+            t = l2t.get(lbl, "")
+            t = t.replace("<BLANK_A>", data.get("blank_A", "") or "").replace("<BLANK_B>", data.get("blank_B", "") or "")
+            restored += " " + t
+        if _norm(restored) != _norm(original_passage):
+            errors.append(
+                f"[{pid}] 순서형 복원 불일치 — intro+(A)(B)(C)를 정답순서로 이어붙여도 원문과 다름 "
+                f"(문장 재배치/병합/누락 의심). (A)(B)(C)는 원문 연속 구간만 담을 것."
+            )
+
     # Q5 blank_A/B 인접 검증 (paragraphs 기준, 최소 3단어 사이)
     try:
         ptext = " ".join(para_texts)

@@ -66,6 +66,12 @@ def convert_lead_a(lead: str) -> str:
 
 
 # ============ 데이터 정규화 ============
+def bogi_words(text: str) -> list:
+    """답지 텍스트에서 보기 단어 목록 생성 (구두점 제거, 소문자). 누락/잉여 0 보장."""
+    toks = re.sub(r'[.,;:!?"()]', ' ', str(text or "")).split()
+    return [t.lower() for t in toks if t]
+
+
 def shuffle_bogi(bogi: list, seed_str: str = "") -> list:
     """보기 단어들을 셔플 (seed로 동일 데이터엔 동일 결과 보장)"""
     if not bogi:
@@ -84,9 +90,9 @@ def shuffle_bogi(bogi: list, seed_str: str = "") -> list:
 
 def prepare_a_passage(data: dict, label: str) -> dict:
     n_false = sum(1 for _, _, ok in data["statements"] if not ok)
-    # Q5 bogi 셔플
+    # Q5 bogi: 답지(blank_A + blank_B)에서 직접 생성 → 누락/잉여 0
     bogi_shuffled = shuffle_bogi(
-        data["bogi"],
+        bogi_words(data.get("blank_A", "") + " " + data.get("blank_B", "")),
         seed_str=(data.get("blank_A", "") + data.get("blank_B", ""))
     )
     return {
@@ -119,18 +125,16 @@ def prepare_a_passage(data: dict, label: str) -> dict:
 def prepare_b_passage(data: dict, label: str) -> dict:
     new_data = {**data, "passage_rendered": render_marks(data["passage_with_marks"])}
     
-    # Q4 blank_summary_bogi 셔플
-    if "blank_summary_bogi" in new_data:
-        new_data["blank_summary_bogi"] = shuffle_bogi(
-            new_data["blank_summary_bogi"],
-            seed_str=(data.get("blank_A", "") + data.get("blank_B", ""))
-        )
-    # Q5 topic_writing_bogi 셔플
-    if "topic_writing_bogi" in new_data:
-        new_data["topic_writing_bogi"] = shuffle_bogi(
-            new_data["topic_writing_bogi"],
-            seed_str=data.get("topic_writing_answer", "")
-        )
+    # Q4 보기: 답지(blank_A + blank_B)에서 직접 생성 → 누락/잉여 0
+    new_data["blank_summary_bogi"] = shuffle_bogi(
+        bogi_words(data.get("blank_A", "") + " " + data.get("blank_B", "")),
+        seed_str=(data.get("blank_A", "") + data.get("blank_B", ""))
+    )
+    # Q5 보기: 답지(topic_writing_answer)에서 직접 생성 → 누락/잉여 0
+    new_data["topic_writing_bogi"] = shuffle_bogi(
+        bogi_words(data.get("topic_writing_answer", "")),
+        seed_str=data.get("topic_writing_answer", "")
+    )
     
     return {
         "label": label,

@@ -177,24 +177,19 @@ Given an English passage, generate a variation problem set in EXACT JSON format 
    - The bogi must use the SAME tokenization as blank_A/blank_B.
    - If you split "south-facing" into "south" + "facing" anywhere, you create a mismatch and the question fails.
 
-1. **MARKER DISTRIBUTION**: Place <MARK1>...<MARK5> at 5 different positions in passage_with_marks. 
-   - There MUST be AT LEAST 3 words between every adjacent pair of markers
-   - Markers MUST be spread across the ENTIRE passage, not clustered together
-   - If passage is short, use 3-4 markers minimum (still with 3+ words between each)
+1. **MARKER DISTRIBUTION — KOREAN CSAT INSERTION STYLE**: Markers <MARK1>...<MARK5> mark candidate insertion points. They mark WHERE the given_sentence might go.
+   - ★ MARKERS GO ONLY AT SENTENCE BOUNDARIES (right after a period/question/exclamation mark, before the next sentence begins). NEVER place a marker in the middle of a sentence / between words.
+   - ★ The passage (after removing the given sentence) is a sequence of full sentences S1. S2. S3. ... Sn. Place markers in the GAPS between sentences: [S1] <MARK1> [S2] <MARK2> [S3] <MARK3> [S4] <MARK4> [S5] <MARK5> [S6]...
+   - ★ First marker goes AFTER the first sentence (never before S1). Last marker goes BEFORE the final sentence (never after the last sentence).
+   - ★ Spread the markers as evenly as possible across the WHOLE passage (like a ladder) — do NOT cluster them in one region.
+   - ★ **position_count**: Use 5 markers (<MARK1>..<MARK5>) whenever the remaining passage has ENOUGH sentence-gaps (≈6+ sentences). If the passage is too short to place 5 well-separated markers at sentence boundaries, use exactly 4 markers (<MARK1>..<MARK4>) and set "position_count": 4. Otherwise set "position_count": 5.
+   - ★ NEVER produce fewer than 4 markers, and NEVER leave a gap (if position_count=5 you MUST have MARK1,2,3,4,5 all present; if 4, MARK1,2,3,4).
    
-   ⚠️ MARKER PLACEMENT RULES:
-   - BAD: "...words <MARK1>word<MARK2>..." (only 1 word between MARK1 and MARK2!)
-   - BAD: "...words <MARK1> <MARK2>..." (0 words between — adjacent!)
-   - BAD: "...words <MARK1> word word <MARK2>..." (only 2 words between — too few!)
-   - GOOD: "...words <MARK1> word word word <MARK2> word word word <MARK3>..."
-   
-   ⚠️ DISTRIBUTE markers like a ladder across the WHOLE passage:
-   - Approximately equal spacing
-   - First marker NOT at the very beginning
-   - Last marker NOT at the very end
-   - Each marker has at least 3 words of original text on BOTH sides (between it and the next marker)
+   GOOD (5 markers at sentence gaps): "Sentence one here. <MARK1> Sentence two here. <MARK2> Sentence three. <MARK3> Sentence four here. <MARK4> Sentence five. <MARK5> Final sentence."
+   BAD: "Sentence one <MARK1> here." (marker inside a sentence — forbidden)
+   BAD: markers all bunched in the first half of the passage.
 
-2. **GIVEN SENTENCE**: Pick a key transition/summary sentence FROM the passage. Remove it. The position where it was must use <MARK(position_correct+1)>. So if position_correct=2, then MARK3 marks where given_sentence belongs.
+2. **GIVEN SENTENCE**: Pick a key transition/summary sentence FROM the passage. Remove it. The sentence-gap where it was removed must be marked by <MARK(position_correct+1)>. So if position_correct=2, then MARK3 marks the gap where given_sentence belongs. position_correct MUST be a valid index: 0..(position_count-1).
 
 2-1. **Q3 SUMMARY_OPTIONS — EACH SLOT MUST BE A SINGLE WORD ONLY**:
    - Q3 = Korean college entrance exam style summary blank question (객관식)
@@ -279,8 +274,9 @@ Given an English passage, generate a variation problem set in EXACT JSON format 
   "id": "<id>",
   "title": "<short English title>",
   "given_sentence": "<sentence removed from passage>",
-  "passage_with_marks": "<passage with <MARK1>...<MARK5> at distributed positions>",
-  "position_correct": <0-4 index, indicates which MARK position the given_sentence belongs at>,
+  "passage_with_marks": "<passage with <MARK1>..<MARK5> (or <MARK4>) placed ONLY at sentence boundaries, evenly spread>",
+  "position_count": <4 or 5 — how many markers/choices this question has; 5 normally, 4 only if passage too short>,
+  "position_correct": <0-based index into the markers (0..position_count-1) — which gap the given_sentence belongs at>,
   "position_explain": "<Korean explanation>",
   "topic_options": ["<5 topic options in English>"],
   "topic_correct": <0-4>,

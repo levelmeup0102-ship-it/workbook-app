@@ -54,15 +54,15 @@ def render_marks(text: str) -> str:
 def convert_chunks_a(chunks):
     out = []
     for label, text in chunks:
-        text = text.replace("<BLANK_A>", '<span class="blank-mark">(A)</span>')
-        text = text.replace("<BLANK_B>", '<span class="blank-mark">(B)</span>')
-        text = text.replace("<CORE_BLANK>", '<span class="core-blank-inline">______________</span>')
+        text = text.replace("<BLANK_A>", '<span class="ublank">(A)</span>')
+        text = text.replace("<BLANK_B>", '<span class="ublank">(B)</span>')
+        text = text.replace("<CORE_BLANK>", '<span class="ublank" style="min-width:130px;">&nbsp;</span>')
         out.append([label, text])
     return out
 
 
 def convert_lead_a(lead: str) -> str:
-    return lead.replace("<CORE_BLANK>", '<span class="core-blank-inline">______________</span>')
+    return lead.replace("<CORE_BLANK>", '<span class="ublank" style="min-width:130px;">&nbsp;</span>')
 
 
 # ============ 데이터 정규화 ============

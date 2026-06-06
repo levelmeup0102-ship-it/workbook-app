@@ -300,13 +300,11 @@ PRINT_HINT_STYLE = """
     page-break-before: always !important;
     break-before: page !important;
   }
-  /* 두 번째 이후 답지는 이전 답지 바로 다음에 */
+  /* 두 번째 이후 답지(다른 유형)는 새 페이지에서 시작 — 유형 A 답지 / 유형 B 답지 분리.
+     헤더만 페이지 끝에 걸리고 내용이 다음 장으로 갈라지는 것 방지 */
   .answers-combined > div.ans-start.ans-merged + div.ans-start.ans-merged {
-    page-break-before: auto !important;
-    break-before: auto !important;
-    margin-top: 18px !important;
-    padding-top: 8px !important;
-    border-top: 1px dashed #ccc;
+    page-break-before: always !important;
+    break-before: page !important;
   }
   
   /* 답지 내부 q-page는 무력화 */

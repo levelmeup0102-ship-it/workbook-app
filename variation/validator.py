@@ -164,14 +164,14 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
             pass
         if "<CORE_BLANK>" not in data.get("intro", ""):
             errors.append(f"[{pid}] Q3 <CORE_BLANK> 마커가 intro에 없음 — intro 안에 표시할 것")
-        # ★ Q3 정답 선지가 core_blank_target과 동일해야 함 (빈칸 범위 침범/중복 방지)
+        # ★ Q3 정답은 빈칸 원문(core_blank_target)의 패러프레이즈여야 함 — 글자 그대로 베끼면 거부 (strict만)
         opts = data.get("core_blank_options"); ci = data.get("core_blank_correct"); tgt = data.get("core_blank_target")
-        if isinstance(opts, list) and isinstance(ci, int) and 0 <= ci < len(opts) and tgt:
+        if not lenient and isinstance(opts, list) and isinstance(ci, int) and 0 <= ci < len(opts) and tgt:
             _w = lambda t: re.sub(r"[^a-z0-9 ]", " ", str(t).lower()).split()
-            if _w(opts[ci]) != _w(tgt):
+            if _w(opts[ci]) == _w(tgt):
                 errors.append(
-                    f"[CRITICAL][{pid}] Q3 정답 선지가 core_blank_target과 불일치 — "
-                    f"선지에 빈칸 밖 단어가 섞였거나 범위가 다름 (정답='{opts[ci]}' vs 빈칸='{tgt}')"
+                    f"[{pid}] Q3 정답이 빈칸 원문을 그대로 베낌 — 유의어/비유로 패러프레이즈할 것 "
+                    f"(정답='{opts[ci]}' = 원문 '{tgt}')"
                 )
 
     # paragraphs 3개 + 각 텍스트 5단어 이상
@@ -206,6 +206,18 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
                     f"[CRITICAL][{pid}] intro 문장이 paragraphs[{idx}]에 중복 등장 — "
                     f"주어진 글은 (A)/(B)/(C)에 다시 넣지 말 것 (누락·중복 0)"
                 )
+
+    # ★★★ Q3 빈칸 겹침 방지 (박아둠): intro의 <CORE_BLANK>를 정답(core_blank_target)으로 채우면
+    #     원문에 그 문장이 그대로 존재해야 한다. 빈칸이 앞/뒤 단어를 먹었으면 채운 결과가 원문과 어긋나 여기서 걸린다.
+    _intro_raw = data.get("intro", "") or ""
+    _tgt = data.get("core_blank_target", "") or ""
+    if original_passage and _tgt and "<CORE_BLANK>" in _intro_raw:
+        _filled = _intro_raw.replace("<CORE_BLANK>", _tgt)
+        if _norm(_filled) not in _norm(original_passage):
+            errors.append(
+                f"[CRITICAL][{pid}] Q3 빈칸 위치/범위 오류 — 빈칸을 정답으로 채우면 원문과 어긋남 "
+                f"(빈칸이 앞/뒤 본문 단어를 먹었을 가능성). 빈칸은 실제로 빠진 부분만 덮을 것."
+            )
 
     # ★★★ 순서형 복원 대조 (핵심): intro + (A)(B)(C)를 정답순서로 합치면 원문과 100% 일치해야 함.
     #     떨어진 문장을 한 단락에 병합하거나, 문장을 재배치/누락/중복하면 여기서 걸린다.

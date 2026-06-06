@@ -142,8 +142,8 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
     if not isinstance(v, int) or not (0 <= v <= 4):
         errors.append(f"[{pid}] Q2 order_correct 범위 오류(0-4여야 함): {v}")
 
-    # Q5 blank_A/B 단어 수 최소 5 (관대모드 3)
-    min_bw = 3 if lenient else 5
+    # Q5 blank_A/B 단어 수 최소 6 (관대모드 4)
+    min_bw = 4 if lenient else 6
     try:
         wa = len(data["blank_A"].split()); wb = len(data["blank_B"].split())
         if wa < min_bw:

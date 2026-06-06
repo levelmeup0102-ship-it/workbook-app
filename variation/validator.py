@@ -12,6 +12,64 @@ import re
 from collections import Counter
 
 
+# ── 문법 성립 검사용 (LLM이 만든 패러프레이즈/영작이 비문이 되는 경우 차단) ──
+# 흔한 동사 원형: 주절 주어 자리에 오면 "주어 없는 비문" 의심 (gerund -ing/과거 -ed는 set에 없어 자동 통과)
+_BASE_VERBS = {
+    "partition", "break", "create", "make", "build", "find", "choose", "direct", "enable",
+    "divide", "split", "develop", "produce", "provide", "reduce", "increase", "improve",
+    "change", "control", "convert", "transform", "consider", "focus", "turn", "keep", "help",
+    "allow", "cause", "lead", "drive", "shape", "form", "use", "apply", "achieve", "gain",
+    "maintain", "manage", "handle", "address", "tackle", "solve", "approach", "treat", "regard",
+    "view", "perceive", "recognize", "identify", "determine", "foster", "promote", "prevent",
+    "ensure", "require",
+}
+# 정형동사 신호 (주절에 이미 동사가 있다는 표시 → 앞의 동사원형은 주어 자리였다는 뜻)
+_FINITE_HINT = re.compile(
+    r'\b(enables?|is|are|was|were|makes?|allows?|leads?|helps?|creates?|becomes?|results?|'
+    r'provides?|requires?|drives?|causes?|fosters?|promotes?|ensures?|reduces?|increases?|'
+    r'improves?|transforms?|builds?|produces?|maintains?|manages?)\b', re.I)
+# 동사 존재 판정용(보수적): 이게 하나도 없으면 '동사 없는 명사구'로 본다
+_VERB_WORDS = _BASE_VERBS | {
+    "is", "are", "was", "were", "be", "been", "plays", "play", "have", "has", "had", "do", "does",
+    "exert", "exerts", "hold", "holds", "exist", "exists", "occur", "occurs", "matter", "matters",
+    "work", "works", "fluctuate", "fluctuates", "remain", "remains", "stem", "stems", "depend", "depends",
+}
+
+
+def looks_bare_verb_subject(sentence: str) -> bool:
+    """영작 정답 문장의 주절이 '동사원형 + ... + 정형동사' 꼴이면 주어 없는 비문으로 본다.
+    예: 'partition those into pieces enables responses' (X)  /  'Partitioning ... enables ...' (O)"""
+    s = str(sentence or "").strip()
+    m = re.match(
+        r'^\s*(rather than|instead of|by|when|while|if|although|though|because|since|after|before)\b.*?,\s*(.+)$',
+        s, re.I)
+    main = m.group(2) if m else s
+    words = main.split()
+    if not words:
+        return False
+    w0 = re.sub(r'[^a-zA-Z]', '', words[0]).lower()
+    if w0 in _BASE_VERBS:
+        rest = " ".join(words[1:])
+        if _FINITE_HINT.search(rest):
+            return True
+    return False
+
+
+def _phrase_has_verb(phrase: str) -> bool:
+    toks = re.sub(r'[^a-zA-Z ]', ' ', str(phrase or "").lower()).split()
+    return any(t in _VERB_WORDS for t in toks)
+
+
+def q3_blank_is_nounphrase_after_clause(intro: str, correct_opt: str) -> bool:
+    """Q3 빈칸 바로 앞이 that/which/who/because/whether(절 유도)인데 정답에 동사가 전혀 없으면
+    'believe that [명사구]' 같은 비문 → True. (절 유도어 뒤가 아니면 검사 안 함: 보수적)"""
+    filled = str(intro or "").replace("<CORE_BLANK>", " \u27e6OPT\u27e7 ")
+    m = re.search(r'\b(that|which|who|because|whether)\s+\u27e6OPT\u27e7', filled, re.I)
+    if not m:
+        return False
+    return not _phrase_has_verb(correct_opt)
+
+
 def normalize_text(s: str) -> str:
     return " ".join(s.split())
 
@@ -183,6 +241,23 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
                 errors.append(
                     f"[{pid}] Q3 정답이 빈칸 원문을 그대로 베낌 — 유의어/비유로 패러프레이즈할 것 "
                     f"(정답='{opts[ci]}' = 원문 '{tgt}')"
+                )
+        # ★ Q3 문법 성립: 빈칸 앞이 that/which 등 절 유도어인데 정답이 동사 없는 명사구면 비문 (strict만)
+        if not lenient and isinstance(opts, list) and isinstance(ci, int) and 0 <= ci < len(opts):
+            if q3_blank_is_nounphrase_after_clause(data.get("intro", ""), opts[ci]):
+                errors.append(
+                    f"[{pid}] [CRITICAL] Q3 정답이 빈칸에 문법적으로 안 맞음 — 빈칸 앞이 절 유도어(that 등)인데 "
+                    f"정답('{opts[ci]}')이 동사 없는 명사구임. 원문이 절(주어+동사)이면 정답도 절로 패러프레이즈할 것."
+                )
+
+    # ★ A Q5 영작 정답(blank_A/B)이 '동사원형 주어' 비문 꼴인지 (strict만)
+    if not lenient:
+        for key in ("blank_A", "blank_B"):
+            v = data.get(key)
+            if v and looks_bare_verb_subject(v):
+                errors.append(
+                    f"[{pid}] [CRITICAL] Q5 {key}가 동사원형으로 시작하는 비문 꼴 "
+                    f"('{v}') — 동명사/명사구로 시작하도록 구절을 고를 것."
                 )
 
     # paragraphs 3개 + 각 텍스트 5단어 이상
@@ -371,7 +446,22 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
             )
     except (KeyError, AttributeError):
         errors.append(f"[{pid}] B topic_writing_answer 형식 오류")
-    
+
+    # ★ B Q5 주제문 / Q4 요약영작 정답이 '동사원형 주어' 비문 꼴인지 (strict만)
+    if strict:
+        tw = data.get("topic_writing_answer")
+        if tw and looks_bare_verb_subject(tw):
+            errors.append(
+                f"[{pid}] [CRITICAL] Q5 주제문이 동사원형으로 시작하는 비문 꼴 "
+                f"('{tw}') — 동명사/명사구 주어로 쓸 것 (예: 'Partitioning ...' not 'partition ...')."
+            )
+        for key in ("blank_A", "blank_B"):
+            v = data.get(key)
+            if v and looks_bare_verb_subject(v):
+                errors.append(
+                    f"[{pid}] [CRITICAL] Q4 {key}가 동사원형으로 시작하는 비문 꼴 ('{v}')"
+                )
+
     # Q4 잘라쓰기 (요약 영작) - strict일 때만 필수, soft는 통과
     if strict:
         try:

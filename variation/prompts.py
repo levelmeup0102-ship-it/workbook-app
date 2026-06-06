@@ -96,20 +96,14 @@ Everything you generate must reflect that whole-passage understanding:
    - Therefore core_blank_target MUST be an EXACT substring of the FIRST SENTENCE of the passage (it is blanked inside the intro).
    - Pick the most thesis-bearing phrase available within that first sentence.
 
-3-3. **Q3 CHOICES MUST FILL ONLY THE BLANK (no overflow!)**:
-   - <CORE_BLANK> replaces EXACTLY core_blank_target — nothing more.
-   - All 5 core_blank_options must fit ONLY in the blank slot (same scope as core_blank_target).
-   - NEVER include words that already exist right before/after the blank in the intro.
-     If the intro is "wants to <CORE_BLANK> and compete and train", an option must be like
-     "produce adrenaline" — NOT "produce adrenaline and compete and train" (that repeats the text after the blank!).
-   - The correct option (index = core_blank_correct) MUST be EXACTLY equal to core_blank_target.
-   - ★★ IF YOU NEED 3+ WORDS, EXTEND THE BLANK EARLIER — do NOT leave those words in the intro.
-     The <CORE_BLANK> marker in the intro must cover the ENTIRE core_blank_target. Whatever words are in core_blank_target must NOT also appear right before/after the marker.
-     BAD: intro "...you to completely comprehend, much less <CORE_BLANK>" + target "completely comprehend, much less control"
-          (→ "completely comprehend, much less" sits in BOTH the intro and the target — overlap! The reader sees the answer twice.)
-     GOOD: intro "...you to <CORE_BLANK>" + target "completely comprehend, much less control"
-          (→ the marker swallows the whole phrase; nothing is duplicated.)
-     Rule: after you replace <CORE_BLANK> with core_blank_target, the intro must read EXACTLY like the original passage — no repeated words around the blank.
+3-3. **Q3 OPTIONS — 정답은 패러프레이즈, 빈칸은 앞뒤를 먹지 말 것**:
+   - core_blank_target = the ORIGINAL phrase missing from the blank (an exact substring of the FIRST SENTENCE). Code blanks exactly this phrase.
+   - ★ THE BLANK MUST NOT SWALLOW WORDS THAT STAY IN THE SENTENCE:
+     core_blank_target must NOT contain any word still sitting right before/after the blank. After blanking core_blank_target, the rest of the sentence must read exactly like the original — no word duplicated around the blank.
+     BAD: "...comprehend, much less ___" with target "completely comprehend, much less control" (앞 단어를 먹음 — 중복)
+     GOOD: target = "control" only; OR move the blank earlier: "...you to ___" with target "completely comprehend, much less control".
+   - ★ The CORRECT option (index = core_blank_correct) is a PARAPHRASE of core_blank_target — synonym or figurative rewording, NOT the original wording copied. (e.g. target "control" → correct option "exert mastery over"; target "completely comprehend, much less control" → "fully grasp, let alone steer".)
+   - ★ The 4 WRONG options = opposite meaning or content NOT mentioned. Each ≤ 15 words, grammatically fits the blank, not near-duplicates of each other.
 
 3-4. **Q4 EVIDENCE — copy the proof sentence from the passage**:
    - For EACH statement (가~마), put in statements_evidence the EXACT English sentence/clause from the passage that proves or disproves it.

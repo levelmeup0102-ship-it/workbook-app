@@ -103,6 +103,7 @@ Everything you generate must reflect that whole-passage understanding:
      BAD: "...comprehend, much less ___" with target "completely comprehend, much less control" (앞 단어를 먹음 — 중복)
      GOOD: target = "control" only; OR move the blank earlier: "...you to ___" with target "completely comprehend, much less control".
    - ★ The CORRECT option (index = core_blank_correct) is a PARAPHRASE of core_blank_target — synonym or figurative rewording, NOT the original wording copied. (e.g. target "control" → correct option "exert mastery over"; target "completely comprehend, much less control" → "fully grasp, let alone steer".)
+   - ★★ GRAMMATICAL FIT IS MANDATORY: the paraphrase MUST keep the SAME grammatical structure as core_blank_target so that, when inserted into the blank, the sentence is fully grammatical English. If the original blanked phrase is a CLAUSE (subject + verb, e.g. "food and nutrition play the greatest role"), the paraphrase MUST also be a clause (e.g. "food and nutrition have the most significant impact"). If it is a noun phrase, keep a noun phrase. NEVER turn a clause into a bare noun phrase. TEST: read the full sentence with the correct option in the blank — if it is not grammatical (e.g. "believe that most significant impact on well-being" ❌), the option is WRONG; rewrite it.
    - ★ The 4 WRONG options = opposite meaning or content NOT mentioned. Each ≤ 15 words, grammatically fits the blank, not near-duplicates of each other.
 
 3-4. **Q4 EVIDENCE — copy the proof sentence from the passage**:
@@ -264,6 +265,8 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
    - summary_options = 5 pairs of SINGLE WORDS  ← Q3 choices
    - blank_A = full phrase (6+ words)  ← Q4 writing answer
    - blank_B = full phrase (6+ words)  ← Q4 writing answer
+   - ★★ NO PHRASE OVERLAP: blank_A / blank_B must NOT repeat words that already sit just before or just after their (A)/(B) slot in blank_summary_template. If the template reads "thereby (B) that would otherwise interfere with problem-solving", then blank_B MUST NOT also end with "that would otherwise interfere with problem-solving" — that doubles the phrase. The answer fills ONLY the gap, never text already printed around it.
+   - ★★ If the (A)/(B) slot is right after "by / while / thereby / without / before / after", the answer MUST start with a GERUND (-ing), not a base verb. (template "thereby (B) ..." → blank_B "suppressing ..." ✅, not "suppress ..." ❌)
    - blank_summary_bogi = shuffled words from blank_A + blank_B  ← Q4 word bank
 
 3. **Q4 BOGI MUST EQUAL blank_A + blank_B EXACTLY (word-by-word, case-insensitive)**:
@@ -294,6 +297,8 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
    - topic_writing_answer is the full topic sentence to be written
    - It MUST contain AT LEAST 14 words (a complete topic statement, not just a short summary)
    - Include subject, verb, object, and modifiers
+   - ★★ MUST BE A GRAMMATICALLY COMPLETE, CORRECT SENTENCE. The bogi words (which are extracted from this exact sentence) MUST be able to form a fully grammatical sentence. Common failure to AVOID: a BARE VERB used as the subject (e.g. "partition those into pieces enables responses" ❌ — "partition" is a bare verb and cannot be the subject). Use a GERUND or NOUN-PHRASE subject instead (e.g. "Partitioning crises into pieces enables responses" ✅, or "Breaking large crises into smaller pieces enables effective action" ✅). If you need a gerund (e.g. "partitioning", "breaking"), put THAT form in topic_writing_answer (the bogi is generated from it, so the right word form will be available).
+   - TEST: read topic_writing_answer aloud — it must be a grammatical English sentence on its own.
    - Example GOOD: "Strategic microclimate manipulation enables earlier cultivation in temperate regions through localized warming." (12 words)
    - Example BAD: "Strategic placement maximizes soil heating." (5 words - too short!)
    - ★★ MUST USE DIFFERENT WORDING FROM THE Q4 SUMMARY (blank_summary_template / blank_A / blank_B):

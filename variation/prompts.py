@@ -207,6 +207,7 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
    BAD: markers all bunched in the first half of the passage.
 
 2. **GIVEN SENTENCE**: Pick a key transition/summary sentence FROM the passage. Remove it. The sentence-gap where it was removed must be marked by <MARK(position_correct+1)>. So if position_correct=2, then MARK3 marks the gap where given_sentence belongs. position_correct MUST be a valid index: 0..(position_count-1).
+   - ★★ VERIFICATION: putting given_sentence back at the position_correct gap MUST reproduce the ORIGINAL passage word-for-word. Count the gaps carefully — position_correct is 0-based, and MARK(position_correct+1) is the EXACT gap the sentence was removed from. A wrong index here makes the answer wrong, so double-check by mentally reinserting it.
 
 2-0. **★★★ CSAT Q40-STYLE SUMMARY DESIGN (applies to Q3 options AND Q4 blanks) ★★★**
    The summary sentence and its blanks must follow the Korean CSAT (수능) #40 summary-question style. Study these authentic patterns:

@@ -153,6 +153,17 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
     except (KeyError, AttributeError) as e:
         errors.append(f"[{pid}] blank_A/B 형식 오류: {e}")
 
+    # ★ Q5 (A)(B) 빈칸 마커가 본문에 실제로 찍혔는지 — 마킹 실패 시 한쪽만/둘 다 사라지는 버그 방지
+    if data.get("blank_A") and data.get("blank_B"):
+        joined = " ".join(
+            p[1] for p in data.get("paragraphs", [])
+            if isinstance(p, (list, tuple)) and len(p) > 1
+        )
+        if "<BLANK_A>" not in joined:
+            errors.append(f"[{pid}] [CRITICAL] Q5 (A) 빈칸이 본문에 표시되지 않음 — blank_A 구절을 원문에서 찾지 못함 (구절을 원문 그대로 고를 것)")
+        if "<BLANK_B>" not in joined:
+            errors.append(f"[{pid}] [CRITICAL] Q5 (B) 빈칸이 본문에 표시되지 않음 — blank_B 구절을 원문에서 찾지 못함 (구절을 원문 그대로 고를 것)")
+
     # Q3 core_blank: 단어 수 최소 3 + <CORE_BLANK> 마커가 intro에 존재
     if data.get("core_blank_target"):
         try:

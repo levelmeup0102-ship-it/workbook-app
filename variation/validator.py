@@ -317,6 +317,27 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
             pcorr = data.get("position_correct", -1)
             if isinstance(pcorr, int) and not (0 <= pcorr < pc):
                 errors.append(f"[{pid}] position_correct({pcorr})가 position_count({pc}) 범위 밖")
+
+    # ★ Q1 삽입 정답 위치 검증 — 정답 마커 자리에 given_sentence를 도로 넣으면 원문이 복원돼야 함
+    #   (LLM이 위치를 잘못 세면 답이 틀리게 나오던 문제 방지. 따옴표/공백 차이는 무시하고 위치만 검사)
+    if original_passage and data.get("passage_with_marks") and data.get("given_sentence"):
+        pcorr = data.get("position_correct")
+        if isinstance(pcorr, int) and 0 <= pcorr <= 4:
+            pwm = str(data["passage_with_marks"])
+            gs = str(data["given_sentence"]).strip()
+            correct_mark = f"<MARK{pcorr + 1}>"
+            def _alnum(t):
+                return re.sub(r"[^a-z0-9]", "", str(t).lower())
+            if correct_mark not in pwm:
+                errors.append(f"[{pid}] [CRITICAL] Q1 정답 마커 {correct_mark}가 본문에 없음")
+            else:
+                recon = pwm.replace(correct_mark, " " + gs + " ")
+                recon = re.sub(r"<MARK\d>", "", recon)
+                if _alnum(recon) != _alnum(original_passage):
+                    errors.append(
+                        f"[{pid}] [CRITICAL] Q1 삽입 정답 위치 오류 — 정답({pcorr + 1}번) 자리에 "
+                        f"주어진 문장을 넣어도 원문이 복원되지 않음 (주어진 문장이 실제로 빠진 위치를 정답으로 표시할 것)"
+                    )
     
     # ★ Q4 요약문 / Q3 요약문에 (A)(B) 빈칸 표시가 반드시 있어야 함 (완성문 금지)
     #   strict/soft 무관 필수 — 빈칸이 없으면 문제 자체가 성립하지 않음
@@ -339,8 +360,8 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
     except (KeyError, AttributeError) as e:
         errors.append(f"[{pid}] B blank_A/B 형식 오류: {e}")
     
-    # ★ Q5 topic_writing_answer 단어 수 (strict 10개, soft 3개)
-    min_topic_words = 10 if strict else 3
+    # ★ Q5 topic_writing_answer 단어 수 (strict 14개, soft 3개)
+    min_topic_words = 14 if strict else 3
     try:
         twc = len(data["topic_writing_answer"].split())
         if twc < min_topic_words:

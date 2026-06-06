@@ -164,8 +164,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s11 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s11"
+    # _s12 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s12"
 
 
 # ============ Supabase 캐시 ============
@@ -318,13 +318,14 @@ def generate_variation_a(
                 tgt = (data.get("core_blank_target") or "").strip()
                 if tgt and tgt in data["intro"]:
                     data["intro"] = data["intro"].replace(tgt, "<CORE_BLANK>", 1)
-                # Q5 영작빈칸: LLM이 고른 구절을 (A)(B)(C)에서 찾아 각각 다른 단락에 마킹
+                # Q5 영작빈칸: LLM이 고른 구절을 (A)(B)(C)에서 찾아 마킹 (같은 단락이어도 둘 다)
                 for mk, key in (("<BLANK_A>", "blank_A"), ("<BLANK_B>", "blank_B")):
                     val = (data.get(key) or "").strip()
                     if not val:
                         continue
                     for p in data["paragraphs"]:
-                        if val in p[1] and "<BLANK_" not in p[1]:
+                        # 이미 마킹된 부분(<BLANK_A>)은 원문과 다르므로 자연히 안 겹침
+                        if val in p[1]:
                             p[1] = p[1].replace(val, mk, 1)
                             break
 

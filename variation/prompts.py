@@ -53,10 +53,10 @@ Everything you generate must reflect that whole-passage understanding:
    - "order_correct" = index (0-4) of the choice matching the original order.
    - The correct order is NEVER "(A)-(B)-(C)" — shuffle so the answer is one of the 5 fixed choices.
 
-2. **Q5 BLANK_A and BLANK_B MUST BE LONG (each at least 5 words)**:
-   - blank_A must be a phrase with AT LEAST 5 words from the passage
-   - blank_B must be a phrase with AT LEAST 5 words from the passage
-   - Total bogi should have at least 14 words (after combining blank_A + blank_B)
+2. **Q5 BLANK_A and BLANK_B MUST BE LONG (each at least 6 words)**:
+   - blank_A must be a phrase with AT LEAST 6 words from the passage
+   - blank_B must be a phrase with AT LEAST 6 words from the passage
+   - Total bogi should have at least 12 words (after combining blank_A + blank_B)
    - Pick MEANINGFUL phrases (entire clauses or noun phrases with modifiers), not just short bits
    - Example GOOD: blank_A="the area between the plants to maximize soil heating from the sun"
    - Example BAD (too short): blank_A="maximize soil heating"
@@ -141,8 +141,8 @@ Everything you generate must reflect that whole-passage understanding:
     "<... for 나>", "<... for 다>", "<... for 라>", "<... for 마>"
   ],
   "mismatch_count": <number of false statements (1-5)>,
-  "blank_A": "<phrase from original passage, AT LEAST 5 WORDS>",
-  "blank_B": "<phrase from original passage, AT LEAST 5 WORDS>",
+  "blank_A": "<phrase from original passage, AT LEAST 6 WORDS>",
+  "blank_B": "<phrase from original passage, AT LEAST 6 WORDS>",
   "bogi": ["<shuffled lowercase words from blank_A + blank_B>"],
   "topic_explain": "<Brief Korean explanation, one sentence>",
   "order_explain": "<Brief Korean explanation of the flow, one sentence>",
@@ -157,8 +157,8 @@ Everything you generate must reflect that whole-passage understanding:
 
 # VERIFICATION CHECKLIST (do BEFORE outputting)
 1. ✓ Does intro + (A)(B)(C) in the correct order equal the WHOLE passage (no duplicate, no omission)? Does the intro NOT reappear in (A)/(B)/(C)?
-2. ✓ Does blank_A have at least 5 words?
-3. ✓ Does blank_B have at least 5 words?
+2. ✓ Does blank_A have at least 6 words?
+3. ✓ Does blank_B have at least 6 words?
 4. ✓ Are blank_A and blank_B SEPARATED by at least 5 words in the passage? (Not adjacent!)
 5. ✓ Does core_blank_target have at least 3 words?
 6. ✓ Does bogi contain exactly the words from blank_A + blank_B (lowercase, no punctuation)?
@@ -289,9 +289,9 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
    Example: topic_writing_answer="Effort drives success."
    → topic_writing_bogi = ["success", "drives", "effort"] (3 words, shuffled, lowercase, no period)
 
-4-1. **Q5 topic_writing_answer MUST BE AT LEAST 10 WORDS**:
+4-1. **Q5 topic_writing_answer MUST BE AT LEAST 14 WORDS**:
    - topic_writing_answer is the full topic sentence to be written
-   - It MUST contain AT LEAST 10 words (a complete topic statement, not just a short summary)
+   - It MUST contain AT LEAST 14 words (a complete topic statement, not just a short summary)
    - Include subject, verb, object, and modifiers
    - Example GOOD: "Strategic microclimate manipulation enables earlier cultivation in temperate regions through localized warming." (12 words)
    - Example BAD: "Strategic placement maximizes soil heating." (5 words - too short!)
@@ -338,7 +338,7 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
 VERIFY BEFORE OUTPUT:
 - blank_A has at least 6 words
 - blank_B has at least 6 words
-- topic_writing_answer has at least 10 words
+- topic_writing_answer has at least 14 words
 - blank_summary_bogi has same word count as (blank_A words + blank_B words)
 - topic_writing_bogi has same word count as topic_writing_answer (excluding punctuation)
 - Same words (case-insensitive) appear in bogi and the answer

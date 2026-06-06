@@ -164,8 +164,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s14 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s14"
+    # _s15 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s15"
 
 
 # ============ Supabase 캐시 ============
@@ -320,15 +320,40 @@ def generate_variation_a(
                 if tgt and tgt in data["intro"]:
                     data["intro"] = data["intro"].replace(tgt, "<CORE_BLANK>", 1)
                 # Q5 영작빈칸: LLM이 고른 구절을 (A)(B)(C)에서 찾아 마킹 (같은 단락이어도 둘 다)
+                # ★ LLM이 따옴표(' ')나 대시(– —)를 바꿔 적어도 찾도록 정규화 매칭 사용
+                def _mark_phrase(text, phrase, mk):
+                    if not phrase:
+                        return text, False
+                    if phrase in text:
+                        return text.replace(phrase, mk, 1), True
+                    # 따옴표/대시 통일 (1:1 치환이라 길이 보존 → 인덱스가 원문과 동일)
+                    qmap = {"\u2019": "'", "\u2018": "'", "\u201c": '"', "\u201d": '"',
+                            "\u2013": "-", "\u2014": "-", "\u00a0": " "}
+                    def nq(s):
+                        for a, b in qmap.items():
+                            s = s.replace(a, b)
+                        return s
+                    nt, npr = nq(text), nq(phrase)
+                    if npr in nt:
+                        i = nt.index(npr)
+                        return text[:i] + mk + text[i + len(npr):], True
+                    return text, False
+
+                marked = {}
                 for mk, key in (("<BLANK_A>", "blank_A"), ("<BLANK_B>", "blank_B")):
                     val = (data.get(key) or "").strip()
                     if not val:
+                        marked[mk] = False
                         continue
+                    done = False
                     for p in data["paragraphs"]:
-                        # 이미 마킹된 부분(<BLANK_A>)은 원문과 다르므로 자연히 안 겹침
-                        if val in p[1]:
-                            p[1] = p[1].replace(val, mk, 1)
+                        new_txt, ok = _mark_phrase(p[1], val, mk)
+                        if ok:
+                            p[1] = new_txt
+                            done = True
                             break
+                    marked[mk] = done
+                data["_blanks_marked"] = marked
 
             if "mismatch_count" not in data and "statements" in data:
                 data["mismatch_count"] = sum(1 for _, _, ok in data["statements"] if not ok)

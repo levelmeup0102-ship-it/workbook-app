@@ -386,7 +386,7 @@ body {
 
       <div class="ans-row-c">
         <b class="q-name">Q2.순서</b>
-        <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.order_correct] }} {{ ['(A)-(C)-(B)','(B)-(A)-(C)','(B)-(C)-(A)','(C)-(A)-(B)','(C)-(B)-(A)'][item.data.order_correct] }}</span>
+        <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.order_correct] }} <span style="white-space:nowrap;">{{ ['(A)-(C)-(B)','(B)-(A)-(C)','(B)-(C)-(A)','(C)-(A)-(B)','(C)-(B)-(A)'][item.data.order_correct] }}</span></span>
       </div>
 
       {% if item.data.core_blank_correct is defined and item.data.core_blank_correct is not none %}

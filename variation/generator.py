@@ -164,8 +164,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s18 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s18"
+    # _s20 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s20"
 
 
 # ============ Supabase 캐시 ============
@@ -315,18 +315,15 @@ def generate_variation_a(
                 data["intro"] = ob["intro"]
                 data["paragraphs"] = [list(p) for p in ob["paragraphs"]]
                 data["order_correct"] = ob["order_correct"]
-                # Q3 핵심빈칸: LLM이 고른 구절을 intro(첫 문장)에서 찾아 마킹
-                tgt = (data.get("core_blank_target") or "").strip()
-                if tgt and tgt in data["intro"]:
-                    data["intro"] = data["intro"].replace(tgt, "<CORE_BLANK>", 1)
-                # Q5 영작빈칸: LLM이 고른 구절을 (A)(B)(C)에서 찾아 마킹 (같은 단락이어도 둘 다)
-                # ★ LLM이 따옴표(' ')나 대시(– —)를 바꿔 적어도 찾도록 정규화 매칭 사용
+
+                # ★ 따옴표·대시·구두점·하이픈·공백·대소문자 차이까지 흡수하는 마킹 함수 (core_blank / blank 공통)
                 def _mark_phrase(text, phrase, mk):
                     if not phrase:
                         return text, False
+                    # 1) 정확 매칭
                     if phrase in text:
                         return text.replace(phrase, mk, 1), True
-                    # 따옴표/대시 통일 (1:1 치환이라 길이 보존 → 인덱스가 원문과 동일)
+                    # 2) 따옴표/대시/비분리공백 통일 (1:1 치환이라 길이 보존 → 인덱스 동일)
                     qmap = {"\u2019": "'", "\u2018": "'", "\u201c": '"', "\u201d": '"',
                             "\u2013": "-", "\u2014": "-", "\u00a0": " "}
                     def nq(s):
@@ -337,8 +334,28 @@ def generate_variation_a(
                     if npr in nt:
                         i = nt.index(npr)
                         return text[:i] + mk + text[i + len(npr):], True
+                    # 3) 토큰(영숫자) 시퀀스 매칭 — 구두점/하이픈/공백/대소문자 차이를 전부 흡수
+                    spans = [(m.group(0).lower(), m.start(), m.end())
+                             for m in re.finditer(r"[A-Za-z0-9]+", text)]
+                    tw = [w for w, _, _ in spans]
+                    pt = re.findall(r"[A-Za-z0-9]+", phrase.lower())
+                    if pt and len(pt) <= len(tw):
+                        for i in range(len(tw) - len(pt) + 1):
+                            if tw[i:i + len(pt)] == pt:
+                                s_char = spans[i][1]
+                                e_char = spans[i + len(pt) - 1][2]
+                                return text[:s_char] + mk + text[e_char:], True
                     return text, False
 
+                # Q3 핵심빈칸: LLM이 고른 구절을 intro(첫 문장)에서 찾아 마킹 (따옴표 흡수)
+                tgt = (data.get("core_blank_target") or "").strip()
+                if tgt:
+                    new_intro, core_ok = _mark_phrase(data["intro"], tgt, "<CORE_BLANK>")
+                    if core_ok:
+                        data["intro"] = new_intro
+                    data["_core_marked"] = core_ok
+
+                # Q5 영작빈칸: LLM이 고른 구절을 (A)(B)(C)에서 찾아 마킹 (같은 단락이어도 둘 다)
                 marked = {}
                 for mk, key in (("<BLANK_A>", "blank_A"), ("<BLANK_B>", "blank_B")):
                     val = (data.get(key) or "").strip()

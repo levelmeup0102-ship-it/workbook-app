@@ -80,14 +80,34 @@ _FINITE_VERB = re.compile(
 
 
 def fill_boundary_dup(template: str, pairs) -> str:
-    """빈칸에 정답을 넣었을 때 경계에서 같은 단어가 연달아 나오면(예: 'aspects aspects')
-    그 중복 단어를 반환. 없으면 None. (빈칸 범위가 앞/뒤 단어를 먹은 경우 감지)"""
-    t = template or ""
+    """빈칸에 정답을 넣었을 때 ① 정답 구절이 빈칸 앞/뒤 텍스트와 겹쳐 반복되거나
+    ② 경계에서 같은 단어가 연달아 나오면(예: 'aspects aspects') 그 중복 텍스트를 반환. 없으면 None.
+    (빈칸 범위가 앞/뒤 단어·구절을 먹은 경우 감지)"""
+    template = template or ""
+    # ② 구절 겹침: 정답 끝 k단어 == 빈칸 뒤 앞 k단어, 또는 정답 앞 k단어 == 빈칸 앞 끝 k단어
+    for mk, ans in pairs:
+        parts = template.split(mk, 1)
+        if len(parts) < 2:
+            continue
+        pre, suf = parts[0], parts[1]
+        for omk, _ in pairs:
+            suf = suf.replace(omk, " "); pre = pre.replace(omk, " ")
+        aw = re.sub(r'[^A-Za-z0-9 ]', ' ', (ans or "").lower()).split()
+        sw = re.sub(r'[^A-Za-z0-9 ]', ' ', suf.lower()).split()
+        pw = re.sub(r'[^A-Za-z0-9 ]', ' ', pre.lower()).split()
+        for k in range(min(len(aw), len(sw)), 1, -1):
+            if aw[-k:] == sw[:k]:
+                return " ".join(aw[-k:])
+        for k in range(min(len(aw), len(pw)), 1, -1):
+            if aw[:k] == pw[-k:]:
+                return " ".join(aw[:k])
+    # ① 인접 단어 중복
+    t = template
     for mk, ans in pairs:
         t = t.replace(mk, " " + (ans or "") + " ", 1)
     words = re.sub(r'[^A-Za-z0-9 ]', ' ', t.lower()).split()
     for i in range(len(words) - 1):
-        if words[i] == words[i + 1] and len(words[i]) > 2:  # 짧은 관사류(a, an) 제외
+        if words[i] == words[i + 1] and len(words[i]) > 2:
             return words[i]
     return None
 

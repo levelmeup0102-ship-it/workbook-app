@@ -394,6 +394,9 @@ body {
         <b class="q-name">Q3.핵심빈칸</b>
         <span class="ans-val" style="color:var(--purple); background:var(--bg-purple);">{{ ['①','②','③','④','⑤'][item.data.core_blank_correct] }}</span>
         <span class="ans-text">{{ item.data.core_blank_options[item.data.core_blank_correct] }}</span>
+        {% if item.data.core_blank_target %}
+        <span class="ans-text" style="grid-column:3; grid-row:2; color:#777; font-size:7.2pt;">원문: <b style="color:#555;">{{ item.data.core_blank_target }}</b> &nbsp;→&nbsp; 패러프레이즈: <b style="color:var(--purple);">{{ item.data.core_blank_options[item.data.core_blank_correct] }}</b></span>
+        {% endif %}
       </div>
       {% endif %}
 

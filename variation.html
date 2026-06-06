@@ -340,7 +340,7 @@ body {
     <div class="col-right">
       <div class="col-header col-r-hdr">[ 일치판단 / 빈칸 서술 ]</div>
 
-      <div class="q-title"><span class="q-num">4</span> 다음 글의 내용과 <span style="color:var(--red);">일치하지 않는</span> 진술의 개수는?</div>
+      <div class="q-title"><span class="q-num">4</span> 다음 글의 내용과 일치하지 <span style="color:var(--red); text-decoration:underline; font-weight:bold;">않는</span> 진술의 개수는?</div>
       <div class="statements">
         {% for stmt in item.data.statements %}
         <div class="stmt-item"><span class="stmt-label">{{ stmt[0] }}.</span> {{ stmt[1] }}</div>

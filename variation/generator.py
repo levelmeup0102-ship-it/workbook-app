@@ -8,6 +8,8 @@ variation/generator.py
 """
 import os
 import hashlib
+import random
+import re
 import traceback
 from typing import Optional
 
@@ -16,11 +18,122 @@ import httpx
 from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response
 from variation.validator import validate_a, validate_b
 
+
+# ============================================================
+# 문장 분리 (0회독 pipeline.py와 동일 — 경칭/약어/따옴표 보호, 무손실)
+# ============================================================
+def split_sentences(text: str) -> list:
+    """영어 지문 문장 분리 (원문 무손실). 0회독 워크북과 동일 로직."""
+    protected = text
+
+    def protect_quote_internals(match):
+        inner = match.group(1)
+        open_q = match.group(0)[0]
+        close_q = match.group(0)[-1]
+        protected_inner = re.sub(
+            r'([.!?])\s+([A-Z])',
+            lambda m2: f"{m2.group(1)}§QSEP§{m2.group(2)}",
+            inner
+        )
+        return open_q + protected_inner + close_q
+
+    protected = re.sub(r'["\u201c](.*?)["\u201d]', protect_quote_internals, protected, flags=re.DOTALL)
+
+    abbrevs = [
+        'Dr.', 'Mr.', 'Ms.', 'Mrs.', 'Prof.', 'Jr.', 'Sr.', 'St.',
+        'vs.', 'etc.', 'No.', 'Vol.', 'Fig.', 'Gen.', 'Gov.', 'Rev.',
+        'Sgt.', 'Cpl.', 'Lt.', 'Co.', 'Inc.', 'Ltd.', 'Corp.', 'Dept.',
+        'Est.', 'al.', 'e.g.', 'i.e.', 'U.S.', 'U.K.', 'U.N.',
+    ]
+    replacements = {}
+    for ab in abbrevs:
+        token = ab.replace('.', '§DOT§')
+        pattern = r'(?<!\w)' + re.escape(ab)
+        if re.search(pattern, protected):
+            replacements[token] = ab
+            protected = re.sub(pattern, token, protected)
+
+    def protect_initial(m):
+        return m.group(0).replace('.', '§DOT§')
+    protected = re.sub(r'(?<!\w)([A-Z])\.\s*(?=[A-Z][\.\s]|[A-Z][a-z])', protect_initial, protected)
+
+    sentences = [s.strip() for s in re.split(
+        r'(?<=[.!?])\s+(?=[\u201c\u201d\u0022]?[A-Z])|(?<=[.!?][\u201c\u201d\u0022])\s+(?=[\u201c\u201d\u0022]?[A-Z])',
+        protected
+    ) if s.strip()]
+
+    restored = []
+    for s in sentences:
+        for token, original in replacements.items():
+            s = s.replace(token, original)
+        s = s.replace('§DOT§', '.')
+        s = s.replace('§QSEP§', ' ')
+        restored.append(s)
+    return restored
+
+
+# 순서형 5선지: order_correct 인덱스 → 복원(원문) 라벨 순서
+FIXED_ORDER = [["A", "C", "B"], ["B", "A", "C"], ["B", "C", "A"], ["C", "A", "B"], ["C", "B", "A"]]
+
+
+def build_order_blocks_a(en_text: str, pid: str = "?", seed_extra: str = "") -> Optional[dict]:
+    """
+    원문을 코드로 분할 → intro + (A)(B)(C) + order_correct 구성 (원문 무손실).
+    LLM이 단락을 만들지 않으므로 복원검증이 절대 깨지지 않는다.
+    반환: {"intro", "paragraphs":[["A",t],["B",t],["C",t]], "order_correct"} 또는 None(분할 불가).
+    """
+    sents = split_sentences(en_text)
+    if len(sents) < 4:
+        print(f"[VAR][A][{pid}] 문장 {len(sents)}개 — 순서배열(intro+3단락) 불가")
+        return None
+
+    # intro = 첫 1문장 (남은 문장이 3개 미만이면 순서배열 불가)
+    intro_text = sents[0].strip()
+    rest = sents[1:]
+    if len(rest) < 3:
+        return None
+
+    # rest를 연속 3덩어리로 (앞쪽에 +1)
+    k = len(rest)
+    sizes = [k // 3, k // 3, k // 3]
+    for i in range(k % 3):
+        sizes[i] += 1
+    blocks, idx = [], 0
+    for s in sizes:
+        blocks.append(" ".join(rest[idx:idx + s]).strip())
+        idx += s
+    # blocks[0]=원문1번째덩어리, [1]=2번째, [2]=3번째
+
+    # 라벨 셔플: 원문순서 그대로(A-B-C)는 선지에 없으니 제외
+    seed = int(hashlib.md5((pid + seed_extra + en_text[:40]).encode()).hexdigest()[:8], 16)
+    rng = random.Random(seed)
+    perm = [0, 1, 2]
+    for _ in range(10):
+        rng.shuffle(perm)
+        # (A)=blocks[perm[0]], (B)=blocks[perm[1]], (C)=blocks[perm[2]]
+        label_of = {}
+        for li, bi in enumerate(perm):
+            label_of[bi] = ["A", "B", "C"][li]
+        restore = [label_of[0], label_of[1], label_of[2]]  # 원문순서대로의 라벨
+        if restore in FIXED_ORDER:
+            break
+    else:
+        restore = ["B", "A", "C"]
+        perm = [1, 0, 2]
+
+    paragraphs = [
+        ["A", blocks[perm[0]]],
+        ["B", blocks[perm[1]]],
+        ["C", blocks[perm[2]]],
+    ]
+    order_correct = FIXED_ORDER.index(restore)
+    return {"intro": intro_text, "paragraphs": paragraphs, "order_correct": order_correct}
+
 # ============ 환경 변수 ============
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5")
 ANTHROPIC_VERSION = "2023-06-01"
-MAX_RETRIES = 5
+MAX_RETRIES = 3
 
 SB_URL = os.environ.get("SUPABASE_URL", "")
 SB_KEY = (
@@ -51,7 +164,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}"
+    # _s8 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s8"
 
 
 # ============ Supabase 캐시 ============
@@ -130,7 +244,7 @@ def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000) -
         "messages": [{"role": "user", "content": user_message}],
     }
     
-    with httpx.Client(timeout=180.0) as client:
+    with httpx.Client(timeout=120.0) as client:
         r = client.post(url, headers=headers, json=payload)
         if r.status_code != 200:
             raise RuntimeError(f"Claude API 오류 {r.status_code}: {r.text[:500]}")
@@ -149,6 +263,7 @@ def generate_variation_a(
     book: str = "",
     unit: str = "",
     force_regenerate: bool = False,
+    cache_only: bool = False,
 ) -> dict:
     en_text, _ = split_passage_and_translation(passage_text)
     cache_key = make_cache_key(book, unit, pid, en_text, "a")
@@ -159,7 +274,13 @@ def generate_variation_a(
             print(f"[VAR][A][{pid}] 캐시 히트")
             return cached
     
+    # 합치기 단계: 캐시에 없으면 생성하지 않고 None (재생성으로 인한 타임아웃 방지)
+    if cache_only:
+        print(f"[VAR][A][{pid}] 캐시 없음 — cache_only이므로 생략")
+        return None
+    
     last_errors = []
+    last_data = None
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             user_msg = (
@@ -171,31 +292,75 @@ def generate_variation_a(
                 user_msg += (
                     "\n\n# ⚠️ PREVIOUS ATTEMPT FAILED — FIX THESE ERRORS:\n"
                     + "\n".join(f"  ✗ {e}" for e in last_errors[:5])
-                    + "\n\n# REMINDER OF CRITICAL CHECKS FOR TYPE A:\n"
-                    "  1. blank_A and blank_B must EACH have AT LEAST 5 words\n"
-                    "  2. blank_A and blank_B should be in DIFFERENT chunks (so they're separated by 3+ words)\n"
-                    "  3. bogi must contain EVERY SINGLE WORD from blank_A + blank_B — "
-                    "count articles ('the', 'a', 'an') and prepositions ('of', 'in', 'to') carefully!\n"
-                    "     Example: if blank_A is 'the area between the plants' (5 words including TWO 'the'), "
-                    "bogi must include 'the' TWICE, not once.\n"
-                    "  4. order_correct must NOT point to '(a)-(b)-(c)-(d)' — pick a SHUFFLED order\n"
-                    "  5. core_blank_target must have AT LEAST 3 words\n"
-                    "  6. ★ ALL 4 CHUNKS must have actual text — NEVER leave (d) or any chunk empty/blank!\n"
-                    "     Split the passage into 4 BALANCED pieces, each with 5+ words"
+                    + "\n\n# REMINDER OF CRITICAL CHECKS FOR TYPE A (sentence-order style):\n"
+                    "  1. intro = the given lead (first 1-2 sentences, with <CORE_BLANK>). It must NOT reappear in (A)/(B)/(C).\n"
+                    "  2. ★ (A)(B)(C) = exactly 3 paragraphs. Each must be a CONSECUTIVE run of whole sentences from the passage — "
+                    "NEVER merge sentences that are far apart in the original. Cut ONLY at sentence boundaries.\n"
+                    "  3. ★ RECONSTRUCTION TEST: intro + (A)(B)(C) reassembled in the order_correct sequence must EQUAL the original passage word-for-word "
+                    "(no reordering inside a paragraph, no merging distant sentences, no omission, no duplication).\n"
+                    "  4. order_correct = index 0-4 into FIXED choices (0=(A)-(C)-(B) 1=(B)-(A)-(C) 2=(B)-(C)-(A) 3=(C)-(A)-(B) 4=(C)-(B)-(A)); never (A)-(B)-(C).\n"
+                    "  5. blank_A and blank_B must EACH have AT LEAST 5 words, placed INSIDE (A)/(B)/(C) (not in intro), in different paragraphs.\n"
+                    "  6. bogi must contain EVERY SINGLE WORD from blank_A + blank_B — count articles ('the','a','an') and prepositions carefully.\n"
+                    "  7. core_blank_target must have AT LEAST 3 words; the Q3 correct option must equal core_blank_target exactly."
                 )
             
             raw = call_claude(SYSTEM_PROMPT_A, user_msg)
             data = extract_json_from_response(raw)
-            
+
+            # ★★ 순서배열(Q2)을 코드가 원문에서 분할 — LLM 단락을 무시하고 원문 그대로 사용.
+            #    원문 무손실이라 복원검증이 깨지지 않는다. LLM은 빈칸 구절만 고른다.
+            ob = build_order_blocks_a(en_text, pid)
+            if ob:
+                data["intro"] = ob["intro"]
+                data["paragraphs"] = [list(p) for p in ob["paragraphs"]]
+                data["order_correct"] = ob["order_correct"]
+                # Q3 핵심빈칸: LLM이 고른 구절을 intro(첫 문장)에서 찾아 마킹
+                tgt = (data.get("core_blank_target") or "").strip()
+                if tgt and tgt in data["intro"]:
+                    data["intro"] = data["intro"].replace(tgt, "<CORE_BLANK>", 1)
+                # Q5 영작빈칸: LLM이 고른 구절을 (A)(B)(C)에서 찾아 각각 다른 단락에 마킹
+                for mk, key in (("<BLANK_A>", "blank_A"), ("<BLANK_B>", "blank_B")):
+                    val = (data.get(key) or "").strip()
+                    if not val:
+                        continue
+                    for p in data["paragraphs"]:
+                        if val in p[1] and "<BLANK_" not in p[1]:
+                            p[1] = p[1].replace(val, mk, 1)
+                            break
+
             if "mismatch_count" not in data and "statements" in data:
                 data["mismatch_count"] = sum(1 for _, _, ok in data["statements"] if not ok)
-            
-            errors = validate_a(data, en_text, pid)
+
+            # ★ Q5 보기(bogi) 자동 생성: blank_A + blank_B의 모든 단어를 셔플해서 사용.
+            #   모델이 만든 bogi는 무시 → 보기 누락/변형으로 인한 불일치를 원천 차단.
+            try:
+                bw = (str(data.get("blank_A", "")) + " " + str(data.get("blank_B", ""))).split()
+                if bw:
+                    seed = int(hashlib.md5((pid + str(data.get("blank_A", ""))).encode()).hexdigest()[:8], 16)
+                    shuffled = list(bw)
+                    rng = random.Random(seed)
+                    for _ in range(5):
+                        rng.shuffle(shuffled)
+                        if shuffled != bw:
+                            break
+                    data["bogi"] = shuffled
+            except Exception:
+                pass
+
+            is_last = (attempt == MAX_RETRIES)
+            errors = validate_a(data, en_text, pid, lenient=is_last)
             if not errors:
                 save_cached(cache_key, "variation_a", data)
-                print(f"[VAR][A][{pid}] 생성 완료 (시도 {attempt})")
+                mode_str = "관대 모드" if is_last else "엄격 모드"
+                print(f"[VAR][A][{pid}] 생성 완료 (시도 {attempt}, {mode_str})")
                 return data
             last_errors = errors
+            has_critical = any("[CRITICAL]" in e for e in errors)
+            if is_last and data and not has_critical:
+                last_data = data
+                print(f"[VAR][A][{pid}] 마지막 시도 실패했지만 경미한 오류뿐 → 데이터 보관: {len(errors)}건")
+            elif is_last and has_critical:
+                print(f"[VAR][A][{pid}] 마지막 시도에 치명적 오류(순서/빈칸/원문) → fallback 거부, 이 항목 생략")
             print(f"[VAR][A][{pid}] 시도 {attempt} 실패 ({len(errors)}건):")
             for err in errors[:5]:
                 print(f"    - {err[:200]}")
@@ -203,6 +368,11 @@ def generate_variation_a(
             traceback.print_exc()
             last_errors = [f"예외: {e}"]
     
+    # ★ 5회 모두 실패해도 마지막 데이터가 있으면 그거라도 사용 (불완전한 A라도 없는 것보단 나음)
+    if last_data is not None:
+        save_cached(cache_key, "variation_a", last_data)
+        print(f"[VAR][A][{pid}] 관대 fallback 사용 ({MAX_RETRIES}회 실패)")
+        return last_data
     raise RuntimeError(f"유형 A 생성 실패 ({MAX_RETRIES}회). 마지막 오류:\n" + "\n".join(last_errors[:5]))
 
 
@@ -213,6 +383,7 @@ def generate_variation_b(
     book: str = "",
     unit: str = "",
     force_regenerate: bool = False,
+    cache_only: bool = False,
 ) -> dict:
     en_text, _ = split_passage_and_translation(passage_text)
     cache_key = make_cache_key(book, unit, pid, en_text, "b")
@@ -222,6 +393,11 @@ def generate_variation_b(
         if cached:
             print(f"[VAR][B][{pid}] 캐시 히트")
             return cached
+    
+    # 합치기 단계: 캐시에 없으면 생성하지 않고 None
+    if cache_only:
+        print(f"[VAR][B][{pid}] 캐시 없음 — cache_only이므로 생략")
+        return None
     
     last_errors = []
     last_data = None  # 마지막 fallback용
@@ -253,7 +429,24 @@ def generate_variation_b(
             
             raw = call_claude(SYSTEM_PROMPT_B, user_msg)
             data = extract_json_from_response(raw)
-            
+
+            # ★ Q4/Q5 보기(bogi) 자동 생성: 답지 단어를 그대로 소문자·구두점제거하여 보기로 사용.
+            #   모델이 만든 보기는 무시 → 누락/잉여(예: 'for')/중복오류를 원천 차단.
+            def _bogi_from(text: str):
+                toks = re.sub(r'[.,;:!?"()]', ' ', str(text or "")).split()
+                return [t.lower() for t in toks if t]
+            try:
+                # Q4: blank_A + blank_B
+                q4 = _bogi_from(str(data.get("blank_A", "")) + " " + str(data.get("blank_B", "")))
+                if q4:
+                    data["blank_summary_bogi"] = q4
+                # Q5: topic_writing_answer
+                q5 = _bogi_from(data.get("topic_writing_answer", ""))
+                if q5:
+                    data["topic_writing_bogi"] = q5
+            except Exception:
+                pass
+
             # 마지막 시도면 strict=False (검증 풀어서라도 받아들임)
             is_last = (attempt == MAX_RETRIES)
             errors = validate_b(data, en_text, pid, strict=not is_last)
@@ -263,10 +456,13 @@ def generate_variation_b(
                 print(f"[VAR][B][{pid}] 생성 완료 (시도 {attempt}, {mode_str})")
                 return data
             last_errors = errors
-            # 마지막 시도이고 검증 실패면, 데이터를 저장해두고 마지막에 fallback 사용
-            if is_last and data:
+            has_critical = any("[CRITICAL]" in e for e in errors)
+            # 마지막 시도이고 경미한 오류뿐이면 fallback용으로 보관 (치명적이면 거부)
+            if is_last and data and not has_critical:
                 last_data = data
-                print(f"[VAR][B][{pid}] 마지막 시도도 실패했지만 데이터 보관: {len(errors)}건 위반")
+                print(f"[VAR][B][{pid}] 마지막 시도 실패했지만 경미한 오류뿐 → 데이터 보관: {len(errors)}건")
+            elif is_last and has_critical:
+                print(f"[VAR][B][{pid}] 마지막 시도에 치명적 오류 → fallback 거부, 이 항목 생략")
             print(f"[VAR][B][{pid}] 시도 {attempt} 실패 ({len(errors)}건):")
             for err in errors[:5]:
                 print(f"    - {err[:200]}")

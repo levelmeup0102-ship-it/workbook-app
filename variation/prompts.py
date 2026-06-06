@@ -295,6 +295,11 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
    - Include subject, verb, object, and modifiers
    - Example GOOD: "Strategic microclimate manipulation enables earlier cultivation in temperate regions through localized warming." (12 words)
    - Example BAD: "Strategic placement maximizes soil heating." (5 words - too short!)
+   - ★★ MUST USE DIFFERENT WORDING FROM THE Q4 SUMMARY (blank_summary_template / blank_A / blank_B):
+     Q5 expresses the SAME core idea as the Q4 summary but with PARAPHRASED vocabulary — different key nouns/verbs, not the same phrases reused.
+     BAD (too similar): Q4 "...decomposing overwhelming problems into manageable sub-problems" + Q5 "...decomposing them into manageable problems" (거의 동일 표현)
+     GOOD: Q4 uses "decompose / manageable sub-problems" → Q5 rephrases as "break down / addressable components" or "partition / actionable pieces".
+     Do NOT recycle the distinctive content words of blank_A/blank_B in topic_writing_answer.
 
 5. **TOPIC WRITING (Q5)**: VARY sentence patterns. AVOID always starting with "What ~ is/does". Use diverse openings:
    - "Thanks to X, ..." / "People can ..." / "A model serves ..." / "By doing X, ..."

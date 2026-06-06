@@ -164,8 +164,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s13 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s13"
+    # _s14 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s14"
 
 
 # ============ Supabase 캐시 ============
@@ -299,7 +299,7 @@ def generate_variation_a(
                     "  3. ★ RECONSTRUCTION TEST: intro + (A)(B)(C) reassembled in the order_correct sequence must EQUAL the original passage word-for-word "
                     "(no reordering inside a paragraph, no merging distant sentences, no omission, no duplication).\n"
                     "  4. order_correct = index 0-4 into FIXED choices (0=(A)-(C)-(B) 1=(B)-(A)-(C) 2=(B)-(C)-(A) 3=(C)-(A)-(B) 4=(C)-(B)-(A)); never (A)-(B)-(C).\n"
-                    "  5. blank_A and blank_B must EACH have AT LEAST 5 words, placed INSIDE (A)/(B)/(C) (not in intro), in different paragraphs.\n"
+                    "  5. blank_A and blank_B must EACH have AT LEAST 6 words, placed INSIDE (A)/(B)/(C) (not in intro), in different paragraphs.\n"
                     "  6. bogi must contain EVERY SINGLE WORD from blank_A + blank_B — count articles ('the','a','an') and prepositions carefully.\n"
                     "  7. core_blank_target must have AT LEAST 3 words; the Q3 correct option must be a PARAPHRASE of core_blank_target "
                     "(synonym or figurative rewording), NOT the original wording copied verbatim."
@@ -420,7 +420,7 @@ def generate_variation_b(
                     "     BAD example: 'word word <MARK1> word word <MARK2><MARK3> word' — MARK2/MARK3 adjacent (0 words between)\n"
                     "     GOOD example: 'word word word <MARK1> word word word word <MARK2> word word word <MARK3> ...'\n"
                     "  2. blank_A and blank_B must EACH have AT LEAST 6 words\n"
-                    "  3. topic_writing_answer must have AT LEAST 10 words\n"
+                    "  3. topic_writing_answer must have AT LEAST 14 words\n"
                     "  4. Hyphenated words (south-facing, well-known) stay as ONE token in both blank and bogi\n"
                     "  5. blank_summary_bogi must contain EVERY word from blank_A + blank_B (count articles/preps)\n"
                     "  6. ★ Q3 summary_options: EACH (A) and (B) must be EXACTLY ONE WORD (no phrases!)\n"

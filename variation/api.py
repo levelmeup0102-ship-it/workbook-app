@@ -64,6 +64,7 @@ class VariationRequest(BaseModel):
     passages: List[PassageRef]
     types: List[str]  # ['A'] / ['B'] / ['A','B']
     mode: str = "by-type"  # "by-type" or "by-passage"
+    school_name: str = "레벨미업학원"
 
 
 class VariationItemRequest(BaseModel):
@@ -71,7 +72,6 @@ class VariationItemRequest(BaseModel):
     unit: str
     id: str
     type: str  # 'A' or 'B'
-    school_name: str = "레벨미업학원"
 
 
 # ============ 라우터 ============
@@ -159,8 +159,12 @@ def create_variation(
                 data_a = generate_variation_a(
                     passage_text=passage_text,
                     pid=p.id, book=p.book, unit=p.unit,
+                    cache_only=True,
                 )
-                a_items.append(prepare_a_passage(data_a, label))
+                if data_a is None:
+                    errors_per_passage.append(f"[{p.id}] A 제외 (생성 단계에서 검증 미통과)")
+                else:
+                    a_items.append(prepare_a_passage(data_a, label))
             except Exception as e:
                 traceback.print_exc()
                 errors_per_passage.append(f"[{p.id}] A 생성 실패: {e}")
@@ -170,8 +174,12 @@ def create_variation(
                 data_b = generate_variation_b(
                     passage_text=passage_text,
                     pid=p.id, book=p.book, unit=p.unit,
+                    cache_only=True,
                 )
-                b_items.append(prepare_b_passage(data_b, label))
+                if data_b is None:
+                    errors_per_passage.append(f"[{p.id}] B 제외 (생성 단계에서 검증 미통과)")
+                else:
+                    b_items.append(prepare_b_passage(data_b, label))
             except Exception as e:
                 traceback.print_exc()
                 errors_per_passage.append(f"[{p.id}] B 생성 실패: {e}")

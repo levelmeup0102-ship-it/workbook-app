@@ -51,8 +51,22 @@ async def _request(method: str, endpoint: str, body=None, extra_headers: dict | 
 # Passages
 # ========================
 async def get_all_passages():
-    result = await _request("GET", "passages?select=*&order=unit,pid")
-    return result if isinstance(result, list) else []
+    """모든 지문을 가져온다. Supabase REST API는 한 응답에 최대 1000줄만 주므로
+    1000개씩 끝까지 반복해서(offset) 전부 모아 반환한다."""
+    all_rows = []
+    page_size = 1000
+    offset = 0
+    while True:
+        q = f"passages?select=*&order=unit,pid,id&limit={page_size}&offset={offset}"
+        result = await _request("GET", q)
+        if not isinstance(result, list) or not result:
+            break
+        all_rows.extend(result)
+        if len(result) < page_size:   # 마지막 페이지면 종료
+            break
+        offset += page_size
+    print(f"[supa] loaded {len(all_rows)} passages (paginated)")
+    return all_rows
 
 async def get_passage(book, unit, pid):
     q = (

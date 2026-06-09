@@ -263,8 +263,10 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
         WRONG (no blanks): "Athletes must practice controlled breathing to manage arousal."
         RIGHT (has blanks): "Athletes must (A) to (B) during performance."
    - summary_options = 5 pairs of SINGLE WORDS  ← Q3 choices
-   - blank_A = full phrase (6+ words)  ← Q4 writing answer
-   - blank_B = full phrase (6+ words)  ← Q4 writing answer
+   - ★ APPROACH (same as the 1회독 blank step): FIRST write the full summary as ONE natural, grammatical sentence. THEN pick two existing phrases inside it as blank_A / blank_B and replace them with (A)/(B). You are NOT composing answers to fit a word bank — you are blanking out parts of a sentence you already wrote naturally. This is why it must read perfectly when (A)/(B) are filled back in.
+   - blank_A = the exact phrase removed from the (A) slot (6+ words)  ← Q4 writing answer
+   - blank_B = the exact phrase removed from the (B) slot (6+ words)  ← Q4 writing answer
+   - ★ When (A)/(B) are put back into blank_summary_template, the sentence MUST read as the natural sentence you first wrote — fully grammatical, no doubled words, no leftover prepositions.
    - ★★ NO PHRASE OVERLAP: blank_A / blank_B must NOT repeat words that already sit just before or just after their (A)/(B) slot in blank_summary_template. If the template reads "thereby (B) that would otherwise interfere with problem-solving", then blank_B MUST NOT also end with "that would otherwise interfere with problem-solving" — that doubles the phrase. The answer fills ONLY the gap, never text already printed around it.
    - ★★ If the (A)/(B) slot is right after "by / while / thereby / without / before / after", the answer MUST start with a GERUND (-ing), not a base verb. (template "thereby (B) ..." → blank_B "suppressing ..." ✅, not "suppress ..." ❌)
    - blank_summary_bogi = shuffled words from blank_A + blank_B  ← Q4 word bank
@@ -293,14 +295,13 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
    Example: topic_writing_answer="Effort drives success."
    → topic_writing_bogi = ["success", "drives", "effort"] (3 words, shuffled, lowercase, no period)
 
-4-1. **Q5 topic_writing_answer MUST BE AT LEAST 14 WORDS**:
-   - topic_writing_answer is the full topic sentence to be written
-   - It MUST contain AT LEAST 14 words (a complete topic statement, not just a short summary)
-   - Include subject, verb, object, and modifiers
-   - ★★ MUST BE A GRAMMATICALLY COMPLETE, CORRECT SENTENCE. The bogi words (which are extracted from this exact sentence) MUST be able to form a fully grammatical sentence. Common failure to AVOID: a BARE VERB used as the subject (e.g. "partition those into pieces enables responses" ❌ — "partition" is a bare verb and cannot be the subject). Use a GERUND or NOUN-PHRASE subject instead (e.g. "Partitioning crises into pieces enables responses" ✅, or "Breaking large crises into smaller pieces enables effective action" ✅). If you need a gerund (e.g. "partitioning", "breaking"), put THAT form in topic_writing_answer (the bogi is generated from it, so the right word form will be available).
-   - TEST: read topic_writing_answer aloud — it must be a grammatical English sentence on its own.
-   - Example GOOD: "Strategic microclimate manipulation enables earlier cultivation in temperate regions through localized warming." (12 words)
-   - Example BAD: "Strategic placement maximizes soil heating." (5 words - too short!)
+4-1. **Q5 topic_writing_answer — write a NATURAL, COMPLETE sentence FIRST (do NOT count words or think about the word bank)**:
+   - ★ Approach (same as the 1회독 topic step): express the passage's core message as ONE complete, fully grammatical English sentence, paraphrasing the key words with synonyms. Write it as if you were writing a model topic sentence — naturally. The code will split it into the word bank afterward; you do NOT arrange words to fit a bank.
+   - ★ GRAMMAR AND NATURALNESS COME FIRST. Do NOT bend the sentence to hit a word count. A clean, natural sentence is the only goal.
+   - Length should fall naturally around 12–20 words (a real topic sentence). Do not pad it to reach a number, and do not cram extra phrases.
+   - It MUST be a grammatically complete sentence with a proper subject and a finite verb. Forbidden patterns: bare verb as subject ("partition those... enables" ❌ → "Partitioning those... enables" ✅); a sentence ending in a preposition/conjunction ("...channeling energy through" ❌); "Despite + subject + verb" ❌ (use "Although ..." or "Despite + noun phrase"); a modal followed by an adjective ("can controllable" ❌).
+   - TEST: read it aloud as a standalone sentence. If it is not natural and grammatical, rewrite it.
+   - Example GOOD: "Self-comparison, rather than rivalry with others, is the only meaningful measure of genuine growth." (natural, grammatical)
    - ★★ MUST USE DIFFERENT WORDING FROM THE Q4 SUMMARY (blank_summary_template / blank_A / blank_B):
      Q5 expresses the SAME core idea as the Q4 summary but with PARAPHRASED vocabulary — different key nouns/verbs, not the same phrases reused.
      BAD (too similar): Q4 "...decomposing overwhelming problems into manageable sub-problems" + Q5 "...decomposing them into manageable problems" (거의 동일 표현)

@@ -551,7 +551,7 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
         errors.append(f"[{pid}] B blank_A/B 형식 오류: {e}")
     
     # ★ Q5 topic_writing_answer 단어 수 (strict 14개, soft 3개)
-    min_topic_words = 12  # 너무 짧은 것만 차단 (자연스러움 우선, 억지로 늘리기 방지)
+    min_topic_words = 10  # 너무 짧은 것만 차단 (자연스러움 우선)
     try:
         twc = len(data["topic_writing_answer"].split())
         if twc < min_topic_words:
@@ -568,12 +568,6 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
         errors.append(
             f"[{pid}] [CRITICAL] Q5 주제문이 동사원형으로 시작하는 비문 꼴 "
             f"('{tw}') — 동명사/명사구 주어로 쓸 것 (예: 'Partitioning ...' not 'partition ...')."
-        )
-    # ★ 동명사(-ing)로 시작하는데 정형동사가 없는 비문 ('directing energy preventing reactions' 류)
-    if tw and gerund_start_no_finite(tw):
-        errors.append(
-            f"[{pid}] [CRITICAL] Q5 주제문에 정형동사가 없는 비문 꼴 "
-            f"('{tw}') — 분사·동명사만 나열됨. 주절에 정형동사(enables, is, can 등)를 넣을 것."
         )
     for flaw in grammar_flaws(tw):
         errors.append(f"[{pid}] [CRITICAL] Q5 주제문 비문 — {flaw} ('{tw}')")

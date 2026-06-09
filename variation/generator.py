@@ -15,7 +15,7 @@ from typing import Optional
 
 import httpx
 
-from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt
+from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt
 from variation.validator import validate_a, validate_b
 
 
@@ -164,8 +164,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s33 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s33"
+    # _s34 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s34"
 
 
 # ============ Supabase 캐시 ============
@@ -485,6 +485,22 @@ def generate_variation_b(
                     data["topic_writing_answer"] = _ts  # 집중 생성한 깔끔한 주제문으로 교체
             except Exception:
                 pass  # 실패하면 기존(한번에 만든) 주제문 유지
+
+            # ★★ Q4 요약문 단독 재생성 (영작이라 비문 잦음 → 따로 집중 생성)
+            #   요약문(full_summary)만 따로 생성하고, 그 안의 두 구절을 코드가 빈칸으로 뚫는다.
+            try:
+                _s_raw = call_claude(SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt(en_text), max_tokens=600)
+                _s = extract_json_from_response(_s_raw)
+                _fs = (_s.get("full_summary") or "").strip()
+                _ba = (_s.get("blank_A") or "").strip()
+                _bb = (_s.get("blank_B") or "").strip()
+                # 셋 다 있고 blank_A/B가 full_summary 안에 실제로 들어있을 때만 교체
+                if _fs and _ba and _bb and _ba in _fs and _bb in _fs and _ba != _bb:
+                    data["full_summary"] = _fs
+                    data["blank_A"] = _ba
+                    data["blank_B"] = _bb
+            except Exception:
+                pass  # 실패하면 기존(한번에 만든) 요약문 유지
 
             # ★★ 코드가 빈칸 뚫기 (우리가 정한 방식: 완성문장 먼저 → 코드가 뚫기)
             #   LLM이 준 full_summary(빈칸 없는 완성문장)에서 blank_A/blank_B를 찾아

@@ -164,8 +164,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s40 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s40"
+    # _s41 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s41"
 
 
 # ============ Supabase 캐시 ============
@@ -497,6 +497,33 @@ def generate_variation_b(
             
             raw = call_claude(SYSTEM_PROMPT_B, user_msg)
             data = extract_json_from_response(raw)
+
+            # ★★ Q1 삽입 정답 위치 코드 정정 (Q4 빈칸뚫기와 같은 원리)
+            #   AI가 마커는 박되 "어느 자리에서 문장이 빠졌나"(position_correct)를 자주 틀린다.
+            #   코드가 마커를 1번부터 끝까지 하나씩 넣어보고, 원문이 복원되는 자리를 정답으로 정정.
+            #   → 정답 위치 100% 보장. AI는 마커만 적당히 박으면 됨.
+            try:
+                import re as _re1
+                _pwm = str(data.get("passage_with_marks") or "")
+                _gs = str(data.get("given_sentence") or "").strip()
+                _orig = _re1.sub(r'\s+', ' ', str(en_text or "")).strip()
+                def _alnum1(t):
+                    return _re1.sub(r"[^a-z0-9]", "", str(t).lower())
+                if _pwm and _gs and _orig:
+                    _found = None
+                    for _k in range(1, 6):  # MARK1..MARK5 후보 전부 시험
+                        _mk = f"<MARK{_k}>"
+                        if _mk not in _pwm:
+                            continue
+                        _recon = _pwm.replace(_mk, " " + _gs + " ")
+                        _recon = _re1.sub(r"<MARK\d>", "", _recon)
+                        if _alnum1(_recon) == _alnum1(_orig):
+                            _found = _k - 1  # 0-based
+                            break
+                    if _found is not None and _found != data.get("position_correct"):
+                        data["position_correct"] = _found  # 코드가 찾은 정답으로 정정
+            except Exception:
+                pass  # 실패하면 AI가 찍은 값 유지 (검증에서 다시 걸러짐)
 
             # ★★ Q5 주제문 단독 재생성 (1회독 step4 방식)
             #   Q1~Q5를 한 번에 만들면 주제문에 집중이 안 돼 수일치 등 실수가 난다.

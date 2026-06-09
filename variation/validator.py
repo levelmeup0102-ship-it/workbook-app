@@ -130,10 +130,14 @@ def despite_with_clause(s: str) -> bool:
     m = re.match(r'^\s*(despite|in spite of)\s+(.+)$', str(s or ""), re.I)
     if not m:
         return False
-    head = " ".join(m.group(2).split()[:6])
+    head = " ".join(m.group(2).split()[:7])
     return bool(re.search(
-        r'\b(is|are|was|were|can|could|will|would|must|should|may|might|has|have|'
-        r'enables?|requires?|makes?|involves?|provides?|leads?|becomes?)\b', head, re.I))
+        r'\b(is|are|was|were|can|could|will|would|must|should|may|might|has|have|had|'
+        r'enables?|requires?|makes?|involves?|provides?|leads?|becomes?|'
+        r'contains?|seeks?|needs?|wants?|offers?|shows?|includes?|lacks?|faces?|'
+        r'fails?|tends?|appears?|seems?|remains?|suggests?|claims?|argues?|'
+        r'believes?|finds?|gives?|takes?|uses?|helps?|allows?|causes?|creates?|'
+        r'produces?|reduces?|increases?|carries?|holds?|keeps?|brings?)\b', head, re.I))
 
 
 def modal_no_verb(s: str) -> bool:

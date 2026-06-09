@@ -475,3 +475,35 @@ def build_topic_sentence_prompt(passage_text: str) -> str:
         "[OUTPUT JSON]\n"
         '{"topic_sentence": "<one perfect topic sentence>"}'
     )
+
+
+# ════════════════════════════════════════════════════════════════
+# Q4 요약영작 전용 프롬프트 (1회독 방식 — 요약문 하나에만 집중 생성)
+#   Q1~Q5를 한 번에 만들면 요약문에 집중 안 돼 수일치·구조 실수가 난다.
+#   요약문(full_summary)만 따로 생성 → 코드가 그 안의 두 구절을 빈칸으로 뚫는다.
+# ════════════════════════════════════════════════════════════════
+SUMMARY_SENTENCE_SYS = (
+    "You are an English exam content generator for Korean high school students. "
+    "Output ONLY valid JSON, no markdown, no text outside JSON."
+)
+
+def build_summary_sentence_prompt(passage_text: str) -> str:
+    return (
+        "Write ONE summary sentence that captures the whole passage's thesis and logic.\n\n"
+        "[PASSAGE]\n" + passage_text + "\n\n"
+        "[RULES]\n"
+        "- ONE complete, natural, fully grammatical English sentence (NO blanks, NO (A)/(B)).\n"
+        "- It must summarize the WHOLE passage (thesis + key logic), paraphrased with synonyms — "
+        "not a copy of any single sentence.\n"
+        "- Concise: about 15-25 words.\n"
+        "- ★ Check grammar carefully, especially SUBJECT-VERB AGREEMENT: a plural/compound subject "
+        "(X and Y) takes a plural verb ('context and surroundings ALTER ...' not 'alters').\n"
+        "- No bare-verb subject; do not end with a preposition; no 'Despite + clause'; no 'modal + adjective'.\n"
+        "- Also pick TWO phrases that ALREADY appear verbatim inside your sentence (each ~4-8 words, "
+        "separated by other words) — these become the two writing blanks. Copy them character-for-character.\n"
+        "- This is the ONLY thing you are writing now — focus entirely on making this one sentence perfect.\n\n"
+        "[OUTPUT JSON]\n"
+        '{"full_summary": "<one perfect summary sentence>", '
+        '"blank_A": "<exact substring of full_summary, ~4-8 words>", '
+        '"blank_B": "<another exact substring, ~4-8 words, separated from blank_A>"}'
+    )

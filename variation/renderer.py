@@ -68,13 +68,13 @@ def convert_lead_a(lead: str) -> str:
 # ============ 데이터 정규화 ============
 def bogi_words(text: str) -> list:
     """답지 텍스트에서 보기 단어 목록 생성 (구두점 제거, 소문자). 누락/잉여 0 보장.
-    단, 숫자 사이 쉼표(천 단위, 예: 100,000)는 한 덩어리로 보존한다."""
+    숫자 사이 쉼표(100,000)와 약어 마침표(U.S.)는 한 덩어리로 보존한다."""
     s = str(text or "")
-    # 숫자,숫자 사이 쉼표를 임시 토큰으로 보호 (100,000 → 100<COMMA>000)
-    s = re.sub(r'(?<=\d),(?=\d)', '\u0001', s)
+    s = re.sub(r'(?<=\d),(?=\d)', '\u0001', s)  # 100,000 보호
+    # 약어(U.S. / e.g. / U.S.A.): 글자.글자 패턴의 내부 마침표 보호
+    s = re.sub(r'\b([A-Za-z](?:\.[A-Za-z])+)\.?', lambda m: m.group(0).replace('.', '\u0002'), s)
     toks = re.sub(r'[.,;:!?"()]', ' ', s).split()
-    # 보호한 쉼표를 복원
-    return [t.replace('\u0001', ',').lower() for t in toks if t]
+    return [t.replace('\u0001', ',').replace('\u0002', '.').lower() for t in toks if t]
 
 
 def shuffle_bogi(bogi: list, seed_str: str = "") -> list:

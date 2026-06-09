@@ -53,9 +53,9 @@ Everything you generate must reflect that whole-passage understanding:
    - "order_correct" = index (0-4) of the choice matching the original order.
    - The correct order is NEVER "(A)-(B)-(C)" — shuffle so the answer is one of the 5 fixed choices.
 
-2. **Q5 BLANK_A and BLANK_B MUST BE LONG (each at least 6 words)**:
-   - blank_A must be a phrase with AT LEAST 6 words from the passage
-   - blank_B must be a phrase with AT LEAST 6 words from the passage
+2. **Q5 BLANK_A and BLANK_B — pick a natural KEY phrase from the passage (about 4-8 words each)**:
+   - blank_A is a meaningful phrase taken verbatim from the passage (roughly 4-8 words — pick where it falls naturally, do NOT pad to a number)
+   - blank_B is another such phrase taken verbatim from the passage (roughly 4-8 words)
    - Total bogi should have at least 12 words (after combining blank_A + blank_B)
    - Pick MEANINGFUL phrases (entire clauses or noun phrases with modifiers), not just short bits
    - Example GOOD: blank_A="the area between the plants to maximize soil heating from the sun"
@@ -142,8 +142,8 @@ Everything you generate must reflect that whole-passage understanding:
     "<... for 나>", "<... for 다>", "<... for 라>", "<... for 마>"
   ],
   "mismatch_count": <number of false statements (1-5)>,
-  "blank_A": "<phrase from original passage, AT LEAST 6 WORDS>",
-  "blank_B": "<phrase from original passage, AT LEAST 6 WORDS>",
+  "blank_A": "<key phrase taken verbatim from passage, ~4-8 words>",
+  "blank_B": "<key phrase taken verbatim from passage, ~4-8 words>",
   "bogi": ["<shuffled lowercase words from blank_A + blank_B>"],
   "topic_explain": "<Brief Korean explanation, one sentence>",
   "order_explain": "<Brief Korean explanation of the flow, one sentence>",
@@ -158,8 +158,8 @@ Everything you generate must reflect that whole-passage understanding:
 
 # VERIFICATION CHECKLIST (do BEFORE outputting)
 1. ✓ Does intro + (A)(B)(C) in the correct order equal the WHOLE passage (no duplicate, no omission)? Does the intro NOT reappear in (A)/(B)/(C)?
-2. ✓ Does blank_A have at least 6 words?
-3. ✓ Does blank_B have at least 6 words?
+2. ✓ Is blank_A a natural key phrase (~4-8 words) taken verbatim from the passage?
+3. ✓ Is blank_B a natural key phrase (~4-8 words) taken verbatim from the passage?
 4. ✓ Are blank_A and blank_B SEPARATED by at least 5 words in the passage? (Not adjacent!)
 5. ✓ Does core_blank_target have at least 3 words?
 6. ✓ Does bogi contain exactly the words from blank_A + blank_B (lowercase, no punctuation)?
@@ -252,7 +252,7 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
 
 2-2. **★ CRITICAL: Q3 (summary_options) AND Q4 (blank_A/blank_B) ARE COMPLETELY SEPARATE QUESTIONS!**
    - Q3 = OBJECTIVE choice question with SHORT single-word options for (A)(B)
-   - Q4 = WRITING question where students fill in LONG phrases (6+ words each)
+   - Q4 = WRITING question where students fill in natural key phrases (~4-8 words each)
    - They use DIFFERENT templates and DIFFERENT answer formats!
    
    Structure:
@@ -264,8 +264,8 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
         RIGHT (has blanks): "Athletes must (A) to (B) during performance."
    - summary_options = 5 pairs of SINGLE WORDS  ← Q3 choices
    - ★ APPROACH (same as the 1회독 blank step): FIRST write the full summary as ONE natural, grammatical sentence. THEN pick two existing phrases inside it as blank_A / blank_B and replace them with (A)/(B). You are NOT composing answers to fit a word bank — you are blanking out parts of a sentence you already wrote naturally. This is why it must read perfectly when (A)/(B) are filled back in.
-   - blank_A = the exact phrase removed from the (A) slot (6+ words)  ← Q4 writing answer
-   - blank_B = the exact phrase removed from the (B) slot (6+ words)  ← Q4 writing answer
+   - blank_A = the exact phrase removed from the (A) slot (~4-8 words)  ← Q4 writing answer
+   - blank_B = the exact phrase removed from the (B) slot (~4-8 words)  ← Q4 writing answer
    - ★ When (A)/(B) are put back into blank_summary_template, the sentence MUST read as the natural sentence you first wrote — fully grammatical, no doubled words, no leftover prepositions.
    - ★★ NO PHRASE OVERLAP: blank_A / blank_B must NOT repeat words that already sit just before or just after their (A)/(B) slot in blank_summary_template. If the template reads "thereby (B) that would otherwise interfere with problem-solving", then blank_B MUST NOT also end with "that would otherwise interfere with problem-solving" — that doubles the phrase. The answer fills ONLY the gap, never text already printed around it.
    - ★★ If the (A)/(B) slot is right after "by / while / thereby / without / before / after", the answer MUST start with a GERUND (-ing), not a base verb. (template "thereby (B) ..." → blank_B "suppressing ..." ✅, not "suppress ..." ❌)
@@ -280,9 +280,9 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
    Example: blank_A="economic growth", blank_B="environmental cost"
    → blank_summary_bogi = ["cost", "growth", "economic", "environmental"] (4 words, shuffled, lowercase)
 
-3-1. **Q4 blank_A and blank_B MUST BE AT LEAST 6 WORDS EACH**:
-   - blank_A must contain AT LEAST 6 words (meaningful phrase, not just a noun phrase)
-   - blank_B must contain AT LEAST 6 words
+3-1. **Q4 blank_A and blank_B — natural key phrases (~4-8 words each)**:
+   - blank_A is a meaningful phrase (~4-8 words, pick where it falls naturally — do not pad)
+   - blank_B is a meaningful phrase (~4-8 words)
    - Pick FULL CLAUSES or extended phrases, not short noun phrases
    - Example GOOD: blank_A="strategically arranged south-facing terraces with stone walls" (7 words)
    - Example BAD: blank_A="south-facing slopes" (2 words - way too short!)
@@ -343,8 +343,8 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
 }
 
 VERIFY BEFORE OUTPUT:
-- blank_A has at least 6 words
-- blank_B has at least 6 words
+- blank_A is a natural key phrase (~4-8 words)
+- blank_B is a natural key phrase (~4-8 words)
 - topic_writing_answer has at least 14 words
 - blank_summary_bogi has same word count as (blank_A words + blank_B words)
 - topic_writing_bogi has same word count as topic_writing_answer (excluding punctuation)

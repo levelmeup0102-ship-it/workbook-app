@@ -507,3 +507,43 @@ def build_summary_sentence_prompt(passage_text: str) -> str:
         '"blank_A": "<exact substring of full_summary, ~4-8 words>", '
         '"blank_B": "<another exact substring, ~4-8 words, separated from blank_A>"}'
     )
+
+
+# ════════════════════════════════════════════════════════════════
+# Q3 핵심빈칸 전용 프롬프트 (유형 A — 첫 문장만 주고 집중 생성)
+#   첫 문장(intro)은 코드가 확정한다. 그 문장에서 핵심 구절 1개를 골라
+#   빈칸으로 만들고, 같은 문법구조의 패러프레이즈를 정답으로 만든다.
+#   "원문이 절이면 정답도 절" 규칙을 강제해 빈칸 문법 불일치를 막는다.
+# ════════════════════════════════════════════════════════════════
+CORE_BLANK_SYS = (
+    "You are an English exam content generator for Korean high school students. "
+    "Output ONLY valid JSON, no markdown, no text outside JSON."
+)
+
+def build_core_blank_prompt(first_sentence: str) -> str:
+    return (
+        "Make ONE blank-inference question from the FIRST SENTENCE below.\n\n"
+        "[FIRST SENTENCE]\n" + first_sentence + "\n\n"
+        "[RULES]\n"
+        "- core_blank_target = an EXACT substring of the first sentence (copy it character-for-character) "
+        "that the whole point hinges on. At least 3 words.\n"
+        "- It must NOT include any word that sits right before/after it (so that blanking it leaves the "
+        "rest of the sentence reading exactly like the original — no duplicated word around the blank).\n"
+        "- The CORRECT option is a PARAPHRASE of core_blank_target (synonyms / figurative rewording, NOT a copy).\n"
+        "- ★★ GRAMMATICAL FIT IS MANDATORY: the correct option MUST keep the SAME grammatical structure as "
+        "core_blank_target so the sentence stays grammatical when inserted.\n"
+        "   · If the blanked phrase is a CLAUSE (has a subject + finite verb, e.g. 'food and nutrition play the "
+        "greatest role'), the paraphrase MUST also be a clause (e.g. 'food and nutrition have the most "
+        "significant impact'). NEVER turn a clause into a bare noun phrase.\n"
+        "   · If it is a noun phrase, keep a noun phrase.\n"
+        "   · TEST: read the full first sentence with the correct option in the blank — if it is not "
+        "grammatical, rewrite the option.\n"
+        "- Provide 5 options total (index 0-4). The 4 wrong options = opposite meaning or content not stated; "
+        "each grammatically fits the blank; not near-duplicates.\n"
+        "- This is the ONLY thing you are writing now — focus entirely on this one blank question.\n\n"
+        "[OUTPUT JSON]\n"
+        '{"core_blank_target": "<exact substring of the first sentence, >=3 words>", '
+        '"core_blank_options": ["<opt0>", "<opt1>", "<opt2>", "<opt3>", "<opt4>"], '
+        '"core_blank_correct": <0-4>, '
+        '"core_blank_explain": "<Korean one-line explanation>"}'
+    )

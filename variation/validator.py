@@ -1,7 +1,7 @@
 """
 variation/validator.py
 변형문제 데이터 무결성 검증 - 완화 버전
- 
+
 핵심 변경:
 - 원문 보존 검증은 옵션 (기본 끔) - Claude가 종종 미세한 차이를 만들어내서 폐기
 - 마커 최소 간격 5→3 단어로 완화
@@ -10,8 +10,8 @@ variation/validator.py
 """
 import re
 from collections import Counter
- 
- 
+
+
 # ── 문법 성립 검사용 (LLM이 만든 패러프레이즈/영작이 비문이 되는 경우 차단) ──
 # 흔한 동사 원형: 주절 주어 자리에 오면 "주어 없는 비문" 의심 (gerund -ing/과거 -ed는 set에 없어 자동 통과)
 _BASE_VERBS = {
@@ -34,8 +34,8 @@ _VERB_WORDS = _BASE_VERBS | {
     "exert", "exerts", "hold", "holds", "exist", "exists", "occur", "occurs", "matter", "matters",
     "work", "works", "fluctuate", "fluctuates", "remain", "remains", "stem", "stems", "depend", "depends",
 }
- 
- 
+
+
 def looks_bare_verb_subject(sentence: str) -> bool:
     """영작 정답 문장의 주절이 '동사원형 + ... + 정형동사' 꼴이면 주어 없는 비문으로 본다.
     예: 'partition those into pieces enables responses' (X)  /  'Partitioning ... enables ...' (O)"""
@@ -53,13 +53,13 @@ def looks_bare_verb_subject(sentence: str) -> bool:
         if _FINITE_HINT.search(rest):
             return True
     return False
- 
- 
+
+
 def _phrase_has_verb(phrase: str) -> bool:
     toks = re.sub(r'[^a-zA-Z ]', ' ', str(phrase or "").lower()).split()
     return any(t in _VERB_WORDS for t in toks)
- 
- 
+
+
 def q3_blank_is_nounphrase_after_clause(intro: str, correct_opt: str) -> bool:
     """Q3 빈칸 바로 앞이 that/which/who/because/whether(절 유도)인데 정답에 동사가 전혀 없으면
     'believe that [명사구]' 같은 비문 → True. (절 유도어 뒤가 아니면 검사 안 함: 보수적)"""
@@ -68,8 +68,8 @@ def q3_blank_is_nounphrase_after_clause(intro: str, correct_opt: str) -> bool:
     if not m:
         return False
     return not _phrase_has_verb(correct_opt)
- 
- 
+
+
 # 정형동사 신호 (be/조동사/have/do + 흔한 3인칭 동사)
 _FINITE_VERB = re.compile(
     r'\b(is|am|are|was|were|be|been|has|have|had|do|does|did|'
@@ -77,8 +77,8 @@ _FINITE_VERB = re.compile(
     r'enables?|requires?|involves?|makes?|allows?|leads?|becomes?|remains?|'
     r'provides?|needs?|takes?|gives?|helps?|results?|reduces?|increases?|'
     r'improves?|creates?|drives?|causes?|fosters?|promotes?|ensures?)\b', re.I)
- 
- 
+
+
 def fill_boundary_dup(template: str, pairs) -> str:
     """빈칸에 정답을 넣었을 때 ① 정답 구절이 빈칸 앞/뒤 텍스트와 겹쳐 반복되거나
     ② 경계에서 같은 단어가 연달아 나오면(예: 'aspects aspects') 그 중복 텍스트를 반환. 없으면 None.
@@ -110,21 +110,21 @@ def fill_boundary_dup(template: str, pairs) -> str:
         if words[i] == words[i + 1] and len(words[i]) > 2:
             return words[i]
     return None
- 
- 
+
+
 _END_BAD = {"through", "to", "of", "in", "on", "at", "for", "with", "by", "from", "into", "onto",
             "upon", "about", "and", "or", "but", "nor", "that", "which", "who", "whose",
             "the", "a", "an", "their", "its", "his", "her",
             "can", "will", "must", "should", "would", "could", "may", "might",
             "is", "are", "was", "were", "be"}
- 
- 
+
+
 def ends_with_function_word(s: str) -> bool:
     """문장/구절이 전치사·접속사·관사·조동사·be로 끝나면 비문 (예: '... toward solutions through')"""
     w = re.sub(r'[^A-Za-z ]', ' ', str(s or "").lower()).split()
     return bool(w) and w[-1] in _END_BAD
- 
- 
+
+
 def despite_with_clause(s: str) -> bool:
     """Despite / In spite of + (주어+동사 절) → 비문 (Despite는 명사구만 이끔; 절은 Although)"""
     m = re.match(r'^\s*(despite|in spite of)\s+(.+)$', str(s or ""), re.I)
@@ -138,16 +138,16 @@ def despite_with_clause(s: str) -> bool:
         r'fails?|tends?|appears?|seems?|remains?|suggests?|claims?|argues?|'
         r'believes?|finds?|gives?|takes?|uses?|helps?|allows?|causes?|creates?|'
         r'produces?|reduces?|increases?|carries?|holds?|keeps?|brings?)\b', head, re.I))
- 
- 
+
+
 def modal_no_verb(s: str) -> bool:
     """조동사(can/will/must...) 뒤에 동사원형이 아니라 형용사가 오면 비문 (예: 'can controllable')"""
     m = re.search(r'\b(can|will|must|should|would|could|may|might)\s+(\w+)', str(s or ""), re.I)
     if not m:
         return False
     return bool(re.search(r'(able|ible|ous|ive|ful|less)$', m.group(2).lower()))
- 
- 
+
+
 def grammar_flaws(s: str):
     """위 세 가지 흔한 비문 패턴을 한 번에 검사해 사유 리스트를 반환."""
     out = []
@@ -158,8 +158,8 @@ def grammar_flaws(s: str):
     if modal_no_verb(s):
         out.append("조동사 뒤에 동사원형이 아닌 형용사가 옴")
     return out
- 
- 
+
+
 def gerund_start_no_finite(sentence: str) -> bool:
     """문장이 동명사(-ing)로 시작하는데 정형동사가 하나도 없으면 비문 의심.
     (분사·동명사만 나열된 'directing energy preventing reactions' 류).
@@ -176,17 +176,17 @@ def gerund_start_no_finite(sentence: str) -> bool:
     if not w0.endswith("ing"):
         return False
     return not _FINITE_VERB.search(main)
- 
- 
+
+
 def normalize_text(s: str) -> str:
     return " ".join(s.split())
- 
- 
+
+
 def normalize_word(w: str) -> str:
     """단어 정규화: 소문자 + 양옆 구두점 제거"""
     return w.strip(".,!?;:'\"()[]{}").lower()
- 
- 
+
+
 def tokenize_for_comparison(text: str) -> list:
     """비교용 토큰화: 하이픈을 공백으로 처리해서 split
     'south-facing slopes' → ['south', 'facing', 'slopes']
@@ -200,8 +200,8 @@ def tokenize_for_comparison(text: str) -> list:
         if cleaned:
             words.append(cleaned)
     return words
- 
- 
+
+
 def check_cutout_match(bogi: list, answer_parts: list, pid: str = "?", q_name: str = "Q") -> list:
     """보기 단어 = 정답 단어 (대소문자/구두점/하이픈 무시, 개수만 일치)"""
     errors = []
@@ -229,8 +229,8 @@ def check_cutout_match(bogi: list, answer_parts: list, pid: str = "?", q_name: s
         )
     
     return errors
- 
- 
+
+
 def check_marker_positions(passage_with_marks: str, pid: str = "?", min_between: int = 3, position_correct: int = None, position_count: int = None, strict: bool = True) -> list:
     """마커 위치 검증:
     - strict: 개수=position_count, 1..N 연속, 문장 경계에만, 한곳 몰림 금지
@@ -243,21 +243,21 @@ def check_marker_positions(passage_with_marks: str, pid: str = "?", min_between:
         if idx >= 0:
             positions[i] = idx
     n = len(positions)
- 
-    # 개수/연속성
-    if position_count in (4, 5):
+
+    # 개수/연속성 (기본 4~5개, 지문이 짧아 4개가 안 되면 3개까지 허용)
+    if position_count in (3, 4, 5):
         if n != position_count:
             errors.append(f"[{pid}] 마커 수 불일치: {n}개 (position_count={position_count})")
         missing = [i for i in range(1, position_count + 1) if i not in positions]
         if missing:
             errors.append(f"[{pid}] 마커 누락: MARK{missing}")
-    if n < 4:
-        errors.append(f"[{pid}] 마커 수 부족: {n}개 (최소 4개)")
+    if n < 3:
+        errors.append(f"[{pid}] 마커 수 부족: {n}개 (최소 3개 — 4~5개 우선, 지문이 너무 짧을 때만 3개)")
     if n < 3:
         return errors
- 
+
     sorted_marks = sorted(positions.items(), key=lambda x: x[1])
- 
+
     if strict:
         # 문장 경계 검증: 각 마커 직전(다른 마커 제거 후)이 문장부호로 끝나야
         for mnum, pos in positions.items():
@@ -269,7 +269,7 @@ def check_marker_positions(passage_with_marks: str, pid: str = "?", min_between:
         span = sorted_marks[-1][1] - sorted_marks[0][1]
         if clean_len > 0 and span < clean_len * 0.40:
             errors.append(f"[{pid}] 마커들이 한곳에 몰림 (분산 부족: {span}/{clean_len})")
- 
+
     # 정답 마커 좌우 간격 (항상)
     correct_mark_num = None
     if position_correct is not None and 0 <= position_correct < len(sorted_marks):
@@ -289,25 +289,25 @@ def check_marker_positions(passage_with_marks: str, pid: str = "?", min_between:
                 f"[{pid}] {label} {m1}과 {m2} 사이 너무 짧음 ({wc}단어 < {threshold}최소)"
             )
     return errors
- 
- 
+
+
 # ====================== 유형 A 검증 (완화) ======================
 def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient: bool = False) -> list:
     """유형 A 검증 - 평가원 순서형 (intro + (A)(B)(C) 3문단 + 고정 5선지)"""
     errors = []
- 
+
     required = ["intro", "paragraphs", "topic_options", "topic_correct",
                 "order_correct", "statements", "blank_A", "blank_B", "bogi"]
     for f in required:
         if f not in data:
             errors.append(f"[{pid}] 필수 필드 누락: {f}")
             return errors
- 
+
     # Q2 order_correct: 고정 5선지 인덱스(0-4). (A)-(B)-(C)는 선지에 없어 자동 배제됨.
     v = data.get("order_correct", -1)
     if not isinstance(v, int) or not (0 <= v <= 4):
         errors.append(f"[{pid}] Q2 order_correct 범위 오류(0-4여야 함): {v}")
- 
+
     # Q5 blank_A/B 단어 수 최소 6 (관대모드 4)
     min_bw = 4  # 빈칸은 자연스러운 핵심 구절(4~6단어) 허용 (1회독처럼 하한 완화)
     try:
@@ -318,7 +318,7 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
             errors.append(f"[{pid}] Q5 blank_B 단어 수 부족 ({wb}개 < {min_bw}개)")
     except (KeyError, AttributeError) as e:
         errors.append(f"[{pid}] blank_A/B 형식 오류: {e}")
- 
+
     # ★ Q5 (A)(B) 빈칸 마커가 본문에 실제로 찍혔는지 — 마킹 실패 시 한쪽만/둘 다 사라지는 버그 방지
     if data.get("blank_A") and data.get("blank_B"):
         joined = " ".join(
@@ -329,7 +329,7 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
             errors.append(f"[{pid}] [CRITICAL] Q5 (A) 빈칸이 본문에 표시되지 않음 — blank_A 구절을 원문에서 찾지 못함 (구절을 원문 그대로 고를 것)")
         if "<BLANK_B>" not in joined:
             errors.append(f"[{pid}] [CRITICAL] Q5 (B) 빈칸이 본문에 표시되지 않음 — blank_B 구절을 원문에서 찾지 못함 (구절을 원문 그대로 고를 것)")
- 
+
     # Q3 core_blank: 단어 수 최소 3 + <CORE_BLANK> 마커가 intro에 존재
     if data.get("core_blank_target"):
         try:
@@ -357,7 +357,7 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
                     f"[{pid}] [CRITICAL] Q3 정답이 빈칸에 문법적으로 안 맞음 — 빈칸 앞이 절 유도어(that 등)인데 "
                     f"정답('{opts[ci]}')이 동사 없는 명사구임. 원문이 절(주어+동사)이면 정답도 절로 패러프레이즈할 것."
                 )
- 
+
     # ★ A Q5 영작 정답(blank_A/B) 비문/중복 검사 — lenient(마지막 시도)에서도 실행 (CRITICAL은 끝까지 막아야 함)
     for key in ("blank_A", "blank_B"):
         v = data.get(key)
@@ -375,7 +375,7 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
                 f"[{pid}] [CRITICAL] Q5 빈칸에 정답을 넣으면 '{dup}'이(가) 중복됨 "
                 f"— 빈칸 범위가 앞/뒤 단어를 먹었음 (구절을 빈칸 자리에 맞게 다시 고를 것)."
             )
- 
+
     # paragraphs 3개 + 각 텍스트 5단어 이상
     paras = data.get("paragraphs")
     if not isinstance(paras, list) or len(paras) != 3:
@@ -392,7 +392,7 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
             errors.append(f"[{pid}] paragraphs[{idx}] {label} 텍스트가 비어있음")
         elif len(text.split()) < 5:
             errors.append(f"[{pid}] paragraphs[{idx}] {label} 텍스트 너무 짧음 ({len(text.split())}단어 < 5)")
- 
+
     # ★★★ 중복 차단 (이번 핵심 버그): intro 문장이 (A)(B)(C)에 통째로 재등장하면 거부
     def _norm(t):
         t = re.sub(r"<[^>]+>", " ", t)
@@ -408,7 +408,7 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
                     f"[CRITICAL][{pid}] intro 문장이 paragraphs[{idx}]에 중복 등장 — "
                     f"주어진 글은 (A)/(B)/(C)에 다시 넣지 말 것 (누락·중복 0)"
                 )
- 
+
     # ★★★ Q3 빈칸 겹침 방지 (박아둠): intro의 <CORE_BLANK>를 정답(core_blank_target)으로 채우면
     #     원문에 그 문장이 그대로 존재해야 한다. 빈칸이 앞/뒤 단어를 먹었으면 채운 결과가 원문과 어긋나 여기서 걸린다.
     _intro_raw = data.get("intro", "") or ""
@@ -420,7 +420,7 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
                 f"[CRITICAL][{pid}] Q3 빈칸 위치/범위 오류 — 빈칸을 정답으로 채우면 원문과 어긋남 "
                 f"(빈칸이 앞/뒤 본문 단어를 먹었을 가능성). 빈칸은 실제로 빠진 부분만 덮을 것."
             )
- 
+
     # ★★★ 순서형 복원 대조 (핵심): intro + (A)(B)(C)를 정답순서로 합치면 원문과 100% 일치해야 함.
     #     떨어진 문장을 한 단락에 병합하거나, 문장을 재배치/누락/중복하면 여기서 걸린다.
     if original_passage and isinstance(data.get("order_correct"), int) \
@@ -440,7 +440,7 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
                 f"[CRITICAL][{pid}] 순서형 복원 불일치 — intro+(A)(B)(C)를 정답순서로 이어붙여도 원문과 다름 "
                 f"(문장 재배치/병합/누락 또는 Q3 빈칸 위치 오류 의심). (A)(B)(C)는 원문 연속 구간만 담을 것."
             )
- 
+
     # Q5 blank_A/B 인접 검증 (paragraphs 기준, 최소 3단어 사이)
     try:
         ptext = " ".join(para_texts)
@@ -453,13 +453,13 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
                 errors.append(f"[{pid}] Q5 blank_A와 blank_B가 너무 가까움 (사이 {wc}단어 < 3개)")
     except Exception:
         pass
- 
+
     # Q5 잘라쓰기(보기) 검증
     try:
         errors += check_cutout_match(data["bogi"], [data["blank_A"], data["blank_B"]], pid, "Q5(빈칸영작)")
     except Exception as e:
         errors.append(f"[{pid}] Q5 보기 검증 예외: {e}")
- 
+
     # 정답 인덱스 범위
     v = data.get("topic_correct", -1)
     if not isinstance(v, int) or not (0 <= v <= 4):
@@ -468,14 +468,14 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
         v = data["core_blank_correct"]
         if not isinstance(v, int) or not (0 <= v <= 4):
             errors.append(f"[{pid}] core_blank_correct 범위 오류")
- 
+
     # statements 5개
     if not isinstance(data.get("statements"), list) or len(data["statements"]) != 5:
         errors.append(f"[{pid}] statements는 5개 항목이어야 함")
- 
+
     return errors
- 
- 
+
+
 # ====================== 유형 B 검증 (완화) ======================
 def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict: bool = True) -> list:
     """유형 B 검증 - 핵심만 체크
@@ -498,17 +498,17 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
         v = data.get(key, -1)
         if not isinstance(v, int) or not (0 <= v <= 4):
             errors.append(f"[{pid}] {key} 범위 오류: {v}")
- 
-    # position_count(4 or 5) + position_correct가 그 범위 안인지
+
+    # position_count(3~5) + position_correct가 그 범위 안인지 (4~5 우선, 짧으면 3 허용)
     pc = data.get("position_count")
     if pc is not None:
-        if pc not in (4, 5):
-            errors.append(f"[{pid}] position_count는 4 또는 5여야 함: {pc}")
+        if pc not in (3, 4, 5):
+            errors.append(f"[{pid}] position_count는 3~5여야 함 (4~5 우선): {pc}")
         else:
             pcorr = data.get("position_correct", -1)
             if isinstance(pcorr, int) and not (0 <= pcorr < pc):
                 errors.append(f"[{pid}] position_correct({pcorr})가 position_count({pc}) 범위 밖")
- 
+
     # ★ Q1 삽입 정답 위치 검증 — 정답 마커 자리에 given_sentence를 도로 넣으면 원문이 복원돼야 함
     #   (LLM이 위치를 잘못 세면 답이 틀리게 나오던 문제 방지. 따옴표/공백 차이는 무시하고 위치만 검사)
     if original_passage and data.get("passage_with_marks") and data.get("given_sentence"):
@@ -538,7 +538,7 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
     sst = str(data.get("summary_template", "") or "")
     if "(A)" not in sst or "(B)" not in sst:
         errors.append(f"[{pid}] Q3 summary_template에 (A)/(B) 빈칸이 없음 — (A)(B) placeholder를 남길 것")
- 
+
     # ★ Q4 blank_A, blank_B 단어 수 (strict 6개, soft 2개)
     min_blank_words = 4  # 빈칸은 자연스러운 핵심 구절(4~6단어) 허용
     try:
@@ -562,7 +562,7 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
             )
     except (KeyError, AttributeError):
         errors.append(f"[{pid}] B topic_writing_answer 형식 오류")
- 
+
     # ★ B Q5 주제문 / Q4 요약영작 비문·중복 검사 — soft(마지막 시도)에서도 실행 (CRITICAL은 끝까지 막아야 함)
     tw = data.get("topic_writing_answer")
     if tw and looks_bare_verb_subject(tw):
@@ -588,7 +588,7 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
                 f"[{pid}] [CRITICAL] Q4 요약문 빈칸에 정답을 넣으면 '{dup}'이(가) 중복됨 "
                 f"— 빈칸 범위가 앞/뒤 단어를 먹었음 (정답 구절을 빈칸 자리에 맞게 다시 고를 것)."
             )
- 
+
     # Q4 잘라쓰기 (요약 영작) - strict일 때만 필수, soft는 통과
     if strict:
         try:
@@ -645,7 +645,7 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
                         f"[{pid}] Q3 정답 {slot} '{w}'가 본문에 그대로 등장 — "
                         f"본문 단어를 베끼지 말고 한 단계 추상화/패러프레이즈할 것"
                     )
- 
+
     # summary_options 5개 (필수)
     if not isinstance(data.get("summary_options"), list) or len(data["summary_options"]) < 2:
         errors.append(f"[{pid}] summary_options는 최소 2개 항목 필요")
@@ -687,8 +687,8 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
                 errors.append(f"[{pid}] Q3 summary_options의 (B) 값들이 중복됨: {b_words}")
     
     return errors
- 
- 
+
+
 # ====================== 호환용 함수 (예전 코드용) ======================
 def check_passage_preservation(rebuilt: str, original: str, pid: str = "?") -> list:
     """예전 코드 호환용 - 호출돼도 빈 리스트 반환 (검증 안 함)"""

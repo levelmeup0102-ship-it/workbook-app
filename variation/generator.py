@@ -15,7 +15,7 @@ from typing import Optional
 
 import httpx
 
-from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt
+from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt, CORE_BLANK_SYS, build_core_blank_prompt
 from variation.validator import validate_a, validate_b
 
 
@@ -164,8 +164,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s35 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s35"
+    # _s36 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s36"
 
 
 # ============ Supabase 캐시 ============
@@ -315,6 +315,30 @@ def generate_variation_a(
                 data["intro"] = ob["intro"]
                 data["paragraphs"] = [list(p) for p in ob["paragraphs"]]
                 data["order_correct"] = ob["order_correct"]
+
+                # ★★ Q3 핵심빈칸 단독 재생성 (첫 문장만 주고 집중 — that절↔명사구 불일치 방지)
+                #   intro(첫 문장)는 코드가 확정했으므로, 그 문장에서 핵심 구절+패러프레이즈 정답을
+                #   따로 한 번 더 만든다. "원문이 절이면 정답도 절" 규칙으로 빈칸 문법 불일치를 막는다.
+                try:
+                    # intro에서 첫 한 문장만 추출 (마침표 기준)
+                    _intro_txt = re.sub(r'\s+', ' ', str(data.get("intro", ""))).strip()
+                    _first = re.split(r'(?<=[.!?])\s+', _intro_txt)[0] if _intro_txt else ""
+                    if _first and len(_first.split()) >= 4:
+                        _c_raw = call_claude(CORE_BLANK_SYS, build_core_blank_prompt(_first), max_tokens=700)
+                        _c = extract_json_from_response(_c_raw)
+                        _tg = (_c.get("core_blank_target") or "").strip()
+                        _op = _c.get("core_blank_options")
+                        _co = _c.get("core_blank_correct")
+                        # target이 첫 문장 안에 실제로 있고 선지 5개가 정상일 때만 교체
+                        if (_tg and _tg in _first and isinstance(_op, list) and len(_op) == 5
+                                and isinstance(_co, int) and 0 <= _co <= 4):
+                            data["core_blank_target"] = _tg
+                            data["core_blank_options"] = _op
+                            data["core_blank_correct"] = _co
+                            if _c.get("core_blank_explain"):
+                                data["core_blank_explain"] = _c["core_blank_explain"]
+                except Exception:
+                    pass  # 실패하면 기존(한번에 만든) Q3 유지
 
                 # ★ 따옴표·대시·구두점·하이픈·공백·대소문자 차이까지 흡수하는 마킹 함수 (core_blank / blank 공통)
                 def _mark_phrase(text, phrase, mk):

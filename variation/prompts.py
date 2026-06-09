@@ -5,6 +5,7 @@ variation/prompts.py
 
 # ===================== 유형 A 프롬프트 =====================
 SYSTEM_PROMPT_A = """You are an expert Korean high school English variation problem generator for 레벨미업학원.
+★ ALL ENGLISH YOU WRITE MUST BE GRAMMATICALLY CORRECT — check subject-verb agreement, tense, and prepositions in every sentence. This rule overrides everything else.
 
 Given an English passage, generate a variation problem set with 5 questions in EXACT JSON format below.
 
@@ -169,7 +170,8 @@ Return ONLY the JSON object."""
 
 
 # ===================== 유형 B 프롬프트 =====================
-SYSTEM_PROMPT_B = """You are an expert Korean high school English variation problem generator for 레벨미업학원.
+SYSTEM_PROMPT_B = """You are an English exam content generator for Korean high school students, an expert variation problem generator for 레벨미업학원.
+★ ALL ENGLISH YOU WRITE MUST BE GRAMMATICALLY CORRECT — check subject-verb agreement, tense, and prepositions in every sentence you produce. This rule overrides everything else.
 
 Given an English passage, generate a variation problem set in EXACT JSON format below.
 
@@ -456,7 +458,7 @@ def extract_json_from_response(text: str) -> dict:
 # ════════════════════════════════════════════════════════════════
 TOPIC_SENTENCE_SYS = (
     "You are an English exam content generator for Korean high school students. "
-    "Output ONLY valid JSON, no markdown, no text outside JSON."
+    "All English you write MUST be grammatically correct (check subject-verb agreement, tense, prepositions). Output ONLY valid JSON, no markdown, no text outside JSON."
 )
 
 def build_topic_sentence_prompt(passage_text: str) -> str:
@@ -464,12 +466,17 @@ def build_topic_sentence_prompt(passage_text: str) -> str:
         "Write ONE topic sentence that captures the core message of the passage below.\n\n"
         "[PASSAGE]\n" + passage_text + "\n\n"
         "[RULES]\n"
-        "- ONE complete, natural, fully grammatical English sentence.\n"
-        "- Paraphrase the key idea with synonyms (do NOT copy a sentence verbatim from the passage).\n"
+        "- ★★ METHOD (do this to stay grammatical): FIRST pick the single sentence in the passage that best "
+        "states the main point. Then KEEP ITS GRAMMATICAL SKELETON — the same subject-verb relationship, the "
+        "same clause/phrase structure (prepositional phrases, appositives, relative clauses, parallel form) — "
+        "and ONLY swap the content words for synonyms. You are re-dressing an existing correct sentence, NOT "
+        "building a new structure from scratch. This keeps subject-verb agreement, tense, and prepositions "
+        "automatically correct.\n"
+        "- ONE complete, natural, fully grammatical English sentence. Do NOT copy the sentence verbatim "
+        "(change the content words), but DO mirror its structure.\n"
         "- Concise: about 12-20 words.\n"
-        "- ★ Check grammar carefully, especially SUBJECT-VERB AGREEMENT: a plural/compound subject "
-        "takes a plural verb (e.g. 'context and surroundings ALTER ...' not 'alters'); a singular "
-        "subject takes a singular verb.\n"
+        "- ★ Still double-check SUBJECT-VERB AGREEMENT after swapping words: a plural/compound subject "
+        "(X and Y) takes a plural verb ('context and surroundings ALTER ...' not 'alters').\n"
         "- No bare-verb subject; do not end with a preposition; no 'Despite + clause'; no 'modal + adjective'.\n"
         "- This is the ONLY thing you are writing now — focus entirely on making this one sentence perfect.\n\n"
         "[OUTPUT JSON]\n"
@@ -484,7 +491,7 @@ def build_topic_sentence_prompt(passage_text: str) -> str:
 # ════════════════════════════════════════════════════════════════
 SUMMARY_SENTENCE_SYS = (
     "You are an English exam content generator for Korean high school students. "
-    "Output ONLY valid JSON, no markdown, no text outside JSON."
+    "All English you write MUST be grammatically correct (check subject-verb agreement, tense, prepositions). Output ONLY valid JSON, no markdown, no text outside JSON."
 )
 
 def build_summary_sentence_prompt(passage_text: str) -> str:
@@ -492,11 +499,16 @@ def build_summary_sentence_prompt(passage_text: str) -> str:
         "Write ONE summary sentence that captures the whole passage's thesis and logic.\n\n"
         "[PASSAGE]\n" + passage_text + "\n\n"
         "[RULES]\n"
+        "- ★★ METHOD (do this to stay grammatical): base your sentence on the GRAMMATICAL SKELETON of the "
+        "passage's main/thesis sentence — keep a clear single subject-verb relationship and a clean clause "
+        "structure (prepositional phrases, appositives, relative clauses) modeled on real sentences from the "
+        "passage; then express the WHOLE passage's point by swapping in synonyms and merging the key logic. "
+        "Re-dress a correct structure rather than inventing a new one — this keeps agreement/tense/prepositions correct.\n"
         "- ONE complete, natural, fully grammatical English sentence (NO blanks, NO (A)/(B)).\n"
         "- It must summarize the WHOLE passage (thesis + key logic), paraphrased with synonyms — "
-        "not a copy of any single sentence.\n"
+        "not a verbatim copy of any single sentence.\n"
         "- Concise: about 15-25 words.\n"
-        "- ★ Check grammar carefully, especially SUBJECT-VERB AGREEMENT: a plural/compound subject "
+        "- ★ Still double-check SUBJECT-VERB AGREEMENT after swapping words: a plural/compound subject "
         "(X and Y) takes a plural verb ('context and surroundings ALTER ...' not 'alters').\n"
         "- No bare-verb subject; do not end with a preposition; no 'Despite + clause'; no 'modal + adjective'.\n"
         "- Also pick TWO phrases that ALREADY appear verbatim inside your sentence (each ~4-8 words, "
@@ -517,7 +529,7 @@ def build_summary_sentence_prompt(passage_text: str) -> str:
 # ════════════════════════════════════════════════════════════════
 CORE_BLANK_SYS = (
     "You are an English exam content generator for Korean high school students. "
-    "Output ONLY valid JSON, no markdown, no text outside JSON."
+    "All English you write MUST be grammatically correct (check subject-verb agreement, tense, prepositions). Output ONLY valid JSON, no markdown, no text outside JSON."
 )
 
 def build_core_blank_prompt(first_sentence: str) -> str:

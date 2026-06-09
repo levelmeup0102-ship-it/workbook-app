@@ -164,8 +164,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s25 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s25"
+    # _s26 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s26"
 
 
 # ============ Supabase 캐시 ============
@@ -299,7 +299,7 @@ def generate_variation_a(
                     "  3. ★ RECONSTRUCTION TEST: intro + (A)(B)(C) reassembled in the order_correct sequence must EQUAL the original passage word-for-word "
                     "(no reordering inside a paragraph, no merging distant sentences, no omission, no duplication).\n"
                     "  4. order_correct = index 0-4 into FIXED choices (0=(A)-(C)-(B) 1=(B)-(A)-(C) 2=(B)-(C)-(A) 3=(C)-(A)-(B) 4=(C)-(B)-(A)); never (A)-(B)-(C).\n"
-                    "  5. blank_A and blank_B must EACH have AT LEAST 6 words, placed INSIDE (A)/(B)/(C) (not in intro), in different paragraphs.\n"
+                    "  5. blank_A and blank_B are natural key phrases (~4-8 words each, do not pad), taken verbatim from INSIDE (A)/(B)/(C) (not intro), in different paragraphs.\n"
                     "  6. bogi must contain EVERY SINGLE WORD from blank_A + blank_B — count articles ('the','a','an') and prepositions carefully.\n"
                     "  7. core_blank_target must have AT LEAST 3 words; the Q3 correct option must be a PARAPHRASE of core_blank_target "
                     "(synonym or figurative rewording) that keeps the SAME grammatical structure as the original (clause stays a clause, noun phrase stays a noun phrase) so the sentence reads grammatically when the option fills the blank; NOT the original wording copied verbatim."
@@ -461,7 +461,7 @@ def generate_variation_b(
                     "     There MUST be AT LEAST 3 words between every adjacent pair of markers\n"
                     "     BAD example: 'word word <MARK1> word word <MARK2><MARK3> word' — MARK2/MARK3 adjacent (0 words between)\n"
                     "     GOOD example: 'word word word <MARK1> word word word word <MARK2> word word word <MARK3> ...'\n"
-                    "  2. blank_A and blank_B must EACH have AT LEAST 6 words\n"
+                    "  2. blank_A and blank_B are natural key phrases (~4-8 words each, do not pad to a number)\n"
                     "  3. topic_writing_answer: write ONE natural, fully grammatical topic sentence FIRST (don't count words or fit a word bank; the code splits it). Naturalness/grammar first, ~12-20 words. No bare-verb subject, no sentence ending in a preposition, no 'Despite + clause', no 'modal + adjective'.\n"
                     "  4. Hyphenated words (south-facing, well-known) stay as ONE token in both blank and bogi\n"
                     "  5. blank_summary_bogi must contain EVERY word from blank_A + blank_B (count articles/preps)\n"

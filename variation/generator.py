@@ -1,7 +1,8 @@
+
 """
 variation/generator.py
 변형문제 데이터 생성 - Claude API + httpx Supabase REST + 자동 검증 + 재시도
-
+ 
 기존 워크북 시스템과 일관성 유지:
 - supa.py처럼 httpx 사용
 - anthropic, supabase 라이브러리 추가 의존성 없음
@@ -12,20 +13,20 @@ import random
 import re
 import traceback
 from typing import Optional
-
+ 
 import httpx
-
+ 
 from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response
 from variation.validator import validate_a, validate_b
-
-
+ 
+ 
 # ============================================================
 # 문장 분리 (0회독 pipeline.py와 동일 — 경칭/약어/따옴표 보호, 무손실)
 # ============================================================
 def split_sentences(text: str) -> list:
     """영어 지문 문장 분리 (원문 무손실). 0회독 워크북과 동일 로직."""
     protected = text
-
+ 
     def protect_quote_internals(match):
         inner = match.group(1)
         open_q = match.group(0)[0]
@@ -36,9 +37,9 @@ def split_sentences(text: str) -> list:
             inner
         )
         return open_q + protected_inner + close_q
-
+ 
     protected = re.sub(r'["\u201c](.*?)["\u201d]', protect_quote_internals, protected, flags=re.DOTALL)
-
+ 
     abbrevs = [
         'Dr.', 'Mr.', 'Ms.', 'Mrs.', 'Prof.', 'Jr.', 'Sr.', 'St.',
         'vs.', 'etc.', 'No.', 'Vol.', 'Fig.', 'Gen.', 'Gov.', 'Rev.',
@@ -52,16 +53,16 @@ def split_sentences(text: str) -> list:
         if re.search(pattern, protected):
             replacements[token] = ab
             protected = re.sub(pattern, token, protected)
-
+ 
     def protect_initial(m):
         return m.group(0).replace('.', '§DOT§')
     protected = re.sub(r'(?<!\w)([A-Z])\.\s*(?=[A-Z][\.\s]|[A-Z][a-z])', protect_initial, protected)
-
+ 
     sentences = [s.strip() for s in re.split(
         r'(?<=[.!?])\s+(?=[\u201c\u201d\u0022]?[A-Z])|(?<=[.!?][\u201c\u201d\u0022])\s+(?=[\u201c\u201d\u0022]?[A-Z])',
         protected
     ) if s.strip()]
-
+ 
     restored = []
     for s in sentences:
         for token, original in replacements.items():
@@ -70,12 +71,12 @@ def split_sentences(text: str) -> list:
         s = s.replace('§QSEP§', ' ')
         restored.append(s)
     return restored
-
-
+ 
+ 
 # 순서형 5선지: order_correct 인덱스 → 복원(원문) 라벨 순서
 FIXED_ORDER = [["A", "C", "B"], ["B", "A", "C"], ["B", "C", "A"], ["C", "A", "B"], ["C", "B", "A"]]
-
-
+ 
+ 
 def build_order_blocks_a(en_text: str, pid: str = "?", seed_extra: str = "") -> Optional[dict]:
     """
     원문을 코드로 분할 → intro + (A)(B)(C) + order_correct 구성 (원문 무손실).
@@ -86,13 +87,13 @@ def build_order_blocks_a(en_text: str, pid: str = "?", seed_extra: str = "") -> 
     if len(sents) < 4:
         print(f"[VAR][A][{pid}] 문장 {len(sents)}개 — 순서배열(intro+3단락) 불가")
         return None
-
+ 
     # intro = 첫 1문장 (남은 문장이 3개 미만이면 순서배열 불가)
     intro_text = sents[0].strip()
     rest = sents[1:]
     if len(rest) < 3:
         return None
-
+ 
     # rest를 연속 3덩어리로 (앞쪽에 +1)
     k = len(rest)
     sizes = [k // 3, k // 3, k // 3]
@@ -103,7 +104,7 @@ def build_order_blocks_a(en_text: str, pid: str = "?", seed_extra: str = "") -> 
         blocks.append(" ".join(rest[idx:idx + s]).strip())
         idx += s
     # blocks[0]=원문1번째덩어리, [1]=2번째, [2]=3번째
-
+ 
     # 라벨 셔플: 원문순서 그대로(A-B-C)는 선지에 없으니 제외
     seed = int(hashlib.md5((pid + seed_extra + en_text[:40]).encode()).hexdigest()[:8], 16)
     rng = random.Random(seed)
@@ -120,7 +121,7 @@ def build_order_blocks_a(en_text: str, pid: str = "?", seed_extra: str = "") -> 
     else:
         restore = ["B", "A", "C"]
         perm = [1, 0, 2]
-
+ 
     paragraphs = [
         ["A", blocks[perm[0]]],
         ["B", blocks[perm[1]]],
@@ -128,26 +129,26 @@ def build_order_blocks_a(en_text: str, pid: str = "?", seed_extra: str = "") -> 
     ]
     order_correct = FIXED_ORDER.index(restore)
     return {"intro": intro_text, "paragraphs": paragraphs, "order_correct": order_correct}
-
+ 
 # ============ 환경 변수 ============
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5")
 ANTHROPIC_VERSION = "2023-06-01"
 MAX_RETRIES = 3
-
+ 
 SB_URL = os.environ.get("SUPABASE_URL", "")
 SB_KEY = (
     os.environ.get("SUPABASE_SERVICE_KEY")
     or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     or os.environ.get("SUPABASE_KEY", "")
 )
-
-
+ 
+ 
 # ============ Supabase REST 헬퍼 ============
 def _supabase_enabled() -> bool:
     return bool(SB_URL and SB_KEY)
-
-
+ 
+ 
 def _sb_headers() -> dict:
     return {
         "apikey": SB_KEY,
@@ -155,8 +156,8 @@ def _sb_headers() -> dict:
         "Content-Type": "application/json",
         "Prefer": "return=representation",
     }
-
-
+ 
+ 
 # ============ 캐시 키 ============
 def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_type: str) -> str:
     """캐시 키: {책}_{단원}_{번호}_{md5}_v{유형}"""
@@ -164,10 +165,10 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s29 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s29"
-
-
+    # _s30 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s30"
+ 
+ 
 # ============ Supabase 캐시 ============
 def load_cached(cache_key: str, step_name: str) -> Optional[dict]:
     if not _supabase_enabled():
@@ -189,8 +190,8 @@ def load_cached(cache_key: str, step_name: str) -> Optional[dict]:
     except Exception as e:
         print(f"[VAR] cache load error: {e}")
     return None
-
-
+ 
+ 
 def save_cached(cache_key: str, step_name: str, data: dict) -> None:
     if not _supabase_enabled():
         return
@@ -215,16 +216,16 @@ def save_cached(cache_key: str, step_name: str, data: dict) -> None:
                 client.post(url, headers=_sb_headers(), json=payload)
     except Exception as e:
         print(f"[VAR] cache save error: {e}")
-
-
+ 
+ 
 # ============ 지문 분리 ============
 def split_passage_and_translation(passage_text: str) -> tuple:
     if "###해석###" in passage_text:
         en, kr = passage_text.split("###해석###", 1)
         return en.strip(), kr.strip()
     return passage_text.strip(), ""
-
-
+ 
+ 
 # ============ Claude API 호출 (httpx) ============
 def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000) -> str:
     """anthropic SDK 없이 httpx 직접 호출"""
@@ -254,8 +255,8 @@ def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000) -
             if block.get("type") == "text":
                 return block.get("text", "")
         raise RuntimeError(f"Claude 응답에 텍스트 없음: {data}")
-
-
+ 
+ 
 # ============ 유형 A 생성 ============
 def generate_variation_a(
     passage_text: str,
@@ -307,7 +308,7 @@ def generate_variation_a(
             
             raw = call_claude(SYSTEM_PROMPT_A, user_msg)
             data = extract_json_from_response(raw)
-
+ 
             # ★★ 순서배열(Q2)을 코드가 원문에서 분할 — LLM 단락을 무시하고 원문 그대로 사용.
             #    원문 무손실이라 복원검증이 깨지지 않는다. LLM은 빈칸 구절만 고른다.
             ob = build_order_blocks_a(en_text, pid)
@@ -315,7 +316,7 @@ def generate_variation_a(
                 data["intro"] = ob["intro"]
                 data["paragraphs"] = [list(p) for p in ob["paragraphs"]]
                 data["order_correct"] = ob["order_correct"]
-
+ 
                 # ★ 따옴표·대시·구두점·하이픈·공백·대소문자 차이까지 흡수하는 마킹 함수 (core_blank / blank 공통)
                 def _mark_phrase(text, phrase, mk):
                     if not phrase:
@@ -346,7 +347,7 @@ def generate_variation_a(
                                 e_char = spans[i + len(pt) - 1][2]
                                 return text[:s_char] + mk + text[e_char:], True
                     return text, False
-
+ 
                 # Q3 핵심빈칸: LLM이 고른 구절을 intro(첫 문장)에서 찾아 마킹 (따옴표 흡수)
                 tgt = (data.get("core_blank_target") or "").strip()
                 if tgt:
@@ -354,7 +355,7 @@ def generate_variation_a(
                     if core_ok:
                         data["intro"] = new_intro
                     data["_core_marked"] = core_ok
-
+ 
                 # Q5 영작빈칸: LLM이 고른 구절을 (A)(B)(C)에서 찾아 마킹 (같은 단락이어도 둘 다)
                 marked = {}
                 for mk, key in (("<BLANK_A>", "blank_A"), ("<BLANK_B>", "blank_B")):
@@ -371,10 +372,10 @@ def generate_variation_a(
                             break
                     marked[mk] = done
                 data["_blanks_marked"] = marked
-
+ 
             if "mismatch_count" not in data and "statements" in data:
                 data["mismatch_count"] = sum(1 for _, _, ok in data["statements"] if not ok)
-
+ 
             # ★ Q5 보기(bogi) 자동 생성: blank_A + blank_B의 모든 단어를 셔플해서 사용.
             #   모델이 만든 bogi는 무시 → 보기 누락/변형으로 인한 불일치를 원천 차단.
             try:
@@ -390,7 +391,7 @@ def generate_variation_a(
                     data["bogi"] = shuffled
             except Exception:
                 pass
-
+ 
             is_last = (attempt == MAX_RETRIES)
             errors = validate_a(data, en_text, pid, lenient=is_last)
             if not errors:
@@ -418,8 +419,8 @@ def generate_variation_a(
         print(f"[VAR][A][{pid}] 관대 fallback 사용 ({MAX_RETRIES}회 실패)")
         return last_data
     raise RuntimeError(f"유형 A 생성 실패 ({MAX_RETRIES}회). 마지막 오류:\n" + "\n".join(last_errors[:5]))
-
-
+ 
+ 
 # ============ 유형 B 생성 ============
 def generate_variation_b(
     passage_text: str,
@@ -473,7 +474,7 @@ def generate_variation_b(
             
             raw = call_claude(SYSTEM_PROMPT_B, user_msg)
             data = extract_json_from_response(raw)
-
+ 
             # ★ Q4/Q5 보기(bogi) 자동 생성: 답지 단어를 그대로 소문자·구두점제거하여 보기로 사용.
             #   모델이 만든 보기는 무시 → 누락/잉여(예: 'for')/중복오류를 원천 차단.
             def _bogi_from(text: str):
@@ -490,7 +491,7 @@ def generate_variation_b(
                     data["topic_writing_bogi"] = q5
             except Exception:
                 pass
-
+ 
             # 마지막 시도면 strict=False (검증 풀어서라도 받아들임)
             is_last = (attempt == MAX_RETRIES)
             errors = validate_b(data, en_text, pid, strict=not is_last)
@@ -525,8 +526,8 @@ def generate_variation_b(
             return last_data
     
     raise RuntimeError(f"유형 B 생성 실패 ({MAX_RETRIES}회). 마지막 오류:\n" + "\n".join(last_errors[:5]))
-
-
+ 
+ 
 # ============ Passage 조회 ============
 def fetch_passage_text(book: str, unit: str, pid: str) -> Optional[str]:
     if not _supabase_enabled():
@@ -549,7 +550,8 @@ def fetch_passage_text(book: str, unit: str, pid: str) -> Optional[str]:
     except Exception as e:
         print(f"[VAR] fetch_passage_text error: {e}")
     return None
-
-
+ 
+ 
 # api.py 호환용 변수
 sb_client = True if _supabase_enabled() else None
+ 

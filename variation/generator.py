@@ -164,8 +164,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s39 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s39"
+    # _s40 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s40"
 
 
 # ============ Supabase 캐시 ============
@@ -577,8 +577,9 @@ def generate_variation_b(
             #   모델이 만든 보기는 무시 → 누락/잉여(예: 'for')/중복오류를 원천 차단.
             def _bogi_from(text: str):
                 s = re.sub(r'(?<=\d),(?=\d)', '\u0001', str(text or ""))  # 100,000 보호
+                s = re.sub(r'\b([A-Za-z](?:\.[A-Za-z])+)\.?', lambda m: m.group(0).replace('.', '\u0002'), s)  # U.S. 보호
                 toks = re.sub(r'[.,;:!?"()]', ' ', s).split()
-                return [t.replace('\u0001', ',').lower() for t in toks if t]
+                return [t.replace('\u0001', ',').replace('\u0002', '.').lower() for t in toks if t]
             try:
                 # Q4: blank_A + blank_B
                 q4 = _bogi_from(str(data.get("blank_A", "")) + " " + str(data.get("blank_B", "")))

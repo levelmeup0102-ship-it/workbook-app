@@ -57,7 +57,18 @@ def looks_bare_verb_subject(sentence: str) -> bool:
 
 def _phrase_has_verb(phrase: str) -> bool:
     toks = re.sub(r'[^a-zA-Z ]', ' ', str(phrase or "").lower()).split()
-    return any(t in _VERB_WORDS for t in toks)
+    if any(t in _VERB_WORDS for t in toks):
+        return True
+    # 목록에 없어도: 3인칭 단수 동사는 -s로 끝남 (departs, deviates, requires, stimulates...).
+    # 명사 복수도 -s지만, that/which 절 뒤 정답이라 동사일 확률이 높다 → 오탐(정상 거부)을 줄이려 동사로 간주.
+    # 단, 흔한 복수명사 어미(-ies는 명사 가능성↑이나 동사도 있음)는 그대로 두고 일반 -s를 본다.
+    for t in toks:
+        if len(t) >= 4 and t.endswith('s') and not t.endswith('ss') and not t.endswith('us') and not t.endswith('is'):
+            return True
+    # -ing/-ed 형(동사 활용)도 동사 신호로 본다
+    if any(t.endswith('ing') or t.endswith('ed') for t in toks if len(t) >= 4):
+        return True
+    return False
 
 
 def q3_blank_is_nounphrase_after_clause(intro: str, correct_opt: str) -> bool:

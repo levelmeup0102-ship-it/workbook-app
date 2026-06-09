@@ -342,7 +342,7 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
 VERIFY BEFORE OUTPUT:
 - blank_A is a natural key phrase (~4-8 words)
 - blank_B is a natural key phrase (~4-8 words)
-- topic_writing_answer has at least 14 words
+- topic_writing_answer is ONE natural, grammatical sentence (concise; do not pad to a word count)
 - blank_summary_bogi has same word count as (blank_A words + blank_B words)
 - topic_writing_bogi has same word count as topic_writing_answer (excluding punctuation)
 - Same words (case-insensitive) appear in bogi and the answer
@@ -447,3 +447,31 @@ def extract_json_from_response(text: str) -> dict:
                 raise ValueError(err_msg)
     
     raise ValueError(f"JSON 객체를 찾을 수 없음. 응답 일부: {text[:300]}")
+
+
+# ════════════════════════════════════════════════════════════════
+# Q5 주제문 전용 프롬프트 (1회독 step4_topic 방식 — 주제문만 집중 생성)
+#   변형 Q1~Q5를 한 번에 만들면 주제문 한 문장에 집중이 안 돼 수일치 등 실수가 난다.
+#   그래서 주제문만 따로, 단독으로 한 번 더 생성한다(1회독처럼).
+# ════════════════════════════════════════════════════════════════
+TOPIC_SENTENCE_SYS = (
+    "You are an English exam content generator for Korean high school students. "
+    "Output ONLY valid JSON, no markdown, no text outside JSON."
+)
+
+def build_topic_sentence_prompt(passage_text: str) -> str:
+    return (
+        "Write ONE topic sentence that captures the core message of the passage below.\n\n"
+        "[PASSAGE]\n" + passage_text + "\n\n"
+        "[RULES]\n"
+        "- ONE complete, natural, fully grammatical English sentence.\n"
+        "- Paraphrase the key idea with synonyms (do NOT copy a sentence verbatim from the passage).\n"
+        "- Concise: about 12-20 words.\n"
+        "- ★ Check grammar carefully, especially SUBJECT-VERB AGREEMENT: a plural/compound subject "
+        "takes a plural verb (e.g. 'context and surroundings ALTER ...' not 'alters'); a singular "
+        "subject takes a singular verb.\n"
+        "- No bare-verb subject; do not end with a preposition; no 'Despite + clause'; no 'modal + adjective'.\n"
+        "- This is the ONLY thing you are writing now — focus entirely on making this one sentence perfect.\n\n"
+        "[OUTPUT JSON]\n"
+        '{"topic_sentence": "<one perfect topic sentence>"}'
+    )

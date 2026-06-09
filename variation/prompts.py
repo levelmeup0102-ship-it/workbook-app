@@ -295,18 +295,12 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
    Example: topic_writing_answer="Effort drives success."
    → topic_writing_bogi = ["success", "drives", "effort"] (3 words, shuffled, lowercase, no period)
 
-4-1. **Q5 topic_writing_answer — write a NATURAL, COMPLETE sentence FIRST (do NOT count words or think about the word bank)**:
-   - ★ Approach (same as the 1회독 topic step): express the passage's core message as ONE complete, fully grammatical English sentence, paraphrasing the key words with synonyms. Write it as if you were writing a model topic sentence — naturally. The code will split it into the word bank afterward; you do NOT arrange words to fit a bank.
-   - ★ GRAMMAR AND NATURALNESS COME FIRST. Do NOT bend the sentence to hit a word count. A clean, natural sentence is the only goal.
-   - Length should fall naturally around 12–20 words (a real topic sentence). Do not pad it to reach a number, and do not cram extra phrases.
-   - It MUST be a grammatically complete sentence with a proper subject and a finite verb. Forbidden patterns: bare verb as subject ("partition those... enables" ❌ → "Partitioning those... enables" ✅); a sentence ending in a preposition/conjunction ("...channeling energy through" ❌); "Despite + subject + verb" ❌ (use "Although ..." or "Despite + noun phrase"); a modal followed by an adjective ("can controllable" ❌).
-   - TEST: read it aloud as a standalone sentence. If it is not natural and grammatical, rewrite it.
-   - Example GOOD: "Self-comparison, rather than rivalry with others, is the only meaningful measure of genuine growth." (natural, grammatical)
-   - ★★ MUST USE DIFFERENT WORDING FROM THE Q4 SUMMARY (blank_summary_template / blank_A / blank_B):
-     Q5 expresses the SAME core idea as the Q4 summary but with PARAPHRASED vocabulary — different key nouns/verbs, not the same phrases reused.
-     BAD (too similar): Q4 "...decomposing overwhelming problems into manageable sub-problems" + Q5 "...decomposing them into manageable problems" (거의 동일 표현)
-     GOOD: Q4 uses "decompose / manageable sub-problems" → Q5 rephrases as "break down / addressable components" or "partition / actionable pieces".
-     Do NOT recycle the distinctive content words of blank_A/blank_B in topic_writing_answer.
+4-1. **Q5 topic_writing_answer — just write ONE natural topic sentence (like the 1회독 topic step)**:
+   - Express the passage's core message as ONE complete, natural, grammatical English sentence, paraphrasing the key words with synonyms. Keep it concise (within ~20 words). That's it — write it the way you'd write a model topic sentence. The code shuffles it into the word bank afterward; do NOT arrange words to fit a bank or pad to a word count.
+   - It just needs to be a normal, correct English sentence (proper subject + verb). Don't overthink it.
+   - Example GOOD: "Self-comparison, rather than rivalry with others, is the only meaningful measure of genuine growth."
+   - ★ Use DIFFERENT wording from the Q4 summary (paraphrase the key nouns/verbs; don't reuse the exact phrases of blank_A/blank_B).
+   - ★ Two quick no-nos: don't end the sentence with a preposition ("...responses through" ❌); and after "Despite/In spite of" use a noun phrase, not a clause (use "Although ..." if you need a subject+verb).
 
 5. **TOPIC WRITING (Q5)**: VARY sentence patterns. AVOID always starting with "What ~ is/does". Use diverse openings:
    - "Thanks to X, ..." / "People can ..." / "A model serves ..." / "By doing X, ..."

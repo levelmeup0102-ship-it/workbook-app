@@ -305,7 +305,7 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
         errors.append(f"[{pid}] Q2 order_correct 범위 오류(0-4여야 함): {v}")
 
     # Q5 blank_A/B 단어 수 최소 6 (관대모드 4)
-    min_bw = 6  # 마지막 시도에서도 6단어 강제
+    min_bw = 4  # 빈칸은 자연스러운 핵심 구절(4~6단어) 허용 (1회독처럼 하한 완화)
     try:
         wa = len(data["blank_A"].split()); wb = len(data["blank_B"].split())
         if wa < min_bw:
@@ -539,7 +539,7 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
         errors.append(f"[{pid}] Q3 summary_template에 (A)/(B) 빈칸이 없음 — (A)(B) placeholder를 남길 것")
 
     # ★ Q4 blank_A, blank_B 단어 수 (strict 6개, soft 2개)
-    min_blank_words = 6  # 마지막 시도에서도 6단어 강제
+    min_blank_words = 4  # 빈칸은 자연스러운 핵심 구절(4~6단어) 허용
     try:
         wa = len(data["blank_A"].split())
         wb = len(data["blank_B"].split())

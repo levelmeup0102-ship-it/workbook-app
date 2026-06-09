@@ -112,6 +112,50 @@ def fill_boundary_dup(template: str, pairs) -> str:
     return None
 
 
+_END_BAD = {"through", "to", "of", "in", "on", "at", "for", "with", "by", "from", "into", "onto",
+            "upon", "about", "and", "or", "but", "nor", "that", "which", "who", "whose",
+            "the", "a", "an", "their", "its", "his", "her",
+            "can", "will", "must", "should", "would", "could", "may", "might",
+            "is", "are", "was", "were", "be"}
+
+
+def ends_with_function_word(s: str) -> bool:
+    """문장/구절이 전치사·접속사·관사·조동사·be로 끝나면 비문 (예: '... toward solutions through')"""
+    w = re.sub(r'[^A-Za-z ]', ' ', str(s or "").lower()).split()
+    return bool(w) and w[-1] in _END_BAD
+
+
+def despite_with_clause(s: str) -> bool:
+    """Despite / In spite of + (주어+동사 절) → 비문 (Despite는 명사구만 이끔; 절은 Although)"""
+    m = re.match(r'^\s*(despite|in spite of)\s+(.+)$', str(s or ""), re.I)
+    if not m:
+        return False
+    head = " ".join(m.group(2).split()[:6])
+    return bool(re.search(
+        r'\b(is|are|was|were|can|could|will|would|must|should|may|might|has|have|'
+        r'enables?|requires?|makes?|involves?|provides?|leads?|becomes?)\b', head, re.I))
+
+
+def modal_no_verb(s: str) -> bool:
+    """조동사(can/will/must...) 뒤에 동사원형이 아니라 형용사가 오면 비문 (예: 'can controllable')"""
+    m = re.search(r'\b(can|will|must|should|would|could|may|might)\s+(\w+)', str(s or ""), re.I)
+    if not m:
+        return False
+    return bool(re.search(r'(able|ible|ous|ive|ful|less)$', m.group(2).lower()))
+
+
+def grammar_flaws(s: str):
+    """위 세 가지 흔한 비문 패턴을 한 번에 검사해 사유 리스트를 반환."""
+    out = []
+    if ends_with_function_word(s):
+        out.append("전치사·접속사로 끝나 문장이 끊김")
+    if despite_with_clause(s):
+        out.append("Despite 뒤에 절(주어+동사)이 옴 — Although를 쓰거나 명사구로")
+    if modal_no_verb(s):
+        out.append("조동사 뒤에 동사원형이 아닌 형용사가 옴")
+    return out
+
+
 def gerund_start_no_finite(sentence: str) -> bool:
     """문장이 동명사(-ing)로 시작하는데 정형동사가 하나도 없으면 비문 의심.
     (분사·동명사만 나열된 'directing energy preventing reactions' 류).
@@ -261,7 +305,7 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
         errors.append(f"[{pid}] Q2 order_correct 범위 오류(0-4여야 함): {v}")
 
     # Q5 blank_A/B 단어 수 최소 6 (관대모드 4)
-    min_bw = 4 if lenient else 6
+    min_bw = 6  # 마지막 시도에서도 6단어 강제
     try:
         wa = len(data["blank_A"].split()); wb = len(data["blank_B"].split())
         if wa < min_bw:
@@ -302,33 +346,34 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
                     f"[{pid}] Q3 정답이 빈칸 원문을 그대로 베낌 — 유의어/비유로 패러프레이즈할 것 "
                     f"(정답='{opts[ci]}' = 원문 '{tgt}')"
                 )
-        # ★ Q3 문법 성립: 빈칸 앞이 that/which 등 절 유도어인데 정답이 동사 없는 명사구면 비문 (strict만)
-        if not lenient and isinstance(opts, list) and isinstance(ci, int) and 0 <= ci < len(opts):
+        # ★ Q3 문법 성립: 빈칸 앞이 that/which 등 절 유도어인데 정답이 동사 없는 명사구면 비문 (lenient에서도 검사 — CRITICAL)
+        if isinstance(opts, list) and isinstance(ci, int) and 0 <= ci < len(opts):
             if q3_blank_is_nounphrase_after_clause(data.get("intro", ""), opts[ci]):
                 errors.append(
                     f"[{pid}] [CRITICAL] Q3 정답이 빈칸에 문법적으로 안 맞음 — 빈칸 앞이 절 유도어(that 등)인데 "
                     f"정답('{opts[ci]}')이 동사 없는 명사구임. 원문이 절(주어+동사)이면 정답도 절로 패러프레이즈할 것."
                 )
 
-    # ★ A Q5 영작 정답(blank_A/B)이 '동사원형 주어' 비문 꼴인지 (strict만)
-    if not lenient:
-        for key in ("blank_A", "blank_B"):
-            v = data.get(key)
-            if v and looks_bare_verb_subject(v):
-                errors.append(
-                    f"[{pid}] [CRITICAL] Q5 {key}가 동사원형으로 시작하는 비문 꼴 "
-                    f"('{v}') — 동명사/명사구로 시작하도록 구절을 고를 것."
-                )
-        # ★ A Q5 빈칸에 정답을 넣었을 때 경계 단어가 중복되는지 (빈칸이 앞/뒤 단어를 먹음)
-        if data.get("blank_A") and data.get("blank_B"):
-            dup = fill_boundary_dup(
-                " ".join(p[1] for p in data.get("paragraphs", []) if isinstance(p, list) and len(p) > 1),
-                [("<BLANK_A>", data["blank_A"]), ("<BLANK_B>", data["blank_B"])])
-            if dup:
-                errors.append(
-                    f"[{pid}] [CRITICAL] Q5 빈칸에 정답을 넣으면 '{dup} {dup}'처럼 단어가 중복됨 "
-                    f"— 빈칸 범위가 앞/뒤 단어를 먹었음 (구절을 빈칸 자리에 맞게 다시 고를 것)."
-                )
+    # ★ A Q5 영작 정답(blank_A/B) 비문/중복 검사 — lenient(마지막 시도)에서도 실행 (CRITICAL은 끝까지 막아야 함)
+    for key in ("blank_A", "blank_B"):
+        v = data.get(key)
+        if v and looks_bare_verb_subject(v):
+            errors.append(
+                f"[{pid}] [CRITICAL] Q5 {key}가 동사원형으로 시작하는 비문 꼴 "
+                f"('{v}') — 동명사/명사구로 시작하도록 구절을 고를 것."
+            )
+        for flaw in grammar_flaws(v):
+            errors.append(f"[{pid}] [CRITICAL] Q5 {key} 비문 — {flaw} ('{v}')")
+    # ★ A Q5 빈칸에 정답을 넣었을 때 경계 단어/구절이 중복되는지 (빈칸이 앞/뒤 단어를 먹음)
+    if data.get("blank_A") and data.get("blank_B"):
+        dup = fill_boundary_dup(
+            " ".join(p[1] for p in data.get("paragraphs", []) if isinstance(p, list) and len(p) > 1),
+            [("<BLANK_A>", data["blank_A"]), ("<BLANK_B>", data["blank_B"])])
+        if dup:
+            errors.append(
+                f"[{pid}] [CRITICAL] Q5 빈칸에 정답을 넣으면 '{dup}'이(가) 중복됨 "
+                f"— 빈칸 범위가 앞/뒤 단어를 먹었음 (구절을 빈칸 자리에 맞게 다시 고를 것)."
+            )
 
     # paragraphs 3개 + 각 텍스트 5단어 이상
     paras = data.get("paragraphs")
@@ -494,7 +539,7 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
         errors.append(f"[{pid}] Q3 summary_template에 (A)/(B) 빈칸이 없음 — (A)(B) placeholder를 남길 것")
 
     # ★ Q4 blank_A, blank_B 단어 수 (strict 6개, soft 2개)
-    min_blank_words = 6 if strict else 2
+    min_blank_words = 6  # 마지막 시도에서도 6단어 강제
     try:
         wa = len(data["blank_A"].split())
         wb = len(data["blank_B"].split())
@@ -506,7 +551,7 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
         errors.append(f"[{pid}] B blank_A/B 형식 오류: {e}")
     
     # ★ Q5 topic_writing_answer 단어 수 (strict 14개, soft 3개)
-    min_topic_words = 14 if strict else 3
+    min_topic_words = 12  # 너무 짧은 것만 차단 (자연스러움 우선, 억지로 늘리기 방지)
     try:
         twc = len(data["topic_writing_answer"].split())
         if twc < min_topic_words:
@@ -517,36 +562,39 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
     except (KeyError, AttributeError):
         errors.append(f"[{pid}] B topic_writing_answer 형식 오류")
 
-    # ★ B Q5 주제문 / Q4 요약영작 정답이 '동사원형 주어' 비문 꼴인지 (strict만)
-    if strict:
-        tw = data.get("topic_writing_answer")
-        if tw and looks_bare_verb_subject(tw):
+    # ★ B Q5 주제문 / Q4 요약영작 비문·중복 검사 — soft(마지막 시도)에서도 실행 (CRITICAL은 끝까지 막아야 함)
+    tw = data.get("topic_writing_answer")
+    if tw and looks_bare_verb_subject(tw):
+        errors.append(
+            f"[{pid}] [CRITICAL] Q5 주제문이 동사원형으로 시작하는 비문 꼴 "
+            f"('{tw}') — 동명사/명사구 주어로 쓸 것 (예: 'Partitioning ...' not 'partition ...')."
+        )
+    # ★ 동명사(-ing)로 시작하는데 정형동사가 없는 비문 ('directing energy preventing reactions' 류)
+    if tw and gerund_start_no_finite(tw):
+        errors.append(
+            f"[{pid}] [CRITICAL] Q5 주제문에 정형동사가 없는 비문 꼴 "
+            f"('{tw}') — 분사·동명사만 나열됨. 주절에 정형동사(enables, is, can 등)를 넣을 것."
+        )
+    for flaw in grammar_flaws(tw):
+        errors.append(f"[{pid}] [CRITICAL] Q5 주제문 비문 — {flaw} ('{tw}')")
+    for key in ("blank_A", "blank_B"):
+        v = data.get(key)
+        if v and looks_bare_verb_subject(v):
             errors.append(
-                f"[{pid}] [CRITICAL] Q5 주제문이 동사원형으로 시작하는 비문 꼴 "
-                f"('{tw}') — 동명사/명사구 주어로 쓸 것 (예: 'Partitioning ...' not 'partition ...')."
+                f"[{pid}] [CRITICAL] Q4 {key}가 동사원형으로 시작하는 비문 꼴 ('{v}')"
             )
-        # ★ 동명사(-ing)로 시작하는데 정형동사가 없는 비문 ('directing energy preventing reactions' 류)
-        if tw and gerund_start_no_finite(tw):
+        for flaw in grammar_flaws(v):
+            errors.append(f"[{pid}] [CRITICAL] Q4 {key} 비문 — {flaw} ('{v}')")
+    # ★ B Q4 빈칸에 정답을 넣었을 때 경계 단어/구절 중복 (빈칸이 앞/뒤 단어를 먹음)
+    if data.get("blank_A") and data.get("blank_B") and data.get("blank_summary_template"):
+        dup = fill_boundary_dup(
+            data["blank_summary_template"],
+            [("(A)", data["blank_A"]), ("(B)", data["blank_B"])])
+        if dup:
             errors.append(
-                f"[{pid}] [CRITICAL] Q5 주제문에 정형동사가 없는 비문 꼴 "
-                f"('{tw}') — 분사·동명사만 나열됨. 주절에 정형동사(enables, is, can 등)를 넣을 것."
+                f"[{pid}] [CRITICAL] Q4 요약문 빈칸에 정답을 넣으면 '{dup}'이(가) 중복됨 "
+                f"— 빈칸 범위가 앞/뒤 단어를 먹었음 (정답 구절을 빈칸 자리에 맞게 다시 고를 것)."
             )
-        for key in ("blank_A", "blank_B"):
-            v = data.get(key)
-            if v and looks_bare_verb_subject(v):
-                errors.append(
-                    f"[{pid}] [CRITICAL] Q4 {key}가 동사원형으로 시작하는 비문 꼴 ('{v}')"
-                )
-        # ★ B Q4 빈칸에 정답을 넣었을 때 경계 단어 중복 (빈칸이 앞/뒤 단어를 먹음)
-        if data.get("blank_A") and data.get("blank_B") and data.get("blank_summary_template"):
-            dup = fill_boundary_dup(
-                data["blank_summary_template"],
-                [("(A)", data["blank_A"]), ("(B)", data["blank_B"])])
-            if dup:
-                errors.append(
-                    f"[{pid}] [CRITICAL] Q4 요약문 빈칸에 정답을 넣으면 '{dup} {dup}'처럼 단어가 중복됨 "
-                    f"— 빈칸 범위가 앞/뒤 단어를 먹었음 (정답 구절을 빈칸 자리에 맞게 다시 고를 것)."
-                )
 
     # Q4 잘라쓰기 (요약 영작) - strict일 때만 필수, soft는 통과
     if strict:

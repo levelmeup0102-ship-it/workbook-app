@@ -202,8 +202,8 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
    - ★ The passage (after removing the given sentence) is a sequence of full sentences S1. S2. S3. ... Sn. Place markers in the GAPS between sentences: [S1] <MARK1> [S2] <MARK2> [S3] <MARK3> [S4] <MARK4> [S5] <MARK5> [S6]...
    - ★ First marker goes AFTER the first sentence (never before S1). Last marker goes BEFORE the final sentence (never after the last sentence).
    - ★ Spread the markers as evenly as possible across the WHOLE passage (like a ladder) — do NOT cluster them in one region.
-   - ★ **position_count**: Use 5 markers (<MARK1>..<MARK5>) whenever the remaining passage has ENOUGH sentence-gaps (≈6+ sentences). If the passage is too short to place 5 well-separated markers at sentence boundaries, use exactly 4 markers (<MARK1>..<MARK4>) and set "position_count": 4. Otherwise set "position_count": 5.
-   - ★ NEVER produce fewer than 4 markers, and NEVER leave a gap (if position_count=5 you MUST have MARK1,2,3,4,5 all present; if 4, MARK1,2,3,4).
+   - ★ **position_count**: PREFER 5 markers (<MARK1>..<MARK5>) when the remaining passage has ENOUGH sentence-gaps (≈6+ sentences). If too short for 5, use 4 markers and set "position_count": 4. ONLY IF the passage is so short that even 4 well-separated sentence-boundary markers are impossible, use exactly 3 markers (<MARK1>..<MARK3>) and set "position_count": 3. Always prefer 4-5; use 3 only as a last resort for very short passages.
+   - ★ NEVER produce fewer than 3 markers, and NEVER leave a gap (if position_count=5 → MARK1..5 all present; if 4 → MARK1..4; if 3 → MARK1..3).
    
    GOOD (5 markers at sentence gaps): "Sentence one here. <MARK1> Sentence two here. <MARK2> Sentence three. <MARK3> Sentence four here. <MARK4> Sentence five. <MARK5> Final sentence."
    BAD: "Sentence one <MARK1> here." (marker inside a sentence — forbidden)

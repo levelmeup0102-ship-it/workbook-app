@@ -15,7 +15,7 @@ from typing import Optional
 
 import httpx
 
-from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response
+from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt
 from variation.validator import validate_a, validate_b
 
 
@@ -164,8 +164,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s31 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s31"
+    # _s33 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s33"
 
 
 # ============ Supabase 캐시 ============
@@ -473,6 +473,18 @@ def generate_variation_b(
             
             raw = call_claude(SYSTEM_PROMPT_B, user_msg)
             data = extract_json_from_response(raw)
+
+            # ★★ Q5 주제문 단독 재생성 (1회독 step4 방식)
+            #   Q1~Q5를 한 번에 만들면 주제문에 집중이 안 돼 수일치 등 실수가 난다.
+            #   그래서 주제문만 따로 한 번 더 — 주제문 하나에만 집중 → 1회독 품질.
+            try:
+                _t_raw = call_claude(TOPIC_SENTENCE_SYS, build_topic_sentence_prompt(en_text), max_tokens=500)
+                _t = extract_json_from_response(_t_raw)
+                _ts = (_t.get("topic_sentence") or "").strip()
+                if _ts and len(_ts.split()) >= 6:
+                    data["topic_writing_answer"] = _ts  # 집중 생성한 깔끔한 주제문으로 교체
+            except Exception:
+                pass  # 실패하면 기존(한번에 만든) 주제문 유지
 
             # ★★ 코드가 빈칸 뚫기 (우리가 정한 방식: 완성문장 먼저 → 코드가 뚫기)
             #   LLM이 준 full_summary(빈칸 없는 완성문장)에서 blank_A/blank_B를 찾아

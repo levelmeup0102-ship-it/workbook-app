@@ -158,6 +158,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       <div class="header-tab" onclick="switchTab('preclass', this)">📕 0회독 — 수업 전 분석</div>
       <div class="header-tab active" onclick="switchTab('generate', this)">📄 1회독 교재 생성</div>
       <div class="header-tab" onclick="switchTab('variation', this)">📝 2회독 변형문제</div>
+      <div class="header-tab" onclick="switchTab('seosul', this)">✍️ 2회독 서술형 종합</div>
       <div class="header-tab" onclick="switchTab('secret', this)">🔐 비밀노트</div>
       <div class="header-tab" onclick="switchTab('extract', this)">📖 원문 추출</div>
       <div class="header-tab" onclick="switchTab('upload', this)">📤 지문 관리</div>
@@ -394,6 +395,73 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       </div>
     </div>
   </div>
+
+<div id="tab-seosul" class="hidden">
+  <div class="three-col">
+    <div style="grid-column: span 2;">
+      <div class="card">
+        <div class="card-title">📚 지문 선택 (클릭 순서대로 출력됨)</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+          <button class="btn btn-sm" onclick="ssExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
+          <button class="btn btn-sm" onclick="ssCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
+          <button class="btn btn-sm" onclick="ssClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
+          <span style="margin-left:auto;font-size:13px;color:#666;" id="ss-sel-count">0개 선택</span>
+        </div>
+        <div id="ss-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
+          <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-right">
+      <div class="vr-card card" style="border:1.5px solid #93c5fd;background:linear-gradient(135deg,#eff6ff,#f5f3ff);">
+        <div class="card-title" style="color:#1d4ed8;">🏫 학교명</div>
+        <input type="text" id="ss-school-name" placeholder="레벨미업학원" value="레벨미업학원"
+          style="width:100%;padding:9px 12px;border:2px solid #93c5fd;border-radius:8px;font-size:13px;outline:none;">
+      </div>
+
+      <div class="vr-card card" style="border:1.5px solid #93c5fd;background:linear-gradient(135deg,#eff6ff,#f5f3ff);">
+        <div class="card-title" style="color:#1d4ed8;">✍️ 서술형 유형 (한 지문에 종합 출제 · 자유 조합)</div>
+
+        <label style="display:flex;align-items:center;gap:8px;background:#fef3e8;border:1.5px solid #fdba74;border-radius:8px;padding:9px;margin-bottom:7px;cursor:pointer;">
+          <input type="checkbox" id="ss-type-sa" checked onchange="ssUpdateBtns()" style="width:18px;height:18px;">
+          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#c2410c;">SA — 본문 빈칸 배열영작</div>
+            <div style="font-size:11px;color:#666;">보기 단어 배열, 어형변형 가능</div></div>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;background:#fef3e8;border:1.5px solid #fdba74;border-radius:8px;padding:9px;margin-bottom:7px;cursor:pointer;">
+          <input type="checkbox" id="ss-type-sc" checked onchange="ssUpdateBtns()" style="width:18px;height:18px;">
+          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#c2410c;">SC — 요약문 빈칸 영작</div>
+            <div style="font-size:11px;color:#666;">변형 없이 배열, 구조 회전</div></div>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;background:#dbeafe;border:1.5px solid #93c5fd;border-radius:8px;padding:9px;margin-bottom:7px;cursor:pointer;">
+          <input type="checkbox" id="ss-type-sd" checked onchange="ssUpdateBtns()" style="width:18px;height:18px;">
+          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#1e40af;">SD — 어법 틀린 곳 고치기</div>
+            <div style="font-size:11px;color:#666;">밑줄 없음, grammar_points 근거</div></div>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;background:#f3e8ff;border:1.5px solid #c4b5fd;border-radius:8px;padding:9px;cursor:pointer;">
+          <input type="checkbox" id="ss-type-se" checked onchange="ssUpdateBtns()" style="width:18px;height:18px;">
+          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#6d28d9;">SE — 어휘 품사 변형 채우기</div>
+            <div style="font-size:11px;color:#666;">핵심어 4~5곳, 품사 변형</div></div>
+        </label>
+      </div>
+
+      <div class="vr-card card" style="border:1.5px solid #93c5fd;background:linear-gradient(135deg,#eff6ff,#f5f3ff);">
+        <button class="btn btn-primary" id="ss-btn-generate" onclick="doSeosul()" disabled
+          style="width:100%;padding:14px;font-size:15px;font-weight:700;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:white;border:none;border-radius:10px;cursor:pointer;">
+          ✍️ 서술형 종합 생성
+        </button>
+        <div class="progress hidden" id="ss-progress">
+          <div class="progress-bar" style="margin-top:8px;"><div class="progress-fill" id="ss-progress-fill" style="width:0%"></div></div>
+          <div class="progress-text" id="ss-progress-text">생성 중...</div>
+        </div>
+      </div>
+
+      <div class="card hidden" id="ss-results-section">
+        <div class="card-title">✅ 생성 완료</div>
+        <div id="ss-results-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
 
   <!-- 비밀노트 탭 -->
   <div id="tab-secret" class="hidden">
@@ -874,6 +942,7 @@ function switchTab(tab, el) {
   document.getElementById('tab-preclass').classList.toggle('hidden', tab!=='preclass');
   document.getElementById('tab-generate').classList.toggle('hidden', tab!=='generate');
   document.getElementById('tab-variation').classList.toggle('hidden', tab!=='variation');
+  document.getElementById('tab-seosul').classList.toggle('hidden', tab!=='seosul');
   document.getElementById('tab-upload').classList.toggle('hidden', tab!=='upload');
   document.getElementById('tab-secret').classList.toggle('hidden', tab!=='secret');
   document.getElementById('tab-extract').classList.toggle('hidden', tab!=='extract');
@@ -881,6 +950,111 @@ function switchTab(tab, el) {
   if(tab==='secret') snRefreshBooks();
   if(tab==='extract') extRefreshBooks();
   if(tab==='variation') vrRefreshBooks();
+  if(tab==='seosul') ssRefreshBooks();
+}
+
+// ============================================================
+// ★ 서술형 종합 (2회독) - seosul
+// ============================================================
+let ssSelectedPassages = new Map();   // 클릭 순서 유지
+let ssExpandedBooks = new Set();
+
+function ssRefreshBooks(){ if(PASSAGES_DATA) ssRenderBookList(); }
+
+function ssRenderBookList(){
+  const books = {};
+  PASSAGES_DATA.forEach(p => {
+    (books[p.book] = books[p.book] || {});
+    (books[p.book][p.unit] = books[p.book][p.unit] || []).push(p);
+  });
+  let html = '';
+  for(const book of Object.keys(books).sort()){
+    const units = Object.keys(books[book]).sort((a,b)=>(parseInt(a.match(/\d+/)?.[0])||0)-(parseInt(b.match(/\d+/)?.[0])||0)||a.localeCompare(b));
+    const all = Object.values(books[book]).flat();
+    const sel = all.filter(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+    const exp = ssExpandedBooks.has(book);
+    html += `<div class="ext-book-item ${exp?'expanded':''}" onclick="ssToggleExpand('${book}')">
+      <span style="color:#666;font-size:12px;">${exp?'▼':'▶'}</span>
+      <input type="checkbox" ${sel===all.length&&all.length?'checked':''} onclick="event.stopPropagation();ssToggleBook('${book}')" style="width:15px;height:15px;">
+      <span style="flex:1;font-size:13px;font-weight:500;">${book}</span>
+      <span class="ext-count-badge">${sel}/${all.length}</span></div>`;
+    if(exp){
+      for(const unit of units){
+        const ups = books[book][unit];
+        const usel = ups.filter(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+        html += `<div class="ext-unit-row"><div class="ext-unit-header">
+          <input type="checkbox" ${usel===ups.length?'checked':''} onclick="ssToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
+          <span style="font-size:13px;font-weight:600;color:#1d4ed8;">${unit}</span>
+          <span style="font-size:11px;color:#999;">(${usel}/${ups.length})</span></div><div class="ext-pid-list">`;
+        for(const p of ups){
+          const key = `${p.book}|${p.unit}|${p.id}`;
+          const is = ssSelectedPassages.has(key);
+          let ord = is ? `<span style="background:#2563eb;color:#fff;font-weight:700;padding:0 4px;border-radius:8px;font-size:9px;margin-right:2px;">${[...ssSelectedPassages.keys()].indexOf(key)+1}</span>`:'';
+          html += `<label class="ext-pid-chip ${is?'selected':''}" style="${is?'background:#dbeafe;border-color:#60a5fa;':''}">
+            <input type="checkbox" ${is?'checked':''} onchange="ssTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">${ord}${p.id}</label>`;
+        }
+        html += '</div></div>';
+      }
+    }
+  }
+  document.getElementById('ss-book-list').innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
+  ssUpdateCount(); ssUpdateBtns();
+}
+function ssToggleExpand(b){ ssExpandedBooks.has(b)?ssExpandedBooks.delete(b):ssExpandedBooks.add(b); ssRenderBookList(); }
+function ssTogglePassage(book,unit,id){ const k=`${book}|${unit}|${id}`; ssSelectedPassages.has(k)?ssSelectedPassages.delete(k):ssSelectedPassages.set(k,{book,unit,id}); ssRenderBookList(); }
+function ssToggleUnit(book,unit){ const ups=PASSAGES_DATA.filter(p=>p.book===book&&p.unit===unit); const allSel=ups.every(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)); ups.forEach(p=>{const k=`${p.book}|${p.unit}|${p.id}`; allSel?ssSelectedPassages.delete(k):ssSelectedPassages.set(k,{book:p.book,unit:p.unit,id:p.id});}); ssRenderBookList(); }
+function ssToggleBook(book){ const bp=PASSAGES_DATA.filter(p=>p.book===book); const allSel=bp.every(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)); bp.forEach(p=>{const k=`${p.book}|${p.unit}|${p.id}`; allSel?ssSelectedPassages.delete(k):ssSelectedPassages.set(k,{book:p.book,unit:p.unit,id:p.id});}); ssRenderBookList(); }
+function ssExpandAll(){ PASSAGES_DATA.forEach(p=>ssExpandedBooks.add(p.book)); ssRenderBookList(); }
+function ssCollapseAll(){ ssExpandedBooks.clear(); ssRenderBookList(); }
+function ssClearSelection(){ ssSelectedPassages.clear(); ssRenderBookList(); }
+function ssUpdateCount(){ document.getElementById('ss-sel-count').textContent = `${ssSelectedPassages.size}개 선택`; }
+function ssUpdateBtns(){
+  const types = ['sa','sc','sd','se'].filter(t=>document.getElementById('ss-type-'+t).checked);
+  document.getElementById('ss-btn-generate').disabled = !(ssSelectedPassages.size && types.length);
+}
+
+async function doSeosul(){
+  const passages = [...ssSelectedPassages.values()];
+  if(!passages.length){ toast('지문을 선택하세요'); return; }
+  const types = [];
+  if(document.getElementById('ss-type-sa').checked) types.push('SA');
+  if(document.getElementById('ss-type-sc').checked) types.push('SC');
+  if(document.getElementById('ss-type-sd').checked) types.push('SD');
+  if(document.getElementById('ss-type-se').checked) types.push('SE');
+  if(!types.length){ toast('유형을 1개 이상 선택하세요'); return; }
+  const schoolName = document.getElementById('ss-school-name').value.trim() || '레벨미업학원';
+
+  const btn=document.getElementById('ss-btn-generate'), progress=document.getElementById('ss-progress');
+  const fill=document.getElementById('ss-progress-fill'), ptext=document.getElementById('ss-progress-text');
+  const rsec=document.getElementById('ss-results-section'), rlist=document.getElementById('ss-results-list');
+  btn.disabled=true; progress.classList.remove('hidden'); rsec.classList.add('hidden'); rlist.innerHTML='';
+  ptext.textContent = `생성 중... (지문 ${passages.length}개 × 유형 ${types.length}개)`;
+
+  try{
+    const res = await fetch(API+'/api/seosul', {
+      method:'POST', headers:{...headers(),'Content-Type':'application/json'},
+      body: JSON.stringify({ passages, types, school_name: schoolName })
+    });
+    if(!res.ok) throw new Error(await res.text() || 'API 오류');
+    const data = await res.json();
+    fill.style.width='100%'; ptext.textContent = `✓ 완료 (지문 ${data.passages_generated}개)`;
+    rsec.classList.remove('hidden');
+    const url=data.html_url, dl=data.download_url;
+    let h = `<div class="sn-result-item"><span>✍️ 서술형 종합 (문제+정답)</span>
+      <span style="display:flex;gap:6px;">
+        <a href="${dl}" download class="btn btn-sm" style="background:#6b7280;color:white;">📥 다운로드</a>
+        <a href="${url}" target="_blank" class="btn btn-sm btn-primary">🔗 열기</a></span></div>
+      <div style="font-size:11px;color:#666;padding:8px;background:#eff6ff;border-radius:6px;margin-top:8px;">
+        💡 '열기' 후 Ctrl+P (Mac: Cmd+P)로 인쇄/PDF 저장</div>`;
+    if(data.warnings && data.warnings.length){
+      h += `<div style="margin-top:10px;padding:8px;background:#fee;border:1px solid #fca5a5;border-radius:6px;font-size:11px;color:#991b1b;">
+        ❌ 생성 실패 항목:<br>${data.warnings.map(w=>'• '+w).join('<br>')}</div>`;
+    }
+    rlist.innerHTML=h;
+    try{ window.open(url,'_blank'); }catch(e){}
+    toast('서술형 종합 생성 완료!');
+  }catch(e){ ptext.textContent='❌ '+(e.message||'생성 실패'); toast('생성 실패: '+(e.message||'')); }
+  finally{ setTimeout(()=>{ progress.classList.add('hidden'); fill.style.width='0%'; ssUpdateBtns(); },2000); }
 }
 
 function toast(msg) {

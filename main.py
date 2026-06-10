@@ -39,6 +39,18 @@ except Exception as e:
 
 
 # ============================================================
+# ★ 서술형 종합 (2회독) 라우터 등록 - seosul 모듈
+# ============================================================
+try:
+    from seosul.api import router as seosul_router, download_router as seosul_dl
+    app.include_router(seosul_router)
+    app.include_router(seosul_dl)
+    print("[seosul] 서술형 종합 라우터 등록 완료")
+except Exception as e:
+    print(f"[seosul] 라우터 등록 실패 (서술형 기능 비활성): {e}")
+
+
+# ============================================================
 # Auth
 # ============================================================
 def _token(pw: str) -> str:

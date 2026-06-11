@@ -1,28 +1,6 @@
 #!/usr/bin/env python3
 """
 sheet_routes.py  ―  분석지(three_modes) 라우트.
-main.py 에 그대로 붙이거나, import 해서 라우터로 등록.
-
-[중요] three_modes 의 HTML/CSS/폰트는 한 글자도 안 바꾼다.
-       이 파일은 "데이터 주입 + 저장/공유" 만 담당.
-
-[엔드포인트]
-  GET  /sheet?book=&unit=&pid=     → 분석지 저작 화면 (three_modes HTML + 0회독 데이터 주입)
-  POST /api/sheet/save             → sheet_cache 에 저장 (sheet_save RPC)
-  POST /api/sheet/publish          → 공유 토큰 발급 (sheet_publish RPC)
-  GET  /s/{token}                  → 학생 게시물 (읽기 전용, 저장된 분석지)
-
-[연결 전제]
-  - sheet_cache 테이블 + sheet_save/sheet_publish RPC 는 이미 Supabase 에 있음.
-  - three_modes 템플릿 파일은 sheet/sheet_three_modes.html 로 배치
-    (원본 그대로. <!--SHEET_DATA_INJECT--> 주석 한 줄만 추가해 두면 됨)
-  - 0회독 데이터는 step_cache(preclass_analysis_v24) 에서 읽음.
-
-[main.py 에 추가하는 법]
-  from sheet_routes import router as sheet_router
-  app.include_router(sheet_router)
-  ↑ 기존 variation/seosul 등록과 동일 패턴. _ck/_verify/_load_db 는
-    main.py 의 것을 그대로 재사용하도록 di(아래 set_deps)로 주입.
 """
 import os
 import json
@@ -37,12 +15,11 @@ from . import convert as sc
 
 router = APIRouter()
 
-# ── main.py 의 함수/상수를 주입받는다 (순환 import 방지) ──
 _DEPS = {
-    "ck": None,          # _ck(book,unit,pid) -> cache_key
-    "verify": None,      # _verify(request)
-    "load_db": None,     # async _load_db() -> {"books":{...}}
-    "data_dir": None,    # Path("data")
+    "ck": None,
+    "verify": None,
+    "load_db": None,
+    "data_dir": None,
     "template_dir": Path("sheet"),
 }
 
@@ -56,9 +33,6 @@ def set_deps(*, ck, verify, load_db, data_dir, template_dir=None):
         _DEPS["template_dir"] = Path(template_dir)
 
 
-# ════════════════════════════════════════════════════════════════
-# Supabase REST 헬퍼 (httpx) — supa 모듈 있으면 그걸 쓰고, 없으면 직접 호출
-# ════════════════════════════════════════════════════════════════
 def _supa_headers():
     key = os.environ.get("SUPABASE_KEY", "") or os.environ.get("SUPABASE_SERVICE_KEY", "")
     return {
@@ -73,8 +47,6 @@ def _supa_url():
 
 
 def _load_preclass(cache_key: str) -> dict | None:
-    """step_cache(preclass_analysis_v24) 의 data 읽기. 로컬 우선, 없으면 Supabase REST."""
-    # 1) 로컬 파일
     dd = _DEPS["data_dir"] or Path("data")
     local = Path(dd) / cache_key / "preclass_analysis_v24.json"
     if local.exists():
@@ -82,8 +54,7 @@ def _load_preclass(cache_key: str) -> dict | None:
             return json.loads(local.read_text(encoding="utf-8"))
         except Exception:
             pass
-    # 2) Supabase REST
-    url, base = _supa_url(), None
+    url = _supa_url()
     if url:
         try:
             import httpx
@@ -102,7 +73,6 @@ def _load_preclass(cache_key: str) -> dict | None:
 
 
 def _load_sheet(cache_key: str = None, token: str = None) -> dict | None:
-    """sheet_cache 에서 저장된 분석지 읽기."""
     url = _supa_url()
     if not url:
         return None
@@ -146,11 +116,7 @@ def _rpc(fn: str, payload: dict) -> dict | None:
         raise HTTPException(500, f"{fn} 예외: {str(e)[:150]}")
 
 
-# ════════════════════════════════════════════════════════════════
-# 지문 원문/번역 가져오기
-# ════════════════════════════════════════════════════════════════
 async def _get_passage_text(book, unit, pid):
-    """passages 의 passage_text → (english, translation)."""
     load_db = _DEPS["load_db"]
     db = await load_db()
     try:
@@ -165,14 +131,7 @@ async def _get_passage_text(book, unit, pid):
     return raw.strip(), ""
 
 
-# ════════════════════════════════════════════════════════════════
-# HTML 주입 — three_modes 원본에 SHEET_DATA 만 끼워넣기
-# ════════════════════════════════════════════════════════════════
 def _inject(html: str, sheet_data: dict, mode: str = "auth", readonly: bool = False) -> str:
-    """three_modes HTML 에 전역 데이터 주입.
-    원본 HTML 은 <!--SHEET_DATA_INJECT--> 한 줄만 있으면 됨.
-    없으면 </head> 앞에 자동 삽입.
-    """
     payload = {
         "S": sheet_data.get("S", []),
         "FLOW": sheet_data.get("FLOW", []),
@@ -205,15 +164,8 @@ def _read_template() -> str:
     return p.read_text(encoding="utf-8")
 
 
-# ════════════════════════════════════════════════════════════════
-# 라우트
-# ════════════════════════════════════════════════════════════════
 @router.get("/sheet", response_class=HTMLResponse)
 async def sheet_page(request: Request, book: str = "", unit: str = "", pid: str = ""):
-    """분석지 저작 화면. 0회독 데이터 + 저장본을 three_modes 에 주입해 반환."""
-    # /sheet 자체는 로그인 화면 안에서 fetch 로 부르는 게 아니라
-    # 새 탭으로 열리므로 토큰 검증을 쿼리/세션 대신 그대로 둠.
-    # (민감정보 없음 — 어차피 같은 지문 분석 데이터. 필요하면 _verify 추가)
     if not all([book, unit, pid]):
         raise HTTPException(400, "book, unit, pid 필요")
 
@@ -234,7 +186,6 @@ async def sheet_page(request: Request, book: str = "", unit: str = "", pid: str 
 
 @router.post("/api/sheet/save")
 async def sheet_save(request: Request):
-    """분석지 편집본 저장 → sheet_cache upsert."""
     _DEPS["verify"](request)
     body = await request.json()
     book = body.get("book"); unit = body.get("unit"); pid = body.get("pid")
@@ -253,7 +204,6 @@ async def sheet_save(request: Request):
 
 @router.post("/api/sheet/publish")
 async def sheet_publish(request: Request):
-    """공유 토큰 발급 → /s/{token} 으로 학생 배포."""
     _DEPS["verify"](request)
     body = await request.json()
     book = body.get("book"); unit = body.get("unit"); pid = body.get("pid")
@@ -261,7 +211,6 @@ async def sheet_publish(request: Request):
         raise HTTPException(400, "book, unit, pid 필요")
     ck = _DEPS["ck"](book, unit, pid)
     res = _rpc("sheet_publish", {"p_cache_key": ck})
-    # res 는 share_token (문자열 or [{share_token}] 형태)
     token = None
     if isinstance(res, str):
         token = res
@@ -272,9 +221,74 @@ async def sheet_publish(request: Request):
     return {"ok": True, "token": token, "url": f"/s/{token}" if token else None}
 
 
+# ════════════════════════════════════════════════════════════════
+# ★ AI 동의어/반의어 — 서버에서 Anthropic 호출 (브라우저 직접 호출 금지)
+#   three_modes 의 "+ AI로 동의어 받기" 버튼이 이 엔드포인트를 부른다.
+#   0회독에 없는 단어만 여기로 옴 (있는 단어는 VPOOL 에서 자동으로 뜸).
+# ════════════════════════════════════════════════════════════════
+@router.post("/api/sheet/ai-synonym")
+async def sheet_ai_synonym(request: Request):
+    _DEPS["verify"](request)
+    body = await request.json()
+    word = (body.get("word") or "").strip()
+    sentence = (body.get("sentence") or "").strip()
+    if not word:
+        raise HTTPException(400, "word 필요")
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise HTTPException(500, "ANTHROPIC_API_KEY 미설정")
+
+    prompt = (
+        f'영어 단어 "{word}"'
+        + (f' (문맥 문장: "{sentence}")' if sentence else "")
+        + '에 대해 한국 고교 영어 어휘 학습용 동의어와 반의어를 제시하라. '
+        '반드시 JSON만, 마크다운/설명 없이: '
+        '{"syn":[["english","한국어뜻"]...최대6],"ant":[["english","한국어뜻"]...최대3]}'
+    )
+
+    try:
+        import httpx
+        with httpx.Client(timeout=30) as c:
+            r = c.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": "claude-sonnet-4-20250514",
+                    "max_tokens": 1000,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+            )
+        if r.status_code != 200:
+            raise HTTPException(502, f"AI 호출 실패: {r.status_code} {r.text[:150]}")
+        d = r.json()
+        text = "".join(
+            blk.get("text", "")
+            for blk in (d.get("content") or [])
+            if blk.get("type") == "text"
+        )
+        text = text.replace("```json", "").replace("```", "").strip()
+        parsed = json.loads(text)
+        # 형태 정규화
+        syn = [[str(x[0]), str(x[1])] for x in (parsed.get("syn") or [])
+               if isinstance(x, (list, tuple)) and len(x) >= 2]
+        ant = [[str(x[0]), str(x[1])] for x in (parsed.get("ant") or [])
+               if isinstance(x, (list, tuple)) and len(x) >= 2]
+        return {"ok": True, "syn": syn, "ant": ant}
+    except HTTPException:
+        raise
+    except json.JSONDecodeError:
+        raise HTTPException(502, "AI 응답 파싱 실패")
+    except Exception as e:
+        raise HTTPException(502, f"AI 예외: {str(e)[:150]}")
+
+
 @router.get("/s/{token}", response_class=HTMLResponse)
 async def sheet_student(token: str):
-    """학생 게시물 (읽기 전용). 저장된 분석지를 학생 모드로 렌더."""
     row = _load_sheet(token=token)
     if not row:
         raise HTTPException(404, "공유된 분석지를 찾을 수 없습니다.")
@@ -284,7 +298,6 @@ async def sheet_student(token: str):
     if not pre:
         raise HTTPException(404, "원본 분석 데이터가 없습니다.")
 
-    # 원문/번역
     eng, kr = "", ""
     try:
         eng, kr = await _get_passage_text(book, unit, pid)
@@ -293,5 +306,4 @@ async def sheet_student(token: str):
 
     data = sc.build_sheet_data(pre, translation=kr, saved_sheet=row.get("sheet"))
     html = _read_template()
-    # 학생 모드 + 읽기전용
     return _inject(html, data, mode="student", readonly=True)

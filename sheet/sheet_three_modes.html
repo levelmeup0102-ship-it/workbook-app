@@ -394,14 +394,17 @@ function bindAuth(){
   view.querySelectorAll('[data-pick]').forEach(c=>c.addEventListener('click',()=>{SEL[c.dataset.pick]=+c.dataset.i;SEL.openPick=null;renderAuth();updateHeader();}));
 }
 let pickSyn,pickAnt,curVp,curTarget,curSi,curWord;
+// ★ 변경: 브라우저가 Anthropic 을 직접 부르지 않고, 서버 /api/sheet/ai-synonym 을 호출.
+//   토큰은 부모(워크북) 페이지의 localStorage('wb_token') 사용.
 async function fetchSyn(word,sentence){
-  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',
-      content:`영어 단어 "${word}" (문맥 문장: "${sentence}")에 대해 한국 고교 영어 어휘 학습용 동의어와 반의어를 제시하라. 반드시 JSON만, 마크다운/설명 없이: {"syn":[["english","한국어뜻"]...최대6],"ant":[["english","한국어뜻"]...최대3]}`}]})});
+  let token='';
+  try{token=localStorage.getItem('wb_token')||'';}catch(e){}
+  const r=await fetch('/api/sheet/ai-synonym',{method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+    body:JSON.stringify({word:word,sentence:sentence})});
+  if(!r.ok){throw new Error('AI 호출 실패 ('+r.status+')');}
   const d=await r.json();
-  let t=(d.content||[]).filter(x=>x.type==='text').map(x=>x.text).join('');
-  t=t.replace(/```json/g,'').replace(/```/g,'').trim();
-  return JSON.parse(t);
+  return {syn:d.syn||[],ant:d.ant||[]};
 }
 function synChipsHtml(vp){
   let h='<div class="sl">동의어 — 넣을 것 클릭 (여러 개 가능)</div><div class="chips">';

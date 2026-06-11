@@ -97,7 +97,11 @@ def _gen_with_repair(prompt_fn, validate_fn, *args) -> dict:
         except Exception as e:
             last_err = [f"JSON 파싱 실패: {e}"]
             continue
-        errs = validate_fn(item)
+        try:
+            errs = validate_fn(item)
+        except Exception as e:
+            last_err = [f"필수 키 누락/형식 오류: {e} → 스키마대로 모든 키를 채워라"]
+            continue
         if not errs:
             return item
         last_err = errs
@@ -147,6 +151,9 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
     if not items:
         raise RuntimeError("모든 유형 생성 실패: " + "; ".join(warnings))
 
+    # 라벨 강제 배정 (SA=A,B / SE=C,D,E … 충돌·괄호 제거)
+    _normalize_labels(items)
+
     # 지문 자리표시 합성 (빈칸/오류 주입)
     passage_sentences = _assemble_passage(sents, items, roles)
     s = {"passage_ref": {"book": book, "unit": unit, "pid": pid},
@@ -160,30 +167,84 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
     return s
 
 
+_LETTERS = "ABCDEFGH"
+
+def _normalize_labels(items):
+    """라벨을 코드가 강제로 배정: SA→A,B / SE→그 다음(C,D,E). 괄호 라벨·충돌 제거."""
+    used = 0
+    sa = next((it for it in items if it["type"] == "SA"), None)
+    se = next((it for it in items if it["type"] == "SE"), None)
+    if sa:
+        new_ans, new_blk = {}, {}
+        for old in list((sa.get("answers") or {}).keys()):
+            L = _LETTERS[used]; used += 1
+            ans = sa["answers"][old]
+            blk = (sa.get("blanks") or {}).get(old, {}) or {}
+            orig = blk.get("original", "") or ""
+            if ans and ans in orig:
+                tpl = orig.replace(ans, "{{%s}}" % L, 1)
+            else:
+                tpl = (blk.get("tpl", "") or "").replace("{{%s}}" % old, "{{%s}}" % L)
+            new_ans[L] = ans
+            new_blk[L] = {"sent": blk.get("sent"), "tpl": tpl, "original": orig}
+        sa["answers"], sa["blanks"] = new_ans, new_blk
+    if se:
+        for bl in (se.get("blanks") or []):
+            bl["label"] = _LETTERS[used]; used += 1
+    return items
+
+
 def _assemble_passage(sents, items, roles) -> List[str]:
     out = list(sents)
-    # SA/SE 빈칸 치환
     for it in items:
         if it["type"] == "SA":
-            for lab, meta in it["blanks"].items():
-                out[meta["sent"]] = meta["tpl"]
-        if it["type"] == "SE":
-            for bl in it["blanks"]:
-                out[bl["sent"]] = re.sub(rf"(?<![\w]){re.escape(bl['answer'])}(?![\w])",
-                                         "{{%s}}" % bl["label"], out[bl["sent"]], count=1)
-        if it["type"] == "SD":
-            for e in it["errors"]:
-                out[e["sent"]] = re.sub(rf"(?<![\w]){re.escape(e['right'])}(?![\w])",
-                                        e["wrong"], out[e["sent"]], count=1)
+            bysent = {}
+            for lab, meta in (it.get("blanks") or {}).items():
+                bysent.setdefault(meta.get("sent"), []).append((lab, it["answers"][lab]))
+            for sent, blanks in bysent.items():
+                if sent is None or sent >= len(out):
+                    continue
+                base = sents[sent]
+                for lab, ans in blanks:
+                    if ans and ans in base:
+                        base = base.replace(ans, "{{%s}}" % lab, 1)
+                out[sent] = base
+        elif it["type"] == "SE":
+            for bl in (it.get("blanks") or []):
+                sent = bl.get("sent")
+                if sent is None or sent >= len(out):
+                    continue
+                out[sent] = re.sub(rf"(?<![\w]){re.escape(bl['answer'])}(?![\w])",
+                                   "{{%s}}" % bl["label"], out[sent], count=1)
+        elif it["type"] == "SD":
+            for e in (it.get("errors") or []):
+                sent = e.get("sent")
+                if sent is None or sent >= len(out):
+                    continue
+                out[sent] = re.sub(rf"(?<![\w]){re.escape(e['right'])}(?![\w])",
+                                   e["wrong"], out[sent], count=1)
     return out
 
 
 def _attach_meta(items, stypes) -> list:
     pts = {"SA": 6, "SC": 4, "SD": 4, "SE": 6}
     for it in items:
-        sp = stypes.get(it["type"], {})
-        it["instruction"] = sp.get("instruction", "")
-        it["points"] = pts.get(it["type"], "")
-        if it["type"] == "SA":
+        t = it["type"]
+        it["points"] = pts.get(t, "")
+        if t == "SA":
             it["allow_inflect"] = True
+            labs = ", ".join(f"({k})" for k in (it.get("answers") or {}))
+            it["instruction"] = (f"윗글의 빈칸 {labs}에 들어갈 적절한 말을 "
+                                 f"&lt;보기&gt;의 단어를 사용하여 작성하시오.")
+        elif t == "SC":
+            it["instruction"] = ("윗글의 내용을 아래와 같이 요약할 때 빈칸에 들어갈 말을 "
+                                 "&lt;보기&gt;의 어구를 <b>변형 없이 모두 한 번씩만 배열하여</b> 완성하시오.")
+        elif t == "SD":
+            n = len(it.get("errors") or [])
+            it["instruction"] = (f"윗글의 <b>빈칸을 제외한 부분</b>에서 어법상 틀린 곳 {n}군데를 "
+                                 f"찾아 바르게 고쳐 쓰시오. (밑줄 없음)")
+        elif t == "SE":
+            labs = ", ".join(f"({b['label']})" for b in (it.get("blanks") or []))
+            it["instruction"] = (f"윗글의 빈칸 {labs}에 들어갈 단어를 &lt;보기&gt;에서 골라 "
+                                 f"<b>흐름과 어법에 맞게 변형하시오.</b>")
     return items

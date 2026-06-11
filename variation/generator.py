@@ -15,8 +15,8 @@ from typing import Optional
 
 import httpx
 
-from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response
-from variation.validator import validate_a, validate_b
+from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt, CORE_BLANK_SYS, build_core_blank_prompt
+from variation.validator import validate_a, validate_b, check_marker_positions
 
 
 # ============================================================
@@ -129,6 +129,70 @@ def build_order_blocks_a(en_text: str, pid: str = "?", seed_extra: str = "") -> 
     order_correct = FIXED_ORDER.index(restore)
     return {"intro": intro_text, "paragraphs": paragraphs, "order_correct": order_correct}
 
+def build_insert_blocks_b(en_text: str, pid: str = "?") -> Optional[dict]:
+    """원문에서 문장 하나를 떼어 given_sentence로, 나머지에 코드가 마커를 박아
+    삽입문제(Q1)를 무손실로 재구성한다. (순서배열 build_order_blocks_a와 같은 철학)
+    validator.check_marker_positions를 통과하고 '정답 자리에 도로 넣으면 원문 복원'이
+    성립하는 구성만 반환. 재구성 불가하면 None(→ 기존 LLM 결과 유지).
+    LLM이 given/본문을 변형해 '어느 자리도 복원 안 되는' 항목을 코드가 살린다."""
+    def _alnum_ib(t):
+        return re.sub(r"[^a-z0-9]", "", str(t).lower())
+    sents = split_sentences(en_text)
+    m = len(sents)
+    if m < 4:
+        return None
+    mid = m // 2
+    order = sorted(range(1, m), key=lambda g: abs(g - mid))  # 가운데 문장부터 시도(첫 문장 제외)
+    for g in order:
+        given = sents[g]
+        remaining = sents[:g] + sents[g + 1:]
+        L = len(remaining)
+        real_gap = g
+        pool = list(range(1, L + 1))  # 각 갭은 앞에 최소 한 문장 → 문장경계 보장
+        if real_gap not in pool or len(pool) < 3:
+            continue
+        target = 5 if len(pool) >= 5 else (4 if len(pool) >= 4 else 3)
+        picks = {pool[0], pool[-1], real_gap}
+        if target > len(picks):
+            for i in range(target):
+                ix = round(i * (len(pool) - 1) / (target - 1))
+                picks.add(pool[ix])
+        chosen = sorted(picks)
+        protected = {pool[0], pool[-1], real_gap}
+        while len(chosen) > 5:
+            for c in chosen:
+                if c not in protected:
+                    chosen.remove(c)
+                    break
+            else:
+                break
+        chosen = sorted(chosen)
+        rank = {gap: i + 1 for i, gap in enumerate(chosen)}  # gap → MARK번호(위치순)
+        out = []
+        for j in range(L + 1):
+            if j in rank:
+                out.append(f"<MARK{rank[j]}>")
+            if j < L:
+                out.append(remaining[j])
+        pwm = " ".join(out)
+        pos_correct = chosen.index(real_gap)
+        pos_count = len(chosen)
+        # 1) 정답 자리에 given 도로 넣으면 원문 복원?
+        recon = pwm.replace(f"<MARK{pos_correct + 1}>", " " + given + " ")
+        recon = re.sub(r"<MARK\d>", "", recon)
+        if _alnum_ib(recon) != _alnum_ib(en_text):
+            continue
+        # 2) 배포 validator 마커 검사 통과?
+        errs = check_marker_positions(pwm, pid, min_between=3,
+                                      position_correct=pos_correct,
+                                      position_count=pos_count, strict=True)
+        if errs:
+            continue
+        return {"given_sentence": given, "passage_with_marks": pwm,
+                "position_correct": pos_correct, "position_count": pos_count}
+    return None
+
+
 # ============ 환경 변수 ============
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5")
@@ -164,8 +228,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s8 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s8"
+    # _s41 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s41"
 
 
 # ============ Supabase 캐시 ============
@@ -299,9 +363,10 @@ def generate_variation_a(
                     "  3. ★ RECONSTRUCTION TEST: intro + (A)(B)(C) reassembled in the order_correct sequence must EQUAL the original passage word-for-word "
                     "(no reordering inside a paragraph, no merging distant sentences, no omission, no duplication).\n"
                     "  4. order_correct = index 0-4 into FIXED choices (0=(A)-(C)-(B) 1=(B)-(A)-(C) 2=(B)-(C)-(A) 3=(C)-(A)-(B) 4=(C)-(B)-(A)); never (A)-(B)-(C).\n"
-                    "  5. blank_A and blank_B must EACH have AT LEAST 5 words, placed INSIDE (A)/(B)/(C) (not in intro), in different paragraphs.\n"
+                    "  5. blank_A and blank_B are natural key phrases (~4-8 words each, do not pad), taken verbatim from INSIDE (A)/(B)/(C) (not intro), in different paragraphs.\n"
                     "  6. bogi must contain EVERY SINGLE WORD from blank_A + blank_B — count articles ('the','a','an') and prepositions carefully.\n"
-                    "  7. core_blank_target must have AT LEAST 3 words; the Q3 correct option must equal core_blank_target exactly."
+                    "  7. core_blank_target must have AT LEAST 3 words; the Q3 correct option must be a PARAPHRASE of core_blank_target "
+                    "(synonym or figurative rewording) that keeps the SAME grammatical structure as the original (clause stays a clause, noun phrase stays a noun phrase) so the sentence reads grammatically when the option fills the blank; NOT the original wording copied verbatim."
                 )
             
             raw = call_claude(SYSTEM_PROMPT_A, user_msg)
@@ -314,19 +379,86 @@ def generate_variation_a(
                 data["intro"] = ob["intro"]
                 data["paragraphs"] = [list(p) for p in ob["paragraphs"]]
                 data["order_correct"] = ob["order_correct"]
-                # Q3 핵심빈칸: LLM이 고른 구절을 intro(첫 문장)에서 찾아 마킹
+
+                # ★★ Q3 핵심빈칸 단독 재생성 (첫 문장만 주고 집중 — that절↔명사구 불일치 방지)
+                #   intro(첫 문장)는 코드가 확정했으므로, 그 문장에서 핵심 구절+패러프레이즈 정답을
+                #   따로 한 번 더 만든다. "원문이 절이면 정답도 절" 규칙으로 빈칸 문법 불일치를 막는다.
+                try:
+                    # intro에서 첫 한 문장만 추출 (마침표 기준)
+                    _intro_txt = re.sub(r'\s+', ' ', str(data.get("intro", ""))).strip()
+                    _first = re.split(r'(?<=[.!?])\s+', _intro_txt)[0] if _intro_txt else ""
+                    if _first and len(_first.split()) >= 4:
+                        _c_raw = call_claude(CORE_BLANK_SYS, build_core_blank_prompt(_first), max_tokens=700)
+                        _c = extract_json_from_response(_c_raw)
+                        _tg = (_c.get("core_blank_target") or "").strip()
+                        _op = _c.get("core_blank_options")
+                        _co = _c.get("core_blank_correct")
+                        # target이 첫 문장 안에 실제로 있고 선지 5개가 정상일 때만 교체
+                        if (_tg and _tg in _first and isinstance(_op, list) and len(_op) == 5
+                                and isinstance(_co, int) and 0 <= _co <= 4):
+                            data["core_blank_target"] = _tg
+                            data["core_blank_options"] = _op
+                            data["core_blank_correct"] = _co
+                            if _c.get("core_blank_explain"):
+                                data["core_blank_explain"] = _c["core_blank_explain"]
+                except Exception:
+                    pass  # 실패하면 기존(한번에 만든) Q3 유지
+
+                # ★ 따옴표·대시·구두점·하이픈·공백·대소문자 차이까지 흡수하는 마킹 함수 (core_blank / blank 공통)
+                def _mark_phrase(text, phrase, mk):
+                    if not phrase:
+                        return text, False
+                    # 1) 정확 매칭
+                    if phrase in text:
+                        return text.replace(phrase, mk, 1), True
+                    # 2) 따옴표/대시/비분리공백 통일 (1:1 치환이라 길이 보존 → 인덱스 동일)
+                    qmap = {"\u2019": "'", "\u2018": "'", "\u201c": '"', "\u201d": '"',
+                            "\u2013": "-", "\u2014": "-", "\u00a0": " "}
+                    def nq(s):
+                        for a, b in qmap.items():
+                            s = s.replace(a, b)
+                        return s
+                    nt, npr = nq(text), nq(phrase)
+                    if npr in nt:
+                        i = nt.index(npr)
+                        return text[:i] + mk + text[i + len(npr):], True
+                    # 3) 토큰(영숫자) 시퀀스 매칭 — 구두점/하이픈/공백/대소문자 차이를 전부 흡수
+                    spans = [(m.group(0).lower(), m.start(), m.end())
+                             for m in re.finditer(r"[A-Za-z0-9]+", text)]
+                    tw = [w for w, _, _ in spans]
+                    pt = re.findall(r"[A-Za-z0-9]+", phrase.lower())
+                    if pt and len(pt) <= len(tw):
+                        for i in range(len(tw) - len(pt) + 1):
+                            if tw[i:i + len(pt)] == pt:
+                                s_char = spans[i][1]
+                                e_char = spans[i + len(pt) - 1][2]
+                                return text[:s_char] + mk + text[e_char:], True
+                    return text, False
+
+                # Q3 핵심빈칸: LLM이 고른 구절을 intro(첫 문장)에서 찾아 마킹 (따옴표 흡수)
                 tgt = (data.get("core_blank_target") or "").strip()
-                if tgt and tgt in data["intro"]:
-                    data["intro"] = data["intro"].replace(tgt, "<CORE_BLANK>", 1)
-                # Q5 영작빈칸: LLM이 고른 구절을 (A)(B)(C)에서 찾아 각각 다른 단락에 마킹
+                if tgt:
+                    new_intro, core_ok = _mark_phrase(data["intro"], tgt, "<CORE_BLANK>")
+                    if core_ok:
+                        data["intro"] = new_intro
+                    data["_core_marked"] = core_ok
+
+                # Q5 영작빈칸: LLM이 고른 구절을 (A)(B)(C)에서 찾아 마킹 (같은 단락이어도 둘 다)
+                marked = {}
                 for mk, key in (("<BLANK_A>", "blank_A"), ("<BLANK_B>", "blank_B")):
                     val = (data.get(key) or "").strip()
                     if not val:
+                        marked[mk] = False
                         continue
+                    done = False
                     for p in data["paragraphs"]:
-                        if val in p[1] and "<BLANK_" not in p[1]:
-                            p[1] = p[1].replace(val, mk, 1)
+                        new_txt, ok = _mark_phrase(p[1], val, mk)
+                        if ok:
+                            p[1] = new_txt
+                            done = True
                             break
+                    marked[mk] = done
+                data["_blanks_marked"] = marked
 
             if "mismatch_count" not in data and "statements" in data:
                 data["mismatch_count"] = sum(1 for _, _, ok in data["statements"] if not ok)
@@ -417,8 +549,8 @@ def generate_variation_b(
                     "     There MUST be AT LEAST 3 words between every adjacent pair of markers\n"
                     "     BAD example: 'word word <MARK1> word word <MARK2><MARK3> word' — MARK2/MARK3 adjacent (0 words between)\n"
                     "     GOOD example: 'word word word <MARK1> word word word word <MARK2> word word word <MARK3> ...'\n"
-                    "  2. blank_A and blank_B must EACH have AT LEAST 6 words\n"
-                    "  3. topic_writing_answer must have AT LEAST 10 words\n"
+                    "  2. blank_A and blank_B are natural key phrases (~4-8 words each, do not pad to a number)\n"
+                    "  3. topic_writing_answer: write ONE natural, fully grammatical topic sentence FIRST (don't count words or fit a word bank; the code splits it). Naturalness/grammar first, ~12-20 words. No bare-verb subject, no sentence ending in a preposition, no 'Despite + clause', no 'modal + adjective'.\n"
                     "  4. Hyphenated words (south-facing, well-known) stay as ONE token in both blank and bogi\n"
                     "  5. blank_summary_bogi must contain EVERY word from blank_A + blank_B (count articles/preps)\n"
                     "  6. ★ Q3 summary_options: EACH (A) and (B) must be EXACTLY ONE WORD (no phrases!)\n"
@@ -430,11 +562,145 @@ def generate_variation_b(
             raw = call_claude(SYSTEM_PROMPT_B, user_msg)
             data = extract_json_from_response(raw)
 
+            # ★★ Q1 삽입 정답 위치 코드 정정 (Q4 빈칸뚫기와 같은 원리)
+            #   AI가 마커는 박되 "어느 자리에서 문장이 빠졌나"(position_correct)를 자주 틀린다.
+            #   코드가 마커를 1번부터 끝까지 하나씩 넣어보고, 원문이 복원되는 자리를 정답으로 정정.
+            #   → 정답 위치 100% 보장. AI는 마커만 적당히 박으면 됨.
+            try:
+                import re as _re1
+                _pwm = str(data.get("passage_with_marks") or "")
+                _gs = str(data.get("given_sentence") or "").strip()
+                _orig = _re1.sub(r'\s+', ' ', str(en_text or "")).strip()
+                def _alnum1(t):
+                    return _re1.sub(r"[^a-z0-9]", "", str(t).lower())
+                if _pwm and _gs and _orig:
+                    _found = None
+                    for _k in range(1, 6):  # MARK1..MARK5 후보 전부 시험
+                        _mk = f"<MARK{_k}>"
+                        if _mk not in _pwm:
+                            continue
+                        _recon = _pwm.replace(_mk, " " + _gs + " ")
+                        _recon = _re1.sub(r"<MARK\d>", "", _recon)
+                        if _alnum1(_recon) == _alnum1(_orig):
+                            _found = _k - 1  # 0-based
+                            break
+                    if _found is not None and _found != data.get("position_correct"):
+                        data["position_correct"] = _found  # 코드가 찾은 정답으로 정정
+            except Exception:
+                pass  # 실패하면 AI가 찍은 값 유지 (검증에서 다시 걸러짐)
+
+            # ★★ Q1 삽입 fallback — 위 자동정정으로도 '복원되는 자리'가 하나도 없으면
+            #   (LLM이 given/본문을 변형해 어느 자리에 넣어도 원문이 안 맞는 경우),
+            #   코드가 원문에서 삽입문제를 통째로 재구성한다. 복원되는 항목은 건드리지 않음.
+            try:
+                _pwm_fb = str(data.get("passage_with_marks") or "")
+                _gs_fb = str(data.get("given_sentence") or "").strip()
+                def _alnum_fb(t):
+                    return re.sub(r"[^a-z0-9]", "", str(t).lower())
+                _ok_fb = False
+                if _pwm_fb and _gs_fb:
+                    for _k in range(1, 6):
+                        _mk = f"<MARK{_k}>"
+                        if _mk not in _pwm_fb:
+                            continue
+                        _r = _pwm_fb.replace(_mk, " " + _gs_fb + " ")
+                        _r = re.sub(r"<MARK\d>", "", _r)
+                        if _alnum_fb(_r) == _alnum_fb(en_text):
+                            _ok_fb = True
+                            break
+                if not _ok_fb:
+                    _ib = build_insert_blocks_b(en_text, pid)
+                    if _ib:
+                        data["given_sentence"] = _ib["given_sentence"]
+                        data["passage_with_marks"] = _ib["passage_with_marks"]
+                        data["position_correct"] = _ib["position_correct"]
+                        data["position_count"] = _ib["position_count"]
+                        print(f"[VAR][B][{pid}] Q1 삽입 코드 재구성 적용 (복원되는 자리 없어 fallback)")
+            except Exception:
+                pass
+
+            # ★★ Q5 주제문 단독 재생성 (1회독 step4 방식)
+            #   Q1~Q5를 한 번에 만들면 주제문에 집중이 안 돼 수일치 등 실수가 난다.
+            #   그래서 주제문만 따로 한 번 더 — 주제문 하나에만 집중 → 1회독 품질.
+            try:
+                _t_raw = call_claude(TOPIC_SENTENCE_SYS, build_topic_sentence_prompt(en_text), max_tokens=500)
+                _t = extract_json_from_response(_t_raw)
+                _ts = (_t.get("topic_sentence") or "").strip()
+                if _ts and len(_ts.split()) >= 6:
+                    data["topic_writing_answer"] = _ts  # 집중 생성한 깔끔한 주제문으로 교체
+            except Exception:
+                pass  # 실패하면 기존(한번에 만든) 주제문 유지
+
+            # ★★ Q4 요약문 단독 재생성 (영작이라 비문 잦음 → 따로 집중 생성)
+            #   요약문(full_summary)만 따로 생성하고, 그 안의 두 구절을 코드가 빈칸으로 뚫는다.
+            try:
+                _s_raw = call_claude(SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt(en_text), max_tokens=600)
+                _s = extract_json_from_response(_s_raw)
+                _fs = (_s.get("full_summary") or "").strip()
+                _ba = (_s.get("blank_A") or "").strip()
+                _bb = (_s.get("blank_B") or "").strip()
+                # 셋 다 있고 blank_A/B가 full_summary 안에 실제로 들어있을 때만 교체
+                if _fs and _ba and _bb and _ba in _fs and _bb in _fs and _ba != _bb:
+                    data["full_summary"] = _fs
+                    data["blank_A"] = _ba
+                    data["blank_B"] = _bb
+            except Exception:
+                pass  # 실패하면 기존(한번에 만든) 요약문 유지
+
+            # ★★ 코드가 빈칸 뚫기 (우리가 정한 방식: 완성문장 먼저 → 코드가 뚫기)
+            #   LLM이 준 full_summary(빈칸 없는 완성문장)에서 blank_A/blank_B를 찾아
+            #   (A)/(B)로 코드가 직접 치환 → blank_summary_template 생성.
+            #   이렇게 하면 "되넣으면 복원"이 코드로 보장 → 빈칸범위/중복/마킹 오류 원천 차단.
+            def _punch_blanks(full, a, b):
+                """full에서 a→(A), b→(B)로 치환. 대소문자/공백 차이 흡수. 성공 시 (template, True)."""
+                import re as _re
+                if not full or not a or not b:
+                    return None, False
+                def _find(hay, needle):
+                    # 1) 그대로  2) 공백 정규화 후 토큰시퀀스 매칭
+                    i = hay.find(needle)
+                    if i >= 0:
+                        return i, i + len(needle)
+                    hn = _re.sub(r'\s+', ' ', hay)
+                    nn = _re.sub(r'\s+', ' ', needle).strip()
+                    j = hn.find(nn)
+                    if j >= 0:
+                        # 원본 인덱스 보정이 복잡하므로, 정규화 문자열에서 작업
+                        return None
+                    return None
+                # 단순/정규화 치환을 정규화 평면에서 수행
+                hn = _re.sub(r'\s+', ' ', full).strip()
+                an = _re.sub(r'\s+', ' ', a).strip()
+                bn = _re.sub(r'\s+', ' ', b).strip()
+                if an not in hn or bn not in hn:
+                    return None, False
+                # A를 먼저 치환하되, B가 A의 부분문자열이면 충돌 → 더 긴 것부터
+                first, fk, second, sk = (an, "(A)", bn, "(B)")
+                if len(bn) > len(an):
+                    first, fk, second, sk = (bn, "(B)", an, "(A)")
+                t = hn.replace(first, fk, 1)
+                if second not in t:  # 치환 후 두 번째 구절이 사라졌으면(겹침) 실패
+                    return None, False
+                t = t.replace(second, sk, 1)
+                if "(A)" not in t or "(B)" not in t:
+                    return None, False
+                return t, True
+
+            try:
+                _full = data.get("full_summary") or data.get("summary_full") or ""
+                _tmpl, _ok = _punch_blanks(_full, data.get("blank_A", ""), data.get("blank_B", ""))
+                if _ok:
+                    data["blank_summary_template"] = _tmpl  # 코드가 만든 빈칸 버전으로 덮어쓰기
+            except Exception:
+                pass
+
             # ★ Q4/Q5 보기(bogi) 자동 생성: 답지 단어를 그대로 소문자·구두점제거하여 보기로 사용.
             #   모델이 만든 보기는 무시 → 누락/잉여(예: 'for')/중복오류를 원천 차단.
             def _bogi_from(text: str):
-                toks = re.sub(r'[.,;:!?"()]', ' ', str(text or "")).split()
-                return [t.lower() for t in toks if t]
+                s = re.sub(r'(?<=\d),(?=\d)', '\u0001', str(text or ""))  # 100,000 보호
+                s = re.sub(r'\b([A-Za-z](?:\.[A-Za-z])+)\.?', lambda m: m.group(0).replace('.', '\u0002'), s)  # U.S. 보호
+                toks = re.sub(r'[.,;:!?"()]', ' ', s).split()
+                return [t.replace('\u0001', ',').replace('\u0002', '.').lower() for t in toks if t]
             try:
                 # Q4: blank_A + blank_B
                 q4 = _bogi_from(str(data.get("blank_A", "")) + " " + str(data.get("blank_B", "")))

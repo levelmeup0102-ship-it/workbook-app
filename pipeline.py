@@ -3620,6 +3620,26 @@ Return ONLY the JSON object.
 """
 
 
+def _merge_teacher_sheet(pre: dict, cache_key: str, passage: str) -> dict:
+    """강사 분석지(sheet_cache)가 있으면 0회독에 병합한 '화면용 dict' 반환.
+    sheet 없으면 pre 를 그대로 반환. 원본 pre 는 수정하지 않는다(복사본에 병합).
+
+    정책 = 병합: AI 초안 유지 + 강사 강조 덧입히기(강사 우선). step_cache 원본은
+    오염시키지 않으므로, 강사가 분석지를 수정하면 다음 0회독 조회 때 즉시 반영된다.
+    """
+    try:
+        from sheet import merge as sheet_merge
+        sheet = sheet_merge.load_sheet_for_merge(cache_key)
+        if not sheet:
+            return pre
+        import copy
+        disp = copy.deepcopy(pre)
+        return sheet_merge.apply_sheet_to_preclass(disp, sheet)
+    except Exception as e:
+        _safe_print(f"  ⚠️ [sheet-merge] 실패(무시): {type(e).__name__}: {str(e)[:120]}")
+        return pre
+
+
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
     # v21: 캐시 로드 후 어휘 마커 보정 마이그레이션 추가
@@ -3644,12 +3664,20 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
             # ★ v24 핵심 — 지문↔상세 동기화 (항상 실행, 옛 캐시도 보정됨)
             cached = _sync_grammar_boxes_with_passage(cached)
             cached = _sync_vocab_with_passage(cached)
-            
+
+            # 원본(병합 전)을 먼저 저장 — step_cache 는 AI 원본만 보관 (오염 방지)
             cached["passage_html"] = _passage_marked_to_html(
                 cached.get("passage_marked", ""), passage
             )
-            # 마이그레이션 결과 다시 저장
             save_step(passage_dir, "preclass_analysis_v24", cached)
+
+            # ★ 강사 분석지(sheet) 병합 — 화면용만 병합, passage_html 을 병합본으로 교체
+            _disp = _merge_teacher_sheet(cached, passage_dir.name, passage)
+            if _disp is not cached:
+                cached["passage_html"] = _passage_marked_to_html(
+                    _disp.get("passage_marked", ""), passage
+                )
+                cached["_display"] = _disp   # main.py 가 4박스·노트 렌더에 우선 사용
             _safe_print(f"  ✅ 캐시 마이그레이션 완료")
         except Exception as e:
             import traceback as _tb_mig
@@ -3753,7 +3781,19 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     _r = _safe_post("_enforce_summary_length", lambda: _enforce_summary_length(data, max_words=40))
     if _r is not None: data = _r
 
+    # 원본(병합 전)을 step_cache 에 저장 — AI 원본만 보관 (오염 방지)
     save_step(passage_dir, "preclass_analysis_v24", data)
+
+    # ★ 강사 분석지(sheet) 병합 — 화면용만 병합, passage_html 을 병합본으로 교체
+    _disp = _merge_teacher_sheet(data, passage_dir.name, passage)
+    if _disp is not data:
+        try:
+            data["passage_html"] = _passage_marked_to_html(
+                _disp.get("passage_marked", ""), passage)
+            data["_display"] = _disp   # main.py 가 4박스·노트 렌더에 우선 사용
+        except Exception as e:
+            _safe_print(f"  ⚠️ [sheet-merge html] 실패(무시): {type(e).__name__}: {str(e)[:120]}")
+
     return data
 
 

@@ -104,7 +104,7 @@ Everything you generate must reflect that whole-passage understanding:
      BAD: "...comprehend, much less ___" with target "completely comprehend, much less control" (앞 단어를 먹음 — 중복)
      GOOD: target = "control" only; OR move the blank earlier: "...you to ___" with target "completely comprehend, much less control".
    - ★ The CORRECT option (index = core_blank_correct) is a PARAPHRASE of core_blank_target — synonym or figurative rewording, NOT the original wording copied. (e.g. target "control" → correct option "exert mastery over"; target "completely comprehend, much less control" → "fully grasp, let alone steer".)
-   - ★ KEEP PROPER NOUNS & TECHNICAL TERMS VERBATIM: never paraphrase proper nouns (people/places/organizations) or technical/scientific/fixed terms (e.g. "thyroid gland", "photosynthesis", "mitochondria"). Copy them EXACTLY from the passage. Paraphrase ONLY general and logical vocabulary.
+   - ★ Keep verbatim ONLY (1) genuine proper nouns (specific people/places/organizations/titles, e.g. "John Dewey", "NASA") and (2) fixed scientific/technical terms that have no natural synonym (e.g. "thyroid gland", "photosynthesis", "mitochondria"). Everything else is paraphrased normally — ordinary descriptive phrases like "social and political protest" or "economic growth" are NOT protected and SHOULD be reworded. When unsure, paraphrase.
    - ★★ GRAMMATICAL FIT IS MANDATORY: the paraphrase MUST keep the SAME grammatical structure as core_blank_target so that, when inserted into the blank, the sentence is fully grammatical English. If the original blanked phrase is a CLAUSE (subject + verb, e.g. "food and nutrition play the greatest role"), the paraphrase MUST also be a clause (e.g. "food and nutrition have the most significant impact"). If it is a noun phrase, keep a noun phrase. NEVER turn a clause into a bare noun phrase. TEST: read the full sentence with the correct option in the blank — if it is not grammatical (e.g. "believe that most significant impact on well-being" ❌), the option is WRONG; rewrite it.
    - ★ The 4 WRONG options = opposite meaning or content NOT mentioned. Each ≤ 15 words, grammatically fits the blank, not near-duplicates of each other.
 
@@ -223,7 +223,7 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
    (a) ★ BLANK ON THE LOGICAL CORE, NOT SURFACE NOUNS. The blank must fall on the word that carries the sentence's *logic* — the abstract relation: a verb of causation/function (enables, diminishes, intensifies, constrains, reverses) or an abstract property noun (controllability, manageability, predictability, variability). NEVER blank a concrete surface noun lifted from the passage (e.g. breathing, training, competition, adrenaline). Those are too easy.
    (b) ★ THE SUMMARY = ONE abstract sentence capturing the passage's CAUSE→EFFECT or PROPERTY→CONSEQUENCE relation. (A) usually = the cause/property, (B) = the effect/function. It must read like a 수능 40번 요약문, not a paraphrased first sentence.
    (c) ★ THE CORRECT (A)/(B) MUST BE A PARAPHRASE — NEVER a word copied from the passage. Pull the answer UP a level of abstraction (passage "precisely controlled" → answer "controllability"; passage "break into small problems" → answer "manageability"). If the correct option word appears verbatim in the passage, it is WRONG — change it.
-   - ★ KEEP PROPER NOUNS & TECHNICAL TERMS VERBATIM: never paraphrase proper nouns (people/places/organizations) or technical/scientific/fixed terms (e.g. "thyroid gland", "photosynthesis", "mitochondria"). Copy them EXACTLY from the passage. Paraphrase ONLY general and logical vocabulary.
+   - ★ Keep verbatim ONLY (1) genuine proper nouns (specific people/places/organizations/titles, e.g. "John Dewey", "NASA") and (2) fixed scientific/technical terms that have no natural synonym (e.g. "thyroid gland", "photosynthesis", "mitochondria"). Everything else is paraphrased normally — ordinary descriptive phrases like "social and political protest" or "economic growth" are NOT protected and SHOULD be reworded. When unsure, paraphrase.
    (d) ★ DISTRACTORS must be the SAME part of speech and individually plausible, but each must FAIL the passage's logic — NOT mere synonyms/antonyms of the answer. Avoid 5 near-synonyms (manage/control/handle/regulate/direct) — that makes the answer guessable. Mix in words that fit grammar but contradict or overstate the passage.
    (e) ★ WORD LEVEL = GRE/upper-CSAT abstract vocabulary (finite, fixed, controllability, manageability, intensify, diminish, constrain, reciprocal, provisional). No basic words (increase, reduce, manage, activate).
 
@@ -477,7 +477,7 @@ def build_topic_sentence_prompt(passage_text: str) -> str:
         "- ONE complete, natural, fully grammatical English sentence. Do NOT copy the sentence verbatim "
         "(change the content words), but DO mirror its structure.\n"
         "- Concise: about 12-20 words.\n"
-        "- ★ KEEP PROPER NOUNS & TECHNICAL TERMS VERBATIM: never paraphrase proper nouns (people/places/organizations) or technical/scientific/fixed terms (e.g. 'thyroid gland', 'photosynthesis', 'mitochondria') — copy them EXACTLY. Paraphrase ONLY general/logical vocabulary.\n"
+        "- ★ Keep verbatim ONLY (1) genuine proper nouns (people/places/organizations/titles, e.g. 'John Dewey') and (2) fixed scientific/technical terms with no natural synonym (e.g. 'thyroid gland', 'photosynthesis'). Everything else is paraphrased normally — ordinary phrases like 'social and political protest' are NOT protected, reword them. When unsure, paraphrase.\n"
         "- ★ Still double-check SUBJECT-VERB AGREEMENT after swapping words: a plural/compound subject "
         "(X and Y) takes a plural verb ('context and surroundings ALTER ...' not 'alters').\n"
         "- No bare-verb subject; do not end with a preposition; no 'Despite + clause'; no 'modal + adjective'.\n"
@@ -511,7 +511,7 @@ def build_summary_sentence_prompt(passage_text: str) -> str:
         "- It must summarize the WHOLE passage (thesis + key logic), paraphrased with synonyms — "
         "not a verbatim copy of any single sentence.\n"
         "- Concise: about 15-25 words.\n"
-        "- ★ KEEP PROPER NOUNS & TECHNICAL TERMS VERBATIM: never paraphrase proper nouns (people/places/organizations) or technical/scientific/fixed terms (e.g. 'thyroid gland', 'photosynthesis', 'mitochondria') — copy them EXACTLY. Paraphrase ONLY general/logical vocabulary.\n"
+        "- ★ Keep verbatim ONLY (1) genuine proper nouns (people/places/organizations/titles, e.g. 'John Dewey') and (2) fixed scientific/technical terms with no natural synonym (e.g. 'thyroid gland', 'photosynthesis'). Everything else is paraphrased normally — ordinary phrases like 'social and political protest' are NOT protected, reword them. When unsure, paraphrase.\n"
         "- ★ Still double-check SUBJECT-VERB AGREEMENT after swapping words: a plural/compound subject "
         "(X and Y) takes a plural verb ('context and surroundings ALTER ...' not 'alters').\n"
         "- No bare-verb subject; do not end with a preposition; no 'Despite + clause'; no 'modal + adjective'.\n"
@@ -546,7 +546,7 @@ def build_core_blank_prompt(first_sentence: str) -> str:
         "- It must NOT include any word that sits right before/after it (so that blanking it leaves the "
         "rest of the sentence reading exactly like the original — no duplicated word around the blank).\n"
         "- The CORRECT option is a PARAPHRASE of core_blank_target (synonyms / figurative rewording, NOT a copy).\n"
-        "- ★ KEEP PROPER NOUNS & TECHNICAL TERMS VERBATIM: never paraphrase proper nouns (people/places/organizations) or technical/scientific/fixed terms (e.g. 'thyroid gland', 'photosynthesis', 'mitochondria') — copy them EXACTLY. Paraphrase ONLY general/logical vocabulary.\n"
+        "- ★ Keep verbatim ONLY (1) genuine proper nouns (people/places/organizations/titles, e.g. 'John Dewey') and (2) fixed scientific/technical terms with no natural synonym (e.g. 'thyroid gland', 'photosynthesis'). Everything else is paraphrased normally — ordinary phrases like 'social and political protest' are NOT protected, reword them. When unsure, paraphrase.\n"
         "- ★★ GRAMMATICAL FIT IS MANDATORY: the correct option MUST keep the SAME grammatical structure as "
         "core_blank_target so the sentence stays grammatical when inserted.\n"
         "   · If the blanked phrase is a CLAUSE (has a subject + finite verb, e.g. 'food and nutrition play the "

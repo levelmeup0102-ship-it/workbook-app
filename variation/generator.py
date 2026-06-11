@@ -196,6 +196,18 @@ def build_insert_blocks_b(en_text: str, pid: str = "?") -> Optional[dict]:
 _Q5_MODALS = {"can", "will", "must", "should", "would", "could", "may", "might", "shall"}
 
 
+def _quote_ok(s: str) -> bool:
+    """빈칸 후보 검사: 문장경계(.!?) 없고, 따옴표 '짝'이 갈리지 않음(균형).
+    따옴표가 있어도 쌍이 맞으면 허용 — \"good student\" 통째는 OK, 여는 짝만 먹으면 제외."""
+    if re.search(r'[.!?]', s):
+        return False
+    if s.count('"') % 2 != 0:
+        return False
+    if s.count('\u201c') != s.count('\u201d'):
+        return False
+    return True
+
+
 def _q5_candidates(ptext: str, min_w: int = 5, max_w: int = 7) -> list:
     """단락에서 '문장 중간 연속 구절'(verbatim) 후보 생성. 가운데 우선.
     문장경계/따옴표 포함 제외, 조동사 시작 제외, 단락 내 유일 등장만."""
@@ -207,7 +219,7 @@ def _q5_candidates(ptext: str, min_w: int = 5, max_w: int = 7) -> list:
         for i in range(1, n - L):  # 양끝 한 토큰씩 비워 경계 확보
             j = i + L - 1
             sub = ptext[spans[i][0]:spans[j][1]]
-            if re.search(r'[.!?"\u201c\u201d]', sub):
+            if not _quote_ok(sub):
                 continue
             fw = re.sub(r'[^a-z]', '', toks[i].lower())
             if fw in _Q5_MODALS:
@@ -241,7 +253,7 @@ def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?
             return None
         if texts[idx].count(v) != 1:
             return None
-        if re.search(r'[.!?"\u201c\u201d]', v):
+        if not _quote_ok(v):
             return None
         if modal_no_verb(v):
             return None
@@ -291,7 +303,7 @@ def _b_candidates(hn: str, min_w: int = 4, max_w: int = 7) -> list:
         for i in range(0, n - L + 1):
             j = i + L - 1
             sub = hn[spans[i][0]:spans[j][1]]
-            if re.search(r'[.!?"\u201c\u201d]', sub):
+            if not _quote_ok(sub):
                 continue
             fw = re.sub(r'[^a-z]', '', toks[i].lower())
             if fw in _Q5_MODALS:
@@ -317,7 +329,7 @@ def pick_b_q4_blanks(full_summary, llm_a: str = "", llm_b: str = "", min_w: int 
         v = re.sub(r'\s+', ' ', str(v or "")).strip()
         if len(v.split()) < min_w or hn.count(v) != 1:
             return None
-        if re.search(r'[.!?"\u201c\u201d]', v):
+        if not _quote_ok(v):
             return None
         if modal_no_verb(v):
             return None
@@ -878,8 +890,8 @@ def generate_variation_b(
             def _bogi_from(text: str):
                 s = re.sub(r'(?<=\d),(?=\d)', '\u0001', str(text or ""))  # 100,000 보호
                 s = re.sub(r'\b([A-Za-z](?:\.[A-Za-z])+)\.?', lambda m: m.group(0).replace('.', '\u0002'), s)  # U.S. 보호
-                toks = re.sub(r'[.,;:!?"()]', ' ', s).split()
-                return [t.replace('\u0001', ',').replace('\u0002', '.').lower() for t in toks if t]
+                toks = re.sub(r'[.,;:!?()]', ' ', s).split()  # " 안 뗌 → 따옴표를 단어에 붙임
+                return [t.replace('\u0001', ',').replace('\u0002', '.') for t in toks if t]  # .lower() 제거 → A처럼 대소문자 유지
             try:
                 # Q4: blank_A + blank_B
                 q4 = _bogi_from(str(data.get("blank_A", "")) + " " + str(data.get("blank_B", "")))

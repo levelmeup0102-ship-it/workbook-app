@@ -61,6 +61,8 @@ def create_seosul(req: SeosulRequest, _=Depends(verify_token)):
         try:
             s = generate_set(p.book, p.unit, p.id, req.types, gp, stypes)
             sections.append(render_seosul_set(s, teacher=False, school_name=req.school_name))
+            for w in s.get("_warnings", []):
+                warnings.append(f"{p.book} {p.unit} {p.id}: {w}")
         except Exception as e:
             warnings.append(f"{p.book} {p.unit} {p.id}: {e}")
             traceback.print_exc()

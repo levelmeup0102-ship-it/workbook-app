@@ -112,14 +112,23 @@ def fill_boundary_dup(template: str, pairs) -> str:
         for k in range(min(len(aw), len(pw)), 1, -1):
             if aw[:k] == pw[-k:]:
                 return " ".join(aw[:k])
-    # ① 인접 단어 중복
-    t = template
+    # ① 경계 인접 중복 (k=1) — 빈칸이 '맞닿는 자리'에서만 검사한다.
+    #   ★ 원문 자체에 원래 있던 인접 중복(예: "questions (questions ...")은 빈칸 탓이 아니므로
+    #     무시한다. 전체를 훑던 옛 방식은 그런 원문 중복까지 오탐으로 잡아 멀쩡한 지문을 거부했다.
     for mk, ans in pairs:
-        t = t.replace(mk, " " + (ans or "") + " ", 1)
-    words = re.sub(r'[^A-Za-z0-9 ]', ' ', t.lower()).split()
-    for i in range(len(words) - 1):
-        if words[i] == words[i + 1] and len(words[i]) > 2:
-            return words[i]
+        parts = template.split(mk, 1)
+        if len(parts) < 2:
+            continue
+        pre, suf = parts[0], parts[1]
+        for omk, _ in pairs:
+            suf = suf.replace(omk, " "); pre = pre.replace(omk, " ")
+        aw = re.sub(r'[^A-Za-z0-9 ]', ' ', (ans or "").lower()).split()
+        sw = re.sub(r'[^A-Za-z0-9 ]', ' ', suf.lower()).split()
+        pw = re.sub(r'[^A-Za-z0-9 ]', ' ', pre.lower()).split()
+        if aw and sw and aw[-1] == sw[0] and len(aw[-1]) > 2:
+            return aw[-1]
+        if aw and pw and aw[0] == pw[-1] and len(aw[0]) > 2:
+            return aw[0]
     return None
 
 

@@ -445,6 +445,10 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       </div>
 
       <div class="vr-card card" style="border:1.5px solid #93c5fd;background:linear-gradient(135deg,#eff6ff,#f5f3ff);">
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;cursor:pointer;font-size:13px;color:#1e40af;">
+          <input type="checkbox" id="ss-answers-back" style="width:17px;height:17px;">
+          <span><b>정답을 맨 뒤로 모으기</b> — 모든 문제를 먼저 출력하고 정답·해설은 맨 뒤에 모음</span>
+        </label>
         <button class="btn btn-primary" id="ss-btn-generate" onclick="doSeosul()" disabled
           style="width:100%;padding:14px;font-size:15px;font-weight:700;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:white;border:none;border-radius:10px;cursor:pointer;">
           ✍️ 서술형 종합 생성
@@ -1033,7 +1037,7 @@ async function doSeosul(){
   try{
     const res = await fetch(API+'/api/seosul', {
       method:'POST', headers:{...headers(),'Content-Type':'application/json'},
-      body: JSON.stringify({ passages, types, school_name: schoolName })
+      body: JSON.stringify({ passages, types, school_name: schoolName, answers_at_back: document.getElementById('ss-answers-back').checked })
     });
     if(!res.ok) throw new Error(await res.text() || 'API 오류');
     const data = await res.json();

@@ -31,6 +31,7 @@ def prompt_SA(sentences, target_idx, spec) -> str:
  "blanks":{{"A":{{"sent":<번호>,"tpl":"<해당문장에서 정답자리를 {{{{A}}}}로 치환>","original":"<원문문장>"}},
             "B":{{"sent":<번호>,"tpl":"...","original":"..."}}}}}}
 규칙: 정답 A,B는 서로 다른 문장/절에 위치.
+- 정답 A,B는 '원문에 실제로 있는 연속된 어구를 그대로' 떼어내라. 한 단어도 바꾸지 마라(빈칸에 정답을 도로 넣으면 원문과 글자까지 똑같아야 한다).
 - bogi에는 정답에 쓰인 모든 단어의 '원형(사전 기본형)'을 넣어라. 관사(a/the)·전치사(in/to/of 등) 같은 기능어도 정답에 쓰였다면 빠짐없이 bogi에 포함하라.
 - 정답은 오직 bogi의 단어들로만 구성하라. bogi에 없는 새 단어(특히 관사·전치사)를 정답에 추가하지 마라.
 - 어형 변형은 허용되나, come→came 같은 '불규칙' 변형이 필요한 자리는 빈칸으로 고르지 마라(규칙 변형만)."""
@@ -46,9 +47,9 @@ def prompt_SC(sentences, spec) -> str:
 지문:
 {_numbered(sentences)}
 
-출력 JSON:
+출력 JSON (모든 키 필수 — bogi를 절대 빠뜨리지 마라):
 {{"type":"SC","summary":"<(A)자리는 {{{{A}}}}, (B)자리는 {{{{B}}}} 인 2문장 요약>",
- "answers":{{"A":"...","B":"..."}},"bogi":["..."],"structure":"<사용한 구조명>"}}"""
+ "answers":{{"A":"...","B":"..."}},"bogi":["...","..."],"structure":"<사용한 구조명>"}}"""
 
 
 def prompt_SD(sentences, target_idx, allowed_gp: List[dict]) -> str:

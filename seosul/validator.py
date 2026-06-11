@@ -119,6 +119,10 @@ def _build_irr():
         ("write", "writes", "wrote", "written", "writing"),
         ("hear", "hears", "heard", "hearing"),
         ("read", "reads", "reading"),
+        # 불규칙 복수명사 (접두 매칭이 안 되는 것들)
+        ("man", "men"), ("woman", "women"), ("child", "children"),
+        ("foot", "feet"), ("tooth", "teeth"), ("goose", "geese"),
+        ("mouse", "mice"), ("person", "people"),
     ]
     d = {}
     for g in groups:
@@ -169,12 +173,25 @@ def validate_arrangement(bogi: List[str], answers: Dict[str, str],
     def _can(w: str) -> str:
         return _IRREGULAR.get(w, w)
 
+    def _ves(w: str) -> set:
+        """-f/-fe ↔ -ves 복수 정규화. life↔lives, leaf↔leaves 등."""
+        if w.endswith("ves"):
+            return {w, w[:-3] + "f", w[:-3] + "fe"}
+        if w.endswith("fe"):
+            return {w, w[:-2] + "ves"}
+        if w.endswith("f"):
+            return {w, w[:-1] + "ves"}
+        return {w}
+
     def _matches(t: str) -> bool:
         if t in bset:
             return True
         ct = _can(t)
+        tv = _ves(t)
         for b in bogi_tok:
             if ct == _can(b):                       # 불규칙 정규화 (made↔make)
+                return True
+            if tv & _ves(b):                        # f/ves 복수 (life↔lives, leaf↔leaves)
                 return True
             if t[:3] == b[:3]:                      # 앞 3글자 공유 (illuminate↔illumination)
                 return True

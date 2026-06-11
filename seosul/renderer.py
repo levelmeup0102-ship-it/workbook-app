@@ -66,7 +66,7 @@ def _build_passage(s: dict, answers_by_label: dict, teacher: bool) -> str:
         lab = m.group(1)
         w = _blank_width(answers_by_label.get(lab, "______"))
         return f'<span class="ibl" style="width:{w}px">({lab})</span>'
-    text = re.sub(r"\{\{([A-Za-z가-힣]+)\}\}", repl, text)
+    text = re.sub(r"\{\{\s*\(?([A-Za-z가-힣]+)\)?\s*\}\}", repl, text)
     # 어법 오류 강조 (교사용만)
     if teacher:
         for w in s.get("_error_words", []):

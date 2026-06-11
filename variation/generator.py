@@ -16,7 +16,7 @@ from typing import Optional
 import httpx
 
 from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt, CORE_BLANK_SYS, build_core_blank_prompt
-from variation.validator import validate_a, validate_b
+from variation.validator import validate_a, validate_b, check_marker_positions
 
 
 # ============================================================
@@ -128,6 +128,70 @@ def build_order_blocks_a(en_text: str, pid: str = "?", seed_extra: str = "") -> 
     ]
     order_correct = FIXED_ORDER.index(restore)
     return {"intro": intro_text, "paragraphs": paragraphs, "order_correct": order_correct}
+
+def build_insert_blocks_b(en_text: str, pid: str = "?") -> Optional[dict]:
+    """원문에서 문장 하나를 떼어 given_sentence로, 나머지에 코드가 마커를 박아
+    삽입문제(Q1)를 무손실로 재구성한다. (순서배열 build_order_blocks_a와 같은 철학)
+    validator.check_marker_positions를 통과하고 '정답 자리에 도로 넣으면 원문 복원'이
+    성립하는 구성만 반환. 재구성 불가하면 None(→ 기존 LLM 결과 유지).
+    LLM이 given/본문을 변형해 '어느 자리도 복원 안 되는' 항목을 코드가 살린다."""
+    def _alnum_ib(t):
+        return re.sub(r"[^a-z0-9]", "", str(t).lower())
+    sents = split_sentences(en_text)
+    m = len(sents)
+    if m < 4:
+        return None
+    mid = m // 2
+    order = sorted(range(1, m), key=lambda g: abs(g - mid))  # 가운데 문장부터 시도(첫 문장 제외)
+    for g in order:
+        given = sents[g]
+        remaining = sents[:g] + sents[g + 1:]
+        L = len(remaining)
+        real_gap = g
+        pool = list(range(1, L + 1))  # 각 갭은 앞에 최소 한 문장 → 문장경계 보장
+        if real_gap not in pool or len(pool) < 3:
+            continue
+        target = 5 if len(pool) >= 5 else (4 if len(pool) >= 4 else 3)
+        picks = {pool[0], pool[-1], real_gap}
+        if target > len(picks):
+            for i in range(target):
+                ix = round(i * (len(pool) - 1) / (target - 1))
+                picks.add(pool[ix])
+        chosen = sorted(picks)
+        protected = {pool[0], pool[-1], real_gap}
+        while len(chosen) > 5:
+            for c in chosen:
+                if c not in protected:
+                    chosen.remove(c)
+                    break
+            else:
+                break
+        chosen = sorted(chosen)
+        rank = {gap: i + 1 for i, gap in enumerate(chosen)}  # gap → MARK번호(위치순)
+        out = []
+        for j in range(L + 1):
+            if j in rank:
+                out.append(f"<MARK{rank[j]}>")
+            if j < L:
+                out.append(remaining[j])
+        pwm = " ".join(out)
+        pos_correct = chosen.index(real_gap)
+        pos_count = len(chosen)
+        # 1) 정답 자리에 given 도로 넣으면 원문 복원?
+        recon = pwm.replace(f"<MARK{pos_correct + 1}>", " " + given + " ")
+        recon = re.sub(r"<MARK\d>", "", recon)
+        if _alnum_ib(recon) != _alnum_ib(en_text):
+            continue
+        # 2) 배포 validator 마커 검사 통과?
+        errs = check_marker_positions(pwm, pid, min_between=3,
+                                      position_correct=pos_correct,
+                                      position_count=pos_count, strict=True)
+        if errs:
+            continue
+        return {"given_sentence": given, "passage_with_marks": pwm,
+                "position_correct": pos_correct, "position_count": pos_count}
+    return None
+
 
 # ============ 환경 변수 ============
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -524,6 +588,36 @@ def generate_variation_b(
                         data["position_correct"] = _found  # 코드가 찾은 정답으로 정정
             except Exception:
                 pass  # 실패하면 AI가 찍은 값 유지 (검증에서 다시 걸러짐)
+
+            # ★★ Q1 삽입 fallback — 위 자동정정으로도 '복원되는 자리'가 하나도 없으면
+            #   (LLM이 given/본문을 변형해 어느 자리에 넣어도 원문이 안 맞는 경우),
+            #   코드가 원문에서 삽입문제를 통째로 재구성한다. 복원되는 항목은 건드리지 않음.
+            try:
+                _pwm_fb = str(data.get("passage_with_marks") or "")
+                _gs_fb = str(data.get("given_sentence") or "").strip()
+                def _alnum_fb(t):
+                    return re.sub(r"[^a-z0-9]", "", str(t).lower())
+                _ok_fb = False
+                if _pwm_fb and _gs_fb:
+                    for _k in range(1, 6):
+                        _mk = f"<MARK{_k}>"
+                        if _mk not in _pwm_fb:
+                            continue
+                        _r = _pwm_fb.replace(_mk, " " + _gs_fb + " ")
+                        _r = re.sub(r"<MARK\d>", "", _r)
+                        if _alnum_fb(_r) == _alnum_fb(en_text):
+                            _ok_fb = True
+                            break
+                if not _ok_fb:
+                    _ib = build_insert_blocks_b(en_text, pid)
+                    if _ib:
+                        data["given_sentence"] = _ib["given_sentence"]
+                        data["passage_with_marks"] = _ib["passage_with_marks"]
+                        data["position_correct"] = _ib["position_correct"]
+                        data["position_count"] = _ib["position_count"]
+                        print(f"[VAR][B][{pid}] Q1 삽입 코드 재구성 적용 (복원되는 자리 없어 fallback)")
+            except Exception:
+                pass
 
             # ★★ Q5 주제문 단독 재생성 (1회독 step4 방식)
             #   Q1~Q5를 한 번에 만들면 주제문에 집중이 안 돼 수일치 등 실수가 난다.

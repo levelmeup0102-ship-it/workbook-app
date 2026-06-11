@@ -398,8 +398,9 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s42 = 스키마 v6 (STEP0 지문 전체 독해→논지 추출 후 요약문 생성) — 옛 캐시 무효화
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s41"
+    # _s42 = 빈칸 4단어 CRITICAL + 따옴표 허용/보기부착 + 패러프레이즈 금지조건 축소 + 경계국한 중복검사
+    #        반영. _s41 옛 캐시(짧은 빈칸·옛 패러프레이즈) 전부 무효화하고 재생성.
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s42"
 
 
 # ============ Supabase 캐시 ============

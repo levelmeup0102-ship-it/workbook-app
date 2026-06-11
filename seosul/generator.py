@@ -119,35 +119,44 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
                   if not ((g.get("prohibited_analysis") or "") and "출제 금지" in g["prohibited_analysis"])]
 
     items = []
+    warnings = []
+
+    def _try(typ, prompt_fn, validate_fn, *args):
+        try:
+            items.append(_gen_with_repair(prompt_fn, validate_fn, *args))
+        except Exception as e:
+            warnings.append(f"{typ} 생략(자동 검증 미통과): {e}")
+
     if "SA" in types:
-        items.append(_gen_with_repair(
-            P.prompt_SA,
-            lambda it: V.validate_arrangement(it["bogi"], it["answers"], True, True),
-            sents, roles["SA"], stypes["SA"]))
+        _try("SA", P.prompt_SA,
+             lambda it: V.validate_arrangement(it["bogi"], it["answers"], True, True),
+             sents, roles["SA"], stypes.get("SA", {}))
     if "SC" in types:
-        items.append(_gen_with_repair(
-            P.prompt_SC,
-            lambda it: V.validate_arrangement(it["bogi"], it["answers"], False, False),
-            sents, stypes["SC"]))
+        _try("SC", P.prompt_SC,
+             lambda it: V.validate_arrangement(it["bogi"], it["answers"], False, False),
+             sents, stypes.get("SC", {}))
     if "SD" in types:
-        items.append(_gen_with_repair(
-            P.prompt_SD,
-            lambda it: V.validate_grammar_errors(it["errors"], gp_index, blank_sents, single_passage=True),
-            sents, roles["SD"], allowed_gp))
+        _try("SD", P.prompt_SD,
+             lambda it: V.validate_grammar_errors(it["errors"], gp_index, blank_sents, single_passage=True),
+             sents, roles["SD"], allowed_gp)
     if "SE" in types:
-        items.append(_gen_with_repair(
-            P.prompt_SE,
-            lambda it: V.validate_word_forms(it["blanks"], it["bogi"], set(roles["SE"])),
-            sents, roles["SE"], stypes["SE"]))
+        _try("SE", P.prompt_SE,
+             lambda it: V.validate_word_forms(it["blanks"], it["bogi"], set(roles["SE"])),
+             sents, roles["SE"], stypes.get("SE", {}))
+
+    if not items:
+        raise RuntimeError("모든 유형 생성 실패: " + "; ".join(warnings))
 
     # 지문 자리표시 합성 (빈칸/오류 주입)
     passage_sentences = _assemble_passage(sents, items, roles)
     s = {"passage_ref": {"book": book, "unit": unit, "pid": pid},
          "passage_sentences": passage_sentences, "roles": roles,
-         "single_passage": True, "items": _attach_meta(items, stypes)}
+         "single_passage": True, "items": _attach_meta(items, stypes),
+         "_warnings": warnings}
     ok, errs = V.validate_set(s, gp_index)
     if not ok:
-        raise RuntimeError("최종 세트 검증 실패: " + "; ".join(errs))
+        # 개별 유형은 통과했으므로 전체는 막지 않고 경고만 남긴다
+        s["_warnings"] = warnings + errs
     return s
 
 

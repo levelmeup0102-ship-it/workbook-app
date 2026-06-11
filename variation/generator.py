@@ -282,6 +282,75 @@ def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?
     return None
 
 
+def _b_candidates(hn: str, min_w: int = 4, max_w: int = 7) -> list:
+    spans = [(m.start(), m.end()) for m in re.finditer(r'\S+', hn)]
+    toks = [hn[s:e] for s, e in spans]
+    n = len(toks)
+    out = []
+    for L in range(min_w, max_w + 1):
+        for i in range(0, n - L + 1):
+            j = i + L - 1
+            sub = hn[spans[i][0]:spans[j][1]]
+            if re.search(r'[.!?"\u201c\u201d]', sub):
+                continue
+            fw = re.sub(r'[^a-z]', '', toks[i].lower())
+            if fw in _Q5_MODALS:
+                continue
+            if hn.count(sub) != 1:
+                continue
+            out.append((i, j, sub))
+    return out
+
+
+def pick_b_q4_blanks(full_summary, llm_a: str = "", llm_b: str = "", min_w: int = 4, max_w: int = 7) -> Optional[dict]:
+    """B Q4 빈칸을 코드가 요약문에서 직접 골라줌 (A Q5와 같은 철학).
+    각 4단어 이상, 서로 안 겹침, 경계중복 None. LLM 구절이 유효하면 우선 사용. 실패 시 None.
+    요약문은 우리가 만든 한 문장이라, 짧거나 비verbatim인 LLM 빈칸을 코드가 대체해 누락을 막는다."""
+    hn = re.sub(r'\s+', ' ', str(full_summary or "")).strip()
+    if len(hn.split()) < (2 * min_w + 1):
+        return None
+    cands = _b_candidates(hn, min_w, max_w)
+    if not cands:
+        return None
+
+    def span_of(v):
+        v = re.sub(r'\s+', ' ', str(v or "")).strip()
+        if len(v.split()) < min_w or hn.count(v) != 1:
+            return None
+        if re.search(r'[.!?"\u201c\u201d]', v):
+            return None
+        if modal_no_verb(v):
+            return None
+        toks = hn.split(); pw = v.split()
+        for i in range(len(toks) - len(pw) + 1):
+            if toks[i:i + len(pw)] == pw:
+                return (i, i + len(pw) - 1, v)
+        return None
+
+    la = [span_of(llm_a)] if span_of(llm_a) else []
+    lb = [span_of(llm_b)] if span_of(llm_b) else []
+    poolA = la + cands
+    poolB = lb + cands
+    for ca in poolA:
+        for cb in poolB:
+            lo, hi = (ca, cb) if ca[1] < cb[0] else (cb, ca)
+            if not (lo[1] < hi[0]):  # 겹치거나 인접(사이 0단어) 제외
+                continue
+            va, vb = ca[2], cb[2]
+            if va == vb:
+                continue
+            tmpl = hn.replace(va, "(A)", 1)
+            if "(A)" not in tmpl:
+                continue
+            tmpl = tmpl.replace(vb, "(B)", 1)
+            if "(B)" not in tmpl:
+                continue
+            if fill_boundary_dup(tmpl, [("(A)", va), ("(B)", vb)]):
+                continue
+            return {"blank_A": va, "blank_B": vb}
+    return None
+
+
 # ============ 환경 변수 ============
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5")
@@ -745,6 +814,17 @@ def generate_variation_b(
                     data["blank_B"] = _bb
             except Exception:
                 pass  # 실패하면 기존(한번에 만든) 요약문 유지
+
+            # ★★ Q4 빈칸을 코드가 요약문에서 직접 골라 4단어+ 보장 (A Q5와 같은 철학).
+            #   LLM이 짧게/비verbatim으로 뽑아도 코드가 깨끗한 4단어 구절로 대체 → 누락 차단.
+            try:
+                _fulls = data.get("full_summary") or data.get("summary_full") or ""
+                _bp = pick_b_q4_blanks(_fulls, data.get("blank_A", ""), data.get("blank_B", ""))
+                if _bp:
+                    data["blank_A"] = _bp["blank_A"]
+                    data["blank_B"] = _bp["blank_B"]
+            except Exception:
+                pass
 
             # ★★ 코드가 빈칸 뚫기 (우리가 정한 방식: 완성문장 먼저 → 코드가 뚫기)
             #   LLM이 준 full_summary(빈칸 없는 완성문장)에서 blank_A/blank_B를 찾아

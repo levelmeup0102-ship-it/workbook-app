@@ -64,6 +64,73 @@ def _stem(w: str) -> str:
     return w
 
 
+# 불규칙 변형 정규화 (모든 형태 → 기본형). SA 어형변형 매칭용.
+def _build_irr():
+    groups = [
+        ("be", "is", "are", "am", "was", "were", "been", "being"),
+        ("have", "has", "had", "having"),
+        ("do", "does", "did", "done", "doing"),
+        ("make", "makes", "made", "making"),
+        ("come", "comes", "came", "coming"),
+        ("become", "becomes", "became", "becoming"),
+        ("go", "goes", "went", "gone", "going"),
+        ("take", "takes", "took", "taken", "taking"),
+        ("give", "gives", "gave", "given", "giving"),
+        ("find", "finds", "found", "finding"),
+        ("see", "sees", "saw", "seen", "seeing"),
+        ("know", "knows", "knew", "known", "knowing"),
+        ("grow", "grows", "grew", "grown", "growing"),
+        ("begin", "begins", "began", "begun", "beginning"),
+        ("bring", "brings", "brought", "bringing"),
+        ("build", "builds", "built", "building"),
+        ("buy", "buys", "bought", "buying"),
+        ("catch", "catches", "caught", "catching"),
+        ("choose", "chooses", "chose", "chosen", "choosing"),
+        ("draw", "draws", "drew", "drawn", "drawing"),
+        ("drive", "drives", "drove", "driven", "driving"),
+        ("eat", "eats", "ate", "eaten", "eating"),
+        ("fall", "falls", "fell", "fallen", "falling"),
+        ("feel", "feels", "felt", "feeling"),
+        ("fight", "fights", "fought", "fighting"),
+        ("get", "gets", "got", "gotten", "getting"),
+        ("hold", "holds", "held", "holding"),
+        ("keep", "keeps", "kept", "keeping"),
+        ("lead", "leads", "led", "leading"),
+        ("leave", "leaves", "left", "leaving"),
+        ("lose", "loses", "lost", "losing"),
+        ("mean", "means", "meant", "meaning"),
+        ("meet", "meets", "met", "meeting"),
+        ("pay", "pays", "paid", "paying"),
+        ("rise", "rises", "rose", "risen", "rising"),
+        ("run", "runs", "ran", "running"),
+        ("say", "says", "said", "saying"),
+        ("seek", "seeks", "sought", "seeking"),
+        ("sell", "sells", "sold", "selling"),
+        ("send", "sends", "sent", "sending"),
+        ("show", "shows", "showed", "shown", "showing"),
+        ("speak", "speaks", "spoke", "spoken", "speaking"),
+        ("spend", "spends", "spent", "spending"),
+        ("stand", "stands", "stood", "standing"),
+        ("teach", "teaches", "taught", "teaching"),
+        ("tell", "tells", "told", "telling"),
+        ("think", "thinks", "thought", "thinking"),
+        ("understand", "understands", "understood", "understanding"),
+        ("win", "wins", "won", "winning"),
+        ("write", "writes", "wrote", "written", "writing"),
+        ("hear", "hears", "heard", "hearing"),
+        ("read", "reads", "reading"),
+    ]
+    d = {}
+    for g in groups:
+        base = g[0]
+        for form in g:
+            d[form] = base
+    return d
+
+
+_IRREGULAR = _build_irr()
+
+
 # =========================================================
 #  SA / SC : 배열영작 보기↔정답 토큰 대조
 # =========================================================
@@ -94,15 +161,21 @@ def validate_arrangement(bogi: List[str], answers: Dict[str, str],
                 errs.append(f"[미사용 보기] '{t}'")
         return errs
 
-    # 어형변형 허용 (SA) → 기능어는 보기에 그대로 존재, 내용어는 어근 접두 매칭
+    # 어형변형 허용 (SA) → 기능어는 보기에 그대로 존재, 내용어는 어근 접두/불규칙 매칭
     FUNC = {"a", "an", "the", "in", "on", "of", "to", "and", "or", "for", "with",
             "as", "that", "than", "by", "at", "from", "into", "about", "but", "so"}
     bset = set(bogi_tok)
 
+    def _can(w: str) -> str:
+        return _IRREGULAR.get(w, w)
+
     def _matches(t: str) -> bool:
         if t in bset:
             return True
+        ct = _can(t)
         for b in bogi_tok:
+            if ct == _can(b):                       # 불규칙 정규화 (made↔make)
+                return True
             if t[:3] == b[:3]:                      # 앞 3글자 공유 (illuminate↔illumination)
                 return True
             if t.startswith(b[:max(3, len(b) - 2)]) or b.startswith(t[:max(3, len(t) - 2)]):

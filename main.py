@@ -692,7 +692,8 @@ async def _secret_note_impl(body: dict):
             "label":       label,
             "passage":     passage_text,
             "translation": translation,
-            "data":        note_data,
+            # ★ 분석지(강사 sheet) 병합본이 있으면 그걸 우선 사용 (4박스·노트까지 강사 반영)
+            "data":        (note_data.get("_display") if isinstance(note_data, dict) and note_data.get("_display") else note_data),
         }
         if note_type == "D" and pc_mode == "topic":
             # 캐시 우선, 없으면 web_search 기반 자동 생성
@@ -731,6 +732,28 @@ async def _secret_note_impl(body: dict):
 
     html = pl.render_secret_note(passages_data, note_type, school_name, teacher_name)
     return {"ok": True, "html": html, "filename": f"비밀노트_유형{note_type}.html"}
+
+
+# ============================================================
+# ★ 분석지 (3-mode 저작/인쇄/학생) 라우터 등록 - 2026-06 추가
+#   - GET  /sheet?book=&unit=&pid=  : 분석지 저작 화면 (three_modes)
+#   - POST /api/sheet/save          : sheet_cache 저장
+#   - POST /api/sheet/publish       : 공유 토큰 발급
+#   - GET  /s/{token}               : 학생 게시물 (읽기 전용)
+# ============================================================
+try:
+    from sheet import routes as sheet_routes
+    sheet_routes.set_deps(
+        ck=_ck,
+        verify=_verify,
+        load_db=_load_db,
+        data_dir=DATA_DIR,
+        template_dir=Path("sheet"),
+    )
+    app.include_router(sheet_routes.router)
+    print("[sheet] 분석지 라우터 등록 완료")
+except Exception as e:
+    print(f"[sheet] 라우터 등록 실패 (분석지 기능 비활성): {e}")
 
 
 if __name__ == "__main__":

@@ -16,7 +16,7 @@ from typing import Optional
 import httpx
 
 from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt, CORE_BLANK_SYS, build_core_blank_prompt
-from variation.validator import validate_a, validate_b, check_marker_positions
+from variation.validator import validate_a, validate_b, check_marker_positions, fill_boundary_dup, modal_no_verb
 
 
 # ============================================================
@@ -190,6 +190,95 @@ def build_insert_blocks_b(en_text: str, pid: str = "?") -> Optional[dict]:
             continue
         return {"given_sentence": given, "passage_with_marks": pwm,
                 "position_correct": pos_correct, "position_count": pos_count}
+    return None
+
+
+_Q5_MODALS = {"can", "will", "must", "should", "would", "could", "may", "might", "shall"}
+
+
+def _q5_candidates(ptext: str, min_w: int = 5, max_w: int = 7) -> list:
+    """단락에서 '문장 중간 연속 구절'(verbatim) 후보 생성. 가운데 우선.
+    문장경계/따옴표 포함 제외, 조동사 시작 제외, 단락 내 유일 등장만."""
+    spans = [(m.start(), m.end()) for m in re.finditer(r'\S+', ptext)]
+    toks = [ptext[s:e] for s, e in spans]
+    n = len(toks)
+    cands = []
+    for L in range(min_w, max_w + 1):
+        for i in range(1, n - L):  # 양끝 한 토큰씩 비워 경계 확보
+            j = i + L - 1
+            sub = ptext[spans[i][0]:spans[j][1]]
+            if re.search(r'[.!?"\u201c\u201d]', sub):
+                continue
+            fw = re.sub(r'[^a-z]', '', toks[i].lower())
+            if fw in _Q5_MODALS:
+                continue
+            if ptext.count(sub) != 1:
+                continue
+            mid = abs((i + j) / 2 - n / 2)
+            cands.append((mid, sub))
+    cands.sort(key=lambda x: x[0])
+    return [c[1] for c in cands]
+
+
+def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?") -> Optional[dict]:
+    """A Q5 빈칸을 코드가 (A)(B)(C)에서 직접 골라 마킹 (B 빈칸뚫기와 같은 철학).
+    LLM이 고른 구절(blank_A/B)이 유효하면 우선 사용, 아니면 코드가 깨끗한 구절 선택.
+    fill_boundary_dup None + verbatim 복원 + 서로 다른 단락이 보장되는 조합만 반환. 실패 시 None.
+    → 빈칸 짧음/원문 미발견/경계 단어중복(예: 'questions' 중복) 원천 차단."""
+    try:
+        texts = [p[1] for p in paragraphs]
+    except Exception:
+        return None
+    if len(texts) < 2:
+        return None
+    cand = [_q5_candidates(t) for t in texts]
+
+    def _valid_llm(val, idx):
+        if not val:
+            return None
+        v = str(val).strip()
+        if len(v.split()) < 4:
+            return None
+        if texts[idx].count(v) != 1:
+            return None
+        if re.search(r'[.!?"\u201c\u201d]', v):
+            return None
+        if modal_no_verb(v):
+            return None
+        return v
+
+    order = sorted(range(len(texts)), key=lambda k: -len(texts[k].split()))
+    pool = []
+    for k in order:
+        lst = []
+        for llm in (llm_a, llm_b):
+            vv = _valid_llm(llm, k)
+            if vv and vv not in lst:
+                lst.append(vv)
+        lst += [c for c in cand[k] if c not in lst]
+        pool.append((k, lst))
+
+    for ai in range(len(pool)):
+        ka, la = pool[ai]
+        for bi in range(len(pool)):
+            if bi == ai:
+                continue
+            kb, lb = pool[bi]
+            for va in la[:6]:
+                for vb in lb[:6]:
+                    new = [list(p) for p in paragraphs]
+                    new[ka][1] = texts[ka].replace(va, "<BLANK_A>", 1)
+                    new[kb][1] = texts[kb].replace(vb, "<BLANK_B>", 1)
+                    joined = " ".join(p[1] for p in new)
+                    if "<BLANK_A>" not in joined or "<BLANK_B>" not in joined:
+                        continue
+                    if fill_boundary_dup(joined, [("<BLANK_A>", va), ("<BLANK_B>", vb)]):
+                        continue
+                    if new[ka][1].replace("<BLANK_A>", va) != texts[ka]:
+                        continue
+                    if new[kb][1].replace("<BLANK_B>", vb) != texts[kb]:
+                        continue
+                    return {"paragraphs": new, "blank_A": va, "blank_B": vb}
     return None
 
 
@@ -443,21 +532,31 @@ def generate_variation_a(
                         data["intro"] = new_intro
                     data["_core_marked"] = core_ok
 
-                # Q5 영작빈칸: LLM이 고른 구절을 (A)(B)(C)에서 찾아 마킹 (같은 단락이어도 둘 다)
+                # Q5 영작빈칸: ★ 코드가 (A)(B)(C)에서 직접 골라 뚫는다 (B 빈칸뚫기와 같은 철학).
+                #   LLM 구절이 유효하면 우선 쓰고, 아니면 코드가 깨끗한 구절을 골라 verbatim 마킹.
+                #   → 빈칸 짧음/원문 미발견/경계 단어중복(예: 'questions') 원천 차단. 서로 다른 단락.
                 marked = {}
-                for mk, key in (("<BLANK_A>", "blank_A"), ("<BLANK_B>", "blank_B")):
-                    val = (data.get(key) or "").strip()
-                    if not val:
-                        marked[mk] = False
-                        continue
-                    done = False
-                    for p in data["paragraphs"]:
-                        new_txt, ok = _mark_phrase(p[1], val, mk)
-                        if ok:
-                            p[1] = new_txt
-                            done = True
-                            break
-                    marked[mk] = done
+                _picked = pick_a_q5_blanks(data["paragraphs"], data.get("blank_A", ""), data.get("blank_B", ""), pid)
+                if _picked:
+                    data["paragraphs"] = _picked["paragraphs"]
+                    data["blank_A"] = _picked["blank_A"]
+                    data["blank_B"] = _picked["blank_B"]
+                    marked = {"<BLANK_A>": True, "<BLANK_B>": True}
+                else:
+                    # fallback: 기존 방식(LLM 구절을 찾아 마킹) — 코드픽 실패 시에도 최소한 동작
+                    for mk, key in (("<BLANK_A>", "blank_A"), ("<BLANK_B>", "blank_B")):
+                        val = (data.get(key) or "").strip()
+                        if not val:
+                            marked[mk] = False
+                            continue
+                        done = False
+                        for p in data["paragraphs"]:
+                            new_txt, ok = _mark_phrase(p[1], val, mk)
+                            if ok:
+                                p[1] = new_txt
+                                done = True
+                                break
+                        marked[mk] = done
                 data["_blanks_marked"] = marked
 
             if "mismatch_count" not in data and "statements" in data:

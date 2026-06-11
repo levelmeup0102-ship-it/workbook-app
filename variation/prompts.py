@@ -511,7 +511,7 @@ def build_summary_sentence_prompt(passage_text: str) -> str:
         "- ★ Still double-check SUBJECT-VERB AGREEMENT after swapping words: a plural/compound subject "
         "(X and Y) takes a plural verb ('context and surroundings ALTER ...' not 'alters').\n"
         "- No bare-verb subject; do not end with a preposition; no 'Despite + clause'; no 'modal + adjective'.\n"
-        "- Also pick TWO phrases that ALREADY appear verbatim inside your sentence (each ~4-8 words, "
+        "- Also pick TWO phrases that ALREADY appear verbatim inside your sentence (each MUST be AT LEAST 4 words, ideally 4-8 words, "
         "separated by other words) — these become the two writing blanks. Copy them character-for-character.\n"
         "- This is the ONLY thing you are writing now — focus entirely on making this one sentence perfect.\n\n"
         "[OUTPUT JSON]\n"

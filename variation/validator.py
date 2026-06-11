@@ -324,9 +324,9 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
     try:
         wa = len(data["blank_A"].split()); wb = len(data["blank_B"].split())
         if wa < min_bw:
-            errors.append(f"[{pid}] Q5 blank_A 단어 수 부족 ({wa}개 < {min_bw}개)")
+            errors.append(f"[{pid}] [CRITICAL] Q5 blank_A 단어 수 부족 ({wa}개 < {min_bw}개) — 4단어 이상 필수")
         if wb < min_bw:
-            errors.append(f"[{pid}] Q5 blank_B 단어 수 부족 ({wb}개 < {min_bw}개)")
+            errors.append(f"[{pid}] [CRITICAL] Q5 blank_B 단어 수 부족 ({wb}개 < {min_bw}개) — 4단어 이상 필수")
     except (KeyError, AttributeError) as e:
         errors.append(f"[{pid}] blank_A/B 형식 오류: {e}")
 
@@ -556,9 +556,9 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
         wa = len(data["blank_A"].split())
         wb = len(data["blank_B"].split())
         if wa < min_blank_words:
-            errors.append(f"[{pid}] Q4 blank_A 단어 수 부족 ({wa}개 < {min_blank_words}개) — 더 긴 구문 선택")
+            errors.append(f"[{pid}] [CRITICAL] Q4 blank_A 단어 수 부족 ({wa}개 < {min_blank_words}개) — 4단어 이상 필수")
         if wb < min_blank_words:
-            errors.append(f"[{pid}] Q4 blank_B 단어 수 부족 ({wb}개 < {min_blank_words}개) — 더 긴 구문 선택")
+            errors.append(f"[{pid}] [CRITICAL] Q4 blank_B 단어 수 부족 ({wb}개 < {min_blank_words}개) — 4단어 이상 필수")
     except (KeyError, AttributeError) as e:
         errors.append(f"[{pid}] B blank_A/B 형식 오류: {e}")
     

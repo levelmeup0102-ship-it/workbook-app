@@ -52,24 +52,36 @@ def prompt_SC(sentences, spec) -> str:
 
 
 def prompt_SD(sentences, target_idx, allowed_gp: List[dict]) -> str:
-    wl = "\n".join(f"- #{g['id']} [{g['category']}] {g['name']} :: 함정={g.get('trap_warning','')}"
-                   for g in allowed_gp)
+    if allowed_gp:
+        wl = "\n".join(f"- [{g.get('category','')}] {g['name']} :: 함정={g.get('trap_warning','')}"
+                       for g in allowed_gp[:40])
+    else:
+        wl = ("- [일치] 주어-동사 거리 수일치\n"
+              "- [관계사] 관계대명사 vs 관계부사 자리\n"
+              "- [관계사] what/that/which 구분, the sense/fact + 동격 that\n"
+              "- [준동사] 능동/수동 분사 (v-ing vs p.p.)\n"
+              "- [준동사] to-v vs v-ing, 전치사+동명사(in v-ing)\n"
+              "- [형용사/부사] 형용사 자리 vs 부사 자리\n"
+              "- [태] 능동 vs 수동\n- [도치] 도치 구문 수일치")
     return f"""{_COMMON}
 
 [유형 SD] 다음 지문에서 어법상 틀린 곳을 만든다. 밑줄/번호 표시 없음.
 대상 문장(여기에만 오류 삽입, 빈칸 문장 제외): {target_idx}
-반드시 아래 화이트리스트의 포인트로만 출제. 목록에 없는 어법은 금지(즉석 판단 금지).
-서로 다른 category로, 주어-동사는 수식어구로 거리를 벌려라. 관사/어휘혼동/둘 다 맞는 문법 금지.
+아래 '권장 유형'에서만 골라 출제하고, 각 오류에 그 category를 반드시 적어라.
+서로 다른 category로 출제하고, 주어-동사는 수식어구로 거리를 벌려라.
 
-화이트리스트:
+★ 절대 금지(출제하면 안 됨): 관사(a/an/the) 오류, 어휘·철자 혼동(affect/effect 등),
+  둘 다 맞는 문법(지각/사역/help+원형 vs to V 등). 이런 건 만들지 마라.
+
+권장 유형:
 {wl}
 
 지문:
 {_numbered(sentences)}
 
-출력 JSON:
+출력 JSON (gp_id는 쓰지 말 것, category로 표기):
 {{"type":"SD","errors":[
-  {{"sent":<번호>,"wrong":"<오류형>","right":"<정답형>","gp_id":<화이트리스트 id>,"why":"<근거 한 줄>"}}
+  {{"sent":<번호>,"wrong":"<오류형>","right":"<정답형>","category":"<권장유형 category>","why":"<근거 한 줄>"}}
 ]}}"""
 
 

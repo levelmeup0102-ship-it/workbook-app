@@ -94,16 +94,27 @@ def validate_arrangement(bogi: List[str], answers: Dict[str, str],
                 errs.append(f"[미사용 보기] '{t}'")
         return errs
 
-    # 어형변형 허용 (SA) → 어간 다중집합 비교 (중복 허용 시 부분집합 검사)
-    bstem = _multiset([_stem(t) for t in bogi_tok])
-    astem = _multiset([_stem(t) for t in ans_tok])
-    if allow_dup:
-        for k, v in astem.items():
-            if k not in bstem:
-                errs.append(f"[보기에 없는 어간] '{k}'")
-    else:
-        if bstem != astem:
-            errs.append(f"[보기≠정답 어간] 보기{bstem} vs 정답{astem}")
+    # 어형변형 허용 (SA) → 기능어는 보기에 그대로 존재, 내용어는 어근 접두 매칭
+    FUNC = {"a", "an", "the", "in", "on", "of", "to", "and", "or", "for", "with",
+            "as", "that", "than", "by", "at", "from", "into", "about", "but", "so"}
+    bset = set(bogi_tok)
+
+    def _matches(t: str) -> bool:
+        if t in bset:
+            return True
+        for b in bogi_tok:
+            if t[:3] == b[:3]:                      # 앞 3글자 공유 (illuminate↔illumination)
+                return True
+            if t.startswith(b[:max(3, len(b) - 2)]) or b.startswith(t[:max(3, len(t) - 2)]):
+                return True
+        return False
+
+    for t in ans_tok:
+        if t in FUNC:
+            if t not in bset:
+                errs.append(f"[보기에 없는 기능어] '{t}' (관사·전치사도 보기에 포함해야 함)")
+        elif not _matches(t):
+            errs.append(f"[보기에 없는 단어] '{t}'")
     return errs
 
 

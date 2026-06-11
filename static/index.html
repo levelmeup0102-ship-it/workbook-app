@@ -156,6 +156,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
     </div>
     <div class="header-tabs">
       <div class="header-tab" onclick="switchTab('preclass', this)">📕 0회독 — 수업 전 분석</div>
+      <div class="header-tab" onclick="switchTab('sheet', this)">📊 분석지</div>
       <div class="header-tab active" onclick="switchTab('generate', this)">📄 1회독 교재 생성</div>
       <div class="header-tab" onclick="switchTab('variation', this)">📝 2회독 변형문제</div>
       <div class="header-tab" onclick="switchTab('seosul', this)">✍️ 2회독 서술형 종합</div>
@@ -224,6 +225,45 @@ textarea:focus { border-color: #4A90D9; outline: none; }
         <div class="card hidden" id="pc-results-section">
           <div class="card-title">✅ 생성 완료</div>
           <div id="pc-results-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ★ 분석지 탭 (three_modes 저작) -->
+  <div id="tab-sheet" class="hidden">
+    <div class="three-col">
+      <div style="grid-column: span 2;">
+        <div class="card">
+          <div class="card-title">📚 지문 선택 (0회독이 준비된 지문만 분석지 가능)</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <button class="btn btn-sm" onclick="asExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
+            <button class="btn btn-sm" onclick="asCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
+            <button class="btn btn-sm" onclick="asClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
+            <span style="margin-left:auto;font-size:13px;color:#666;" id="as-sel-count">0개 선택</span>
+          </div>
+          <div id="as-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
+            <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-right">
+        <div class="card" style="border:2px solid #2E4E8F;background:#F7F9FC;">
+          <div class="card-title" style="color:#2E4E8F;">📊 분석지 — 저작·인쇄·학생 공유</div>
+          <div style="font-size:11px;color:#445;margin-bottom:10px;line-height:1.6;">
+            0회독 분석을 그대로 불러와 <b>강조·편집</b>하는 3-모드 분석지입니다.<br>
+            · <b>저작</b> — 단어 클릭으로 어법·어휘·함축 강조<br>
+            · <b>정밀 인쇄물</b> — A4 가로 한 장 (선생님용)<br>
+            · <b>학생 게시물</b> — 공유 링크로 배포
+          </div>
+          <div style="background:#EBF0FA;border:1px solid #2E4E8F;border-radius:8px;padding:10px;margin-bottom:10px;font-size:10.5px;color:#445;line-height:1.6;">
+            ⓘ 분석지는 <b>0회독 자료</b>를 소스로 씁니다.<br>
+            0회독이 ⏳ 미생성인 지문은 먼저 0회독 탭에서 생성하세요.
+          </div>
+          <button class="btn btn-primary" id="as-btn-open" onclick="asOpenSheets()" disabled style="width:100%;background:#2E4E8F;">
+            📊 분석지 열기 (새 창)
+          </button>
+          <div id="as-open-note" style="font-size:11px;color:#666;margin-top:8px;text-align:center;"></div>
         </div>
       </div>
     </div>
@@ -944,6 +984,7 @@ function switchTab(tab, el) {
   document.querySelectorAll('.header-tab').forEach(t => t.classList.remove('active'));
   if(el) el.classList.add('active');
   document.getElementById('tab-preclass').classList.toggle('hidden', tab!=='preclass');
+  document.getElementById('tab-sheet').classList.toggle('hidden', tab!=='sheet');
   document.getElementById('tab-generate').classList.toggle('hidden', tab!=='generate');
   document.getElementById('tab-variation').classList.toggle('hidden', tab!=='variation');
   document.getElementById('tab-seosul').classList.toggle('hidden', tab!=='seosul');
@@ -951,6 +992,7 @@ function switchTab(tab, el) {
   document.getElementById('tab-secret').classList.toggle('hidden', tab!=='secret');
   document.getElementById('tab-extract').classList.toggle('hidden', tab!=='extract');
   if(tab==='preclass') pcRefreshBooks();
+  if(tab==='sheet') asRefreshBooks();
   if(tab==='secret') snRefreshBooks();
   if(tab==='extract') extRefreshBooks();
   if(tab==='variation') vrRefreshBooks();
@@ -2149,6 +2191,137 @@ async function doVariation() {
       progressFill.style.width = '0%';
       vrUpdateBtns();
     }, 2000);
+  }
+}
+
+// ============================================================
+// ★ 분석지 (three_modes 저작) — pc* 패턴 재사용, prefix=as
+// ============================================================
+let asSelectedPassages = new Map();
+let asExpandedBooks = new Set();
+
+function asRefreshBooks() { if (PASSAGES_DATA) asRenderBookList(); }
+
+function asRenderBookList() {
+  const books = {};
+  PASSAGES_DATA.forEach(p => {
+    if (!books[p.book]) books[p.book] = {};
+    if (!books[p.book][p.unit]) books[p.book][p.unit] = [];
+    books[p.book][p.unit].push(p);
+  });
+  const bookNames = Object.keys(books).sort();
+  const container = document.getElementById('as-book-list');
+  let html = '';
+  for (const book of bookNames) {
+    const units = Object.keys(books[book]).sort((a,b) => {
+      const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
+      const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
+      return numA - numB || a.localeCompare(b);
+    });
+    const bookPassages = Object.values(books[book]).flat();
+    const selectedCount = bookPassages.filter(p => asSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+    const isExpanded = asExpandedBooks.has(book);
+    const allSelected = selectedCount === bookPassages.length && bookPassages.length > 0;
+    html += `<div class="ext-book-item ${isExpanded?'expanded':''}" onclick="asToggleExpand('${book}')">
+      <span style="color:#666;font-size:12px;">${isExpanded?'▼':'▶'}</span>
+      <input type="checkbox" ${allSelected?'checked':''} onclick="event.stopPropagation();asToggleBook('${book}')" style="width:15px;height:15px;">
+      <span style="flex:1;font-size:13px;font-weight:500;">${book}</span>
+      <span class="ext-count-badge">${selectedCount}/${bookPassages.length}</span>
+    </div>`;
+    if (isExpanded) {
+      for (const unit of units) {
+        const unitPassages = books[book][unit];
+        const unitSelectedCount = unitPassages.filter(p => asSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+        const unitAllSelected = unitSelectedCount === unitPassages.length;
+        html += `<div class="ext-unit-row">
+          <div class="ext-unit-header">
+            <input type="checkbox" ${unitAllSelected?'checked':''} onclick="asToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
+            <span style="font-size:13px;font-weight:600;color:#2E4E8F;">${unit}</span>
+            <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
+          </div>
+          <div class="ext-pid-list">`;
+        for (const p of unitPassages) {
+          const key = `${p.book}|${p.unit}|${p.id}`;
+          const isSelected = asSelectedPassages.has(key);
+          const ready = p.cache_status === 'ready';
+          const badge = ready
+            ? `<span style="color:#2E9E5A;font-size:9px;margin-left:3px;">●</span>`
+            : `<span style="color:#E8833A;font-size:9px;margin-left:3px;" title="0회독 미생성">○</span>`;
+          html += `<label class="ext-pid-chip ${isSelected?'selected':''}" title="${ready?'0회독 준비됨':'0회독 미생성 — 먼저 0회독 생성 필요'}">
+            <input type="checkbox" ${isSelected?'checked':''} onchange="asTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
+            ${p.id}${badge}
+          </label>`;
+        }
+        html += '</div></div>';
+      }
+    }
+  }
+  container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
+  asUpdateCount();
+  asUpdateBtn();
+}
+
+function asToggleExpand(book) {
+  if (asExpandedBooks.has(book)) asExpandedBooks.delete(book);
+  else asExpandedBooks.add(book);
+  asRenderBookList();
+}
+function asExpandAll() {
+  [...new Set(PASSAGES_DATA.map(p => p.book))].forEach(b => asExpandedBooks.add(b));
+  asRenderBookList();
+}
+function asCollapseAll() { asExpandedBooks.clear(); asRenderBookList(); }
+function asToggleBook(book) {
+  const bp = PASSAGES_DATA.filter(p => p.book === book);
+  const allSel = bp.every(p => asSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  bp.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    if (allSel) asSelectedPassages.delete(key);
+    else asSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
+  });
+  asRenderBookList();
+}
+function asToggleUnit(book, unit) {
+  const up = PASSAGES_DATA.filter(p => p.book === book && p.unit === unit);
+  const allSel = up.every(p => asSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  up.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    if (allSel) asSelectedPassages.delete(key);
+    else asSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
+  });
+  asRenderBookList();
+}
+function asTogglePassage(book, unit, id) {
+  const key = `${book}|${unit}|${id}`;
+  if (asSelectedPassages.has(key)) asSelectedPassages.delete(key);
+  else asSelectedPassages.set(key, {book, unit, id});
+  asRenderBookList();
+}
+function asClearSelection() { asSelectedPassages.clear(); asRenderBookList(); }
+function asUpdateCount() {
+  document.getElementById('as-sel-count').textContent = `${asSelectedPassages.size}개 선택`;
+}
+function asUpdateBtn() {
+  document.getElementById('as-btn-open').disabled = asSelectedPassages.size === 0;
+}
+function asOpenSheets() {
+  const passages = [...asSelectedPassages.values()];
+  if (!passages.length) { toast('지문을 선택하세요'); return; }
+  const note = document.getElementById('as-open-note');
+  let opened = 0;
+  for (const p of passages) {
+    const url = '/sheet?book=' + encodeURIComponent(p.book)
+              + '&unit=' + encodeURIComponent(p.unit)
+              + '&pid=' + encodeURIComponent(p.id);
+    const w = window.open(url, '_blank');
+    if (w) opened++;
+  }
+  if (opened < passages.length) {
+    note.innerHTML = `일부 창이 팝업 차단됨. 이 사이트의 팝업을 허용해주세요. (${opened}/${passages.length} 열림)`;
+    note.style.color = '#E8833A';
+  } else {
+    note.innerHTML = `✅ ${opened}개 분석지 열림`;
+    note.style.color = '#2E9E5A';
   }
 }
 

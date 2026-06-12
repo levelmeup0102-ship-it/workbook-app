@@ -5134,7 +5134,12 @@ def _passage_marked_to_html(marked: str, original: str = "") -> str:
     import re as _re
     import html as _html
 
-    orig_len = len(original.strip()) if original else None
+    # ★ v25 절단 안전화: 공백 무시 길이 + 20% 여유로만 비교.
+    # 기존엔 original 이 조금만 짧아도(공백·위첨자 차이) 뒤쪽 마커가 통째로 잘려
+    # "어휘 번호가 일부 지문에서 안 붙는" 문제 발생 → 충분한 여유를 둬 정상 마커 보호.
+    _orig_nospace = len(_re.sub(r'\s+', '', original)) if original else None
+    orig_len = int(_orig_nospace * 1.2) + 50 if _orig_nospace else None
+    _plain_nospace = 0
 
     # 원숫자/원알파벳 변환 테이블
     CIRCLED_NUMS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮"
@@ -5177,13 +5182,16 @@ def _passage_marked_to_html(marked: str, original: str = "") -> str:
     for m in pattern.finditer(marked):
         if m.start() > last_end:
             plain = marked[last_end:m.start()]
-            if orig_len and plain_len + len(plain) > orig_len:
-                plain = plain[:max(0, orig_len - plain_len)]
+            _add_ns = len(_re.sub(r'\s+', '', plain))
+            if orig_len and _plain_nospace + _add_ns > orig_len:
+                # 평문이 원본+여유를 넘어선 경우에만 절단 (마커 텍스트는 보호)
                 out.append(_html.escape(plain))
                 plain_len += len(plain)
+                _plain_nospace += _add_ns
                 return "".join(out)
             out.append(_html.escape(plain))
             plain_len += len(plain)
+            _plain_nospace += _add_ns
 
         kind = m.group(1)
         inner = m.group(5)  # ★ inner 그룹 번호 변경 (split 그룹 추가됨)
@@ -5201,12 +5209,15 @@ def _passage_marked_to_html(marked: str, original: str = "") -> str:
         else:  # IMPL
             out.append(f'<span class="im">{_html.escape(inner)}</span>')
         plain_len += len(inner)
+        # ★ inner(마커 텍스트)는 절단 카운트(_plain_nospace)에 더하지 않는다 — 마커 보호
         last_end = m.end()
 
     if last_end < len(marked):
         tail = marked[last_end:]
-        if orig_len and plain_len + len(tail) > orig_len:
-            tail = tail[:max(0, orig_len - plain_len)]
+        _tail_ns = len(_re.sub(r'\s+', '', tail))
+        if orig_len and _plain_nospace + _tail_ns > orig_len:
+            # 꼬리 평문이 원본+여유 초과 시에만 절단
+            tail = tail[:max(0, int(orig_len - _plain_nospace) * 2)] if orig_len > _plain_nospace else ""
         out.append(_html.escape(tail))
 
     return "".join(out)

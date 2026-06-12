@@ -52,7 +52,8 @@ def prompt_SC(sentences, spec) -> str:
 
 출력 JSON (모든 키 필수 — bogi를 절대 빠뜨리지 마라):
 {{"type":"SC","summary":"<(A)자리는 {{{{A}}}}, (B)자리는 {{{{B}}}} 인 2문장 요약>",
- "answers":{{"A":"...","B":"..."}},"bogi":["...","..."],"structure":"<사용한 구조명>"}}"""
+ "answers":{{"A":"...","B":"..."}},"bogi":["...","..."],"structure":"<사용한 구조명>"}}
+주의: summary의 빈칸 자리에는 '(A)','(B)' 같은 라벨이나 밑줄(___)을 쓰지 말고, 오직 {{{{A}}}} {{{{B}}}} placeholder만 정확히 한 번씩 넣어라(라벨과 placeholder를 같이 쓰면 빈칸이 두 번 찍힌다)."""
 
 
 def prompt_SD(sentences, target_idx, allowed_gp: List[dict]) -> str:

@@ -144,10 +144,11 @@ def _render_problem(s: dict, teacher: bool, school_name: str) -> str:
                 blank = (f'<span class="sc-lab">({k})</span>'
                          f'<span class="sc-blank" style="width:{w}px"></span>')
                 sentinel = f"\x00{k}\x00"
-                # {{A}} 형식
+                # {{A}} / (A) / (A)____ 를 모두 표식으로 — 모델이 라벨과 placeholder를 같이 쓴 경우 대비
                 summ = re.sub(r'\{\{\s*%s\s*\}\}' % re.escape(k), sentinel, summ)
-                # 모델이 {{}} 대신 (A) 또는 (A)____ 를 직접 쓴 경우도 처리
                 summ = re.sub(r'\(\s*%s\s*\)\s*_*' % re.escape(k), sentinel, summ)
+                # 연달아 붙은 표식(예: (A){{A}})은 하나의 빈칸으로 합침
+                summ = re.sub(r'(?:%s\s*)+' % re.escape(sentinel), sentinel, summ)
                 summ = summ.replace(sentinel, blank)
             rows = "".join(f'<div class="wr-row"><span class="wtag">({k})</span><span class="wline"></span></div>'
                            for k in it["answers"])

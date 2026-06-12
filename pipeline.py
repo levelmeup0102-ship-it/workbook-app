@@ -3295,10 +3295,10 @@ Each box's `num` field: "①" or at most "②③" (2 merged max). NEVER 3+.
 If you'd merge 3+, create SEPARATE boxes instead.
 
 ### RULE 4 — ALL 4 BOX-SLOTS MUST BE FILLED
-`grammar_p1.left`, `grammar_p1.right`, `grammar_p2.left`, `grammar_p2.right` — ALL FOUR must have 3~4 boxes each. Total 12~14 boxes.
+`grammar_p1.left`, `grammar_p1.right`, `grammar_p2.left`, `grammar_p2.right` — ALL FOUR must be filled. Total 16~18 boxes (각 슬롯 4~5개).
 
-Distribution for 12 grammar_notes: 3+3+3+3 (p1.L=①②③ / p1.R=④⑤⑥ / p2.L=⑦⑧⑨ / p2.R=⑩⑪⑫)
-Distribution for 13: 3+4+3+3 or 4+3+3+3
+Distribution for 16 grammar_notes: 4+4+4+4 (p1.L=①②③④ / p1.R=⑤⑥⑦⑧ / p2.L=⑨⑩⑪⑫ / p2.R=⑬⑭⑮⑯)
+Distribution for 18: 5+4+5+4 또는 4+5+4+5
 
 ★ 절대 규칙 — 어법 박스 묶기 금지 ★
 **각 어법 박스는 단 하나의 번호만 가진다.** 다음과 같이 두 개 이상 합치는 것 절대 금지:
@@ -3308,6 +3308,15 @@ Distribution for 13: 3+4+3+3 or 4+3+3+3
 - ✅ `"num": "④"`, `"num": "⑤"`, `"num": "⑥"` (각각 별도 박스)
 
 grammar_notes가 12개면 박스도 정확히 12개 (각각 ①, ②, ③ ... ⑫). 14개면 박스 14개.
+
+### RULE 4.4 — `sense_units` (직독직해 의미단위) ★분석지 정밀인쇄물용★
+
+전체 지문을 **의미단위(sense group)로 끊어서** 영어 원문 조각 + 그 조각의 짧은 한국어 직역을 순서대로 만든다.
+
+- 끊는 단위: 전치사구 / 분사구 / 종속절 / 등위접속사 앞뒤 / to-V구 등 자연스러운 끊어읽기 지점.
+- `en` 조각들을 순서대로 이으면 **passage_marked에서 마커 제거한 원문과 정확히 일치**해야 한다.
+- `kr` 은 그 조각만의 직역(짧게, 5~12자 권장). 문장 전체 의역이 아니라 **그 덩어리의 뜻**.
+- 한 문장이 보통 4~8개 의미단위로 쪼개진다. 전체 지문이면 보통 30~60개.
 
 ### RULE 4.5 — 함축(IMPL) 마커 길이 제한
 **[[IMPL]]...[[/IMPL]] 안의 내용은 5단어 이내로 한정.** 너무 길게 잡으면 어휘·어법 마커와 겹쳐서 표시가 깨진다.
@@ -3326,12 +3335,12 @@ In `passage_marked`, ALL THREE marker types must appear in the body:
 
 | 마커 종류 | 본문 내 개수 | 대응 항목 |
 |---|---|---|
-| `[[GRAMMAR:n=N]]...[[/GRAMMAR]]` | = len(grammar_notes) | 보통 12~14개 |
-| `[[VOCAB:l=L]]...[[/VOCAB]]` | **= len(vocab_notes) = 정확히 10개** | 어휘 노트와 1:1 매칭 |
+| `[[GRAMMAR:n=N]]...[[/GRAMMAR]]` | = len(grammar_notes) | **16개 이상 (지문이 길면 18개까지)** |
+| `[[VOCAB:l=L]]...[[/VOCAB]]` | **= len(vocab_notes) = 14개 이상** | 어휘 노트와 1:1 매칭 |
 | `[[IMPL]]...[[/IMPL]]` | **= len(implication_box.expressions) = 6~7개** | implication 표현 1:1 매칭 |
 
 ★ ENFORCEMENT ★
-- 본문에 VOCAB 마커가 10개 미만이면 SELF-CHECK 실패 → 다시 본문 스캔해서 어휘 위치 찾기
+- 본문에 VOCAB 마커가 14개 미만이면 SELF-CHECK 실패 → 다시 본문 스캔해서 어휘 위치 찾기
 - 본문에 IMPL 마커가 6개 미만이면 SELF-CHECK 실패 → implication_box.expressions 각 표현을 본문에서 찾아 마킹
 - vocab_notes·implication_box를 만들었다면, 그 단어/표현이 본문에 반드시 있다 → 본문에서 위치 찾아 마커로 감싸라
 
@@ -3344,8 +3353,8 @@ In `passage_marked`, ALL THREE marker types must appear in the body:
 
 implication_box.expressions의 각 expr 필드는 본문에서 정확히 그 표현으로 마킹된 부분이어야 함.
 
-### RULE 6 — GRAMMAR_NOTES COUNT = STRICT 12~14 (절대 7~10개 안됨)
-**MINIMUM 12, ABSOLUTE FLOOR. If you find fewer than 12, you MUST re-scan the passage.**
+### RULE 6 — GRAMMAR_NOTES COUNT = STRICT 16~18 (절대 12개 이하 안됨)
+**MINIMUM 16, ABSOLUTE FLOOR. If you find fewer than 16, you MUST re-scan the passage.**
 
 You MUST systematically scan the passage for ALL these categories:
 
@@ -3525,6 +3534,10 @@ Each item:
 ═════════════════════════════════════════════════
 {
   "passage_marked": "...",
+  "sense_units": [
+    {"en": "직독직해 의미단위 (영어 원문 그대로, 끊어읽기 단위)", "kr": "그 단위의 한국어 직역 (짧게)"},
+    {"en": "다음 의미단위", "kr": "한국어 직역"}
+  ],
   "topics": [3 SHORT phrases, **6~10 words each, MAX 10 words, ≤ 100 chars**. Same length/weight as titles. Abstract noun-phrase or compressed proposition. NEVER long explanatory propositions],
   "titles": [3 titles, **6~10 words each, MAX 10 words**. Colon style allowed],
   "topics_kr": [3 natural Korean, **≤ 15 자 each**, same length as titles_kr],
@@ -3581,11 +3594,13 @@ Each item:
 ## SELF-CHECK BEFORE RETURNING
 ═════════════════════════════════════════════════
 □ passage_marked stripped of [[...]] = input character-by-character?
+□ **sense_units 의 en 조각들을 순서대로 이으면 = 원문과 일치?** ★NEW★
+□ **Count of [[GRAMMAR]] in passage_marked = len(grammar_notes) = 16개 이상?** ★NEW★
 □ Every [[...]] marker wraps 1~3 words only?
 □ Every box's num is "X" or "XY" (max 2 merged)?
 □ grammar_p1.left/right ≥ 3 AND grammar_p2.left/right ≥ 3?
 □ Count of [[GRAMMAR]] = len(grammar_notes)?
-□ **Count of [[VOCAB]] in passage_marked = len(vocab_notes) = 10?** ★MOST MISSED CHECK★
+□ **Count of [[VOCAB]] in passage_marked = len(vocab_notes) = 14개 이상?** ★MOST MISSED CHECK★
 □ **Count of [[IMPL]] in passage_marked = len(implication_box.expressions) = 6~7?** ★MOST MISSED CHECK★
 □ Every vocab_detail/theme_vocab has def_en (8~15w) AND ex_short (8~12w)?
 □ **All 3 topics ≤ 10 words AND ≤ 100 chars?** ★ABSOLUTE — RE-WRITE IF VIOLATED★
@@ -3599,8 +3614,8 @@ implication_box.expressions 6~7개를 만들었으면 본문에 IMPL 마커도 �
 **만약 본문에 마커가 부족하면 → 단어/표현을 본문에서 다시 찾아서 마커 추가 → 재검토.**
 
 ★★★ FINAL CHECK — GRAMMAR_NOTES COUNT ★★★
-□ len(grammar_notes) >= 12?
-   If < 12: RE-SCAN. Common missed points:
+□ len(grammar_notes) >= 16?
+   If < 16: RE-SCAN. Common missed points:
    • prevent/keep/stop A from V-ing
    • to-V 부사적 용법 (목적: "in order to V")
    • 현재완료 수동 (have been + p.p.)
@@ -3752,6 +3767,15 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
         )
     except Exception as e:
         _safe_print(f"  ⚠️ [후처리 실패] _ensure_vocab_markers: {type(e).__name__}: {str(e)[:200]}")
+
+    # ★ v25 후처리 4.2 — GRAMMAR 마커 누락 진단 (sync 로 박스 삭제되기 전에 경고)
+    try:
+        _ensure_grammar_markers(
+            data.get("passage_marked", ""),
+            data.get("grammar_notes", []),
+        )
+    except Exception as e:
+        _safe_print(f"  ⚠️ [후처리 실패] _ensure_grammar_markers: {type(e).__name__}: {str(e)[:200]}")
 
     # ★ v24 후처리 4.5 — 지문 마커 ↔ 상세 박스 동기화
     # 선생님 지적: 지문 어법 ③번까지인데 상세 박스 ⑫번까지 나오는 문제
@@ -4114,166 +4138,85 @@ def render_preclass_analysis(passages_data: list, school_name: str,
 
 
 def _sync_grammar_boxes_with_passage(data: dict) -> dict:
-    """지문(passage_marked)의 어법 마커 개수에 맞춰 grammar_p1/p2 상세 박스를 잘라낸다.
-    
-    문제: AI가 지문에는 ①②③만 마킹하고, grammar_p1/p2에는 ①~⑫까지 12개 박스를 만드는 경우.
-    결과: 지문 마커는 3개인데 상세 설명은 12개 — 학생 혼란.
-    
-    해결: 지문에 실제 존재하는 마커 번호만 살리고, 그 외 박스는 제거.
+    """v25 — '늘리는' 방향. 박스/노트를 절대 삭제하지 않는다.
+
+    기존 동작(삭제)이 풍부한 어법 분석을 깎아먹어 방향을 반대로 전환:
+    - grammar_p1/p2 박스와 grammar_notes 는 AI가 만든 그대로 전부 보존.
+    - 지문(passage_marked)에 마킹이 빠진 번호가 있으면, 그 번호 박스의
+      본문예문(is_ex) 줄에서 단어를 뽑아 지문에 [[GRAMMAR:n=N]] 자동 삽입 시도.
+    - 자동 삽입에 실패해도 박스는 그대로 둔다 (분석지가 다 활용).
     """
     if not isinstance(data, dict):
         return data
-    
     import re as _re
-    
     passage_marked = data.get("passage_marked", "") or ""
     if not passage_marked:
         return data
-    
-    # 지문에 실제 존재하는 어법 번호 추출
-    # [[GRAMMAR:n=①]] 또는 [[GRAMMAR:n=1]] 또는 [[GRAMMAR:n=①,split=1]]
-    grammar_nums_in_passage = set()
-    for m in _re.finditer(r'\[\[GRAMMAR:n=([^,\]]+)', passage_marked):
-        raw_num = m.group(1).strip()
-        # 숫자면 원숫자로 변환 (예외 안전)
-        try:
-            if raw_num.isdigit():
-                n_int = int(raw_num)
-                if 1 <= n_int <= 20:
-                    if n_int <= 10:
-                        raw_num = chr(0x2460 + n_int - 1)
-                    elif n_int <= 15:
-                        raw_num = "⑪⑫⑬⑭⑮"[n_int - 11]
-                    else:
-                        raw_num = "⑯⑰⑱⑲⑳"[n_int - 16]
-        except (ValueError, IndexError):
-            pass
-        grammar_nums_in_passage.add(raw_num)
-    
-    if not grammar_nums_in_passage:
-        return data
-    
     CIRCLE_ORDER = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
-    
-    # grammar_p1, grammar_p2의 모든 박스 모으기
+
+    def _norm(raw):
+        raw = (raw or "").strip()
+        if raw and raw[0] in CIRCLE_ORDER:
+            return raw[0]
+        if raw.isdigit():
+            n = int(raw)
+            if 1 <= n <= 20:
+                return CIRCLE_ORDER[n - 1]
+        return ""
+
+    marked = set()
+    for m in _re.finditer(r'\[\[GRAMMAR:n=([^,\]]+)', passage_marked):
+        c = _norm(m.group(1))
+        if c:
+            marked.add(c)
+
     p1 = data.get("grammar_p1", {}) or {}
     p2 = data.get("grammar_p2", {}) or {}
-    all_boxes = (
-        (p1.get("left", []) or []) + (p1.get("right", []) or [])
-        + (p2.get("left", []) or []) + (p2.get("right", []) or [])
-    )
-    
-    # 지문에 있는 번호의 박스만 남김 + 번호 순으로 정렬
-    filtered = []
-    seen_nums = set()
+    all_boxes = ((p1.get("left") or []) + (p1.get("right") or [])
+                 + (p2.get("left") or []) + (p2.get("right") or []))
+
+    added = 0
     for box in all_boxes:
         if not isinstance(box, dict):
             continue
-        num = (box.get("num") or "").strip()
-        # 박스 num에 포함된 원숫자 중 지문에 있는 것만
-        box_nums = [c for c in num if c in CIRCLE_ORDER]
-        if not box_nums:
+        bn = _norm(box.get("num"))
+        if not bn or bn in marked:
             continue
-        # 첫 번호가 지문에 있어야 박스 채택
-        first_num = box_nums[0]
-        if first_num in grammar_nums_in_passage and first_num not in seen_nums:
-            filtered.append(box)
-            seen_nums.add(first_num)
-    
-    # 번호 순으로 정렬
-    def _sort_key(box):
-        num = (box.get("num") or "").strip()
-        for i, c in enumerate(CIRCLE_ORDER):
-            if c in num:
-                return i
-        return 999
-    filtered.sort(key=_sort_key)
-    
-    removed_count = len(all_boxes) - len(filtered)
-    if removed_count > 0:
-        _safe_print(f"  📕 지문 마커 동기화: {len(all_boxes)}개 → {len(filtered)}개 (불일치 {removed_count}개 제거)")
-    
-    # 그리고 grammar_notes도 같이 정리
-    grammar_notes = data.get("grammar_notes", []) or []
-    filtered_notes = []
-    for note in grammar_notes:
-        if not isinstance(note, dict):
-            continue
-        num = (note.get("num") or "").strip()
-        note_nums = [c for c in num if c in CIRCLE_ORDER]
-        if not note_nums:
-            continue
-        if note_nums[0] in grammar_nums_in_passage:
-            filtered_notes.append(note)
-    filtered_notes.sort(key=_sort_key)
-    data["grammar_notes"] = filtered_notes
-    
-    # 박스 4분면 재분배
-    n = len(filtered)
-    if n == 0:
-        data["grammar_p1"] = {"left": [], "right": []}
-        data["grammar_p2"] = {"left": [], "right": []}
-        return data
-    
-    q = n // 4
-    r = n % 4
-    slots = [q + (1 if i < r else 0) for i in range(4)]
-    idx = 0
-    new_p1_l = filtered[idx:idx+slots[0]]; idx += slots[0]
-    new_p1_r = filtered[idx:idx+slots[1]]; idx += slots[1]
-    new_p2_l = filtered[idx:idx+slots[2]]; idx += slots[2]
-    new_p2_r = filtered[idx:idx+slots[3]]
-    data["grammar_p1"] = {"left": new_p1_l, "right": new_p1_r}
-    data["grammar_p2"] = {"left": new_p2_l, "right": new_p2_r}
-    
+        cand_words = []
+        for ln in (box.get("lines") or []):
+            if not isinstance(ln, dict) or not ln.get("is_ex"):
+                continue
+            txt = ln.get("text") or ""
+            for w in _re.findall(r"[A-Za-z][A-Za-z'-]{2,}", txt):
+                if w.lower() not in ("the", "and", "that", "this", "with", "for"):
+                    cand_words.append(w)
+        for w in cand_words:
+            try:
+                res = _find_in_marked(passage_marked, w, word_boundary=True)
+            except Exception:
+                res = None
+            if res:
+                s, e, matched = res
+                passage_marked = (passage_marked[:s]
+                                  + f"[[GRAMMAR:n={bn}]]{matched}[[/GRAMMAR]]"
+                                  + passage_marked[e:])
+                marked.add(bn)
+                added += 1
+                break
+
+    if added:
+        _safe_print(f"  \U0001f4d5 \uc5b4\ubc95 \ub9c8\ucee4 \uc790\ub3d9 \ucd94\uac00(\ub298\ub9ac\uae30): +{added}\uac1c \u2192 \uc9c0\ubb38 \ub9c8\ud0b9 {len(marked)}\uac1c")
+    data["passage_marked"] = passage_marked
+    # ★ 박스/노트는 그대로 보존 (삭제하지 않음)
     return data
 
 
 def _sync_vocab_with_passage(data: dict) -> dict:
-    """지문(passage_marked)의 어휘 마커 letter에 맞춰 vocab_notes를 잘라낸다.
-    
-    같은 원리 — 지문에 ⓐⓑⓒ만 있는데 vocab_notes에 ⓐ~ⓙ까지 10개면 ⓓⓔ... 제거.
+    """v25 — '늘리는' 방향. vocab_notes 를 삭제하지 않는다.
+
+    어휘 마커 추가는 _ensure_vocab_markers 가 이미 처리(word 로 본문 검색).
+    따라서 여기서는 노트를 자르지 않고 그대로 보존만 한다.
     """
-    if not isinstance(data, dict):
-        return data
-    
-    import re as _re
-    
-    passage_marked = data.get("passage_marked", "") or ""
-    if not passage_marked:
-        return data
-    
-    CIRCLED_ALPHA = "ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞ"
-    
-    # 지문에 실제 존재하는 어휘 letter 추출
-    vocab_letters_in_passage = set()
-    for m in _re.finditer(r'\[\[VOCAB:l=([^\]]+)\]\]', passage_marked):
-        raw_letter = m.group(1).strip()
-        # 알파벳이면 원알파벳으로 변환
-        if len(raw_letter) == 1 and raw_letter.isalpha():
-            idx_l = ord(raw_letter.lower()) - ord('a')
-            if 0 <= idx_l < len(CIRCLED_ALPHA):
-                raw_letter = CIRCLED_ALPHA[idx_l]
-        vocab_letters_in_passage.add(raw_letter)
-    
-    if not vocab_letters_in_passage:
-        return data
-    
-    # vocab_notes에서 지문에 있는 letter만 남김
-    vocab_notes = data.get("vocab_notes", []) or []
-    filtered = []
-    for v in vocab_notes:
-        if not isinstance(v, dict):
-            continue
-        letter = (v.get("letter") or "").strip()
-        if letter and letter[0] in vocab_letters_in_passage:
-            filtered.append(v)
-    
-    removed_count = len(vocab_notes) - len(filtered)
-    if removed_count > 0:
-        _safe_print(f"  🔵 지문 어휘 마커 동기화: {len(vocab_notes)}개 → {len(filtered)}개 (불일치 {removed_count}개 제거)")
-    
-    data["vocab_notes"] = filtered
     return data
 
 
@@ -4781,6 +4724,41 @@ def _ensure_vocab_markers(passage_marked: str, vocab_notes: list) -> str:
         _safe_print(f"  🔵 VOCAB 마커 자동 보정: {added}개 추가")
     if not_found:
         _safe_print(f"  ⚠️ VOCAB 마커 추가 실패 (본문에 없거나 충돌): {not_found}")
+    return passage_marked
+
+
+def _ensure_grammar_markers(passage_marked: str, grammar_notes: list) -> str:
+    """grammar_notes 번호와 본문 [[GRAMMAR]] 마커 번호가 1:1 맞는지 진단·로깅.
+    어법은 단어 위치 정보가 없어 자동삽입은 위험 → 누락 번호를 빌드 로그로 알림.
+    """
+    if not passage_marked or not grammar_notes:
+        return passage_marked
+    import re as _re2
+    CN = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
+    norm_marked = set()
+    for raw in _re2.findall(r'\[\[GRAMMAR:n=([0-9]+|[①-⑳]+)', passage_marked):
+        for ch in raw:
+            if ch in CN:
+                norm_marked.add(ch)
+        if raw.isdigit():
+            n = int(raw)
+            if 1 <= n <= 20:
+                norm_marked.add(CN[n-1])
+    note_nums = set()
+    for idx, g in enumerate(grammar_notes):
+        if not isinstance(g, dict):
+            continue
+        raw = (g.get("num") or "").strip()
+        hit = False
+        for ch in raw:
+            if ch in CN:
+                note_nums.add(ch); hit = True
+        if not hit and idx < len(CN):
+            note_nums.add(CN[idx])
+    missing = sorted(note_nums - norm_marked, key=lambda c: CN.index(c) if c in CN else 99)
+    if missing:
+        _safe_print(f"  ⚠️ GRAMMAR 마커 누락 {len(missing)}개: {''.join(missing)} "
+                    f"(notes {len(note_nums)} / 마킹 {len(norm_marked)}) — AI가 어법 마킹 빠뜨림")
     return passage_marked
 
 

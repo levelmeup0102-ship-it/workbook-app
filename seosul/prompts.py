@@ -71,12 +71,12 @@ def prompt_SD(sentences, target_idx, allowed_gp: List[dict]) -> str:
 
 [유형 SD] 다음 지문에서 어법상 틀린 곳을 만든다. 밑줄/번호 표시 없음.
 대상 문장(여기에만 오류 삽입, 빈칸 문장 제외): {target_idx}
-★ 정확히 {len(target_idx)}곳에 오류를 만들어라(각각 다른 문장·다른 category).
+★ '깨끗한' 어법 오류만 2곳 또는 3곳 만들어라(각각 다른 문장·다른 category).
+   3개째가 억지스럽거나 금지 유형밖에 안 남으면 '2개만' 만들어라(억지로 3개 채우지 마라).
 아래 '권장 유형'에서만 골라 출제하고, 각 오류에 그 category를 반드시 적어라.
 서로 다른 category로 출제하고, 주어-동사는 수식어구로 거리를 벌려라.
 
-★ 절대 금지(출제하면 안 됨): 관사(a/an/the) 오류, 어휘·철자 혼동(affect/effect 등),
-  둘 다 맞는 문법(지각/사역/help+원형 vs to V 등). 이런 건 만들지 마라.
+★ 절대 금지(출제하면 안 됨): 관사(a/an/the) 오류, 어휘·철자 혼동(affect/effect, affecting/unaffected, rise/raise, lie/lay 등 '뜻이 다른 단어 바꿔치기'), 둘 다 맞는 문법(지각/사역/help+원형 vs to V 등). 이런 건 만들지 마라. 특히 단어를 '반대뜻/다른뜻 단어'로 바꾸는 건 어법이 아니라 어휘라서 금지다.
 
 권장 유형:
 {wl}

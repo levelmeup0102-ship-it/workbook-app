@@ -89,6 +89,20 @@ def _build_passage(s: dict, answers_by_label: dict, teacher: bool) -> str:
     return f'<div class="psg-box">{text}</div>'
 
 
+def _split_bogi(bogi):
+    """보기를 단어 단위로 분리. 관사(a/an/the)는 바로 뒤 단어와 붙여 한 덩어리로 유지."""
+    words = []
+    for chunk in bogi:
+        toks = str(chunk).split()
+        i = 0
+        while i < len(toks):
+            if toks[i].lower() in ("a", "an", "the") and i + 1 < len(toks):
+                words.append(toks[i] + " " + toks[i + 1]); i += 2
+            else:
+                words.append(toks[i]); i += 1
+    return words
+
+
 def _render_problem(s: dict, teacher: bool, school_name: str) -> str:
     """문제부 HTML 조각 (헤더 + 지문 + 문항)."""
     ref = s.get("passage_ref", {})
@@ -123,13 +137,18 @@ def _render_problem(s: dict, teacher: bool, school_name: str) -> str:
             body.append(head + cond +
                         f'<div class="bogi"><span class="bogi-label">보기</span> {bogi}</div>' + rows + '</div>')
         elif it["type"] == "SC":
-            bogi = ' / '.join(it["bogi"])
+            bogi = ' / '.join(_split_bogi(it["bogi"]))
             summ = it["summary"]
             for k, v in it["answers"].items():
                 w = min(340, max(130, len(v) * 7))
                 blank = (f'<span class="sc-lab">({k})</span>'
                          f'<span class="sc-blank" style="width:{w}px"></span>')
-                summ = summ.replace("{{%s}}" % k, blank)
+                sentinel = f"\x00{k}\x00"
+                # {{A}} 형식
+                summ = re.sub(r'\{\{\s*%s\s*\}\}' % re.escape(k), sentinel, summ)
+                # 모델이 {{}} 대신 (A) 또는 (A)____ 를 직접 쓴 경우도 처리
+                summ = re.sub(r'\(\s*%s\s*\)\s*_*' % re.escape(k), sentinel, summ)
+                summ = summ.replace(sentinel, blank)
             rows = "".join(f'<div class="wr-row"><span class="wtag">({k})</span><span class="wline"></span></div>'
                            for k in it["answers"])
             body.append(head + f'<div class="summary-box">{summ}</div>' +

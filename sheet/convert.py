@@ -18,7 +18,7 @@ sheet_convert.py  ―  0회독(preclass_analysis_v24) 데이터를
 import re
 import html as _html
 
-CIRCLED_NUMS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮"
+CIRCLED_NUMS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
 CIRCLED_ALPHA = "ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞ"
 
 
@@ -28,7 +28,7 @@ def _norm_num(s: str) -> str:
         return s[0]
     try:
         n = int(s)
-        if 1 <= n <= 15:
+        if 1 <= n <= 20:
             return CIRCLED_NUMS[n - 1]
     except ValueError:
         pass
@@ -133,7 +133,7 @@ def split_sentences(text: str) -> list:
 # passage_marked 토큰화
 # ════════════════════════════════════════════════════════════════
 _MARK_RE = re.compile(
-    r'\[\[(GRAMMAR:n=([0-9]+|[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮]+)(?:,split=(\d+))?'
+    r'\[\[(GRAMMAR:n=([0-9]+|[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]+)(?:,split=(\d+))?'
     r'|VOCAB:l=([a-oA-O]|[ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞ])'
     r'|IMPL)\]\]'
     r'([\s\S]*?)'

@@ -232,6 +232,9 @@ def _q5_candidates(ptext: str, min_w: int = 5, max_w: int = 7) -> list:
     return [c[1] for c in cands]
 
 
+MAX_BLANK_WORDS = 9  # 영작 빈칸(A Q5 / B Q4) 최대 단어 수 — 초과 LLM 빈칸은 거부하고 코드가 5~7단어로 대체
+
+
 def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?") -> Optional[dict]:
     """A Q5 빈칸을 코드가 (A)(B)(C)에서 직접 골라 마킹 (B 빈칸뚫기와 같은 철학).
     LLM이 고른 구절(blank_A/B)이 유효하면 우선 사용, 아니면 코드가 깨끗한 구절 선택.
@@ -250,6 +253,8 @@ def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?
             return None
         v = str(val).strip()
         if len(v.split()) < 4:
+            return None
+        if len(v.split()) > MAX_BLANK_WORDS:   # 너무 길면(예: 27단어) 거부 → 코드가 깔끔한 5~7단어로 대체
             return None
         if texts[idx].count(v) != 1:
             return None
@@ -327,7 +332,7 @@ def pick_b_q4_blanks(full_summary, llm_a: str = "", llm_b: str = "", min_w: int 
 
     def span_of(v):
         v = re.sub(r'\s+', ' ', str(v or "")).strip()
-        if len(v.split()) < min_w or hn.count(v) != 1:
+        if len(v.split()) < min_w or len(v.split()) > MAX_BLANK_WORDS or hn.count(v) != 1:
             return None
         if not _quote_ok(v):
             return None
@@ -398,9 +403,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s42 = 빈칸 4단어 CRITICAL + 따옴표 허용/보기부착 + 패러프레이즈 금지조건 축소 + 경계국한 중복검사
-    #        반영. _s41 옛 캐시(짧은 빈칸·옛 패러프레이즈) 전부 무효화하고 재생성.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s42"
+    # _s43 = 빈칸 최대 길이 상한(9단어, 검사기 백스톱 12) 추가 — 27단어 같은 과대 빈칸 차단. 그 외 _s42 누적분 포함.
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s43"
 
 
 # ============ Supabase 캐시 ============

@@ -113,7 +113,7 @@ export default function PassageExtractor() {
 
     let content = '';
     selectedPassages.forEach((p) => {
-      const label = `${p.book} ${p.unit} ${p.pid}`;
+      const label = [p.book, p.unit === 'etc' ? '' : p.unit, p.pid].filter(Boolean).join(' ');
       content += `<div style="margin-bottom: 28px; page-break-inside: avoid;">
   <p style="font-weight: bold; color: #333; margin-bottom: 10px; font-size: 11pt;">${label}</p>
   <p style="line-height: 2.0; text-align: justify; font-size: 11pt;">${p.passage_text}</p>

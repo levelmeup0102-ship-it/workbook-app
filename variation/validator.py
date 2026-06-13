@@ -423,31 +423,9 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
         t = re.sub(r"<[^>]+>", " ", t)
         t = re.sub(r"[^a-zA-Z0-9 ]", " ", t.lower())
         return re.sub(r"\s+", " ", t).strip()
-    intro_n = _norm(data.get("intro", ""))
-    if intro_n:
-        iw = intro_n.split()
-        probe = " ".join(iw[:8]) if len(iw) >= 8 else intro_n
-        for idx, txt in enumerate(para_texts):
-            if probe and probe in _norm(txt):
-                errors.append(
-                    f"[CRITICAL][{pid}] intro 문장이 paragraphs[{idx}]에 중복 등장 — "
-                    f"주어진 글은 (A)/(B)/(C)에 다시 넣지 말 것 (누락·중복 0)"
-                )
-
-    # ★★★ Q3 빈칸 겹침 방지 (박아둠): intro의 <CORE_BLANK>를 정답(core_blank_target)으로 채우면
-    #     원문에 그 문장이 그대로 존재해야 한다. 빈칸이 앞/뒤 단어를 먹었으면 채운 결과가 원문과 어긋나 여기서 걸린다.
-    _intro_raw = data.get("intro", "") or ""
-    _tgt = data.get("core_blank_target", "") or ""
-    if original_passage and _tgt and "<CORE_BLANK>" in _intro_raw:
-        _filled = _intro_raw.replace("<CORE_BLANK>", _tgt)
-        if _norm(_filled) not in _norm(original_passage):
-            errors.append(
-                f"[CRITICAL][{pid}] Q3 빈칸 위치/범위 오류 — 빈칸을 정답으로 채우면 원문과 어긋남 "
-                f"(빈칸이 앞/뒤 본문 단어를 먹었을 가능성). 빈칸은 실제로 빠진 부분만 덮을 것."
-            )
-
-    # ★★★ 순서형 복원 대조 (핵심): intro + (A)(B)(C)를 정답순서로 합치면 원문과 100% 일치해야 함.
-    #     떨어진 문장을 한 단락에 병합하거나, 문장을 재배치/누락/중복하면 여기서 걸린다.
+    # ★★★ 순서형 복원 대조를 '먼저' 계산 (이게 순서 정답의 권위 있는 검사다).
+    #     intro+(A)(B)(C)를 정답순서로 이으면 원문과 100% 일치해야 함. 일치하면 순서가 증명된 것.
+    _recon_ok = None  # None=계산불가, True=원문과 일치, False=불일치
     if original_passage and isinstance(data.get("order_correct"), int) \
        and 0 <= data["order_correct"] <= 4 and len(para_texts) == 3:
         FIXED = [["A", "C", "B"], ["B", "A", "C"], ["B", "C", "A"], ["C", "A", "B"], ["C", "B", "A"]]
@@ -460,11 +438,38 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
             t = l2t.get(lbl, "")
             t = t.replace("<BLANK_A>", data.get("blank_A", "") or "").replace("<BLANK_B>", data.get("blank_B", "") or "")
             restored += " " + t
-        if _norm(restored) != _norm(original_passage):
+        _recon_ok = (_norm(restored) == _norm(original_passage))
+
+    # intro 중복 (보조 휴리스틱) — ★ 복원 대조가 통과(_recon_ok True)면 순서가 원문과 100% 복원되어
+    #   중복이 있을 수 없으므로 이 휴리스틱은 오탐이다. 그때는 검사하지 않는다.
+    intro_n = _norm(data.get("intro", ""))
+    if intro_n and _recon_ok is not True:
+        iw = intro_n.split()
+        probe = " ".join(iw[:8]) if len(iw) >= 8 else intro_n
+        for idx, txt in enumerate(para_texts):
+            if probe and probe in _norm(txt):
+                errors.append(
+                    f"[CRITICAL][{pid}] intro 문장이 paragraphs[{idx}]에 중복 등장 — "
+                    f"주어진 글은 (A)/(B)/(C)에 다시 넣지 말 것 (누락·중복 0)"
+                )
+
+    # ★★★ Q3 빈칸 겹침 방지: intro의 <CORE_BLANK>를 정답으로 채우면 원문에 그 문장이 그대로 존재해야 함.
+    _intro_raw = data.get("intro", "") or ""
+    _tgt = data.get("core_blank_target", "") or ""
+    if original_passage and _tgt and "<CORE_BLANK>" in _intro_raw:
+        _filled = _intro_raw.replace("<CORE_BLANK>", _tgt)
+        if _norm(_filled) not in _norm(original_passage):
             errors.append(
-                f"[CRITICAL][{pid}] 순서형 복원 불일치 — intro+(A)(B)(C)를 정답순서로 이어붙여도 원문과 다름 "
-                f"(문장 재배치/병합/누락 또는 Q3 빈칸 위치 오류 의심). (A)(B)(C)는 원문 연속 구간만 담을 것."
+                f"[CRITICAL][{pid}] Q3 빈칸 위치/범위 오류 — 빈칸을 정답으로 채우면 원문과 어긋남 "
+                f"(빈칸이 앞/뒤 본문 단어를 먹었을 가능성). 빈칸은 실제로 빠진 부분만 덮을 것."
             )
+
+    # 복원 불일치 — 계산 가능했고(_recon_ok is False) 실제로 안 맞을 때만 (진짜 순서 오류)
+    if _recon_ok is False:
+        errors.append(
+            f"[CRITICAL][{pid}] 순서형 복원 불일치 — intro+(A)(B)(C)를 정답순서로 이어붙여도 원문과 다름 "
+            f"(문장 재배치/병합/누락 또는 Q3 빈칸 위치 오류 의심). (A)(B)(C)는 원문 연속 구간만 담을 것."
+        )
 
     # Q5 blank_A/B 인접 검증 (paragraphs 기준, 최소 3단어 사이)
     try:

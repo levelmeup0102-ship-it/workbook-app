@@ -3715,8 +3715,9 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
         sys_prompt = sys_prompt + "\n\n" + grammar_addendum
         _safe_print(f"  📚 grammar_points 주입됨 ({len(grammar_addendum):,} chars)")
 
-    # 출력이 큰 스키마 — max_tokens 넉넉히 (어법16+·어휘14+·sense_units로 출력 증가 → 32000)
-    data = call_claude_json(sys_prompt, prompt, max_tokens=32000)
+    # 출력 한도 — 어법16+·어휘14+·sense_units 실제 필요량은 8~12k. 한도가 과하면
+    # 모델이 장황해져 생성 시간↑·타임아웃 위험 → 16000 으로 적정화.
+    data = call_claude_json(sys_prompt, prompt, max_tokens=16000)
     
     # ★ 후처리 안전 실행 헬퍼 — 에러 시 함수명·에러내용 로깅하고 다음 단계로
     def _safe_post(step_name, fn):

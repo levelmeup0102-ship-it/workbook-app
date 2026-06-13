@@ -22,8 +22,10 @@ def _logo_uri() -> str:
     return "data:image/png;base64," + base64.b64encode(open(p, "rb").read()).decode()
 
 _EXTRA = """
-.hdr-title{white-space:nowrap; flex:1 1 auto; min-width:0; overflow:hidden;}
-.hdr-right{flex:0 0 auto; white-space:nowrap;}
+.hdr{ display:table !important; width:100%; table-layout:auto; }
+.hdr-title{ display:table-cell !important; text-align:left; white-space:nowrap; vertical-align:middle; }
+.hdr-right{ display:table-cell !important; text-align:right; white-space:nowrap; width:1%; vertical-align:middle; padding-left:12px; }
+.var-badge{ display:inline-block; vertical-align:middle; }
 /* 페이지 아래 여백 축소(로고 자리 확보용 22mm 불필요) → 로고가 진짜 모서리로 */
 @page{ margin: 11mm 13mm 10mm 13mm; }
 /* 로고: 인쇄 시 모든 페이지 우하단 모서리에 고정. Chrome 인쇄 기준 음수 오프셋으로 여백 안쪽까지 내림.

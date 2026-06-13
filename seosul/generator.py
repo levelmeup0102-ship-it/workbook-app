@@ -127,6 +127,7 @@ def allocate_roles(n: int) -> Dict[str, List[int]]:
 # ---------- 유형별 생성 + 검증·재생성 ----------
 def _gen_with_repair(prompt_fn, validate_fn, *args) -> dict:
     last_err = []
+    best = None  # (오류개수, item) — 구조는 멀쩡(키 있음)하나 소프트 검증만 실패한 최선 후보
     for attempt in range(MAX_REPAIR):
         prompt = prompt_fn(*args)
         if attempt and last_err:
@@ -143,8 +144,15 @@ def _gen_with_repair(prompt_fn, validate_fn, *args) -> dict:
             continue
         if not errs:
             return item
+        # 키는 다 있으나 소프트 규칙 미달 → 최선 후보로 보관(나중에 살려 출력)
+        if best is None or len(errs) < best[0]:
+            best = (len(errs), item)
         last_err = errs
-    raise RuntimeError("재생성 한도 초과: " + "; ".join(last_err))
+    # 재생성 다 써도 완벽하진 않지만, 렌더 가능한 최선 시도가 있으면 그걸 출력(유형 드롭 금지)
+    if best is not None:
+        best[1]["_soft_fail"] = last_err
+        return best[1]
+    raise RuntimeError("재생성 한도 초과(렌더 가능한 결과 없음): " + "; ".join(last_err))
 
 
 _FUNC_WORDS = {"a", "an", "the", "in", "on", "of", "to", "and", "or", "for", "with",

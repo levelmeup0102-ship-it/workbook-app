@@ -3713,8 +3713,8 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
         sys_prompt = sys_prompt + "\n\n" + grammar_addendum
         _safe_print(f"  📚 grammar_points 주입됨 ({len(grammar_addendum):,} chars)")
 
-    # 출력이 큰 스키마 — max_tokens 넉넉히
-    data = call_claude_json(sys_prompt, prompt, max_tokens=16000)
+    # 출력이 큰 스키마 — max_tokens 넉넉히 (어법16+·어휘14+·sense_units로 출력 증가 → 32000)
+    data = call_claude_json(sys_prompt, prompt, max_tokens=32000)
     
     # ★ 후처리 안전 실행 헬퍼 — 에러 시 함수명·에러내용 로깅하고 다음 단계로
     def _safe_post(step_name, fn):
@@ -4067,6 +4067,13 @@ def render_preclass_analysis(passages_data: list, school_name: str,
     from jinja2 import Environment, FileSystemLoader
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)))
     tmpl = env.get_template("preclass_analysis.html")
+
+    # ★ 생성 실패(data=None) 지문은 본체 렌더에서 제외 — 템플릿이 None.data 참조하다 깨지지 않게.
+    #   실패 지문은 _failed 로 따로 모아 안내 배너로 표시.
+    _failed = [it for it in (passages_data or [])
+               if not (isinstance(it, dict) and it.get("data"))]
+    passages_data = [it for it in (passages_data or [])
+                     if isinstance(it, dict) and it.get("data")]
     
     # sentence_order_only면 include_sentence_order도 자동 True
     if sentence_order_only:
@@ -4129,12 +4136,34 @@ def render_preclass_analysis(passages_data: list, school_name: str,
             
             item["sentence_order"] = so_result
     
-    return tmpl.render(
+    _html_out = tmpl.render(
         passages=passages_data,
         school_name=school_name,
         include_sentence_order=include_sentence_order,
         sentence_order_only=sentence_order_only,
     )
+
+    # ★ 생성 실패 지문이 있으면 상단에 안내 배너 삽입 (undefined 대신 명확한 사유)
+    if _failed:
+        items = "".join(
+            f"<li><b>{(it.get('label') or '지문')}</b> — {(it.get('gen_error') or '생성 실패')}</li>"
+            for it in _failed
+        )
+        banner = (
+            '<div style="margin:10px 13mm;padding:10px 14px;background:#FFF3F3;'
+            'border:1.5px solid #FFAAAA;border-radius:8px;font-family:Pretendard,sans-serif;'
+            'font-size:10pt;color:#CC0000;">'
+            f'<b>[X] 생성 실패 {len(_failed)}개</b> — 아래 지문은 다시 생성해 주세요. '
+            '(나머지는 정상 생성됨)'
+            f'<ul style="margin:6px 0 0 18px;color:#444;font-size:9pt;">{items}</ul>'
+            '</div>'
+        )
+        if "<body>" in _html_out:
+            _html_out = _html_out.replace("<body>", "<body>" + banner, 1)
+        else:
+            _html_out = banner + _html_out
+
+    return _html_out
 
 
 def _sync_grammar_boxes_with_passage(data: dict) -> dict:

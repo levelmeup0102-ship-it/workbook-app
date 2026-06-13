@@ -696,6 +696,20 @@ def generate_variation_a(
                 pass
 
             is_last = (attempt == MAX_RETRIES)
+            # === PREVAL 진단: 검증 직전 data가 실제로 뭘 담는지 ===
+            try:
+                def _pv_norm(t):
+                    t = re.sub(r"<[^>]+>", " ", str(t or "")); t = re.sub(r"[^a-z0-9 ]", " ", t.lower()); return re.sub(r"\s+", " ", t).strip()
+                _pv_iw = _pv_norm(data.get("intro", "")).split()
+                _pv_probe = " ".join(_pv_iw[:8]) if len(_pv_iw) >= 8 else " ".join(_pv_iw)
+                _pv_paras = [p[1] for p in data.get("paragraphs", []) if isinstance(p, (list, tuple)) and len(p) >= 2]
+                _pv_hits = [i for i, t in enumerate(_pv_paras) if _pv_probe and _pv_probe in _pv_norm(t)]
+                print(f"[VAR][A][{pid}] PREVAL intro={data.get('intro','')[:45]!r} "
+                      f"npara={len(_pv_paras)} probe={_pv_probe[:40]!r} dup_hits={_pv_hits} "
+                      f"p0={_pv_paras[0][:45]!r}" if _pv_paras else f"[VAR][A][{pid}] PREVAL npara=0")
+            except Exception as _pe:
+                print(f"[VAR][A][{pid}] PREVAL 예외: {_pe}")
+
             errors = validate_a(data, en_text, pid, lenient=is_last)
             if not errors:
                 save_cached(cache_key, "variation_a", data)

@@ -648,6 +648,35 @@ def generate_variation_a(
             if "mismatch_count" not in data and "statements" in data:
                 data["mismatch_count"] = sum(1 for _, _, ok in data["statements"] if not ok)
 
+            # ★★ 안전장치: intro가 (A)(B)(C)에 중복되면(order override 미적용·LLM 순서 폴백 등 어떤 경로든)
+            #     코드가 원문에서 순서를 강제 재분할해 중복을 제거한다. (16강 03번류 intro 중복 실패 차단)
+            try:
+                def _nz_dup(t):
+                    t = re.sub(r"<[^>]+>", " ", str(t or ""))
+                    t = re.sub(r"[^a-z0-9 ]", " ", t.lower())
+                    return re.sub(r"\s+", " ", t).strip()
+                _iw = _nz_dup(data.get("intro", "")).split()
+                _probe = " ".join(_iw[:8]) if len(_iw) >= 8 else " ".join(_iw)
+                _paras_now = [p for p in data.get("paragraphs", []) if isinstance(p, (list, tuple)) and len(p) >= 2]
+                _dup = bool(_probe) and any(_probe in _nz_dup(p[1]) for p in _paras_now)
+                if _dup:
+                    ob2 = build_order_blocks_a(en_text, pid)
+                    if ob2:
+                        data["intro"] = ob2["intro"]
+                        data["paragraphs"] = [list(p) for p in ob2["paragraphs"]]
+                        data["order_correct"] = ob2["order_correct"]
+                        _pk2 = pick_a_q5_blanks(data["paragraphs"], data.get("blank_A", ""), data.get("blank_B", ""), pid)
+                        if _pk2:
+                            data["paragraphs"] = _pk2["paragraphs"]
+                            data["blank_A"] = _pk2["blank_A"]
+                            data["blank_B"] = _pk2["blank_B"]
+                        _tg2 = (data.get("core_blank_target") or "").strip()
+                        if _tg2 and "<CORE_BLANK>" not in data["intro"] and _tg2 in data["intro"]:
+                            data["intro"] = data["intro"].replace(_tg2, "<CORE_BLANK>", 1)
+                        print(f"[VAR][A][{pid}] intro 중복 감지 → 코드가 순서 강제 재분할(안전장치)")
+            except Exception:
+                pass
+
             # ★ Q5 보기(bogi) 자동 생성: blank_A + blank_B의 모든 단어를 셔플해서 사용.
             #   모델이 만든 bogi는 무시 → 보기 누락/변형으로 인한 불일치를 원천 차단.
             try:

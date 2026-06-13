@@ -3771,6 +3771,12 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     except Exception as e:
         _safe_print(f"  ⚠️ [후처리 실패] _ensure_vocab_markers: {type(e).__name__}: {str(e)[:200]}")
 
+    # ★ v26 후처리 4.1 — 어휘 letter 를 본문 등장 순서대로 재정렬 (지문↔노트 일치)
+    try:
+        data = _renumber_vocab_by_passage_order(data)
+    except Exception as e:
+        _safe_print(f"  ⚠️ [후처리 실패] _renumber_vocab_by_passage_order: {type(e).__name__}: {str(e)[:200]}")
+
     # ★ v25 후처리 4.2 — GRAMMAR 마커 누락 진단 (sync 로 박스 삭제되기 전에 경고)
     try:
         _ensure_grammar_markers(
@@ -4757,6 +4763,87 @@ def _ensure_vocab_markers(passage_marked: str, vocab_notes: list) -> str:
     if not_found:
         _safe_print(f"  ⚠️ VOCAB 마커 추가 실패 (본문에 없거나 충돌): {not_found}")
     return passage_marked
+
+
+def _renumber_vocab_by_passage_order(data: dict) -> dict:
+    """v26 — 어휘 letter(ⓐⓑⓒ..)를 '본문 등장 순서'대로 다시 매긴다.
+
+    문제: _ensure_vocab_markers 가 빠진 어휘를 본문에서 찾아 추가할 때,
+          원래 letter(예 ⓘⓙ)를 그대로 앞쪽 위치에 꽂아 → 지문 순서가
+          ⓐⓑⓚⓛⓜⓒ.. 처럼 엉킴. 그러면 지문 위첨자와 밑 노트(ⓐⓑⓒ순) 가 안 맞음.
+    해결: 본문에 실제 박힌 VOCAB 마커를 등장 순서대로 읽어 ⓐ부터 재부여하고,
+          vocab_notes / vocab_detail 의 letter 도 같은 매핑으로 교체 + 재정렬.
+    """
+    import re as _re
+    if not isinstance(data, dict):
+        return data
+    pm = data.get("passage_marked", "") or ""
+    if not pm:
+        return data
+
+    CA = "ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞⓟⓠⓡⓢⓣ"
+
+    def _na(s):
+        s = (s or "").strip()
+        if s and s[0] in CA:
+            return s[0]
+        if len(s) == 1 and 'a' <= s.lower() <= 't':
+            return CA[ord(s.lower()) - ord('a')]
+        return s
+
+    # 본문 등장 순서대로 letter 수집 (중복 제거, 첫 등장 순)
+    seen = []
+    for m in _re.finditer(r'\[\[VOCAB:l=([^\]]+)\]\]', pm):
+        L = _na(m.group(1))
+        if L and L not in seen:
+            seen.append(L)
+    if not seen:
+        return data
+
+    # 옛 letter → 새 letter (등장 i번째 = CA[i])
+    remap = {}
+    for i, old in enumerate(seen):
+        if i < len(CA):
+            remap[old] = CA[i]
+
+    if all(remap.get(k) == k for k in remap):
+        return data  # 이미 순서 정상 — 변경 없음
+
+    # ① passage_marked 의 letter 교체 (자리표시자 거쳐 충돌 방지)
+    def _sub_letter(text):
+        def repl(mm):
+            old = _na(mm.group(1))
+            new = remap.get(old, old)
+            return f'[[VOCAB:l=\x00{new}\x00]]'
+        out = _re.sub(r'\[\[VOCAB:l=([^\]]+)\]\]', repl, text)
+        return out.replace('\x00', '')
+    data["passage_marked"] = _sub_letter(pm)
+
+    # 정렬 키: 새 letter 의 CA 인덱스
+    def _ord(L):
+        L = _na(L)
+        return CA.index(L) if L in CA else 999
+
+    # ② vocab_notes letter 교체 + 본문 순서로 재정렬
+    vn = data.get("vocab_notes")
+    if isinstance(vn, list):
+        for v in vn:
+            if isinstance(v, dict) and v.get("letter"):
+                v["letter"] = remap.get(_na(v["letter"]), _na(v["letter"]))
+        vn.sort(key=lambda v: _ord(v.get("letter")) if isinstance(v, dict) else 999)
+
+    # ③ vocab_detail(left/right) letter 교체 + 좌우 합쳐 순서대로 재분배
+    vd = data.get("vocab_detail")
+    if isinstance(vd, dict):
+        merged = (vd.get("left") or []) + (vd.get("right") or [])
+        for v in merged:
+            if isinstance(v, dict) and v.get("letter"):
+                v["letter"] = remap.get(_na(v["letter"]), _na(v["letter"]))
+        merged.sort(key=lambda v: _ord(v.get("letter")) if isinstance(v, dict) else 999)
+        half = (len(merged) + 1) // 2
+        data["vocab_detail"] = {"left": merged[:half], "right": merged[half:]}
+
+    return data
 
 
 def _ensure_grammar_markers(passage_marked: str, grammar_notes: list) -> str:

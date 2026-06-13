@@ -207,7 +207,7 @@ _Q5_MODALS = {"can", "will", "must", "should", "would", "could", "may", "might",
 
 def _quote_ok(s: str) -> bool:
     """빈칸 후보 검사: 문장경계(.!?) 없고, 따옴표 '짝'이 갈리지 않음(균형).
-    따옴표가 있어도 쌍이 맞으면 허용 — \"good student\" 통째는 OK, 여는 짝만 먹으면 제외."""
+    따옴표가 있어도 쌍이 맞으면 허용 — "good student" 통째는 OK, 여는 짝만 먹으면 제외."""
     if re.search(r'[.!?]', s):
         return False
     if s.count('"') % 2 != 0:
@@ -408,6 +408,30 @@ def pick_b_q4_blanks(full_summary, llm_a: str = "", llm_b: str = "", min_w: int 
     return None
 
 
+# ============================================================
+# (버) 객관식 정답 위치 셔플 — 핵심빈칸·요약빈칸·주제 정답이 ①에 쏠리던 문제 교정
+#   LLM/프롬프트가 정답을 0번에 두고 내려보내므로, 코드가 보기를 셔플하고 정답
+#   인덱스를 재계산한다. 인덱스 순열로 옮기므로 중복 원소가 있어도(원소 ordinality
+#   추적) 정답 의미는 불변. pid+태그 기반 seed라 같은 지문은 항상 같은 배열이고
+#   네 유형은 태그가 달라 서로 다르게 섞인다(deterministic).
+# ============================================================
+def _shuffle_choices(options, correct, seed):
+    if not isinstance(options, list) or not isinstance(correct, int):
+        return options, correct
+    n = len(options)
+    if n <= 1 or not (0 <= correct < n):
+        return options, correct
+    order = list(range(n))
+    random.Random(seed).shuffle(order)
+    new_options = [options[i] for i in order]
+    new_correct = order.index(correct)  # 정답 원소가 옮겨간 새 위치
+    return new_options, new_correct
+
+
+def _choice_seed(pid, tag, payload=""):
+    return int(hashlib.md5((str(pid) + tag + str(payload)).encode()).hexdigest()[:8], 16)
+
+
 # ============ 환경 변수 ============
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5")
@@ -443,8 +467,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s43 = 빈칸 최대 길이 상한(9단어, 검사기 백스톱 12) 추가 — 27단어 같은 과대 빈칸 차단. 그 외 _s42 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s43"
+    # _s44 = 객관식 정답위치 셔플 (버): 핵심빈칸·요약빈칸·주제 보기를 코드가 셔플 → 정답이 ①~⑤ 분산. _s43 누적분 포함.
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s44"
 
 
 # ============ Supabase 캐시 ============
@@ -757,6 +781,14 @@ def generate_variation_a(
             except Exception as _pe:
                 print(f"[VAR][A][{pid}] PREVAL 예외: {_pe}")
 
+            # ★★ (버) 객관식 정답 위치 셔플 (A: 주제 Q1 / 핵심빈칸 Q3) — 정답이 ①에 쏠리던 문제 교정.
+            #   순서(order_correct)는 위치형이라 손대지 않는다.
+            for _tag, _ok, _ck in (("topicA", "topic_options", "topic_correct"),
+                                   ("coreA", "core_blank_options", "core_blank_correct")):
+                if isinstance(data.get(_ok), list) and isinstance(data.get(_ck), int):
+                    data[_ok], data[_ck] = _shuffle_choices(
+                        data[_ok], data[_ck], _choice_seed(pid, _tag, data.get(_ok)))
+
             errors = validate_a(data, en_text, pid, lenient=is_last)
             if not errors:
                 save_cached(cache_key, "variation_a", data)
@@ -1003,6 +1035,15 @@ def generate_variation_b(
 
             # 마지막 시도면 strict=False (검증 풀어서라도 받아들임)
             is_last = (attempt == MAX_RETRIES)
+
+            # ★★ (버) 객관식 정답 위치 셔플 (B: 주제 Q2 / 요약빈칸 Q3) — 정답이 ①에 쏠리던 문제 교정.
+            #   삽입(position_correct)은 위치형이라 손대지 않는다.
+            for _tag, _ok, _ck in (("topicB", "topic_options", "topic_correct"),
+                                   ("summaryB", "summary_options", "summary_correct")):
+                if isinstance(data.get(_ok), list) and isinstance(data.get(_ck), int):
+                    data[_ok], data[_ck] = _shuffle_choices(
+                        data[_ok], data[_ck], _choice_seed(pid, _tag, data.get(_ok)))
+
             errors = validate_b(data, en_text, pid, strict=not is_last)
             if not errors:
                 save_cached(cache_key, "variation_b", data)

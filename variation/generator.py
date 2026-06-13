@@ -467,8 +467,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s44 = 객관식 정답위치 셔플 (버): 핵심빈칸·요약빈칸·주제 보기를 코드가 셔플 → 정답이 ①~⑤ 분산. _s43 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s44"
+    # _s45 = (버 하드닝) 핵심빈칸(A Q3) 정답위치 셔플을 소스에서 직접 수행 — 바깥 루프 미적용 우회. _s44 누적분 포함.
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s45"
 
 
 # ============ Supabase 캐시 ============
@@ -645,8 +645,15 @@ def generate_variation_a(
                         if (_tg and _tg in _first and isinstance(_op, list) and len(_op) == 5
                                 and isinstance(_co, int) and 0 <= _co <= 4):
                             data["core_blank_target"] = _tg
+                            # ★ (버 하드닝) focused 재생성 결과를 '소스에서 즉시' 셔플한다.
+                            #   바깥 루프(검증 직전)가 core_blank엔 실측상 안 먹어(같은 행 topic은 섞임)
+                            #   원인 불명이라, 값이 정해지는 이 자리에서 직접 섞고 인덱스를 재계산해
+                            #   ②쏠림을 원천 차단. 원소 추적이라 정답 의미 불변. 바깥 루프는 이걸 건너뜀.
+                            _op, _co = _shuffle_choices(_op, _co, _choice_seed(pid, "coreA", _op))
                             data["core_blank_options"] = _op
                             data["core_blank_correct"] = _co
+                            data["_core_shuffled"] = True
+                            print(f"[VAR][A][{pid}] SHUF coreA(src): -> {_co}")
                             if _c.get("core_blank_explain"):
                                 data["core_blank_explain"] = _c["core_blank_explain"]
                 except Exception:
@@ -782,12 +789,21 @@ def generate_variation_a(
                 print(f"[VAR][A][{pid}] PREVAL 예외: {_pe}")
 
             # ★★ (버) 객관식 정답 위치 셔플 (A: 주제 Q1 / 핵심빈칸 Q3) — 정답이 ①에 쏠리던 문제 교정.
-            #   순서(order_correct)는 위치형이라 손대지 않는다.
+            #   순서(order_correct)는 위치형이라 손대지 않는다. core_blank가 소스에서 이미 셔플됐으면
+            #   건너뛴다(중복 셔플 방지). before/after를 로그로 남겨 다음 생성 때 동작을 확인.
             for _tag, _ok, _ck in (("topicA", "topic_options", "topic_correct"),
                                    ("coreA", "core_blank_options", "core_blank_correct")):
+                if _tag == "coreA" and data.get("_core_shuffled"):
+                    print(f"[VAR][A][{pid}] SHUF coreA(loop): 소스에서 이미 셔플 -> {data.get(_ck)}")
+                    continue
                 if isinstance(data.get(_ok), list) and isinstance(data.get(_ck), int):
+                    _before = data[_ck]
                     data[_ok], data[_ck] = _shuffle_choices(
                         data[_ok], data[_ck], _choice_seed(pid, _tag, data.get(_ok)))
+                    print(f"[VAR][A][{pid}] SHUF {_tag}(loop): {_before} -> {data[_ck]}")
+                else:
+                    print(f"[VAR][A][{pid}] SHUF {_tag}(loop): SKIP "
+                          f"(opt={type(data.get(_ok)).__name__}, cor={type(data.get(_ck)).__name__})")
 
             errors = validate_a(data, en_text, pid, lenient=is_last)
             if not errors:

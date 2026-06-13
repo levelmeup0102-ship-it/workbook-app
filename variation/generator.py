@@ -221,6 +221,8 @@ def _q5_candidates(ptext: str, min_w: int = 5, max_w: int = 7) -> list:
             sub = ptext[spans[i][0]:spans[j][1]]
             if not _quote_ok(sub):
                 continue
+            if not _clean_boundary_ok(sub, ptext):
+                continue
             fw = re.sub(r'[^a-z]', '', toks[i].lower())
             if fw in _Q5_MODALS:
                 continue
@@ -230,7 +232,32 @@ def _q5_candidates(ptext: str, min_w: int = 5, max_w: int = 7) -> list:
             cands.append((mid, sub))
     cands.sort(key=lambda x: x[0])
     return [c[1] for c in cands]
-
+def _clean_boundary_ok(phrase: str, full_text: str) -> bool:
+    """빈칸 경계가 깔끔한지: 관사/전치사/접속사/관계사로 시작·끝나지 않고,
+    괄호 짝이 맞고, 고유명사(대문자 단어)를 중간에서 쪼개지 않을 것."""
+    bad_end = {"the","a","an","of","for","to","in","on","at","by","with","from","into","onto",
+               "and","or","but","that","which","who","whose","whom","as","than","is","are",
+               "was","were","be","been","this","these","those","their","her","his","its",
+               "our","your","my","not","no","so","if","when","while","because"}
+    bad_start = {"and","or","but","that","which","who","of","to","for","than","as",
+                 "is","are","was","were"}
+    ws = phrase.split()
+    if not ws:
+        return False
+    if phrase.count("(") != phrase.count(")") or phrase.count("[") != phrase.count("]"):
+        return False
+    bare = lambda w: re.sub(r"[^A-Za-z'-]", "", w).lower()
+    if bare(ws[0]) in bad_start or bare(ws[-1]) in bad_end:
+        return False
+    m = re.search(re.escape(phrase), full_text)
+    if m:
+        before = full_text[:m.start()].split()
+        after = full_text[m.end():].split()
+        if ws[-1][:1].isupper() and after and after[0][:1].isupper():
+            return False
+        if ws[0][:1].isupper() and before and before[-1][:1].isupper():
+            return False
+    return True
 
 MAX_BLANK_WORDS = 9  # 영작 빈칸(A Q5 / B Q4) 최대 단어 수 — 초과 LLM 빈칸은 거부하고 코드가 5~7단어로 대체
 
@@ -309,6 +336,8 @@ def _b_candidates(hn: str, min_w: int = 4, max_w: int = 7) -> list:
             j = i + L - 1
             sub = hn[spans[i][0]:spans[j][1]]
             if not _quote_ok(sub):
+                continue
+            if not _clean_boundary_ok(sub, hn):
                 continue
             fw = re.sub(r'[^a-z]', '', toks[i].lower())
             if fw in _Q5_MODALS:

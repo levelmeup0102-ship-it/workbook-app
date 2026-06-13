@@ -239,7 +239,8 @@ def _clean_boundary_ok(phrase: str, full_text: str) -> bool:
                "and","or","but","that","which","who","whose","whom","as","than","is","are",
                "was","were","be","been","this","these","those","their","her","his","its",
                "our","your","my","not","no","so","if","when","while","because",
-               "they","we","i","he","she","it","you"}
+               "they","we","i","he","she","it","you",
+               "may","might","can","could","will","would","shall","should","must"}
     bad_start = {"and","or","but","that","which","who","of","to","for","than","as",
                  "is","are","was","were"}
     ws = phrase.split()

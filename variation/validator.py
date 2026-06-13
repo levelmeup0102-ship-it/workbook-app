@@ -328,14 +328,19 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
     if not isinstance(v, int) or not (0 <= v <= 4):
         errors.append(f"[{pid}] Q2 order_correct 범위 오류(0-4여야 함): {v}")
 
-    # Q5 blank_A/B 단어 수 최소 6 (관대모드 4)
+    # Q5 blank_A/B 단어 수 최소 4, 최대 12 (백스톱 — 픽커가 9 초과를 거름. 그래도 새면 여기서 막아 재생성)
     min_bw = 4  # 빈칸은 자연스러운 핵심 구절(4~6단어) 허용 (1회독처럼 하한 완화)
+    max_bw = 12
     try:
         wa = len(data["blank_A"].split()); wb = len(data["blank_B"].split())
         if wa < min_bw:
             errors.append(f"[{pid}] [CRITICAL] Q5 blank_A 단어 수 부족 ({wa}개 < {min_bw}개) — 4단어 이상 필수")
         if wb < min_bw:
             errors.append(f"[{pid}] [CRITICAL] Q5 blank_B 단어 수 부족 ({wb}개 < {min_bw}개) — 4단어 이상 필수")
+        if wa > max_bw:
+            errors.append(f"[{pid}] [CRITICAL] Q5 blank_A 단어 수 과다 ({wa}개 > {max_bw}개) — 영작 빈칸으로 너무 김, 5~7단어로 줄일 것")
+        if wb > max_bw:
+            errors.append(f"[{pid}] [CRITICAL] Q5 blank_B 단어 수 과다 ({wb}개 > {max_bw}개) — 영작 빈칸으로 너무 김, 5~7단어로 줄일 것")
     except (KeyError, AttributeError) as e:
         errors.append(f"[{pid}] blank_A/B 형식 오류: {e}")
 
@@ -559,8 +564,9 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
     if "(A)" not in sst or "(B)" not in sst:
         errors.append(f"[{pid}] Q3 summary_template에 (A)/(B) 빈칸이 없음 — (A)(B) placeholder를 남길 것")
 
-    # ★ Q4 blank_A, blank_B 단어 수 (strict 6개, soft 2개)
+    # ★ Q4 blank_A, blank_B 단어 수 (최소 4, 최대 12 백스톱)
     min_blank_words = 4  # 빈칸은 자연스러운 핵심 구절(4~6단어) 허용
+    max_blank_words = 12
     try:
         wa = len(data["blank_A"].split())
         wb = len(data["blank_B"].split())
@@ -568,6 +574,10 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
             errors.append(f"[{pid}] [CRITICAL] Q4 blank_A 단어 수 부족 ({wa}개 < {min_blank_words}개) — 4단어 이상 필수")
         if wb < min_blank_words:
             errors.append(f"[{pid}] [CRITICAL] Q4 blank_B 단어 수 부족 ({wb}개 < {min_blank_words}개) — 4단어 이상 필수")
+        if wa > max_blank_words:
+            errors.append(f"[{pid}] [CRITICAL] Q4 blank_A 단어 수 과다 ({wa}개 > {max_blank_words}개) — 영작 빈칸으로 너무 김, 5~7단어로 줄일 것")
+        if wb > max_blank_words:
+            errors.append(f"[{pid}] [CRITICAL] Q4 blank_B 단어 수 과다 ({wb}개 > {max_blank_words}개) — 영작 빈칸으로 너무 김, 5~7단어로 줄일 것")
     except (KeyError, AttributeError) as e:
         errors.append(f"[{pid}] B blank_A/B 형식 오류: {e}")
     

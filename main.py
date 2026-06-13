@@ -675,18 +675,38 @@ async def _secret_note_impl(body: dict):
             except Exception:
                 pass
 
-        if note_type == "A":
-            note_data = pl.generate_secret_note_a(passage_text, translation, passage_dir)
-        elif note_type == "C":
-            note_data = pl.generate_secret_note_c(passage_text, passage_dir, translation)
-        elif note_type == "D":
-            if pc_mode == "topic":
-                note_data = None   # ★ 수업배경자료는 LLM 생성 안 함 (조각 조립)
-            else:
-                # 유형 D — 0회독 (수업 전 4페이지 완전 분석)
-                note_data = pl.generate_preclass_analysis(passage_text, passage_dir, translation)
-        else:  # B가 기본
-            note_data = pl.generate_secret_note_b(passage_text, passage_dir, translation)
+        # ★ 한 지문 생성 실패가 전체 합본을 죽이지 않도록 격리.
+        #   (특히 0회독은 출력 JSON이 커서 따옴표·토큰한도로 파싱 실패 가능)
+        #   실패하면 그 지문만 에러 표시하고 다음 지문 계속 생성.
+        try:
+            if note_type == "A":
+                note_data = pl.generate_secret_note_a(passage_text, translation, passage_dir)
+            elif note_type == "C":
+                note_data = pl.generate_secret_note_c(passage_text, passage_dir, translation)
+            elif note_type == "D":
+                if pc_mode == "topic":
+                    note_data = None   # ★ 수업배경자료는 LLM 생성 안 함 (조각 조립)
+                else:
+                    # 유형 D — 0회독 (수업 전 4페이지 완전 분석)
+                    note_data = pl.generate_preclass_analysis(passage_text, passage_dir, translation)
+            else:  # B가 기본
+                note_data = pl.generate_secret_note_b(passage_text, passage_dir, translation)
+        except Exception as e:
+            import traceback as _tb_gen
+            _emsg = f"{type(e).__name__}: {str(e)[:300]}"
+            try:
+                print(f"  [X] 생성 실패 [{label}]: {_emsg}")
+                print(_tb_gen.format_exc())
+            except Exception:
+                pass
+            passages_data.append({
+                "label": label,
+                "passage": passage_text,
+                "translation": translation,
+                "data": None,
+                "gen_error": _emsg,   # 프런트가 'undefined' 대신 이 메시지를 보여줄 수 있음
+            })
+            continue
 
         item = {
             "label":       label,

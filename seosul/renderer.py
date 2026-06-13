@@ -47,8 +47,8 @@ _EXTRA = """
 .se-line{display:flex;gap:14px;flex-wrap:wrap;font-size:9.3pt;margin-top:5px;}
 .se-line .sb{display:inline-block;width:96px;border-bottom:1px solid #999;}
 .wb{display:inline-block;min-width:64px;border-bottom:1.2px solid #111;text-align:center;margin:0 1px;}
-.sc-lab{color:var(--primary);font-weight:bold;margin:0 2px;}
-.sc-blank{display:inline-block;border-bottom:1.4px solid #111;height:14px;vertical-align:middle;margin:0 3px;}
+.sc-lab{color:var(--primary);font-weight:bold;margin:0 1px;}
+.sc-blank{display:inline-block;border-bottom:1.4px solid #111;height:14px;vertical-align:middle;margin:0 1px;}
 .sd-ans{display:flex;align-items:baseline;gap:8px;margin-bottom:4px;flex-wrap:wrap;}
 .sd-ans .sd-n{color:var(--accent);font-weight:bold;}
 .sd-ans .sd-why{color:#333;font-size:9pt;flex:1;min-width:240px;}
@@ -140,9 +140,10 @@ def _render_problem(s: dict, teacher: bool, school_name: str) -> str:
             bogi = ' / '.join(_split_bogi(it["bogi"]))
             summ = it["summary"]
             for k, v in it["answers"].items():
-                w = min(340, max(130, len(v) * 7))
-                blank = (f'<span class="sc-lab">({k})</span>'
-                         f'<span class="sc-blank" style="width:{w}px"></span>')
+                half = min(170, max(70, len(v) * 4))
+                blank = (f'<span class="sc-blank" style="width:{half}px"></span>'
+                         f'<span class="sc-lab">({k})</span>'
+                         f'<span class="sc-blank" style="width:{half}px"></span>')
                 sentinel = f"\x00{k}\x00"
                 # {{A}} / (A) / (A)____ 를 모두 표식으로 — 모델이 라벨과 placeholder를 같이 쓴 경우 대비
                 summ = re.sub(r'\{\{\s*%s\s*\}\}' % re.escape(k), sentinel, summ)

@@ -550,6 +550,8 @@ def generate_variation_a(
             # ★★ 순서배열(Q2)을 코드가 원문에서 분할 — LLM 단락을 무시하고 원문 그대로 사용.
             #    원문 무손실이라 복원검증이 깨지지 않는다. LLM은 빈칸 구절만 고른다.
             ob = build_order_blocks_a(en_text, pid)
+            print(f"[VAR][A][{pid}] DIAG 문장수={len(split_sentences(en_text))} "
+                  f"ob={'None' if not ob else 'OK'} en_len={len(en_text)} en_head={en_text[:60]!r}")
             if ob:
                 data["intro"] = ob["intro"]
                 data["paragraphs"] = [list(p) for p in ob["paragraphs"]]

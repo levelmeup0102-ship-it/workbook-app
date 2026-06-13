@@ -87,8 +87,17 @@ def build_order_blocks_a(en_text: str, pid: str = "?", seed_extra: str = "") -> 
         print(f"[VAR][A][{pid}] 문장 {len(sents)}개 — 순서배열(intro+3단락) 불가")
         return None
 
-    # intro = 첫 1문장 (남은 문장이 3개 미만이면 순서배열 불가)
-    intro_text = sents[0].strip()
+    # ★ 제목 분리: 첫 문장이 짧은 라벨(≤4단어)이면 제목으로 보고 떼어 둠.
+    #   연속된 라벨(제목+소제목+"Where:"...)도 모두 흡수. 단 본문이 최소 4문장은 남아야 함.
+    title = ""
+    while len(sents) >= 5 and len(sents[0].split()) <= 4:
+        title = (title + " " + sents[0]).strip()
+        sents = sents[1:]
+
+    # intro = (제목 +) 첫 진짜 문장. 제목은 intro 앞에 붙여 원문 무손실 유지.
+    if len(sents) < 4:
+        return None
+    intro_text = (title + " " + sents[0]).strip() if title else sents[0].strip()
     rest = sents[1:]
     if len(rest) < 3:
         return None

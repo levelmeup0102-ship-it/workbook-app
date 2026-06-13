@@ -265,7 +265,7 @@ def call_claude(system_prompt: str, user_prompt: str, max_retries=2, max_tokens=
                     '-d', f'@{tmp_path}'
                 ],
                 capture_output=True,
-                timeout=120
+                timeout=300
             )
             
             if tmp_path:
@@ -296,15 +296,17 @@ def call_claude_json(system_prompt: str, user_prompt: str, max_retries=3, max_to
         try:
             text = call_claude(system_prompt, user_prompt, max_retries=0, max_tokens=max_tokens)
             return _parse_json_robust(text)
-        except (json.JSONDecodeError, ValueError) as e:
+        except Exception as e:
+            # ★ JSON 파싱 실패뿐 아니라 타임아웃·네트워크 오류도 재시도
+            #   (출력이 큰 0회독은 생성에 시간이 걸려 curl timeout 가능)
             last_error = e
             try:
-                _safe_print(f"  [WARN] JSON parse fail (try {attempt+1}/{max_retries+1}): {str(e)[:80]}")
+                _safe_print(f"  [WARN] call fail (try {attempt+1}/{max_retries+1}): {type(e).__name__}: {str(e)[:80]}")
             except Exception:
                 pass
             if attempt < max_retries:
                 time.sleep(2)
-    raise ValueError(f"JSON parse final fail: {str(last_error)[:200]}")
+    raise ValueError(f"call/parse final fail: {type(last_error).__name__}: {str(last_error)[:200]}")
 
 def _parse_json_robust(text: str) -> dict:
     """여러 전략으로 JSON 파싱 시도"""

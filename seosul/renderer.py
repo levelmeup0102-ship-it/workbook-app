@@ -22,9 +22,9 @@ def _logo_uri() -> str:
     return "data:image/png;base64," + base64.b64encode(open(p, "rb").read()).decode()
 
 _EXTRA = """
-.hdr{ display:table !important; width:100%; table-layout:auto; }
-.hdr-title{ display:table-cell !important; text-align:left; white-space:nowrap; vertical-align:middle; }
-.hdr-right{ display:table-cell !important; text-align:right; white-space:nowrap; width:1%; vertical-align:middle; padding-left:12px; }
+.hdr{ display:block !important; }
+.hdr-right{ display:block !important; text-align:right; font-size:8.5pt; color:#555; white-space:nowrap; margin-bottom:1px; }
+.hdr-title{ display:block !important; font-weight:bold; font-size:11.5pt; color:var(--primary); white-space:nowrap; }
 .var-badge{ display:inline-block; vertical-align:middle; }
 /* 페이지 아래 여백 축소(로고 자리 확보용 22mm 불필요) → 로고가 진짜 모서리로 */
 @page{ margin: 11mm 13mm 10mm 13mm; }
@@ -120,8 +120,8 @@ def _render_problem(s: dict, teacher: bool, school_name: str) -> str:
                 ans_by_label[bl["label"]] = bl["answer"]
 
     body = [f'''<div class="hdr">
-  <span class="hdr-title">{school_name} &nbsp;&middot;&nbsp; 서술형 종합문제 <span class="var-badge">단일 지문</span></span>
   <span class="hdr-right">{ref_label}</span>
+  <span class="hdr-title">{school_name} &nbsp;&middot;&nbsp; 서술형 종합문제 <span class="var-badge">단일 지문</span></span>
 </div>''']
     body.append(_build_passage(s, ans_by_label, teacher))
 

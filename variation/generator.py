@@ -603,7 +603,14 @@ def generate_variation_a(
                 try:
                     # intro에서 첫 한 문장만 추출 (마침표 기준)
                     _intro_txt = re.sub(r'\s+', ' ', str(data.get("intro", ""))).strip()
-                    _first = re.split(r'(?<=[.!?])\s+', _intro_txt)[0] if _intro_txt else ""
+                    _sents_i = re.split(r'(?<=[.!?])\s+', _intro_txt) if _intro_txt else []
+                    _first = ""
+                    for _s in _sents_i:
+                        if len(_s.split()) > 4:
+                            _first = _s
+                            break
+                    if not _first and _sents_i:
+                        _first = _sents_i[0]
                     if _first and len(_first.split()) >= 4:
                         _c_raw = call_claude(CORE_BLANK_SYS, build_core_blank_prompt(_first), max_tokens=700)
                         _c = extract_json_from_response(_c_raw)

@@ -4267,7 +4267,7 @@ def _rebalance_grammar_boxes(data: dict) -> dict:
         
         # ★ 묶인 박스 자동 분리 (num="④⑤⑥" → 박스 3개로 쪼개기)
         import re as _re
-        CIRCLED_NUMS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮"
+        CIRCLED_NUMS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
         unrolled = []
         split_count = 0
         for box in all_boxes:
@@ -4296,7 +4296,7 @@ def _rebalance_grammar_boxes(data: dict) -> dict:
             return data
 
         # num 기준 정렬 — "①②"처럼 합쳐진 경우 첫 번째 마크 기준
-        CIRCLE_ORDER = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮"
+        CIRCLE_ORDER = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
         def _sort_key(box):
             num = (box.get("num") or "").strip()
             for i, c in enumerate(CIRCLE_ORDER):
@@ -4935,7 +4935,7 @@ def _inject_dummy_it_notes(data: dict, passage: str) -> dict:
     if not detected:
         return data
     
-    CIRCLED_NUMS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮"
+    CIRCLED_NUMS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
     added = 0
     
     # dedup by type
@@ -5174,7 +5174,7 @@ def _passage_marked_to_html(marked: str, original: str = "") -> str:
     _plain_nospace = 0
 
     # 원숫자/원알파벳 변환 테이블
-    CIRCLED_NUMS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮"
+    CIRCLED_NUMS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
     CIRCLED_ALPHA = "ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞ"
 
     def _to_circled_num(s: str) -> str:
@@ -5184,7 +5184,7 @@ def _passage_marked_to_html(marked: str, original: str = "") -> str:
             return s
         try:
             n = int(s)
-            if 1 <= n <= 15:
+            if 1 <= n <= 20:
                 return CIRCLED_NUMS[n - 1]
         except ValueError:
             pass
@@ -5204,7 +5204,7 @@ def _passage_marked_to_html(marked: str, original: str = "") -> str:
     # 일반 숫자/알파벳 + 유니코드 원숫자/원알파벳 모두 허용
     # GRAMMAR는 ,split=1 같은 추가 attribute가 붙을 수 있음
     pattern = _re.compile(
-        r'\[\[(GRAMMAR:n=([0-9]+|[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮]+)(?:,split=(\d+))?'
+        r'\[\[(GRAMMAR:n=([0-9]+|[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]+)(?:,split=(\d+))?'
         r'|VOCAB:l=([a-oA-O]|[ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞ])'
         r'|IMPL)\]\]'
         r'([\s\S]*?)'

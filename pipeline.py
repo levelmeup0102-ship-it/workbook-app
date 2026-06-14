@@ -3657,6 +3657,90 @@ def _merge_teacher_sheet(pre: dict, cache_key: str, passage: str) -> dict:
         return pre
 
 
+# ============================================================
+# ★ passage_marked 원문-경계 강제 절단 (덧붙은 요약/중복 차단)
+#   원인: 모델이 passage_marked 에 원문 끝을 넘어서는 요약/중복 문장을 덧붙임.
+#         "마커 떼면 원문과 글자단위 일치" 규칙이 self-check 글자로만 있고
+#         코드로 강제되지 않아 새는 것.
+#   해결: 마커 제거+공백정규화 본문이 정규화 원문으로 '시작'하면 원문 끝 이후를 잘라냄.
+#         시작하지 않으면(본문 중간 변형/누락) 건드리지 않고 경고만.
+# ============================================================
+_TRIM_MARKER_RE = re.compile(r'\[\[/?(?:GRAMMAR|VOCAB|IMPL)[^\]]*\]\]')
+_TRIM_TOKEN_RE  = re.compile(r'\[\[(/?)(GRAMMAR|VOCAB|IMPL)[^\]]*\]\]')
+
+
+def _trim_norm_ws(s: str) -> str:
+    return ' '.join((s or '').split())
+
+
+def _trim_balance(s: str) -> str:
+    """절단 후 닫히지 않은 여는 마커가 있으면 끝에 닫는 태그를 붙인다."""
+    stack = []
+    for m in _TRIM_TOKEN_RE.finditer(s):
+        if m.group(1) == '/':
+            if stack and stack[-1] == m.group(2):
+                stack.pop()
+        else:
+            stack.append(m.group(2))
+    if stack:
+        s = s + ''.join('[[/%s]]' % t for t in reversed(stack))
+    return s
+
+
+def _trim_marked_to_original(passage_marked: str, passage: str):
+    """반환 (trimmed, status).
+    status ∈ {trimmed, ok_nochange, skip_not_prefix, skip_empty}"""
+    if not passage_marked or not passage:
+        return passage_marked, 'skip_empty'
+    norm_orig = _trim_norm_ws(passage)
+    if not norm_orig:
+        return passage_marked, 'skip_empty'
+
+    norm_chars, norm_map = [], []   # norm_map[k] = norm 문자 k 를 만든 raw 문자 바로 다음 인덱스
+    i, n = 0, len(passage_marked)
+    prev_ws = True                  # 앞쪽 공백 무시
+    while i < n:
+        m = _TRIM_MARKER_RE.match(passage_marked, i)
+        if m:
+            i = m.end()
+            continue
+        ch = passage_marked[i]
+        if ch.isspace():
+            if not prev_ws:
+                norm_chars.append(' '); norm_map.append(i + 1)
+            elif norm_map:
+                norm_map[-1] = i + 1
+            prev_ws = True
+        else:
+            norm_chars.append(ch); norm_map.append(i + 1)
+            prev_ws = False
+        i += 1
+    while norm_chars and norm_chars[-1] == ' ':
+        norm_chars.pop(); norm_map.pop()
+    norm_plain = ''.join(norm_chars)
+
+    if not norm_plain.startswith(norm_orig):
+        return passage_marked, 'skip_not_prefix'
+    end_k = len(norm_orig)
+    if end_k >= len(norm_plain):
+        return passage_marked, 'ok_nochange'
+    return _trim_balance(passage_marked[:norm_map[end_k - 1]]), 'trimmed'
+
+
+def _apply_marked_trim(data: dict, passage: str) -> dict:
+    """generate_preclass_analysis 후처리용 래퍼. passage_marked 를 원문 경계로 절단."""
+    pm = data.get("passage_marked", "") or ""
+    trimmed, status = _trim_marked_to_original(pm, passage)
+    if status == 'trimmed':
+        cut = len(pm) - len(trimmed)
+        data["passage_marked"] = trimmed
+        _safe_print(f"  ✂️ passage_marked 원문 경계 절단: {cut}자 제거")
+    elif status == 'skip_not_prefix':
+        # 본문 중간 변형/누락 — 절단으로 못 고침. 재생성 대상으로 경고만.
+        _safe_print("  ⚠️ passage_marked 가 원문 prefix 아님(중간 변형/누락 의심) — 절단 보류")
+    return data
+
+
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
     # v21: 캐시 로드 후 어휘 마커 보정 마이그레이션 추가
@@ -3729,6 +3813,12 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
             _safe_print(f"     {_tb.format_exc().splitlines()[-3] if _tb.format_exc().splitlines() else ''}")
             return None
     
+    # ★ 후처리 0 — passage_marked 원문 경계 강제 절단 (덧붙음/중복 차단)
+    #   가장 먼저 실행해야 이후 마커 카운트·sync·어휘 재정렬·html 변환이
+    #   전부 깨끗한(원문 경계) 본문 위에서 동작한다.
+    _r = _safe_post("_apply_marked_trim", lambda: _apply_marked_trim(data, passage))
+    if _r is not None: data = _r
+
     # 후처리 1 — 박스 균형 자동 보정
     _r = _safe_post("_rebalance_grammar_boxes", lambda: _rebalance_grammar_boxes(data))
     if _r is not None: data = _r

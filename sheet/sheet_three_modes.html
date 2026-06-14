@@ -175,16 +175,40 @@
 
   .explain{max-width:1140px;margin:12px auto 0;font-size:11.5px;color:var(--soft);line-height:1.7;background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 15px}
   .explain b{color:var(--ink)}
-  @media print{@page{size:A4 landscape;margin:7mm}body{background:#fff;padding:0}.toolbar,.explain{display:none}.wrap{max-width:none}.sheet{border:none;box-shadow:none;border-radius:0}}
+  .tch-wrap{display:inline-flex;align-items:center;gap:5px;margin-left:6px}
+  .tch-in{width:92px;font-size:12px;padding:3px 7px;border:1px solid var(--line);border-radius:7px}
+  .tch-sel{font-size:11.5px;padding:3px 5px;border:1px solid var(--line);border-radius:7px;max-width:160px}
+  .tch-btn{font-size:12px;font-weight:700;padding:4px 11px;border:1px solid var(--green);border-radius:7px;background:var(--green);color:#fff;cursor:pointer}
+  .tch-btn.link{background:#2563EB;border-color:#2563EB}
+  .tch-btn:disabled{opacity:.6;cursor:default}
+  .linkbar{max-width:1140px;margin:6px auto 0;font-size:12px;color:#1A1A1A}
+  .linkbar a{color:#2563EB;word-break:break-all}
+  .linkbar button{font-size:11px;margin-left:6px;padding:2px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer}
+  .linkbar .tchtag{color:var(--soft);font-size:11px;margin-left:4px}
+  .curnote{margin:6px 0;padding:7px 10px;background:#F6FBF7;border-left:3px solid var(--green);border-radius:0 8px 8px 0}
+  .curnote.v{background:#F2F6FF;border-left-color:var(--blue)}
+  .curnote .cl{font-size:9px;font-weight:800;color:var(--soft);letter-spacing:.04em}
+  .curnote .cn{font-weight:700;color:#176A33;margin-top:2px;font-size:12.5px}
+  .curnote.v .cn{color:#1E4FA8}
+  .curnote .cd{color:#4B7A58;font-size:11px;margin-top:2px;line-height:1.5}
+  .curnote .curdel{margin-top:5px;font-size:10px;padding:2px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer;color:var(--soft)}
+  @media print{@page{size:A4 landscape;margin:7mm}body{background:#fff;padding:0}.toolbar,.explain,.tch-wrap,.linkbar{display:none}.wrap{max-width:none}.sheet{border:none;box-shadow:none;border-radius:0}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="toolbar">
     <div class="seg"><button id="m0" class="on">저작 모드</button><button id="m1">정밀 인쇄물</button><button id="m2">학생 게시물</button></div>
+    <span class="tch-wrap" id="tchWrap">
+      <input id="tchName" class="tch-in" placeholder="강사명" autocomplete="off">
+      <select id="tchSel" class="tch-sel"><option value="">― 저장된 강사 ―</option></select>
+      <button class="tch-btn" id="saveBtn">저장</button>
+      <button class="tch-btn link" id="linkBtn">학생 링크</button>
+    </span>
     <span class="note" id="note"></span>
     <button class="print" id="printBtn" onclick="window.print()">인쇄 / PDF</button>
   </div>
+  <div class="linkbar" id="linkbar"></div>
   <div class="sheet">
     <div class="head">
       <div class="num">02</div><div class="typ">무관한 문장 찾기</div>
@@ -445,6 +469,10 @@ function openAdd(e){
   const gram=POOL[word]||POOL[an]||[], vp=VPOOL[word]||VPOOL[an]||null;
   pickSyn=new Set();pickAnt=new Set();curVp=null;curTarget=target;curSi=si;curWord=word;
   let h=`<div class="ph"><span class="x" data-x>×</span><b>${disp}</b> · ${si+1}번 문장</div>`;
+  if(target&&(target.n||target.d)){
+    const _cf=target.f===2?'v':'';
+    h+=`<div class="curnote ${_cf}"><div class="cl">현재 적용된 설명</div><div class="cn">${esc(String(target.n||''))}</div>${target.d?`<div class="cd">${esc(String(target.d))}</div>`:''}<button class="curdel" data-curdel>이 설명 비우기</button></div>`;
+  }
   if(gram.length)h+=`<div class="sec"><div class="sl">어법 후보 (0회독 상세)</div>`+gram.map((c,i)=>{
     let det = (c.lines&&c.lines.length)
       ? '<div class="glines">'+c.lines.map(ln=>`<div class="gline">${ln}</div>`).join('')+'</div>'
@@ -464,6 +492,7 @@ function openAdd(e){
     .catch(()=>{a.innerHTML='<div class="nocand">AI 호출 실패 → 직접 작성하세요</div>';});};
   pop.querySelectorAll('[data-pick]').forEach(c=>c.onclick=()=>{const cc=gram[+c.dataset.pick];const dd=(cc.lines&&cc.lines.length)?cc.lines.join('  /  '):cc.pd;if(target){target.n=cc.pl;target.d=dd;target.f=1;target.s=cc.id;if(!target.h)target.h=word;if(target.i<2)target.i=2;}else S[si].push({e:word,k:'',h:word,f:1,n:cc.pl,d:dd,i:2,s:cc.id});pop.classList.remove('show');renderAuth();});
   pop.querySelector('[data-man]').onclick=()=>{const v=document.getElementById('mLab').value.trim();if(!v)return;if(target){target.n=v;target.d='직접 입력';if(!target.h)target.h=word;if(target.i<2)target.i=2;}else S[si].push({e:word,k:'',h:word,f:1,n:v,d:'직접 입력 → grammar_points 저장',i:2,s:'직접'});pop.classList.remove('show');renderAuth();};
+  {const _cd=pop.querySelector('[data-curdel]');if(_cd)_cd.onclick=()=>{if(target){target.n='';target.d='';target.key=false;}pop.classList.remove('show');renderAuth();};}
 }
 
 /* ---------- 정밀 인쇄물 ---------- */
@@ -522,6 +551,82 @@ function setMode(m){mode=m;[0,1,2].forEach(i=>document.getElementById('m'+i).cla
 ['0','1','2'].forEach(i=>document.getElementById('m'+i).onclick=()=>setMode(+i));
 document.addEventListener('click',e=>{if(e.target.classList&&e.target.classList.contains('hst')){DIFF=+e.target.dataset.d;updateHeader();if(mode===0)renderAuth();}});
 document.addEventListener('click',e=>{if(!pop.contains(e.target)&&!e.target.classList.contains('wd')&&!e.target.classList.contains('spot')){pop.classList.remove('show');view.querySelectorAll('.spot.open').forEach(s=>s.classList.remove('open'));}});
+/* ===== 저장 · 발행(학생 링크) · 강사 ===== */
+function _qp(){const p=new URLSearchParams(location.search);return {book:p.get('book')||'',unit:p.get('unit')||'',pid:p.get('pid')||''};}
+function _wbtoken(){try{return localStorage.getItem('wb_token')||'';}catch(e){return '';}}
+function serializeSheet(){
+  const marks=[];
+  S.forEach((chunks,si)=>chunks.forEach((c,ci)=>{
+    if(c.h||c.n||c.key||c.i!==undefined){
+      const m={si,ci};
+      if('h'in c)m.h=c.h; if('f'in c)m.f=c.f; if('n'in c)m.n=c.n;
+      if('d'in c)m.d=c.d; if('i'in c)m.imp=c.i; if('key'in c)m.key=c.key; if('s'in c)m.src=c.s;
+      marks.push(m);
+    }
+  }));
+  return {diff:DIFF,marks,
+    selTitle:SEL.title||0,selTopic:SEL.topic||0,selSum:SEL.sum||0,
+    tags:(typeof STAG!=='undefined'&&STAG)?STAG:{},summary:''};
+}
+async function saveSheet(silent){
+  const {book,unit,pid}=_qp();
+  if(!book||!unit||!pid){if(!silent)alert('이 화면엔 book/unit/pid 정보가 없어 저장할 수 없습니다.');return false;}
+  const teacher=(document.getElementById('tchName').value||'').trim();
+  try{localStorage.setItem('sheet_teacher',teacher);}catch(e){}
+  const btn=document.getElementById('saveBtn');
+  if(!silent){btn.disabled=true;btn.textContent='저장중…';}
+  try{
+    const r=await fetch('/api/sheet/save',{method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+_wbtoken()},
+      body:JSON.stringify({book,unit,pid,teacher,sheet:serializeSheet()})});
+    if(!r.ok)throw new Error('저장 실패 ('+r.status+')');
+    if(!silent){btn.textContent='저장됨 ✓';setTimeout(()=>{btn.textContent='저장';btn.disabled=false;},1500);loadTeachers();}
+    return true;
+  }catch(e){if(!silent){alert(e.message||'저장 실패');btn.textContent='저장';btn.disabled=false;}return false;}
+}
+async function publishSheet(){
+  const {book,unit,pid}=_qp();
+  if(!book||!unit||!pid){alert('이 화면엔 정보가 없어 발행할 수 없습니다.');return;}
+  const teacher=(document.getElementById('tchName').value||'').trim();
+  const bar=document.getElementById('linkbar');bar.textContent='저장 후 학생 링크 생성 중…';
+  const ok=await saveSheet(true);
+  if(!ok){bar.textContent='저장에 실패해 링크를 만들지 못했습니다.';return;}
+  try{
+    const r=await fetch('/api/sheet/publish',{method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+_wbtoken()},
+      body:JSON.stringify({book,unit,pid,teacher})});
+    if(!r.ok)throw new Error('발행 실패 ('+r.status+')');
+    const d=await r.json();
+    const full=location.origin+(d.url||('/s/'+(d.token||'')));
+    bar.innerHTML=`학생 링크: <a href="${full}" target="_blank">${full}</a> <button id="copyLink">복사</button>`+(teacher?` <span class="tchtag">(${esc(teacher)})</span>`:'');
+    const cb=document.getElementById('copyLink');
+    cb.onclick=()=>{(navigator.clipboard?navigator.clipboard.writeText(full):Promise.reject()).then(()=>{cb.textContent='복사됨 ✓';}).catch(()=>{prompt('아래 링크를 복사하세요',full);});};
+  }catch(e){bar.textContent=e.message||'발행 실패';}
+}
+async function loadTeachers(){
+  const {book,unit,pid}=_qp();if(!book||!unit||!pid)return;
+  try{
+    const r=await fetch(`/api/sheet/teachers?book=${encodeURIComponent(book)}&unit=${encodeURIComponent(unit)}&pid=${encodeURIComponent(pid)}`);
+    if(!r.ok)return;const d=await r.json();const sel=document.getElementById('tchSel');if(!sel)return;
+    const cur=(document.getElementById('tchName').value||'').trim();
+    sel.innerHTML='<option value="">― 저장된 강사 ―</option>'+(d.teachers||[]).map(t=>{
+      const v=(t.teacher||'');const nm=v||'(공용)';const vEsc=v.replace(/"/g,'&quot;');
+      return `<option value="${vEsc}"${v===cur?' selected':''}>${esc(nm)}${t.has_link?' · 링크':''}</option>`;
+    }).join('');
+  }catch(e){}
+}
+(function initSheetTools(){
+  const ro=(_D&&(_D.READONLY||_D.MODE==='student'));
+  const wrap=document.getElementById('tchWrap');
+  if(ro){if(wrap)wrap.style.display='none';return;}
+  let tname=(_D&&_D.TEACHER)||'';
+  if(!tname){try{tname=localStorage.getItem('sheet_teacher')||'';}catch(e){}}
+  const inp=document.getElementById('tchName');if(inp)inp.value=tname;
+  const sb=document.getElementById('saveBtn');if(sb)sb.onclick=()=>saveSheet(false);
+  const lb=document.getElementById('linkBtn');if(lb)lb.onclick=publishSheet;
+  const sel=document.getElementById('tchSel');if(sel)sel.onchange=function(){const v=this.value;const p=new URLSearchParams(location.search);if(v)p.set('teacher',v);else p.delete('teacher');location.search=p.toString();};
+  loadTeachers();
+})();
 setMode((_D&&_D.MODE==='student')?2:0);
 </script>
 </body>

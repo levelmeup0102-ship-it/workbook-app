@@ -3329,6 +3329,18 @@ grammar_notes가 12개면 박스도 정확히 12개 (각각 ①, ②, ③ ... �
 
 핵심 비유·역접 신호어·주제 응축 표현만 짧게 잡아라.
 
+### RULE 4.6 — to부정사 용법 분류 정확도 (★자주 틀림★)
+어법 노트의 `tag`·`desc` 에서 to부정사(to-V) 용법을 분류할 때 다음을 지켜라:
+- 가목적어 it + 진목적어 to-V (make/find/think/consider/believe + it + 형용사/명사 + to-V):
+  → **명사적 용법(진목적어)**. 절대 부사적(목적)으로 분류하지 말 것.
+  예) "makes it possible to access" = it(가목적어) … to access(진목적어, 명사적). ❌"~하기 위해(목적)"
+- 진주어 to-V (It is + 형용사 + to-V) → **명사적 용법(진주어)**.
+- be동사·become 등의 보어 자리 to-V → **명사적 용법(보어)**.
+- 동사의 목적어 자리 to-V (want/decide/hope/plan + to-V) → **명사적 용법(목적어)**.
+- 앞 명사를 꾸미는 to-V (a way to V, the ability to V) → **형용사적 용법**.
+- 오직 '~하기 위해/~하도록(목적)', '~해서(결과·감정의 원인)'로 자연스러울 때만 **부사적 용법**.
+판단 팁: to-V를 명사(주어/목적어/보어)로 바꿔 문장이 성립하면 명사적이다. 가목적어 it 이 보이면 그 to-V는 거의 항상 진목적어(명사적)다.
+
 ### RULE 5 — MARKER COUNT IN PASSAGE = NOTES COUNT (★ABSOLUTE — NO EXCEPTIONS★)
 
 **3가지 마커 모두 반드시 본문에 표시해야 한다. 어법(빨간)만 마킹하고 어휘(파랑)·함축(검정) 마커를 빼먹는 것은 절대 금지.**
@@ -3882,6 +3894,16 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     _r = _safe_post("_sync_grammar_boxes_with_passage", lambda: _sync_grammar_boxes_with_passage(data))
     if _r is not None: data = _r
     _r = _safe_post("_sync_vocab_with_passage", lambda: _sync_vocab_with_passage(data))
+    if _r is not None: data = _r
+
+    # ★ 후처리 4.9 — PAGE A 미니노트를 지문 마커와 정확히 1:1 로 강제
+    #   선생님 요구: 지문의 각 빨강/파랑 마크가 바로 밑 미니노트와 정확히 일치.
+    #   - 어법노트(grammar_notes) = 지문 GRAMMAR 마커 집합 (없는 노트는 상세박스 title 로 백필,
+    #     마커 없는 노트는 PAGE A 에서 제외). PAGE B 상세박스는 전부 그대로 유지.
+    #   - 어휘노트(vocab_notes) = 지문 VOCAB 마커 집합 (orphan/중복 글자 제거). PAGE C 형식 유지.
+    _r = _safe_post("_reconcile_grammar_pagea", lambda: _reconcile_grammar_pagea(data))
+    if _r is not None: data = _r
+    _r = _safe_post("_reconcile_vocab_pagea", lambda: _reconcile_vocab_pagea(data))
     if _r is not None: data = _r
 
     # 후처리 5 — passage_marked → passage_html 변환
@@ -4933,6 +4955,135 @@ def _renumber_vocab_by_passage_order(data: dict) -> dict:
         half = (len(merged) + 1) // 2
         data["vocab_detail"] = {"left": merged[:half], "right": merged[half:]}
 
+    return data
+
+
+def _reconcile_grammar_pagea(data: dict) -> dict:
+    """PAGE A 어법노트(grammar_notes)를 지문 GRAMMAR 마커와 정확히 1:1 로 맞춘다.
+    - 어법노트 집합 = 지문에 실제 박힌 번호 집합.
+    - 노트 없는 번호는 PAGE B 상세박스(title)로 백필.
+    - 노트/박스 어디에도 근거 없는 마커는 지문에서 마커만 제거(내용 보존, 드묾).
+    - PAGE B 상세박스(grammar_p1/p2)는 전부 그대로 유지(가급적 전부).
+    - 노트는 번호 오름차순 정렬(지문 번호와 매칭됨).
+    """
+    import re as _re
+    if not isinstance(data, dict):
+        return data
+    pm = data.get("passage_marked", "") or ""
+    if not pm:
+        return data
+    CIRCLE = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
+    def _nc(raw):
+        raw = (raw or "").strip()
+        if raw and raw[0] in CIRCLE:
+            return raw[0]
+        if raw.isdigit():
+            n = int(raw)
+            if 1 <= n <= 20:
+                return CIRCLE[n - 1]
+        return ""
+    order = []
+    for m in _re.finditer(r'\[\[GRAMMAR:n=([^,\]]+)', pm):
+        c = _nc(m.group(1))
+        if c and c not in order:
+            order.append(c)
+    if not order:
+        return data
+    notes_by = {}
+    for n in (data.get("grammar_notes") or []):
+        if isinstance(n, dict):
+            k = _nc(n.get("num"))
+            if k and k not in notes_by:
+                notes_by[k] = n
+    box_by = {}
+    p1 = data.get("grammar_p1", {}) or {}
+    p2 = data.get("grammar_p2", {}) or {}
+    for box in ((p1.get("left") or []) + (p1.get("right") or [])
+                + (p2.get("left") or []) + (p2.get("right") or [])):
+        if isinstance(box, dict):
+            k = _nc(box.get("num"))
+            if k and k not in box_by:
+                box_by[k] = box
+    new_notes, drop = [], []
+    for k in order:
+        if k in notes_by:
+            nd = dict(notes_by[k]); nd["num"] = k
+            new_notes.append(nd)
+        elif k in box_by:
+            new_notes.append({"num": k, "tag": (box_by[k].get("title") or ""), "desc": ""})
+        else:
+            drop.append(k)
+    for k in drop:
+        pat = r'\[\[GRAMMAR:n=' + _re.escape(k) + r'[^\]]*\]\](.*?)\[\[/GRAMMAR\]\]'
+        pm = _re.sub(pat, lambda mm: mm.group(1), pm, count=1)
+    new_notes.sort(key=lambda n: CIRCLE.index(_nc(n.get("num"))) if _nc(n.get("num")) in CIRCLE else 999)
+    data["grammar_notes"] = new_notes
+    data["passage_marked"] = pm
+    n_drop = len(drop)
+    _safe_print(f"  \U0001f534 PAGE A 어법노트 ↔ 지문 1:1 정리: 노트 {len(new_notes)}개"
+                + (f" (근거없는 마커 {n_drop}개 제거)" if n_drop else ""))
+    return data
+
+
+def _reconcile_vocab_pagea(data: dict) -> dict:
+    """PAGE A 어휘노트(vocab_notes)를 지문 VOCAB 마커와 정확히 1:1 로 맞춘다.
+    - 지문에서 각 마커가 실제 감싼 단어로 노트를 매칭(중복 글자 상황도 올바른 노트 선택).
+    - 노트 없는 마커는 지문에서 마커만 제거(내용 보존).
+    - 노트는 지문 등장 순서. PAGE C(vocab_detail) 형식은 건드리지 않는다.
+    """
+    import re as _re
+    if not isinstance(data, dict):
+        return data
+    pm = data.get("passage_marked", "") or ""
+    if not pm:
+        return data
+    CA = "ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞⓟⓠⓡⓢⓣ"
+    def _na(s):
+        s = (s or "").strip()
+        if s and s[0] in CA:
+            return s[0]
+        if len(s) == 1 and 'a' <= s.lower() <= 't':
+            return CA[ord(s.lower()) - ord('a')]
+        return s
+    pairs = []
+    for m in _re.finditer(r'\[\[VOCAB:l=([^\]]+)\]\](.*?)\[\[/VOCAB\]\]', pm):
+        pairs.append((_na(m.group(1)), (m.group(2) or "").strip()))
+    if not pairs:
+        return data
+    notes = [v for v in (data.get("vocab_notes") or []) if isinstance(v, dict)]
+    used = set()
+    def pick(letter, text):
+        tl = text.lower()
+        for i, v in enumerate(notes):           # 1) 감싼 단어로 매칭
+            if i in used:
+                continue
+            w = (v.get("word") or "").lower()
+            if w and (w in tl or tl in w):
+                used.add(i); return v
+        for i, v in enumerate(notes):           # 2) 글자로 매칭
+            if i in used:
+                continue
+            if _na(v.get("letter")) == letter:
+                used.add(i); return v
+        return None
+    new_vn, drop, seen = [], [], set()
+    for (L, text) in pairs:
+        if L in seen:
+            continue
+        seen.add(L)
+        v = pick(L, text)
+        if v is None:
+            drop.append(L); continue
+        vd = dict(v); vd["letter"] = L
+        new_vn.append(vd)
+    for L in drop:
+        pat = r'\[\[VOCAB:l=' + _re.escape(L) + r'[^\]]*\]\](.*?)\[\[/VOCAB\]\]'
+        pm = _re.sub(pat, lambda mm: mm.group(1), pm, count=1)
+    data["vocab_notes"] = new_vn
+    data["passage_marked"] = pm
+    n_drop = len(drop)
+    _safe_print(f"  \U0001f535 PAGE A 어휘노트 ↔ 지문 1:1 정리: 노트 {len(new_vn)}개"
+                + (f" (근거없는 마커 {n_drop}개 제거)" if n_drop else ""))
     return data
 
 

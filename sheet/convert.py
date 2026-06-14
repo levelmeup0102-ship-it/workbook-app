@@ -285,61 +285,110 @@ def build_sheet_data(pre: dict, translation: str = "", saved_sheet: dict = None)
     tokens = _parse_marked(marked)
     sentences = split_sentences(original)
     kr_lines = _split_translation(translation)
-
-    chunks = []
-    cursor = 0
-    sent_idx = 0
     sent_bounds = _sentence_bounds(original, sentences)
 
-    for tk in tokens:
-        seg = tk["text"]
-        if not seg:
-            continue
-        start = original.find(seg, cursor)
-        if start < 0:
-            start = cursor
-        cursor = start + len(seg)
-        while sent_idx + 1 < len(sent_bounds) and start >= sent_bounds[sent_idx + 1][0]:
-            sent_idx += 1
-
-        chunk = {"e": seg.strip()}
+    def _annot(tk):
+        """G/V/I 토큰 → 청크에 얹을 주석 필드(없으면 None)."""
         if tk["kind"] == "G" and not tk["split"]:
-            lbl = tk["label"]
-            note = gnotes.get(lbl, {})
-            box = gboxes.get(lbl, {})
-            chunk.update({
-                "h": seg.strip(), "f": 1,
-                "n": _g_note(note, box),
-                "d": _g_detail(note, box),
-                "i": 2, "key": False,
-                "s": (note.get("num") or lbl or "어법"),
-            })
-        elif tk["kind"] == "V":
-            lbl = tk["label"]
-            note = vnotes.get(lbl, {})
-            dmeta = vdetail.get(lbl, {})
-            chunk.update({
-                "h": seg.strip(), "f": 2,
-                "n": _v_note(note, dmeta),
-                "d": _v_detail(note, dmeta),
-                "i": 2, "key": False, "s": "어휘",
-            })
-        elif tk["kind"] == "I":
-            chunk.update({"h": seg.strip(), "f": 1, "n": "함축·주제 응축",
-                          "d": "빈칸/함축 출제 포인트", "i": 3, "key": True, "s": "함축"})
-        chunks.append((sent_idx, chunk))
+            lbl = tk["label"]; note = gnotes.get(lbl, {}); box = gboxes.get(lbl, {})
+            return {"h": (tk["text"] or "").strip(), "f": 1,
+                    "n": _g_note(note, box), "d": _g_detail(note, box),
+                    "i": 2, "key": False, "s": (note.get("num") or lbl or "어법")}
+        if tk["kind"] == "V":
+            lbl = tk["label"]; note = vnotes.get(lbl, {}); dmeta = vdetail.get(lbl, {})
+            return {"h": (tk["text"] or "").strip(), "f": 2,
+                    "n": _v_note(note, dmeta), "d": _v_detail(note, dmeta),
+                    "i": 2, "key": False, "s": "어휘"}
+        if tk["kind"] == "I":
+            return {"h": (tk["text"] or "").strip(), "f": 1, "n": "함축·주제 응축",
+                    "d": "빈칸/함축 출제 포인트", "i": 3, "key": True, "s": "함축"}
+        return None
 
-    n_sent = max([c[0] for c in chunks], default=-1) + 1
-    S = [[] for _ in range(max(n_sent, len(sentences)))]
-    for si, ch in chunks:
-        S[si].append(ch)
-    S = [s for s in S if s]
+    def _sent_of(pos):
+        si = 0
+        for bi, (bs, _be) in enumerate(sent_bounds):
+            if pos >= bs:
+                si = bi
+            else:
+                break
+        return si
 
-    for i, slist in enumerate(S):
-        kr = kr_lines[i] if i < len(kr_lines) else ""
-        for ci, ch in enumerate(slist):
-            if "k" not in ch:
-                ch["k"] = kr if ci == 0 else ""
+    # 마커들의 원문 내 위치 + 주석 (직독직해 경로에서 구에 얹기)
+    marker_spans = []   # (start, end, annot)
+    _cur = 0
+    for tk in tokens:
+        seg = tk["text"] or ""
+        st = original.find(seg, _cur) if seg else _cur
+        if st < 0:
+            st = _cur
+        en = st + len(seg)
+        _cur = en
+        a = _annot(tk)
+        if a:
+            marker_spans.append((st, en, a))
+
+    dt = pre.get("direct_translation")
+    use_dt = (isinstance(dt, list) and len(dt) >= 2
+              and all(isinstance(u, dict) and (u.get("e") or "").strip() for u in dt))
+
+    if use_dt:
+        # ── 직독직해 경로: 구 단위(e,k)로 청크 구성 + 마커 얹기 (청크마다 한글) ──
+        S = [[] for _ in range(max(1, len(sentences)))]
+        ucur = 0
+        for u in dt:
+            ue = (u.get("e") or "").strip()
+            uk = (u.get("k") or "").strip()
+            if not ue:
+                continue
+            ust = original.find(ue, ucur)
+            if ust < 0:
+                ust = original.find(ue)
+            if ust < 0:
+                ust = ucur
+            uen = ust + len(ue)
+            ucur = uen
+            si = _sent_of(ust)
+            chunk = {"e": ue, "k": uk}
+            # 이 구에 시작점이 들어오는 마커(첫 매칭)를 얹는다
+            for (ms, _me, a) in marker_spans:
+                if ust <= ms < uen:
+                    chunk.update(a)
+                    # h 가 이 구의 영어에 실제로 없으면 강조는 생략(템플릿이 못 찾아도 안전)
+                    break
+            if si >= len(S):
+                S.extend([[] for _ in range(si - len(S) + 1)])
+            S[si].append(chunk)
+        S = [s for s in S if s]
+    else:
+        # ── 기존 경로: 마커 토큰 단위 청크 + 문장 한글을 첫 청크 밑에 (폴백) ──
+        chunks = []
+        cursor = 0
+        sent_idx = 0
+        for tk in tokens:
+            seg = tk["text"]
+            if not seg:
+                continue
+            start = original.find(seg, cursor)
+            if start < 0:
+                start = cursor
+            cursor = start + len(seg)
+            while sent_idx + 1 < len(sent_bounds) and start >= sent_bounds[sent_idx + 1][0]:
+                sent_idx += 1
+            chunk = {"e": seg.strip()}
+            a = _annot(tk)
+            if a:
+                chunk.update(a)
+            chunks.append((sent_idx, chunk))
+        n_sent = max([c[0] for c in chunks], default=-1) + 1
+        S = [[] for _ in range(max(n_sent, len(sentences)))]
+        for si, ch in chunks:
+            S[si].append(ch)
+        S = [s for s in S if s]
+        for i, slist in enumerate(S):
+            kr = kr_lines[i] if i < len(kr_lines) else ""
+            for ci, ch in enumerate(slist):
+                if "k" not in ch:
+                    ch["k"] = kr if ci == 0 else ""
 
     FLOW = _build_flow(pre)
     TITLES = _zip_kr_en(pre.get("titles_kr"), pre.get("titles"))
@@ -382,6 +431,9 @@ def build_sheet_data(pre: dict, translation: str = "", saved_sheet: dict = None)
         entry = _box_to_pool_entry(box)
         # 본문 단어 전체 + 각 단어를 키로 (three_modes 가 data-word 소문자로 찾음)
         seg = (tk["text"] or "").strip()
+        if seg:
+            # ★ 마킹된 구의 '원형' 키 — openAdd 가 data-an(=구 전체, 공백·대소문자 포함)으로 조회하므로 필수
+            POOL.setdefault(seg, []).append(entry)
         full = re.sub(r"[^a-z']", "", seg.lower())
         if full:
             POOL.setdefault(full, []).append(entry)

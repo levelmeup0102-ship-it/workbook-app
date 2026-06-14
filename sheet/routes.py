@@ -72,18 +72,20 @@ def _load_preclass(cache_key: str) -> dict | None:
     return None
 
 
-def _load_sheet(cache_key: str = None, token: str = None) -> dict | None:
+def _load_sheet(cache_key: str = None, token: str = None, teacher: str = "") -> dict | None:
     url = _supa_url()
     if not url:
         return None
     try:
         import httpx
+        from urllib.parse import quote
         if token:
             ep = (f"{url}/rest/v1/sheet_cache"
-                  f"?share_token=eq.{token}&select=sheet,cache_key,book,unit,pid&limit=1")
+                  f"?share_token=eq.{token}&select=sheet,cache_key,book,unit,pid,teacher&limit=1")
         else:
             ep = (f"{url}/rest/v1/sheet_cache"
-                  f"?cache_key=eq.{cache_key}&select=sheet,cache_key,book,unit,pid&limit=1")
+                  f"?cache_key=eq.{cache_key}&teacher=eq.{quote(teacher or '', safe='')}"
+                  f"&select=sheet,cache_key,book,unit,pid,teacher&limit=1")
         with httpx.Client(timeout=10) as c:
             r = c.get(ep, headers=_supa_headers())
         if r.status_code == 200:
@@ -131,7 +133,7 @@ async def _get_passage_text(book, unit, pid):
     return raw.strip(), ""
 
 
-def _inject(html: str, sheet_data: dict, mode: str = "auth", readonly: bool = False) -> str:
+def _inject(html: str, sheet_data: dict, mode: str = "auth", readonly: bool = False, teacher: str = "") -> str:
     payload = {
         "S": sheet_data.get("S", []),
         "FLOW": sheet_data.get("FLOW", []),
@@ -143,6 +145,7 @@ def _inject(html: str, sheet_data: dict, mode: str = "auth", readonly: bool = Fa
         "SEL": sheet_data.get("_SEL", {}),
         "MODE": mode,
         "READONLY": readonly,
+        "TEACHER": teacher,
     }
     snippet = (
         "<script>\n"
@@ -165,7 +168,7 @@ def _read_template() -> str:
 
 
 @router.get("/sheet", response_class=HTMLResponse)
-async def sheet_page(request: Request, book: str = "", unit: str = "", pid: str = ""):
+async def sheet_page(request: Request, book: str = "", unit: str = "", pid: str = "", teacher: str = ""):
     if not all([book, unit, pid]):
         raise HTTPException(400, "book, unit, pid 필요")
 
@@ -176,12 +179,13 @@ async def sheet_page(request: Request, book: str = "", unit: str = "", pid: str 
 
     eng, kr = await _get_passage_text(book, unit, pid)
 
-    saved_row = _load_sheet(cache_key=ck)
+    teacher = (teacher or "").strip()
+    saved_row = _load_sheet(cache_key=ck, teacher=teacher)
     saved_sheet = (saved_row or {}).get("sheet") if saved_row else None
 
     data = sc.build_sheet_data(pre, translation=kr, saved_sheet=saved_sheet)
     html = _read_template()
-    return _inject(html, data, mode="auth", readonly=False)
+    return _inject(html, data, mode="auth", readonly=False, teacher=teacher)
 
 
 @router.post("/api/sheet/save")
@@ -190,6 +194,7 @@ async def sheet_save(request: Request):
     body = await request.json()
     book = body.get("book"); unit = body.get("unit"); pid = body.get("pid")
     sheet = body.get("sheet")
+    teacher = (body.get("teacher") or "").strip()
     if not all([book, unit, pid]):
         raise HTTPException(400, "book, unit, pid 필요")
     if sheet is None:
@@ -197,9 +202,9 @@ async def sheet_save(request: Request):
     ck = _DEPS["ck"](book, unit, pid)
     _rpc("sheet_save", {
         "p_cache_key": ck, "p_book": book, "p_unit": unit,
-        "p_pid": pid, "p_sheet": sheet,
+        "p_pid": pid, "p_sheet": sheet, "p_teacher": teacher,
     })
-    return {"ok": True, "cache_key": ck}
+    return {"ok": True, "cache_key": ck, "teacher": teacher}
 
 
 @router.post("/api/sheet/publish")
@@ -207,10 +212,11 @@ async def sheet_publish(request: Request):
     _DEPS["verify"](request)
     body = await request.json()
     book = body.get("book"); unit = body.get("unit"); pid = body.get("pid")
+    teacher = (body.get("teacher") or "").strip()
     if not all([book, unit, pid]):
         raise HTTPException(400, "book, unit, pid 필요")
     ck = _DEPS["ck"](book, unit, pid)
-    res = _rpc("sheet_publish", {"p_cache_key": ck})
+    res = _rpc("sheet_publish", {"p_cache_key": ck, "p_teacher": teacher})
     token = None
     if isinstance(res, str):
         token = res
@@ -218,7 +224,19 @@ async def sheet_publish(request: Request):
         token = res[0].get("share_token") if isinstance(res[0], dict) else res[0]
     elif isinstance(res, dict):
         token = res.get("share_token") or res.get("sheet_publish")
-    return {"ok": True, "token": token, "url": f"/s/{token}" if token else None}
+    return {"ok": True, "token": token, "teacher": teacher,
+            "url": f"/s/{token}" if token else None}
+
+
+@router.get("/api/sheet/teachers")
+async def sheet_teachers(book: str = "", unit: str = "", pid: str = ""):
+    """이 지문에 저장본이 있는 강사명 목록 (저작모드 드롭다운용)."""
+    if not all([book, unit, pid]):
+        raise HTTPException(400, "book, unit, pid 필요")
+    ck = _DEPS["ck"](book, unit, pid)
+    res = _rpc("sheet_teachers", {"p_cache_key": ck})
+    rows = res if isinstance(res, list) else []
+    return {"ok": True, "cache_key": ck, "teachers": rows}
 
 
 # ════════════════════════════════════════════════════════════════

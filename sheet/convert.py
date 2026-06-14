@@ -349,11 +349,11 @@ def build_sheet_data(pre: dict, translation: str = "", saved_sheet: dict = None)
             ucur = uen
             si = _sent_of(ust)
             chunk = {"e": ue, "k": uk}
-            # 이 구에 시작점이 들어오는 마커(첫 매칭)를 얹는다
+            # 이 구에 시작점이 들어오고, 마커 구가 이 구의 영어에 실제로 포함될 때만 얹는다
+            # (경계를 걸쳐 부분문자열이 아니면 렌더(split/replace)가 깨지므로 강조는 생략)
             for (ms, _me, a) in marker_spans:
-                if ust <= ms < uen:
+                if ust <= ms < uen and a.get("h") and a["h"] in ue:
                     chunk.update(a)
-                    # h 가 이 구의 영어에 실제로 없으면 강조는 생략(템플릿이 못 찾아도 안전)
                     break
             if si >= len(S):
                 S.extend([[] for _ in range(si - len(S) + 1)])

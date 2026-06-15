@@ -7,6 +7,7 @@ seosul/generator.py
 import os
 import json
 import re
+import time
 import httpx
 from typing import List, Dict, Optional
 
@@ -84,18 +85,35 @@ def cache_set(book: str, unit: str, pid: str, types: List[str], data: dict) -> N
 
 
 # ---------- Claude ----------
-def _call_claude(prompt: str, max_tokens: int = 1500) -> str:
+def _call_claude(prompt: str, max_tokens: int = 1500, _tries: int = 4) -> str:
+    """Anthropic 호출. 일시적 오류(429/5xx, 또는 overloaded 류 400)는 지수 백오프로 재시도.
+    이걸로 07번처럼 '일시 400 → 유형 통째 드롭'이 사라진다."""
     if not ANTHROPIC_API_KEY:
         raise RuntimeError("ANTHROPIC_API_KEY 없음")
-    with httpx.Client(timeout=120.0) as c:
-        r = c.post("https://api.anthropic.com/v1/messages",
-                   headers={"x-api-key": ANTHROPIC_API_KEY,
-                            "anthropic-version": ANTHROPIC_VERSION,
-                            "content-type": "application/json"},
-                   json={"model": CLAUDE_MODEL, "max_tokens": max_tokens,
-                         "messages": [{"role": "user", "content": prompt}]})
-        r.raise_for_status()
-        return "".join(b.get("text", "") for b in r.json().get("content", []))
+    last = None
+    for attempt in range(_tries):
+        try:
+            with httpx.Client(timeout=120.0) as c:
+                r = c.post("https://api.anthropic.com/v1/messages",
+                           headers={"x-api-key": ANTHROPIC_API_KEY,
+                                    "anthropic-version": ANTHROPIC_VERSION,
+                                    "content-type": "application/json"},
+                           json={"model": CLAUDE_MODEL, "max_tokens": max_tokens,
+                                 "messages": [{"role": "user", "content": prompt}]})
+                if r.status_code >= 400:
+                    body = r.text or ""
+                    transient = (r.status_code in (408, 409, 425, 429, 500, 502, 503, 504, 529)
+                                 or "overloaded" in body.lower() or "rate_limit" in body.lower())
+                    if transient and attempt < _tries - 1:
+                        time.sleep(min(2 ** attempt * 1.5, 12)); last = body; continue
+                    r.raise_for_status()
+                return "".join(b.get("text", "") for b in r.json().get("content", []))
+        except (httpx.TransportError, httpx.TimeoutException) as e:
+            last = str(e)
+            if attempt < _tries - 1:
+                time.sleep(min(2 ** attempt * 1.5, 12)); continue
+            raise
+    raise RuntimeError(f"Anthropic 재시도 실패: {last}")
 
 def _parse_json(txt: str) -> dict:
     txt = re.sub(r"```(json)?", "", txt).strip()
@@ -105,22 +123,27 @@ def _parse_json(txt: str) -> dict:
 
 # ---------- 문장 역할 배정 (코드, 누더기 방지) ----------
 def allocate_roles(n: int) -> Dict[str, List[int]]:
-    """
-    기본 배정. SA 2 / SE 4 / SD 3. 빈칸·오류 문장 비겹침.
-    인용문([1] 등 따옴표 문장)은 어법 오류에서 제외하는 로직을 호출부에서 추가 가능.
-    """
-    idx = list(range(n))
+    """문장 역할 배정(비겹침). 길이에 상관없이 SA(최대 2)·SE(최대 4)·SD(최소 1, 최대 3)를
+    가능한 한 확보한다. 짧은 지문에서 SD가 비어 'SD 생략'되던 버그를 방지."""
     roles = {"SA": [], "SC": [], "SD": [], "SE": []}
-    if n >= 9:
+    if n <= 0:
+        return roles
+    if n >= 9:  # 검증된 기존 배치 유지
         roles["SA"] = [0, 2]
         roles["SE"] = [1, 3, 5, 6]
         roles["SD"] = [4, 7, 8]
-    else:  # 짧은 지문 폴백
-        roles["SA"] = idx[:1]
-        rem = idx[1:]
-        roles["SE"] = rem[:4]
-        rem2 = [i for i in rem if i not in roles["SE"]]
-        roles["SD"] = rem2[:3]
+        return roles
+    order = list(range(n))
+    # SA: 떨어진 2곳(0,2) 우선
+    sa = [0] + ([2] if n > 2 else ([1] if n > 1 else []))
+    rem = [i for i in order if i not in sa]
+    # SD 최소 1곳 확보를 위해 SE가 다 먹지 않게
+    se_cap = min(4, max(1, len(rem) - 1))
+    se = rem[:se_cap]
+    sd = [i for i in rem if i not in se][:3]
+    if not sd and se:           # 그래도 비면 SE 마지막 1개를 SD로 양보
+        sd = [se.pop()]
+    roles["SA"], roles["SE"], roles["SD"] = sa, se, sd
     return roles
 
 
@@ -239,15 +262,47 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
         _try("SC", P.prompt_SC, _validate_sc, sents, stypes.get("SC", {}))
     if "SD" in types:
         _try("SD", P.prompt_SD,
-             lambda it: V.validate_grammar_errors(it["errors"], gp_index, blank_sents, single_passage=True),
+             lambda it: V.validate_grammar_errors(it["errors"], gp_index, blank_sents,
+                                                  single_passage=True, sentences=sents),
              sents, roles["SD"], allowed_gp)
     if "SE" in types:
-        _try("SE", P.prompt_SE,
-             lambda it: V.validate_word_forms(it["blanks"], it["bogi"], set(roles["SE"])),
-             sents, roles["SE"], stypes.get("SE", {}))
+        try:
+            items.append(_gen_with_repair(
+                P.prompt_SE,
+                lambda it: V.validate_word_forms(it["blanks"], it["bogi"], set(roles["SE"]), sents),
+                sents, roles["SE"], stypes.get("SE", {})))
+        except Exception as e:
+            # ★ 유형 드롭 금지: 코드 기반 결정형 SE로 채운다(07번류 통째 누락 방지)
+            avoid = set(roles.get("SA", [])) | set(roles.get("SD", []))
+            fb = _fallback_se(sents, roles["SE"], avoid=avoid)
+            if fb:
+                items.append(fb)
+                # 폴백이 빌린 문장을 SE 역할로 등록(위치/겹침 검증 일관성)
+                roles["SE"] = sorted(set(roles.get("SE", [])) | {b["sent"] for b in fb["blanks"]})
+                blank_sents = set(roles.get("SA", [])) | set(roles.get("SE", []))
+                warnings.append(f"SE 폴백(결정형 생성 사용): {e}")
+            else:
+                warnings.append(f"SE 생략(폴백도 불가): {e}")
 
     if not items:
         raise RuntimeError("모든 유형 생성 실패: " + "; ".join(warnings))
+
+    # ★ SD 금지유형/중복문장/빈칸문장 개별 제거(유형은 살리되 나쁜 오류만 버림)
+    for it in items:
+        if it.get("type") == "SD":
+            clean, seen = [], set()
+            for e in (it.get("errors") or []):
+                why = V.error_is_forbidden(e, gp_index, sents)
+                si = e.get("sent")
+                if why:
+                    warnings.append(f"SD 오류 제거({why}): {e.get('wrong')}→{e.get('right')}")
+                elif si in blank_sents:
+                    warnings.append(f"SD 오류 제거(빈칸문장): 문장{si}")
+                elif si in seen:
+                    warnings.append(f"SD 오류 제거(중복문장): 문장{si}")
+                else:
+                    clean.append(e); seen.add(si)
+            it["errors"] = clean
 
     # 라벨 강제 배정 (SA=A,B / SE=C,D,E … 충돌·괄호 제거)
     _normalize_labels(items)
@@ -295,35 +350,179 @@ def _normalize_labels(items):
 
 
 def _assemble_passage(sents, items, roles) -> List[str]:
+    """본문에 빈칸/오류를 주입하되, 실제로 못 뚫은 빈칸·못 주입한 오류는
+    정답/보기에서 '동기 제거'한다. → 유령 빈칸·빈칸문장 오류가 구조적으로 0이 된다.
+    SE는 폐기 후 라벨을 다시 연속(C,D,E…)으로 재배열한다."""
     out = list(sents)
+    blanked_sents = set()
+
+    def _sub1(text, surface, repl):
+        new, n = re.subn(rf"(?<![A-Za-z]){re.escape(surface)}(?![A-Za-z])", repl, text, count=1)
+        return (new, True) if n else (text, False)
+
+    def _base_surface(text, base):
+        if not base:
+            return None
+        stem = re.escape(base[:-1] if len(base) > 4 and base.endswith("e") else base)
+        m = re.search(rf"(?<![A-Za-z]){stem}[A-Za-z]*(?![A-Za-z])", text)
+        return m.group(0) if m else None
+
+    # 1) SA — 정답어구를 원문에 직접 천공. 실패하면 그 빈칸 폐기.
     for it in items:
-        if it["type"] == "SA":
-            bysent = {}
-            for lab, meta in (it.get("blanks") or {}).items():
-                bysent.setdefault(meta.get("sent"), []).append((lab, it["answers"][lab]))
-            for sent, blanks in bysent.items():
-                if sent is None or sent >= len(out):
-                    continue
-                base = sents[sent]
-                for lab, ans in blanks:
-                    if ans and ans in base:
-                        base = base.replace(ans, "{{%s}}" % lab, 1)
-                out[sent] = base
-        elif it["type"] == "SE":
-            for bl in (it.get("blanks") or []):
-                sent = bl.get("sent")
-                if sent is None or sent >= len(out):
-                    continue
-                out[sent] = re.sub(rf"(?<![\w]){re.escape(bl['answer'])}(?![\w])",
-                                   "{{%s}}" % bl["label"], out[sent], count=1)
-        elif it["type"] == "SD":
-            for e in (it.get("errors") or []):
-                sent = e.get("sent")
-                if sent is None or sent >= len(out):
-                    continue
-                out[sent] = re.sub(rf"(?<![\w]){re.escape(e['right'])}(?![\w])",
-                                   e["wrong"], out[sent], count=1)
+        if it.get("type") != "SA":
+            continue
+        bysent = {}
+        for lab, meta in (it.get("blanks") or {}).items():
+            bysent.setdefault(meta.get("sent"), []).append(lab)
+        for sent, labs in bysent.items():
+            if not isinstance(sent, int) or sent >= len(out):
+                for lab in labs:
+                    it["blanks"].pop(lab, None); it["answers"].pop(lab, None)
+                continue
+            base = out[sent]
+            for lab in labs:
+                ans = (it.get("answers") or {}).get(lab, "")
+                new, ok = _sub1(base, ans, "{{%s}}" % lab) if ans else (base, False)
+                if ok:
+                    base = new; blanked_sents.add(sent)
+                else:
+                    it["blanks"].pop(lab, None); it["answers"].pop(lab, None)
+                    it.setdefault("_dropped", []).append(("SA", lab))
+            out[sent] = base
+
+    # 2) SE — answer 표면형 우선, 없으면 base의 굴절/파생형 탐색+정답보정. 실패 시 빈칸·보기 동기 폐기.
+    for it in items:
+        if it.get("type") != "SE":
+            continue
+        kept = []
+        for bl in (it.get("blanks") or []):
+            sent = bl.get("sent")
+            if not isinstance(sent, int) or sent >= len(out):
+                it.setdefault("_dropped", []).append(("SE", bl.get("label"))); continue
+            new, ok = _sub1(out[sent], bl.get("answer", ""), "{{%s}}" % bl["label"])
+            if not ok:
+                surf = _base_surface(out[sent], bl.get("base", ""))
+                if surf and surf.lower() != bl.get("base", "").lower():
+                    new, ok = _sub1(out[sent], surf, "{{%s}}" % bl["label"])
+                    if ok:
+                        bl["answer"] = surf
+            if ok:
+                out[sent] = new; blanked_sents.add(sent); kept.append(bl)
+            else:
+                it["bogi"] = [w for w in it.get("bogi", []) if w.lower() != bl.get("base", "").lower()]
+                it.setdefault("_dropped", []).append(("SE", bl.get("label")))
+        # 라벨 재배열(C,D,E…) + 본문 placeholder 갱신
+        relabeled = []
+        for i, bl in enumerate(kept):
+            newL = _LETTERS[2 + i]  # SE는 C부터
+            if bl["label"] != newL:
+                out[bl["sent"]] = out[bl["sent"]].replace("{{%s}}" % bl["label"], "{{%s}}" % newL)
+                bl["label"] = newL
+            relabeled.append(bl)
+        it["blanks"] = relabeled
+
+    # 3) SD — right가 대상 문장에 있고 그 문장이 빈칸 문장이 아닐 때만 주입. 아니면 폐기.
+    for it in items:
+        if it.get("type") != "SD":
+            continue
+        kept = []
+        for e in (it.get("errors") or []):
+            sent = e.get("sent")
+            if not isinstance(sent, int) or sent >= len(out) or sent in blanked_sents:
+                it.setdefault("_dropped", []).append(("SD", "빈칸문장/범위")); continue
+            new, ok = _sub1(out[sent], e.get("right", ""), e.get("wrong", ""))
+            if ok:
+                out[sent] = new; kept.append(e)
+            else:
+                it.setdefault("_dropped", []).append(("SD", e.get("right")))
+        it["errors"] = kept
+
     return out
+
+
+# ---------- 결정형 SE 폴백 (LLM 실패 시 코드가 직접 생성) ----------
+_COMMON_VERBS = {
+ "use","make","take","give","find","show","tell","ask","work","call","try","need","feel",
+ "become","leave","put","mean","keep","let","begin","seem","help","talk","turn","start","move",
+ "like","live","believe","hold","bring","happen","write","provide","sit","stand","lose","pay",
+ "meet","include","continue","set","learn","change","lead","understand","watch","follow","stop",
+ "create","speak","read","spend","grow","open","walk","win","teach","offer","remember","consider",
+ "appear","buy","serve","die","send","build","stay","fall","reach","remain","suggest","raise",
+ "pass","sell","require","report","decide","pull","return","explain","develop","carry","break",
+ "receive","agree","support","hit","produce","eat","cover","catch","draw","choose","cause","point",
+ "listen","realize","press","close","wait","prepare","share","examine","compare","describe","ensure",
+ "secure","reduce","differ","compromise","adhere","educate","perform","expose","react","divide",
+ "consume","implement","ignore","intend","compete","express","recognize","translate","mimic","match",
+ "marry","strike","interpret","fragment","weaken","function","evolve","constrain","communicate",
+ "rationalize","humanize","simulate","represent","generate","play","surf","fill","name","process",
+ "trigger","respond","evoke","capture","gain","watch","encounter","spend","reinforce","protect",
+ "tend","prevent","overwhelm","inundate","sort","group","value","investigate","hinder","handle",
+ "donate","purchase","tout","spend","empathize","facilitate","judge","increase","split","bring",
+}
+
+def _verb_base_from_ing(stem):
+    """동명사/분사 어간 → '내장 빈출동사'에 있는 실단어 원형만 반환(없으면 None)."""
+    if len(stem) >= 4 and stem[-1] == stem[-2] and stem[-1] in "bdgklmnprt":
+        stem = stem[:-1]                       # running→run
+    for cand in (stem, stem + "e"):            # fill / ensure(e)
+        if cand in _COMMON_VERBS:
+            return cand
+    return None
+
+_DERIV = [
+    (re.compile(r"^(.{3,})ically$"), lambda m: m.group(1) + "ical", "형용사→부사"),   # radically→radical
+    (re.compile(r"^(.{4,})ally$"),   lambda m: m.group(1),          "형용사→부사"),   # energetically→energetic은 별도
+    (re.compile(r"^(.{4,})ly$"),      lambda m: (m.group(1)[:-1] + "y") if m.group(1).endswith("i") else m.group(1), "형용사→부사"),
+    (re.compile(r"^(.{4,})ing$"),     lambda m: _verb_base_from_ing(m.group(1)), "동사→동명사"),
+    (re.compile(r"^(.{4,})ed$"),      lambda m: _verb_base_from_ing(m.group(1)), "동사→과거분사"),
+]
+_STOP = {"being","doing","having","during","anything","something","nothing","according",
+         "including","regarding","interesting","following","everything","understanding",
+         "willing","ongoing","wedding","finding","really","only","family","early","likely",
+         "supply","apply","reply"}
+
+def _fallback_se(sents, target_idx, avoid=None, need=4):
+    """대상 문장에서 부사(-ly)·동명사/분사(-ing/-ed, 내장 동사로 검증) 단어를 골라
+    빈칸/정답/보기를 코드로 생성. answer는 항상 원문 표면형이라 빈칸이 반드시 뚫린다.
+    avoid: SA/SD가 이미 점유한 문장(겹침 방지)."""
+    avoid = set(avoid or [])
+    cand = []  # (sent, surface, base, note)
+    pool = [i for i in target_idx if i not in avoid] + \
+           [i for i in range(len(sents)) if i not in target_idx and i not in avoid]
+    for si in pool:
+        if not (0 <= si < len(sents)):
+            continue
+        seen = set()
+        for w in re.findall(r"[A-Za-z]+", sents[si]):
+            wl = w.lower()
+            if len(wl) < 6 or wl in _STOP or wl in seen:
+                continue
+            for rx, fn, note in _DERIV:
+                m = rx.match(wl)
+                if m:
+                    base = fn(m)
+                    if base and base != wl and len(base) >= 3 and base.isalpha():
+                        cand.append((si, w, base, note)); seen.add(wl)
+                    break
+    picked, used_base = [], set()
+    for si, surf, base, note in cand:
+        if base in used_base:
+            continue
+        picked.append((si, surf, base, note)); used_base.add(base)
+        if len(picked) >= need:
+            break
+    if len(picked) < 2:
+        return None
+    blanks, bogi = [], []
+    for i, (si, surf, base, note) in enumerate(picked):
+        L = _LETTERS[2 + i]
+        blanks.append({"label": L, "sent": si, "base": base, "answer": surf, "note": note})
+        bogi.append(base)
+    extras = [b for (_, _, b, _) in cand if b not in used_base and b in _COMMON_VERBS]
+    bogi += (extras[:2] if len(extras) >= 2 else (extras + ["create", "process"])[:2])
+    import random as _r
+    _r.shuffle(bogi)
+    return {"type": "SE", "blanks": blanks, "bogi": bogi, "_fallback": True}
 
 
 def _attach_meta(items, stypes) -> list:

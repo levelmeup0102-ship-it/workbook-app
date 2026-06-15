@@ -220,9 +220,58 @@ def validate_reconstruction(sentence_tpl: str, label: str, answer: str,
 # =========================================================
 #  SD : 어법 오류 ↔ grammar_points 화이트리스트
 # =========================================================
+_BE_FORMS = {"is", "are", "was", "were", "am"}
+
+def _agreement_pair(w, r):
+    wl, rl = (w or "").lower(), (r or "").lower()
+    if wl in _BE_FORMS and rl in _BE_FORMS:
+        return True
+    if wl == rl + "s" or rl == wl + "s" or {wl, rl} == {"has", "have"}:
+        return True
+    return False
+
+def _adjacent_subject(sent_text, wrong):
+    if not sent_text:
+        return False
+    m = re.search(rf"(\w+)\s+{re.escape(wrong)}(?![A-Za-z])", sent_text)
+    if not m:
+        return False
+    prev = m.group(1).lower()
+    return prev not in {"the", "a", "an", "of", "in", "on", "to", "that", "which",
+                        "who", "and", "or", "but", "they", "we", "it", "he", "she"}
+
+def _forbidden_keywords(gp_index):
+    kws = ["관사", "a/an/the", "article", "어휘", "철자", "혼동",
+           "affect", "effect", "둘 다 맞", "둘다 맞", "both correct",
+           "병렬", "조동사", "사역", "지각", "관용", "전치사 관용", "스펠"]
+    for g in (gp_index or {}).values():
+        if "출제 금지" in (g.get("prohibited_analysis") or ""):
+            nm = (g.get("name") or "").strip()
+            if nm:
+                kws.append(nm)
+    return kws
+
+def error_is_forbidden(e: dict, gp_index: Dict[int, dict], sentences: List[str] = None) -> str:
+    """개별 어법오류가 '출제 금지'면 사유 문자열, 아니면 ''. 검증기·합성기 공용."""
+    blob = f"{e.get('category','')} {e.get('name','')} {e.get('why','')}"
+    for kw in _forbidden_keywords(gp_index):
+        if kw and kw in blob:
+            return f"금지유형(키워드 '{kw}')"
+    gp = (gp_index or {}).get(e.get("gp_id"))
+    if gp and "출제 금지" in (gp.get("prohibited_analysis") or ""):
+        return "출제 금지 gp"
+    if sentences is not None and _agreement_pair(e.get("wrong"), e.get("right")):
+        si = e.get("sent")
+        stext = sentences[si] if isinstance(si, int) and 0 <= si < len(sentences) else ""
+        if _adjacent_subject(stext, e.get("wrong", "")):
+            return "근접 수일치(주어 바로 뒤)"
+    return ""
+
+
 def validate_grammar_errors(errors: List[dict], gp_index: Dict[int, dict],
                             blank_sentences: set, n_range=(4, 5),
-                            single_passage: bool = False) -> List[str]:
+                            single_passage: bool = False,
+                            sentences: List[str] = None) -> List[str]:
     """
     errors: [{sent, wrong, right, category, why, (gp_id 선택)}]
     설계: 모델이 DB id를 정확히 맞히는 건 불안정하므로 강제하지 않는다.
@@ -234,29 +283,17 @@ def validate_grammar_errors(errors: List[dict], gp_index: Dict[int, dict],
     if not (lo <= len(errors) <= hi):
         errs.append(f"[개수] 어법 오류 {len(errors)}개 (허용 {lo}~{hi})")
 
-    # 금지 신호(블랙리스트): 하드코딩 + grammar_points의 '출제 금지' 행 이름
-    FORBIDDEN = ["관사", "a/an/the", "article", "어휘", "철자", "혼동",
-                 "affect", "effect", "둘 다 맞", "둘다 맞", "both correct"]
-    for g in (gp_index or {}).values():
-        pa = g.get("prohibited_analysis") or ""
-        if "출제 금지" in pa:
-            nm = (g.get("name") or "").strip()
-            if nm:
-                FORBIDDEN.append(nm)
-
     seen_sent, seen_cat = set(), []
     for e in errors:
-        blob = f"{e.get('category','')} {e.get('name','')} {e.get('why','')}"
-        if any(kw and kw in blob for kw in FORBIDDEN):
-            errs.append(f"[블랙리스트] '{e.get('wrong')}→{e.get('right')}' 금지 유형(관사/어휘혼동/둘다맞음 등)")
-        gp = (gp_index or {}).get(e.get("gp_id"))
-        if gp and "출제 금지" in (gp.get("prohibited_analysis") or ""):
-            errs.append(f"[블랙리스트] gp_id={e.get('gp_id')} 출제 금지 규칙")
+        fb = error_is_forbidden(e, gp_index, sentences)
+        if fb:
+            errs.append(f"[블랙리스트] '{e.get('wrong')}→{e.get('right')}' {fb}")
         if e.get("sent") in blank_sentences:
             errs.append(f"[겹침] 문장{e.get('sent')}은 빈칸 문장 → 어법 오류 금지")
         if e.get("sent") in seen_sent:
             errs.append(f"[중복문장] 문장{e.get('sent')}에 오류 2개")
         seen_sent.add(e.get("sent"))
+        gp = (gp_index or {}).get(e.get("gp_id"))
         seen_cat.append(e.get("category") or (gp.get("category") if gp else None))
         if e.get("wrong") == e.get("right"):
             errs.append(f"[무변화] wrong==right ('{e.get('wrong')}')")
@@ -270,19 +307,40 @@ def validate_grammar_errors(errors: List[dict], gp_index: Dict[int, dict],
 # =========================================================
 #  SE : 품사 변형 채우기
 # =========================================================
+def _is_inflection_only(base: str, ans: str) -> bool:
+    """단순 굴절(복수/3인칭 -s/-es, 불규칙 복수)인지 — 품사 변형이 아님."""
+    b, a = base.lower(), ans.lower()
+    if a in (b + "s", b + "es"):
+        return True
+    if b.endswith("y") and a == b[:-1] + "ies":      # study→studies
+        return True
+    if _IRREGULAR.get(a) == b and a != b:            # 불규칙 복수/시제만(man→men 등)
+        # 단, 파생(동→명 등)이 아니라 같은 표제어의 굴절이면 변형으로 안 침
+        return a.endswith("s") or a in ("men", "women", "children", "feet", "teeth", "mice", "people", "geese")
+    return False
+
 def validate_word_forms(blanks: List[dict], bogi: List[str],
-                        blank_sentences: set) -> List[str]:
+                        blank_sentences: set, sentences: List[str] = None) -> List[str]:
     errs: List[str] = []
     bset = {b.lower() for b in bogi}
     for bl in blanks:
         base, ans = bl.get("base", "").lower(), bl.get("answer", "")
+        al = ans.lower()
         if base not in bset:
             errs.append(f"[보기없음] ({bl.get('label')}) 원형 '{base}' 보기에 없음")
-        if ans.lower() == base:
+        if al == base:
             errs.append(f"[무변형] ({bl.get('label')}) '{ans}' 형태 변형 안 됨")
+        elif _is_inflection_only(base, ans):
+            errs.append(f"[단순굴절] ({bl.get('label')}) '{base}→{ans}'는 복수/3인칭 굴절일 뿐 품사 변형 아님")
         root = base[:max(3, len(base) - 2)] if base else ""
-        if root and not ans.lower().startswith(root):
+        if root and not al.startswith(root):
             errs.append(f"[어근불일치] ({bl.get('label')}) '{ans}'가 원형 '{base}'에서 안 나옴")
+        # ★ 정답이 실제 그 문장 원문에 존재해야 빈칸이 뚫린다(유령 빈칸 차단)
+        if sentences is not None:
+            si = bl.get("sent")
+            if not (isinstance(si, int) and 0 <= si < len(sentences)
+                    and re.search(rf"(?<![A-Za-z]){re.escape(ans)}(?![A-Za-z])", sentences[si])):
+                errs.append(f"[원문부재] ({bl.get('label')}) 정답 '{ans}'가 문장[{si}] 원문에 없음 → 빈칸 안 뚫림")
         if bl.get("sent") not in blank_sentences:
             errs.append(f"[위치] ({bl.get('label')}) 빈칸 문장에 없음")
     return errs

@@ -75,9 +75,25 @@ def prompt_SD(sentences, target_idx, allowed_gp: List[dict]) -> str:
 ★ '깨끗한' 어법 오류만 2곳 또는 3곳 만들어라(각각 다른 문장·다른 category).
    3개째가 억지스럽거나 금지 유형밖에 안 남으면 '2개만' 만들어라(억지로 3개 채우지 마라).
 아래 '권장 유형'에서만 골라 출제하고, 각 오류에 그 category를 반드시 적어라.
-서로 다른 category로 출제하고, 주어-동사는 수식어구로 거리를 벌려라.
+서로 다른 category로 출제할 것(연속 동일 category 금지).
 
-★ 절대 금지(출제하면 안 됨): 관사(a/an/the) 오류, 어휘·철자 혼동(affect/effect, affecting/unaffected, rise/raise, lie/lay 등 '뜻이 다른 단어 바꿔치기'), 둘 다 맞는 문법(지각/사역/help+원형 vs to V 등). 이런 건 만들지 마라. 특히 단어를 '반대뜻/다른뜻 단어'로 바꾸는 건 어법이 아니라 어휘라서 금지다.
+★★ 절대 금지(출제하면 검증기가 자동 폐기한다 — 처음부터 만들지 마라):
+1) 관사(a/an/the) 오류.
+2) 어휘·철자 혼동: affect/effect, affecting/unaffected, rise/raise, lie/lay 등 '뜻이 다른 단어 바꿔치기'(어법 아님, 어휘라서 금지).
+3) 둘 다 맞는 문법: 지각/사역동사·help 뒤 원형 vs to V, 자·타동사 양용(increase/change/move) 등.
+4) 병렬 구조에서 '바로 옆' 항목을 바꾸는 오류.
+5) 조동사/to 바로 뒤를 원형이 아닌 형태로 바꾸는 너무 쉬운 오류.
+6) ★ '근접 수일치': 주어 명사 '바로 뒤'에 붙은 동사를 수일치 틀리게 하는 것(예: 'larger males is', 'their actions affects'). → 주어와 동사 사이에 수식어구(전치사구·관계절 등)로 '거리를 벌린' 수일치만 출제하라.
+
+★ 권장(좋은) 유형 — 이런 걸 우선 출제하라:
+- [수일치] 주어와 동사 사이에 수식어가 끼어 거리가 있는 수일치 (The number of X ... are→is).
+- [준동사] 본동사가 필요한 자리에 분사가 온 오류 (stressing→stressed 처럼 정동사 필요).
+- [태/분사] 능동/수동 분사 (throwing→thrown).
+- [관계사] that/which/what 구분, 관계대명사 vs 관계부사.
+- [도치] 부정어·보어 도치 구문의 어순/수일치.
+- [지칭] 대명사 수·격 일치.
+
+★ 고친형(right)은 '해당 대상 문장 원문에 글자 그대로 존재하는 단어'여야 한다(검증기가 본문에서 그 단어를 찾아 오답으로 바꿔치기하므로, 원문에 없으면 그 오류는 통째로 폐기된다).
 
 권장 유형:
 {wl}
@@ -87,9 +103,9 @@ def prompt_SD(sentences, target_idx, allowed_gp: List[dict]) -> str:
 
 출력 JSON (gp_id는 쓰지 말 것, category로 표기):
 {{"type":"SD","errors":[
-  {{"sent":<번호>,"wrong":"<바뀌는 한 단어만(문장 전체 금지)>","right":"<고친 한 단어>","category":"<권장유형 category>","why":"<무엇을 무엇으로 고치는지 포함한 한 줄 설명. 예: 'after 뒤이므로 engage→engaging'>"}}
+  {{"sent":<번호>,"wrong":"<바뀌는 한 단어만(문장 전체 금지)>","right":"<원문에 그대로 있는 고친 한 단어>","category":"<권장유형 category>","why":"<무엇을 무엇으로 고치는지 포함한 한 줄 설명. 예: 'after 뒤이므로 engage→engaging'>"}}
 ]}}
-주의: wrong/right에는 '실제로 바뀌는 그 단어'만 넣어라(문장이나 긴 어구를 통째로 넣지 마라). 설명(why)에 교정 근거와 '원형→고친형'을 간단히 적어라."""
+주의: wrong/right에는 '실제로 바뀌는 그 단어'만 넣어라(문장이나 긴 어구를 통째로 넣지 마라). 같은 문장에 오류 2개 금지. 설명(why)에 교정 근거와 '원형→고친형'을 간단히 적어라."""
 
 
 def prompt_SE(sentences, target_idx, spec) -> str:
@@ -105,6 +121,9 @@ def prompt_SE(sentences, target_idx, spec) -> str:
 출력 JSON:
 {{"type":"SE","bogi":["<원형들 + 오답용 원형들(섞어서)>"],
  "blanks":[{{"label":"C","sent":<번호>,"base":"<원형>","answer":"<변형형>","note":"<품사 변화>"}}]}}
-규칙:
-- answer는 base에서 품사 형태가 바뀐 형태여야 하며 base와 달라야 한다.
-- ★ 오답(distractor): bogi에는 정답으로 쓰는 원형들 외에, '지문에 실제로 등장하는 다른 내용어'(정답과 무관한 단어)를 원형으로 추가해, 보기 총 개수가 빈칸 개수의 약 1.5배가 되게 하라(예: 빈칸 4개 → 보기 6개). 오답 단어도 정답들과 똑같이 '원형'으로 적어 섞어라(어느 게 정답인지 티 나지 않게)."""
+규칙(어기면 검증기가 그 빈칸을 통째로 폐기한다 — 처음부터 지켜라):
+- ★ answer는 '대상 문장 원문에 글자 그대로 등장하는 그 단어'여야 한다. 본문에 없는 형태를 지어내지 마라(없으면 빈칸이 안 뚫려 폐기됨). 즉 '본문에 이미 파생형으로 쓰인 단어'를 골라 그 원형을 base로 제시하는 방식이다.
+- ★ base→answer는 '품사가 바뀌는' 진짜 파생이어야 한다. 단순 복수/3인칭 -s, -es, y→ies 같은 '굴절'은 금지(예: reduce→reduces, photograph→photographs 금지). 좋은 예: educate→education(동→명), simple→simply(형→부), adhere→adhering(동→동명사), evolutionary→evolutionarily(형→부).
+- answer는 base와 반드시 달라야 한다(무변형 금지).
+- base는 사전 원형으로 적어라(answer의 어근과 일치해야 함).
+- ★ 오답(distractor): bogi에는 정답 원형들 외에 '지문에 실제로 등장하는 다른 내용어'(정답과 무관)를 원형으로 추가해, 보기 총 개수가 빈칸 개수의 약 1.5배가 되게 하라(예: 빈칸 4개 → 보기 6개). 오답도 '원형'으로 적어 섞어라(정답 티 안 나게)."""

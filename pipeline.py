@@ -574,30 +574,55 @@ def _generate_order_choices(data, passage: str = ""):
     if len(paras) != 3:
         raise ValueError(f"STAGE 5 | 단락 개수 이상(3개 필요): {len(paras)}개")
 
-    # 공백 정규화: AI 출력과 원문 모두 단일 공백으로 정규화 후 매칭
-    norm_passage = re.sub(r'\s+', ' ', passage)
+    # 공백 + 따옴표/대시 정규화 (PDF 추출 곡선따옴표·em대시 대응)
+    def _norm(s):
+        s = s or ""
+        s = s.translate(str.maketrans({
+            '\u2018': "'", '\u2019': "'", '\u201b': "'",   # ‘ ’ ‛ → '
+            '\u201c': '"', '\u201d': '"',                   # “ ” → "
+            '\u2013': '-', '\u2014': '-', '\u2212': '-',    # – — − → -
+            '\u00a0': ' ',                                  # nbsp → space
+        }))
+        return re.sub(r'\s+', ' ', s).strip()
 
-    def _find_pos(text):
-        snippet = re.sub(r'\s+', ' ', text.strip())
+    norm_passage = _norm(passage)
+
+    def _find_pos(text, start=0):
+        snippet = _norm(text)
         words = snippet.split()
-        # 점진적 fallback: 긴 prefix부터 짧은 prefix 순으로 시도
-        for n in [30, 20, 15, 10, 8, 6, 5, 4, 3]:
+        # 점진적 fallback: 긴 prefix부터 짧은 prefix 순으로 시도 (start 이후만 탐색)
+        for n in [40, 30, 20, 15, 10, 8, 6, 5, 4, 3]:
             if len(snippet) >= n:
-                pos = norm_passage.find(snippet[:n])
+                pos = norm_passage.find(snippet[:n], start)
                 if pos != -1:
                     return pos
             if len(words) >= n:
-                pos = norm_passage.find(' '.join(words[:n]))
+                pos = norm_passage.find(' '.join(words[:n]), start)
                 if pos != -1:
                     return pos
         return -1
 
-    positions = [_find_pos(paras[i][1]) for i in range(3)]
-    if -1 in positions or len(set(positions)) != 3:
-        raise ValueError(f"STAGE 5 | 단락 위치 매칭 실패: {positions}")
+    # order_paragraphs는 프롬프트상 "원문 순서대로" 생성됨.
+    # 커서를 앞으로 옮기며 순차 탐색 → 같은 위치 충돌 방지 + 단조 증가 보장.
+    positions = []
+    cursor = 0
+    matched = True
+    for i in range(3):
+        pos = _find_pos(paras[i][1], cursor)
+        if pos == -1:
+            matched = False
+            break
+        positions.append(pos)
+        cursor = pos + 1
 
-    # 원문에서 k번째인 단락의 paras 인덱스
-    original_order = sorted(range(3), key=lambda i: positions[i])
+    if matched and len(set(positions)) == 3:
+        # 원문에서 k번째인 단락의 paras 인덱스
+        original_order = sorted(range(3), key=lambda i: positions[i])
+    else:
+        # 매칭이 불완전해도 지문 전체를 죽이지 않음:
+        # 프롬프트가 보장하는 생성 순서(=원문 순서)를 그대로 신뢰하고 진행.
+        _safe_print(f"  ⚠️ STAGE 5 위치 매칭 불완전 {positions} → 생성 순서를 원문 순서로 간주하고 진행")
+        original_order = [0, 1, 2]
 
     # 5개 중 하나를 정답으로 직접 선택
     answer_str, correct = random.choice(ORDER_TABLE)
@@ -682,20 +707,41 @@ JSON 형식:
             # 위치 매칭 사전 검증
             paras_check = candidate.get("order_paragraphs", [])
             if len(paras_check) == 3:
-                norm_p = re.sub(r'\s+', ' ', passage)
-                def _quick_find(t):
+                def _qnorm(s):
+                    s = s or ""
+                    s = s.translate(str.maketrans({
+                        '\u2018': "'", '\u2019': "'", '\u201b': "'",
+                        '\u201c': '"', '\u201d': '"',
+                        '\u2013': '-', '\u2014': '-', '\u2212': '-',
+                        '\u00a0': ' ',
+                    }))
+                    return re.sub(r'\s+', ' ', s).strip()
+                norm_p = _qnorm(passage)
+                def _quick_find(t, start=0):
                     if isinstance(t, dict):
                         t = t.get("text", "")
                     elif isinstance(t, list) and len(t) >= 2:
                         t = t[1]
-                    s = re.sub(r'\s+', ' ', (t or "").strip())
-                    for n in [30, 20, 15, 10, 8, 6, 5, 4, 3]:
+                    s = _qnorm(t)
+                    words = s.split()
+                    for n in [40, 30, 20, 15, 10, 8, 6, 5, 4, 3]:
                         if len(s) >= n:
-                            p = norm_p.find(s[:n])
+                            p = norm_p.find(s[:n], start)
+                            if p != -1:
+                                return p
+                        if len(words) >= n:
+                            p = norm_p.find(' '.join(words[:n]), start)
                             if p != -1:
                                 return p
                     return -1
-                test_positions = [_quick_find(paras_check[i]) for i in range(3)]
+                # 순차 커서 매칭 (본 검증 _generate_order_choices와 동일 로직)
+                test_positions = []
+                _cur = 0
+                for _i in range(3):
+                    _p = _quick_find(paras_check[_i], _cur)
+                    test_positions.append(_p)
+                    if _p != -1:
+                        _cur = _p + 1
                 if -1 not in test_positions and len(set(test_positions)) == 3:
                     data = candidate
                     if _try > 0:

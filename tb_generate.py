@@ -7,7 +7,7 @@ import os, re, json, time, subprocess, tempfile, html as _html
 
 API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 API_URL = "https://api.anthropic.com/v1/messages"
-MODEL   = "claude-sonnet-4-20250514"
+MODEL   = "claude-sonnet-4-6"
 
 # 이미지 허용 도메인 (위키 계열만)
 _IMG_ALLOW = ("upload.wikimedia.org",)

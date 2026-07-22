@@ -44,7 +44,7 @@ body { font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f0f
 .login-error { color: #dc2626; font-size: 13px; margin-bottom: 8px; }
 
 /* 3단 */
-.three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; padding: 14px 16px; max-width: 1400px; margin: 0 auto; }
+.three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; padding: 14px 16px; max-width: 1400px; width: 100%; margin: 0 auto; box-sizing: border-box; }
 @media (max-width: 960px) { .three-col { grid-template-columns: 1fr 1fr; } .col-right { grid-column: 1 / -1; } }
 @media (max-width: 600px) { .three-col { grid-template-columns: 1fr; } }
 
@@ -2147,7 +2147,7 @@ async function doVariation() {
     let resultHtml = '';
     if (htmlUrl) {
       resultHtml += `<div class="sn-result-item">
-        <span>📝 변형문제 (문제+답지)</span>
+        <span> 변형문제 (문제+답지)</span>
         <span style="display:flex;gap:6px;">
           <a href="${downloadUrl}" download class="btn btn-sm" style="background:#6b7280;color:white;">📥 다운로드</a>
           <a href="${htmlUrl}" target="_blank" class="btn btn-sm btn-primary">🔗 열기</a>

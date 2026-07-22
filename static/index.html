@@ -143,9 +143,8 @@ textarea:focus { border-color: #4A90D9; outline: none; }
 <div id="main-screen" class="hidden">
   <div class="header">
     <div class="header-top">
-      <span style="font-size:20px;">📘</span>
-      <h1>레벨미업 워크북</h1>
-      <span class="sub">워크북 자동 생성 시스템</span>
+      <h1 style="font-weight:800;letter-spacing:0.5px;">LEVEL ME UP</h1>
+<span class="sub" style="text-transform:uppercase;letter-spacing:0.5px;">English Workbook</span>
       <div class="header-notice-box">
         <span id="header-notice-text" class="notice-empty">공지사항 없음</span>
       </div>
@@ -153,14 +152,14 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       <button class="logout-btn" onclick="doLogout()">로그아웃</button>
     </div>
     <div class="header-tabs">
-      <div class="header-tab" onclick="switchTab('sheet', this)">📊 분석지</div>
-      <div class="header-tab" onclick="switchTab('preclass', this)">📕 0회독 — 수업 전 분석</div>
-      <div class="header-tab active" onclick="switchTab('generate', this)">📄 1회독 교재 생성</div>
-      <div class="header-tab" onclick="switchTab('variation', this)">📝 2회독 변형문제</div>
-      <div class="header-tab" onclick="switchTab('seosul', this)">✍️ 2회독 서술형 종합</div>
-      <div class="header-tab" onclick="switchTab('secret', this)">🔐 비밀노트</div>
-      <div class="header-tab" onclick="switchTab('extract', this)">📖 원문 추출</div>
-      <div class="header-tab" onclick="switchTab('upload', this)">📤 지문 관리</div>
+      <div class="header-tab" onclick="switchTab('sheet', this)"> 분석지</div>
+      <div class="header-tab" onclick="switchTab('preclass', this)"> 0회독 — 수업 전 분석</div>
+      <div class="header-tab active" onclick="switchTab('generate', this)"> 1회독 교재 생성</div>
+      <div class="header-tab" onclick="switchTab('variation', this)"> 2회독 AB 변형문제</div>
+      <div class="header-tab" onclick="switchTab('seosul', this)"> 2회독 서술형 종합문제</div>
+      <div class="header-tab" onclick="switchTab('secret', this)"> 비밀노트</div>
+      <div class="header-tab" onclick="switchTab('extract', this)"> 원문 추출</div>
+      <div class="header-tab" onclick="switchTab('upload', this)"> 지문 관리</div>
     </div>
   </div>
 
@@ -169,7 +168,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
     <div class="three-col">
       <div style="grid-column: span 2;">
         <div class="card">
-          <div class="card-title">📚 지문 선택 (중복 선택 가능)</div>
+          <div class="card-title"> 지문 선택 (중복 선택 가능)</div>
           <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
             <button class="btn btn-sm" onclick="pcExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
             <button class="btn btn-sm" onclick="pcCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
@@ -183,7 +182,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       </div>
       <div class="col-right">
         <div class="card" style="border:2px solid #fbbf24;background:#fffbeb;">
-          <div class="card-title" style="color:#b45309;">📕 0회독 — 수업 전 분석</div>
+          <div class="card-title" style="color:#b45309;"> 0회독 — 수업 전 분석</div>
           <div style="font-size:11px;color:#92400e;margin-bottom:10px;line-height:1.5;">
             선생님 본인 수업 준비용 4페이지 완전 분석.<br>
             지문(색상 마킹) · 주제·제목·해석 (2x2) · 어법 12~14개 상세박스 · 어휘심화(영영풀이) · 함축 빈칸 흐름
@@ -206,14 +205,14 @@ textarea:focus { border-color: #4A90D9; outline: none; }
           <div style="background:#fffbeb;border:1.5px dashed #fbbf24;border-radius:6px;padding:8px;margin-bottom:8px;">
             <div style="font-size:11px;font-weight:700;color:#b45309;margin-bottom:6px;">📋 자료 종류</div>
             <div class="pc-mode-tabs">
-              <button type="button" class="pc-mode-tab active" data-mode="preclass" onclick="pcSetMode('preclass',this)">📕 0회독</button>
+              <button type="button" class="pc-mode-tab active" data-mode="preclass" onclick="pcSetMode('preclass',this)"> 0회독</button>
               <button type="button" class="pc-mode-tab" data-mode="sentence_order" onclick="pcSetMode('sentence_order',this)">🔀 순서</button>
-              <button type="button" class="pc-mode-tab" data-mode="both" onclick="pcSetMode('both',this)">📦 0회독<br>+순서</button>
-              <button type="button" class="pc-mode-tab" data-mode="topic" onclick="pcSetMode('topic',this)">🎨 배경<br>지식</button>
+              <button type="button" class="pc-mode-tab" data-mode="both" onclick="pcSetMode('both',this)"> 0회독<br>+순서</button>
+              <button type="button" class="pc-mode-tab" data-mode="topic" onclick="pcSetMode('topic',this)"> 배경<br>지식</button>
             </div>
           </div>
           <button class="btn btn-orange" id="pc-btn-d" onclick="doPreclass()" disabled style="width:100%;background:#f59e0b;">
-            📕 0회독 자료 생성
+             0회독 자료 생성
           </button>
           <div class="progress hidden" id="pc-progress">
             <div class="progress-bar" style="margin-top:8px;"><div class="progress-fill" id="pc-progress-fill" style="width:0%"></div></div>
@@ -274,7 +273,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       <!-- 왼쪽: 교재 + 지문 -->
       <div>
         <div class="card">
-          <div class="card-title">📚 교재 선택</div>
+          <div class="card-title"> 교재 선택</div>
           <div style="display:flex;gap:6px;">
             <select id="sel-book" onchange="onBookChange()" style="flex:1;margin-bottom:0;">
               <option value="">교재를 선택하세요</option>
@@ -358,7 +357,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
     <div class="three-col">
       <div style="grid-column: span 2;">
         <div class="card">
-          <div class="card-title">📚 지문 선택 (클릭 순서대로 출력됨)</div>
+          <div class="card-title"> 지문 선택 (클릭 순서대로 출력됨)</div>
           <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
             <button class="btn btn-sm" onclick="vrExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
             <button class="btn btn-sm" onclick="vrCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
@@ -438,7 +437,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
   <div class="three-col">
     <div style="grid-column: span 2;">
       <div class="card">
-        <div class="card-title">📚 지문 선택 (클릭 순서대로 출력됨)</div>
+        <div class="card-title"> 지문 선택 (클릭 순서대로 출력됨)</div>
         <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
           <button class="btn btn-sm" onclick="ssExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
           <button class="btn btn-sm" onclick="ssCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>

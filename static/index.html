@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>레벨미업 워크북</title>
+<title>LEVEL ME UP</title>
 <link rel="manifest" href="/static/manifest.json">
 <meta name="theme-color" content="#4A90D9">
 <style>
@@ -14,7 +14,7 @@ body { font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f0f
 .btn-primary { background: #4A90D9; color: white; }
 .btn-primary:hover { background: #3a7bc8; }
 .btn-primary:disabled { background: #a0c4e8; cursor: not-allowed; }
-.btn-orange { background: #2E4E8F; color: white; }
+.btn-orange { background: #0EA5E9; color: white; }
 .btn-orange:hover { background: #d6732a; }
 .btn-sm { padding: 6px 12px; font-size: 12px; }
 .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
@@ -125,7 +125,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
 .btn-purple:hover { background:#6d28d9; }
 .pc-mode-tabs{display:flex;gap:4px}
 .pc-mode-tab{flex:1;padding:8px 6px;font-size:12px;font-weight:700;border:1.5px solid #fbbf24;background:#fff;color:#b45309;border-radius:6px;cursor:pointer;transition:all .15s;line-height:1.2;}
-.pc-mode-tab.active{background:#2E4E8F;color:#fff;border-color:#2E4E8F}
+.pc-mode-tab.active{background:#0EA5E9;color:#fff;border-color:#0EA5E9}
 </style>
 </head>
 <body>
@@ -145,9 +145,8 @@ textarea:focus { border-color: #4A90D9; outline: none; }
 <div id="main-screen" class="hidden">
   <div class="header">
     <div class="header-top">
-      <span style="font-size:20px;">📘</span>
-      <h1>레벨미업 워크북</h1>
-      <span class="sub">워크북 자동 생성 시스템</span>
+      <h1 style="font-weight:800;letter-spacing:0.5px;">LEVEL ME UP</h1>
+      <span class="sub" style="text-transform:uppercase;letter-spacing:0.5px;">English Workbook</span>
       <div class="header-notice-box">
         <span id="header-notice-text" class="notice-empty">공지사항 없음</span>
       </div>
@@ -205,8 +204,8 @@ textarea:focus { border-color: #4A90D9; outline: none; }
               style="width:100%;padding:8px 10px;border:2px solid #fbbf24;border-radius:6px;font-size:12px;outline:none;margin-top:4px;">
           </div>
           <!-- ★ 자료 종류 (탭) -->
-          <div style="background:#EBF0FA;border:1.5px dashed #2E4E8F;border-radius:6px;padding:8px;margin-bottom:8px;">
-            <div style="font-size:11px;font-weight:700;color:#2E4E8F;margin-bottom:6px;">📋 자료 종류</div>
+          <div style="background:#e0f2fe;border:1.5px dashed #7dd3fc;border-radius:6px;padding:8px;margin-bottom:8px;">
+            <div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:6px;">📋 자료 종류</div>
             <div class="pc-mode-tabs">
               <button type="button" class="pc-mode-tab active" data-mode="preclass" onclick="pcSetMode('preclass',this)">📕 0회독</button>
               <button type="button" class="pc-mode-tab" data-mode="sentence_order" onclick="pcSetMode('sentence_order',this)">🔀 순서</button>
@@ -214,7 +213,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
               <button type="button" class="pc-mode-tab" data-mode="topic" onclick="pcSetMode('topic',this)">🎨 배경<br>지식</button>
             </div>
           </div>
-          <button class="btn btn-orange" id="pc-btn-d" onclick="doPreclass()" disabled style="width:100%;background:#2E4E8F;">
+          <button class="btn btn-orange" id="pc-btn-d" onclick="doPreclass()" disabled style="width:100%;background:#0EA5E9;">
             📕 0회독 자료 생성
           </button>
           <div class="progress hidden" id="pc-progress">
@@ -373,14 +372,14 @@ textarea:focus { border-color: #4A90D9; outline: none; }
         </div>
       </div>
       <div class="col-right">
-        <div class="vr-card card" style="border:1.5px solid #93b4d9;background:linear-gradient(135deg,#eef3fa,#f5f8fc);">
-          <div class="card-title" style="color:#2E4E8F;">🏫 학교명</div>
+        <div class="vr-card card" style="border:1.5px solid #7dd3fc;background:linear-gradient(135deg,#e0f2fe,#f0f9ff);">
+          <div class="card-title" style="color:#0369a1;">🏫 학교명</div>
           <input type="text" id="vr-school-name" placeholder="레벨미업학원" value="레벨미업학원"
-            style="width:100%;padding:9px 12px;border:2px solid #93b4d9;border-radius:8px;font-size:13px;outline:none;">
+            style="width:100%;padding:9px 12px;border:2px solid #7dd3fc;border-radius:8px;font-size:13px;outline:none;">
         </div>
 
-        <div class="vr-card card" style="border:1.5px solid #93b4d9;background:linear-gradient(135deg,#eef3fa,#f5f8fc);">
-          <div class="card-title" style="color:#2E4E8F;">📝 유형 선택 (다중 선택 가능)</div>
+        <div class="vr-card card" style="border:1.5px solid #7dd3fc;background:linear-gradient(135deg,#e0f2fe,#f0f9ff);">
+          <div class="card-title" style="color:#0369a1;">📝 유형 선택 (다중 선택 가능)</div>
           
           <label style="display:flex;align-items:center;gap:8px;background:#dbeafe;border:1.5px solid #93c5fd;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;">
             <input type="checkbox" id="vr-type-a" checked onchange="vrUpdateBtns()" style="width:18px;height:18px;">
@@ -399,8 +398,8 @@ textarea:focus { border-color: #4A90D9; outline: none; }
           </label>
         </div>
 
-        <div class="vr-card card" style="border:1.5px solid #93b4d9;background:linear-gradient(135deg,#eef3fa,#f5f8fc);">
-          <div class="card-title" style="color:#2E4E8F;">📑 출력 방식</div>
+        <div class="vr-card card" style="border:1.5px solid #7dd3fc;background:linear-gradient(135deg,#e0f2fe,#f0f9ff);">
+          <div class="card-title" style="color:#0369a1;">📑 출력 방식</div>
           <label style="display:flex;align-items:center;gap:8px;padding:6px;cursor:pointer;">
             <input type="radio" name="vr-mode" value="by-type" checked style="width:16px;height:16px;">
             <div style="font-size:12px;">
@@ -417,9 +416,9 @@ textarea:focus { border-color: #4A90D9; outline: none; }
           </label>
         </div>
 
-        <div class="vr-card card" style="border:1.5px solid #93b4d9;background:linear-gradient(135deg,#eef3fa,#f5f8fc);">
+        <div class="vr-card card" style="border:1.5px solid #7dd3fc;background:linear-gradient(135deg,#e0f2fe,#f0f9ff);">
           <button class="btn btn-primary" id="vr-btn-generate" onclick="doVariation()" disabled
-            style="width:100%;padding:14px;font-size:15px;font-weight:700;background:linear-gradient(135deg,#2E4E8F,#1f3766);color:white;border:none;border-radius:10px;cursor:pointer;">
+            style="width:100%;padding:14px;font-size:15px;font-weight:700;background:linear-gradient(135deg,#0369a1,#0ea5e9);color:white;border:none;border-radius:10px;cursor:pointer;">
             📝 변형문제 생성
           </button>
           <div class="progress hidden" id="vr-progress">

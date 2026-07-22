@@ -150,12 +150,12 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       <div class="header-notice-box">
         <span id="header-notice-text" class="notice-empty">공지사항 없음</span>
       </div>
-      <button class="logout-btn" style="margin-right:4px;" onclick="refreshTemplate()" title="템플릿 재생성"></button>
+      <button class="logout-btn" style="margin-right:4px;" onclick="refreshTemplate()" title="템플릿 재생성">🔄</button>
       <button class="logout-btn" onclick="doLogout()">로그아웃</button>
     </div>
     <div class="header-tabs">
       <div class="header-tab" onclick="switchTab('sheet', this)"> 분석지</div>
-      <div class="header-tab" onclick="switchTab('preclass', this)"> 0회독 수업 전 분석</div>
+      <div class="header-tab" onclick="switchTab('preclass', this)"> 0회독 — 수업 전 분석</div>
       <div class="header-tab active" onclick="switchTab('generate', this)"> 1회독 교재 생성</div>
       <div class="header-tab" onclick="switchTab('variation', this)"> 2회독 변형문제</div>
       <div class="header-tab" onclick="switchTab('seosul', this)"> 2회독 서술형 종합</div>
@@ -184,7 +184,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       </div>
       <div class="col-right">
         <div class="card" style="border:2px solid #fbbf24;background:#fffbeb;">
-          <div class="card-title" style="color:#b45309;"> 0회독 수업 전 분석</div>
+          <div class="card-title" style="color:#b45309;"> 0회독 — 수업 전 분석</div>
           <div style="font-size:11px;color:#92400e;margin-bottom:10px;line-height:1.5;">
             선생님 본인 수업 준비용 4페이지 완전 분석.<br>
             지문(색상 마킹) · 주제·제목·해석 (2x2) · 어법 12~14개 상세박스 · 어휘심화(영영풀이) · 함축 빈칸 흐름
@@ -418,7 +418,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
 
         <div class="vr-card card" style="border:1.5px solid #7dd3fc;background:linear-gradient(135deg,#e0f2fe,#f0f9ff);">
           <button class="btn btn-primary" id="vr-btn-generate" onclick="doVariation()" disabled
-            style="width:100%;padding:14px;font-size:15px;font-weight:700;background:linear-gradient(135deg,#0369a1,#0ea5e9);color:white;border:none;border-radius:10px;cursor:pointer;">
+            style="width:100%;padding:14px;font-size:15px;font-weight:700;background:linear-gradient(135deg,#2E4E8F,#1f3766);color:white;border:none;border-radius:10px;cursor:pointer;">
              변형문제 생성
           </button>
           <div class="progress hidden" id="vr-progress">
@@ -489,7 +489,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
           <span><b>정답을 맨 뒤로 모으기</b> — 모든 문제를 먼저 출력하고 정답·해설은 맨 뒤에 모음</span>
         </label>
         <button class="btn btn-primary" id="ss-btn-generate" onclick="doSeosul()" disabled
-          style="width:100%;padding:14px;font-size:15px;font-weight:700;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:white;border:none;border-radius:10px;cursor:pointer;">
+          style="width:100%;padding:14px;font-size:15px;font-weight:700;background:linear-gradient(135deg,#2E4E8F,#1f3766);color:white;border:none;border-radius:10px;cursor:pointer;">
            서술형 종합 생성
         </button>
         <div class="progress hidden" id="ss-progress">
@@ -781,7 +781,6 @@ function toggleUnit(book, unit) {
   const allSel = up.every(p => selectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
   up.forEach(p => {
     const key = `${p.book}|${p.unit}|${p.id}`;
-    const cb = document.querySelector(`input[data-key="${key}"]`);
     if (allSel) { selectedPassages.delete(key); if(cb) cb.checked=false; }
     else { selectedPassages.set(key,{book:p.book,unit:p.unit,id:p.id}); if(cb) cb.checked=true; }
   });
@@ -1324,7 +1323,7 @@ function snDownloadMerged(type, schoolName) {
 }
 
 // ============================================================
-// ★ 0회독 수업 전 분석 (4페이지 완전 분석) - 추가 코드
+// ★ 0회독 — 수업 전 분석 (4페이지 완전 분석) - 추가 코드
 // ============================================================
 // 비밀노트(sn*) 함수 패턴을 그대로 따르되 prefix만 pc로 분리
 let pcSelectedPassages = new Map();

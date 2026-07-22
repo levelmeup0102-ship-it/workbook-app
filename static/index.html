@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEVEL ME UP WORKBOOK</title>
+<title>레벨미업 워크북</title>
 <link rel="manifest" href="/static/manifest.json">
 <meta name="theme-color" content="#4A90D9">
 <style>
@@ -14,7 +14,7 @@ body { font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f0f
 .btn-primary { background: #4A90D9; color: white; }
 .btn-primary:hover { background: #3a7bc8; }
 .btn-primary:disabled { background: #a0c4e8; cursor: not-allowed; }
-.btn-orange { background: #E8833A; color: white; }
+.btn-orange { background: #2E4E8F; color: white; }
 .btn-orange:hover { background: #d6732a; }
 .btn-sm { padding: 6px 12px; font-size: 12px; }
 .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
@@ -22,7 +22,8 @@ body { font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f0f
 .badge-pending { background: #FFF8F0; color: #E8833A; }
 
 /* 헤더 */
-.header { background: linear-gradient(135deg, #2E4E8F 0%, #1f3766 100%); color: white; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }.header-top { display: flex; align-items: center; padding: 10px 20px; gap: 10px; }
+.header { background: linear-gradient(135deg, #2E4E8F 0%, #1f3766 100%); color: white; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+.header-top { display: flex; align-items: center; padding: 10px 20px; gap: 10px; }
 .header-top h1 { font-size: 18px; flex-shrink: 0; }
 .header-top .sub { font-size: 11px; opacity: 0.7; flex-shrink: 0; }
 .header-notice-box { flex: 1; background: rgba(255,255,255,0.15); border-radius: 6px; padding: 5px 12px; font-size: 12px; min-height: 28px; display: flex; align-items: center; overflow: hidden; }
@@ -34,8 +35,9 @@ body { font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f0f
 .header-tab.active { color: white; border-bottom-color: white; }
 
 /* 로그인 */
-#login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #2E4E8F 0%, #1f3766 100%); }.login-box { background: white; border-radius: 16px; padding: 40px 32px; width: 90%; max-width: 380px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.15); }
-.login-box h1 { font-size: 24px; color: #4A90D9; margin-bottom: 4px; }
+#login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #2E4E8F 0%, #1f3766 100%); }
+.login-box { background: white; border-radius: 16px; padding: 40px 32px; width: 90%; max-width: 380px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.15); }
+.login-box h1 { font-size: 24px; font-weight: 800; letter-spacing: 0.5px; color: #2E4E8F; margin-bottom: 4px; }
 .login-box .sub { color: #666; font-size: 13px; margin-bottom: 24px; }
 .login-box input { width: 100%; padding: 14px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px; text-align: center; margin-bottom: 12px; outline: none; }
 .login-box input:focus { border-color: #4A90D9; }
@@ -123,7 +125,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
 .btn-purple:hover { background:#6d28d9; }
 .pc-mode-tabs{display:flex;gap:4px}
 .pc-mode-tab{flex:1;padding:8px 6px;font-size:12px;font-weight:700;border:1.5px solid #fbbf24;background:#fff;color:#b45309;border-radius:6px;cursor:pointer;transition:all .15s;line-height:1.2;}
-.pc-mode-tab.active{background:#f59e0b;color:#fff;border-color:#f59e0b}
+.pc-mode-tab.active{background:#2E4E8F;color:#fff;border-color:#2E4E8F}
 </style>
 </head>
 <body>
@@ -131,8 +133,8 @@ textarea:focus { border-color: #4A90D9; outline: none; }
 <!-- 로그인 -->
 <div id="login-screen">
   <div class="login-box">
-    <h1> 레벨미업</h1>
-    <p class="sub">워크북 자동 생성 시스템</p>
+    <h1>LEVEL ME UP</h1>
+    <p class="sub" style="text-transform:uppercase;letter-spacing:0.5px;">English Workbook</p>
     <div id="login-error" class="login-error hidden"></div>
     <input type="password" id="pw-input" placeholder="비밀번호를 입력하세요" autocomplete="off">
     <button class="btn btn-primary" style="width:100%;" onclick="doLogin()">로그인</button>
@@ -143,8 +145,9 @@ textarea:focus { border-color: #4A90D9; outline: none; }
 <div id="main-screen" class="hidden">
   <div class="header">
     <div class="header-top">
-      <h1 style="font-weight:800;letter-spacing:0.5px;">LEVEL ME UP</h1>
-<span class="sub" style="text-transform:uppercase;letter-spacing:0.5px;">English Workbook</span>
+      <span style="font-size:20px;">📘</span>
+      <h1>레벨미업 워크북</h1>
+      <span class="sub">워크북 자동 생성 시스템</span>
       <div class="header-notice-box">
         <span id="header-notice-text" class="notice-empty">공지사항 없음</span>
       </div>
@@ -152,14 +155,14 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       <button class="logout-btn" onclick="doLogout()">로그아웃</button>
     </div>
     <div class="header-tabs">
-      <div class="header-tab" onclick="switchTab('sheet', this)"> 분석지</div>
-      <div class="header-tab" onclick="switchTab('preclass', this)"> 0회독 — 수업 전 분석</div>
-      <div class="header-tab active" onclick="switchTab('generate', this)"> 1회독 교재 생성</div>
-      <div class="header-tab" onclick="switchTab('variation', this)"> 2회독 AB 변형문제</div>
-      <div class="header-tab" onclick="switchTab('seosul', this)"> 2회독 서술형 종합문제</div>
-      <div class="header-tab" onclick="switchTab('secret', this)"> 비밀노트</div>
-      <div class="header-tab" onclick="switchTab('extract', this)"> 원문 추출</div>
-      <div class="header-tab" onclick="switchTab('upload', this)"> 지문 관리</div>
+      <div class="header-tab" onclick="switchTab('sheet', this)">📊 분석지</div>
+      <div class="header-tab" onclick="switchTab('preclass', this)">📕 0회독 — 수업 전 분석</div>
+      <div class="header-tab active" onclick="switchTab('generate', this)">📄 1회독 교재 생성</div>
+      <div class="header-tab" onclick="switchTab('variation', this)">📝 2회독 변형문제</div>
+      <div class="header-tab" onclick="switchTab('seosul', this)">✍️ 2회독 서술형 종합</div>
+      <div class="header-tab" onclick="switchTab('secret', this)">🔐 비밀노트</div>
+      <div class="header-tab" onclick="switchTab('extract', this)">📖 원문 추출</div>
+      <div class="header-tab" onclick="switchTab('upload', this)">📤 지문 관리</div>
     </div>
   </div>
 
@@ -168,7 +171,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
     <div class="three-col">
       <div style="grid-column: span 2;">
         <div class="card">
-          <div class="card-title"> 지문 선택 (중복 선택 가능)</div>
+          <div class="card-title">📚 지문 선택 (중복 선택 가능)</div>
           <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
             <button class="btn btn-sm" onclick="pcExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
             <button class="btn btn-sm" onclick="pcCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
@@ -182,7 +185,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       </div>
       <div class="col-right">
         <div class="card" style="border:2px solid #fbbf24;background:#fffbeb;">
-          <div class="card-title" style="color:#b45309;"> 0회독 — 수업 전 분석</div>
+          <div class="card-title" style="color:#b45309;">📕 0회독 — 수업 전 분석</div>
           <div style="font-size:11px;color:#92400e;margin-bottom:10px;line-height:1.5;">
             선생님 본인 수업 준비용 4페이지 완전 분석.<br>
             지문(색상 마킹) · 주제·제목·해석 (2x2) · 어법 12~14개 상세박스 · 어휘심화(영영풀이) · 함축 빈칸 흐름
@@ -197,22 +200,22 @@ textarea:focus { border-color: #4A90D9; outline: none; }
             </div>
           </div>
           <div style="margin-bottom:8px;">
-            <label style="font-size:11px;color:#444;"> 학교명</label>
+            <label style="font-size:11px;color:#444;">🏫 학교명</label>
             <input type="text" id="pc-school-name" placeholder="레벨미업학원" value="레벨미업학원"
               style="width:100%;padding:8px 10px;border:2px solid #fbbf24;border-radius:6px;font-size:12px;outline:none;margin-top:4px;">
           </div>
           <!-- ★ 자료 종류 (탭) -->
-          <div style="background:#fffbeb;border:1.5px dashed #fbbf24;border-radius:6px;padding:8px;margin-bottom:8px;">
-            <div style="font-size:11px;font-weight:700;color:#b45309;margin-bottom:6px;">📋 자료 종류</div>
+          <div style="background:#EBF0FA;border:1.5px dashed #2E4E8F;border-radius:6px;padding:8px;margin-bottom:8px;">
+            <div style="font-size:11px;font-weight:700;color:#2E4E8F;margin-bottom:6px;">📋 자료 종류</div>
             <div class="pc-mode-tabs">
-              <button type="button" class="pc-mode-tab active" data-mode="preclass" onclick="pcSetMode('preclass',this)"> 0회독</button>
-              <button type="button" class="pc-mode-tab" data-mode="sentence_order" onclick="pcSetMode('sentence_order',this)"> 순서</button>
-              <button type="button" class="pc-mode-tab" data-mode="both" onclick="pcSetMode('both',this)"> 0회독<br>+순서</button>
-              <button type="button" class="pc-mode-tab" data-mode="topic" onclick="pcSetMode('topic',this)"> 배경<br>지식</button>
+              <button type="button" class="pc-mode-tab active" data-mode="preclass" onclick="pcSetMode('preclass',this)">📕 0회독</button>
+              <button type="button" class="pc-mode-tab" data-mode="sentence_order" onclick="pcSetMode('sentence_order',this)">🔀 순서</button>
+              <button type="button" class="pc-mode-tab" data-mode="both" onclick="pcSetMode('both',this)">📦 0회독<br>+순서</button>
+              <button type="button" class="pc-mode-tab" data-mode="topic" onclick="pcSetMode('topic',this)">🎨 배경<br>지식</button>
             </div>
           </div>
-          <button class="btn btn-orange" id="pc-btn-d" onclick="doPreclass()" disabled style="width:100%;background:#f59e0b;">
-             0회독 자료 생성
+          <button class="btn btn-orange" id="pc-btn-d" onclick="doPreclass()" disabled style="width:100%;background:#2E4E8F;">
+            📕 0회독 자료 생성
           </button>
           <div class="progress hidden" id="pc-progress">
             <div class="progress-bar" style="margin-top:8px;"><div class="progress-fill" id="pc-progress-fill" style="width:0%"></div></div>
@@ -232,7 +235,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
     <div class="three-col">
       <div style="grid-column: span 2;">
         <div class="card">
-          <div class="card-title"> 지문 선택 (0회독이 준비된 지문만 분석지 가능)</div>
+          <div class="card-title">📚 지문 선택 (0회독이 준비된 지문만 분석지 가능)</div>
           <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
             <button class="btn btn-sm" onclick="asExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
             <button class="btn btn-sm" onclick="asCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
@@ -258,7 +261,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
             0회독이 ⏳ 미생성인 지문은 먼저 0회독 탭에서 생성하세요.
           </div>
           <button class="btn btn-primary" id="as-btn-open" onclick="asOpenSheets()" disabled style="width:100%;background:#2E4E8F;">
-             분석지 열기 (새 창)
+            📊 분석지 열기 (새 창)
           </button>
           <div id="as-open-note" style="font-size:11px;color:#666;margin-top:8px;text-align:center;"></div>
         </div>
@@ -273,7 +276,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       <!-- 왼쪽: 교재 + 지문 -->
       <div>
         <div class="card">
-          <div class="card-title"> 교재 선택</div>
+          <div class="card-title">📚 교재 선택</div>
           <div style="display:flex;gap:6px;">
             <select id="sel-book" onchange="onBookChange()" style="flex:1;margin-bottom:0;">
               <option value="">교재를 선택하세요</option>
@@ -283,7 +286,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
         </div>
         <div class="card">
           <div class="card-title">
-             지문 선택
+            📄 지문 선택
             <span style="margin-left:auto;font-size:12px;color:#666;" id="sel-count">0개 선택</span>
           </div>
           <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px;">
@@ -300,7 +303,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       <!-- 가운데: 레벨 + 생성버튼 -->
       <div>
         <div class="card">
-          <div class="card-title"> 레벨 선택</div>
+          <div class="card-title">🎯 레벨 선택</div>
           <div class="preset-row">
             <div class="preset-btn" onclick="presetLevels([1,2,3,4])">수업 전+중</div>
             <div class="preset-btn" onclick="presetLevels([5,6,7,8,9,10])">수업 후</div>
@@ -357,7 +360,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
     <div class="three-col">
       <div style="grid-column: span 2;">
         <div class="card">
-          <div class="card-title"> 지문 선택 (클릭 순서대로 출력됨)</div>
+          <div class="card-title">📚 지문 선택 (클릭 순서대로 출력됨)</div>
           <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
             <button class="btn btn-sm" onclick="vrExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
             <button class="btn btn-sm" onclick="vrCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
@@ -370,14 +373,14 @@ textarea:focus { border-color: #4A90D9; outline: none; }
         </div>
       </div>
       <div class="col-right">
-        <div class="vr-card card" style="border:1.5px solid #fdba74;background:linear-gradient(135deg,#fff7ed,#fffbeb);">
-          <div class="card-title" style="color:#c2410c;"> 학교명</div>
+        <div class="vr-card card" style="border:1.5px solid #93b4d9;background:linear-gradient(135deg,#eef3fa,#f5f8fc);">
+          <div class="card-title" style="color:#2E4E8F;">🏫 학교명</div>
           <input type="text" id="vr-school-name" placeholder="레벨미업학원" value="레벨미업학원"
-            style="width:100%;padding:9px 12px;border:2px solid #fdba74;border-radius:8px;font-size:13px;outline:none;">
+            style="width:100%;padding:9px 12px;border:2px solid #93b4d9;border-radius:8px;font-size:13px;outline:none;">
         </div>
 
-        <div class="vr-card card" style="border:1.5px solid #fdba74;background:linear-gradient(135deg,#fff7ed,#fffbeb);">
-          <div class="card-title" style="color:#c2410c;"> 유형 선택 (다중 선택 가능)</div>
+        <div class="vr-card card" style="border:1.5px solid #93b4d9;background:linear-gradient(135deg,#eef3fa,#f5f8fc);">
+          <div class="card-title" style="color:#2E4E8F;">📝 유형 선택 (다중 선택 가능)</div>
           
           <label style="display:flex;align-items:center;gap:8px;background:#dbeafe;border:1.5px solid #93c5fd;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;">
             <input type="checkbox" id="vr-type-a" checked onchange="vrUpdateBtns()" style="width:18px;height:18px;">
@@ -396,8 +399,8 @@ textarea:focus { border-color: #4A90D9; outline: none; }
           </label>
         </div>
 
-        <div class="vr-card card" style="border:1.5px solid #fdba74;background:linear-gradient(135deg,#fff7ed,#fffbeb);">
-          <div class="card-title" style="color:#c2410c;"> 출력 방식</div>
+        <div class="vr-card card" style="border:1.5px solid #93b4d9;background:linear-gradient(135deg,#eef3fa,#f5f8fc);">
+          <div class="card-title" style="color:#2E4E8F;">📑 출력 방식</div>
           <label style="display:flex;align-items:center;gap:8px;padding:6px;cursor:pointer;">
             <input type="radio" name="vr-mode" value="by-type" checked style="width:16px;height:16px;">
             <div style="font-size:12px;">
@@ -414,10 +417,10 @@ textarea:focus { border-color: #4A90D9; outline: none; }
           </label>
         </div>
 
-        <div class="vr-card card" style="border:1.5px solid #fdba74;background:linear-gradient(135deg,#fff7ed,#fffbeb);">
+        <div class="vr-card card" style="border:1.5px solid #93b4d9;background:linear-gradient(135deg,#eef3fa,#f5f8fc);">
           <button class="btn btn-primary" id="vr-btn-generate" onclick="doVariation()" disabled
-            style="width:100%;padding:14px;font-size:15px;font-weight:700;background:linear-gradient(135deg,#ea580c,#c2410c);color:white;border:none;border-radius:10px;cursor:pointer;">
-             변형문제 생성
+            style="width:100%;padding:14px;font-size:15px;font-weight:700;background:linear-gradient(135deg,#2E4E8F,#1f3766);color:white;border:none;border-radius:10px;cursor:pointer;">
+            📝 변형문제 생성
           </button>
           <div class="progress hidden" id="vr-progress">
             <div class="progress-bar" style="margin-top:8px;"><div class="progress-fill" id="vr-progress-fill" style="width:0%"></div></div>
@@ -437,7 +440,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
   <div class="three-col">
     <div style="grid-column: span 2;">
       <div class="card">
-        <div class="card-title"> 지문 선택 (클릭 순서대로 출력됨)</div>
+        <div class="card-title">📚 지문 선택 (클릭 순서대로 출력됨)</div>
         <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
           <button class="btn btn-sm" onclick="ssExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
           <button class="btn btn-sm" onclick="ssCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
@@ -451,13 +454,13 @@ textarea:focus { border-color: #4A90D9; outline: none; }
     </div>
     <div class="col-right">
       <div class="vr-card card" style="border:1.5px solid #93c5fd;background:linear-gradient(135deg,#eff6ff,#f5f3ff);">
-        <div class="card-title" style="color:#1d4ed8;"> 학교명</div>
+        <div class="card-title" style="color:#1d4ed8;">🏫 학교명</div>
         <input type="text" id="ss-school-name" placeholder="레벨미업학원" value="레벨미업학원"
           style="width:100%;padding:9px 12px;border:2px solid #93c5fd;border-radius:8px;font-size:13px;outline:none;">
       </div>
 
       <div class="vr-card card" style="border:1.5px solid #93c5fd;background:linear-gradient(135deg,#eff6ff,#f5f3ff);">
-        <div class="card-title" style="color:#1d4ed8;"> 서술형 유형 (한 지문에 종합 출제 · 자유 조합)</div>
+        <div class="card-title" style="color:#1d4ed8;">✍️ 서술형 유형 (한 지문에 종합 출제 · 자유 조합)</div>
 
         <label style="display:flex;align-items:center;gap:8px;background:#fef3e8;border:1.5px solid #fdba74;border-radius:8px;padding:9px;margin-bottom:7px;cursor:pointer;">
           <input type="checkbox" id="ss-type-sa" checked onchange="ssUpdateBtns()" style="width:18px;height:18px;">
@@ -488,7 +491,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
         </label>
         <button class="btn btn-primary" id="ss-btn-generate" onclick="doSeosul()" disabled
           style="width:100%;padding:14px;font-size:15px;font-weight:700;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:white;border:none;border-radius:10px;cursor:pointer;">
-           서술형 종합 생성
+          ✍️ 서술형 종합 생성
         </button>
         <div class="progress hidden" id="ss-progress">
           <div class="progress-bar" style="margin-top:8px;"><div class="progress-fill" id="ss-progress-fill" style="width:0%"></div></div>
@@ -509,7 +512,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
     <div class="three-col">
       <div style="grid-column: span 2;">
         <div class="card">
-          <div class="card-title"> 지문 선택 (중복 선택 가능)</div>
+          <div class="card-title">📚 지문 선택 (중복 선택 가능)</div>
           <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
             <button class="btn btn-sm" onclick="snExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
             <button class="btn btn-sm" onclick="snCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
@@ -523,17 +526,17 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       </div>
       <div class="col-right">
         <div class="sn-card card">
-          <div class="card-title"> 학교명</div>
+          <div class="card-title">🏫 학교명</div>
           <input type="text" id="sn-school-name" placeholder="레벨미업학원" value="레벨미업학원"
             style="width:100%;padding:9px 12px;border:2px solid #c4b5fd;border-radius:8px;font-size:13px;outline:none;">
         </div>
         <div class="sn-card card">
-          <div class="card-title"> 강사명 (선택)</div>
+          <div class="card-title">👨‍🏫 강사명 (선택)</div>
           <input type="text" id="sn-teacher-name" placeholder="예: 홍길동"
             style="width:100%;padding:9px 12px;border:2px solid #a5b4fc;border-radius:8px;font-size:13px;outline:none;">
         </div>
         <div class="sn-card card">
-          <div class="card-title"> 유형 선택</div>
+          <div class="card-title">🔐 유형 선택</div>
           <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:8px;margin-bottom:6px;">
             <div style="font-size:11px;font-weight:700;color:#6d28d9;">유형 A — 반의어+요약</div>
             <div style="font-size:10px;color:#666;">핵심어휘(반의어)·요약문·Paraphrase</div>
@@ -569,7 +572,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
     <div class="three-col">
       <div style="grid-column: span 2;">
         <div class="card">
-          <div class="card-title"> 지문 선택 (중복 선택 가능)</div>
+          <div class="card-title">📚 지문 선택 (중복 선택 가능)</div>
           <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
             <button class="btn btn-sm" onclick="extExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
             <button class="btn btn-sm" onclick="extCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
@@ -583,7 +586,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       </div>
       <div class="col-right">
         <div class="card">
-          <div class="card-title"> 학교 이름</div>
+          <div class="card-title">🏫 학교 이름</div>
           <input type="text" id="ext-school-name" placeholder="예: 정명고2" style="width:100%;padding:10px 12px;border:2px solid #e5e7eb;border-radius:8px;font-size:14px;">
         </div>
         <div class="card">
@@ -594,14 +597,14 @@ textarea:focus { border-color: #4A90D9; outline: none; }
           </label>
         </div>
         <div class="card">
-          <div class="card-title"> HTML 추출</div>
+          <div class="card-title">📤 HTML 추출</div>
           <button class="btn btn-primary" style="width:100%;" onclick="extExtractHTML()">HTML 추출 (새 창) ↗</button>
           <p style="font-size:12px;color:#666;margin-top:8px;text-align:center;">
             새 창에서 <b>Ctrl+P</b> → PDF 저장
           </p>
         </div>
         <div class="card" style="background:#EBF4FB;border:1.5px solid #4A90D9;">
-          <div class="card-title" style="color:#4A90D9;"> 원문 추출 안내</div>
+          <div class="card-title" style="color:#4A90D9;">💡 원문 추출 안내</div>
           <p style="font-size:12px;color:#555;line-height:1.7;">
             여러 교재의 지문을 <b>중복 선택</b>하여<br>
             한 번에 추출할 수 있습니다.<br><br>
@@ -618,7 +621,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
     <div class="three-col">
       <div>
         <div class="card">
-          <div class="card-title"> 지문 업로드</div>
+          <div class="card-title">📤 지문 업로드</div>
           <p style="font-size:12px;color:#666;margin-bottom:8px;">###강 번호### 형식으로 입력하세요</p>
           <input type="text" id="upload-book" list="book-list" placeholder="교재명 입력 (예: 26 수특 영어)" style="width:100%;padding:9px 12px;border:2px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px;">
           <datalist id="book-list"></datalist>
@@ -628,7 +631,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       </div>
       <div style="grid-column: span 2;">
         <div class="card">
-          <div class="card-title"> 현재 등록된 지문</div>
+          <div class="card-title">📊 현재 등록된 지문</div>
           <div id="stats-list" style="font-size:13px;color:#666;">로딩 중...</div>
           <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
             <button class="btn btn-sm" onclick="syncSupabase()" style="background:#EBF4FB;color:#4A90D9;border:1px solid #4A90D9;">🔄 수파베이스 동기화</button>
@@ -1083,7 +1086,7 @@ async function doSeosul(){
     fill.style.width='100%'; ptext.textContent = `✓ 완료 (지문 ${data.passages_generated}개)`;
     rsec.classList.remove('hidden');
     const url=data.html_url, dl=data.download_url;
-    let h = `<div class="sn-result-item"><span> 서술형 종합 (문제+정답)</span>
+    let h = `<div class="sn-result-item"><span>✍️ 서술형 종합 (문제+정답)</span>
       <span style="display:flex;gap:6px;">
         <a href="${dl}" download class="btn btn-sm" style="background:#6b7280;color:white;">📥 다운로드</a>
         <a href="${url}" target="_blank" class="btn btn-sm btn-primary">🔗 열기</a></span></div>
@@ -1296,13 +1299,13 @@ async function doSecretNote(type) {
   window._lastSnResults = successResults;
 
   let mergeBtn = successResults.length > 1
-    ? `<div style="margin-bottom:8px;"><button class="btn btn-purple" style="width:100%;" onclick="snDownloadMerged('${type}','${schoolName}')"> 합본 다운로드 (${successResults.length}개)</button></div>`
+    ? `<div style="margin-bottom:8px;"><button class="btn btn-purple" style="width:100%;" onclick="snDownloadMerged('${type}','${schoolName}')">📦 합본 다운로드 (${successResults.length}개)</button></div>`
     : '';
   resultsList.innerHTML = mergeBtn + results.map(r =>
     `<div class="sn-result-item">
       <span>${r.status==='success'?'✅':'❌'} ${r.id}</span>
       ${r.status==='success'
-        ? `<button class="btn btn-sm btn-purple" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')"> 다운로드</button>`
+        ? `<button class="btn btn-sm btn-purple" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')">📥 다운로드</button>`
         : `<span style="color:#dc2626;font-size:12px;">${r.error}</span>`}
     </div>`
   ).join('');
@@ -1499,7 +1502,7 @@ async function doPreclass() {
         const srcdoc = data.html.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
         resultsList.innerHTML =
           `<div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;">
-             <button class="btn btn-sm btn-orange" onclick="downloadHtml(\`${enc}\`,'${data.filename}')"> 다운로드</button>
+             <button class="btn btn-sm btn-orange" onclick="downloadHtml(\`${enc}\`,'${data.filename}')">📥 다운로드</button>
              <button class="btn btn-sm" style="background:#eee;color:#333;" onclick="const w=window.open();w.document.write(decodeURIComponent('${enc}'));w.document.close();">↗ 새 창으로</button>
            </div>
            <iframe title="배경지식" sandbox="allow-scripts allow-popups"
@@ -1543,13 +1546,13 @@ async function doPreclass() {
   window._lastPcResults = successResults;
 
   let mergeBtn = successResults.length > 1
-    ? `<div style="margin-bottom:8px;"><button class="btn btn-orange" style="width:100%;" onclick="pcDownloadMerged('${schoolName}')"> 합본 다운로드 (${successResults.length}개)</button></div>`
+    ? `<div style="margin-bottom:8px;"><button class="btn btn-orange" style="width:100%;" onclick="pcDownloadMerged('${schoolName}')">📦 합본 다운로드 (${successResults.length}개)</button></div>`
     : '';
   resultsList.innerHTML = mergeBtn + results.map(r =>
     `<div class="sn-result-item">
       <span>${r.status==='success'?'✅':'❌'} ${r.id}</span>
       ${r.status==='success'
-        ? `<button class="btn btn-sm btn-orange" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')"> 다운로드</button>`
+        ? `<button class="btn btn-sm btn-orange" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')">📥 다운로드</button>`
         : `<span style="color:#dc2626;font-size:12px;">${r.error}</span>`}
     </div>`
   ).join('');
@@ -1562,10 +1565,10 @@ function pcUpdateButtonLabel() {
   const btn = document.getElementById('pc-btn-d');
   if (!btn) return;
   const labels = {
-    'preclass': ' 0회독 자료 생성',
-    'sentence_order': ' 한 문장 순서배열 생성',
-    'both': ' 0회독 + 순서배열 생성',
-    'topic': ' 배경지식 보기',
+    'preclass': '📕 0회독 자료 생성',
+    'sentence_order': '🔀 한 문장 순서배열 생성',
+    'both': '📦 0회독 + 순서배열 생성',
+    'topic': '🎨 배경지식 보기',
   };
   btn.textContent = labels[mode] || labels.preclass;
 }
@@ -2146,7 +2149,7 @@ async function doVariation() {
     let resultHtml = '';
     if (htmlUrl) {
       resultHtml += `<div class="sn-result-item">
-        <span> 변형문제 (문제+답지)</span>
+        <span>📝 변형문제 (문제+답지)</span>
         <span style="display:flex;gap:6px;">
           <a href="${downloadUrl}" download class="btn btn-sm" style="background:#6b7280;color:white;">📥 다운로드</a>
           <a href="${htmlUrl}" target="_blank" class="btn btn-sm btn-primary">🔗 열기</a>

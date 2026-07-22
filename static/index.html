@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>레벨미업 워크북</title>
+<title>LEVEL ME UP WORKBOOK</title>
 <link rel="manifest" href="/static/manifest.json">
 <meta name="theme-color" content="#4A90D9">
 <style>
@@ -197,7 +197,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
             </div>
           </div>
           <div style="margin-bottom:8px;">
-            <label style="font-size:11px;color:#444;">🏫 학교명</label>
+            <label style="font-size:11px;color:#444;"> 학교명</label>
             <input type="text" id="pc-school-name" placeholder="레벨미업학원" value="레벨미업학원"
               style="width:100%;padding:8px 10px;border:2px solid #fbbf24;border-radius:6px;font-size:12px;outline:none;margin-top:4px;">
           </div>
@@ -206,7 +206,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
             <div style="font-size:11px;font-weight:700;color:#b45309;margin-bottom:6px;">📋 자료 종류</div>
             <div class="pc-mode-tabs">
               <button type="button" class="pc-mode-tab active" data-mode="preclass" onclick="pcSetMode('preclass',this)"> 0회독</button>
-              <button type="button" class="pc-mode-tab" data-mode="sentence_order" onclick="pcSetMode('sentence_order',this)">🔀 순서</button>
+              <button type="button" class="pc-mode-tab" data-mode="sentence_order" onclick="pcSetMode('sentence_order',this)"> 순서</button>
               <button type="button" class="pc-mode-tab" data-mode="both" onclick="pcSetMode('both',this)"> 0회독<br>+순서</button>
               <button type="button" class="pc-mode-tab" data-mode="topic" onclick="pcSetMode('topic',this)"> 배경<br>지식</button>
             </div>
@@ -258,7 +258,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
             0회독이 ⏳ 미생성인 지문은 먼저 0회독 탭에서 생성하세요.
           </div>
           <button class="btn btn-primary" id="as-btn-open" onclick="asOpenSheets()" disabled style="width:100%;background:#2E4E8F;">
-            📊 분석지 열기 (새 창)
+             분석지 열기 (새 창)
           </button>
           <div id="as-open-note" style="font-size:11px;color:#666;margin-top:8px;text-align:center;"></div>
         </div>
@@ -1296,13 +1296,13 @@ async function doSecretNote(type) {
   window._lastSnResults = successResults;
 
   let mergeBtn = successResults.length > 1
-    ? `<div style="margin-bottom:8px;"><button class="btn btn-purple" style="width:100%;" onclick="snDownloadMerged('${type}','${schoolName}')">📦 합본 다운로드 (${successResults.length}개)</button></div>`
+    ? `<div style="margin-bottom:8px;"><button class="btn btn-purple" style="width:100%;" onclick="snDownloadMerged('${type}','${schoolName}')"> 합본 다운로드 (${successResults.length}개)</button></div>`
     : '';
   resultsList.innerHTML = mergeBtn + results.map(r =>
     `<div class="sn-result-item">
       <span>${r.status==='success'?'✅':'❌'} ${r.id}</span>
       ${r.status==='success'
-        ? `<button class="btn btn-sm btn-purple" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')">📥 다운로드</button>`
+        ? `<button class="btn btn-sm btn-purple" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')"> 다운로드</button>`
         : `<span style="color:#dc2626;font-size:12px;">${r.error}</span>`}
     </div>`
   ).join('');
@@ -1499,7 +1499,7 @@ async function doPreclass() {
         const srcdoc = data.html.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
         resultsList.innerHTML =
           `<div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;">
-             <button class="btn btn-sm btn-orange" onclick="downloadHtml(\`${enc}\`,'${data.filename}')">📥 다운로드</button>
+             <button class="btn btn-sm btn-orange" onclick="downloadHtml(\`${enc}\`,'${data.filename}')"> 다운로드</button>
              <button class="btn btn-sm" style="background:#eee;color:#333;" onclick="const w=window.open();w.document.write(decodeURIComponent('${enc}'));w.document.close();">↗ 새 창으로</button>
            </div>
            <iframe title="배경지식" sandbox="allow-scripts allow-popups"
@@ -1543,13 +1543,13 @@ async function doPreclass() {
   window._lastPcResults = successResults;
 
   let mergeBtn = successResults.length > 1
-    ? `<div style="margin-bottom:8px;"><button class="btn btn-orange" style="width:100%;" onclick="pcDownloadMerged('${schoolName}')">📦 합본 다운로드 (${successResults.length}개)</button></div>`
+    ? `<div style="margin-bottom:8px;"><button class="btn btn-orange" style="width:100%;" onclick="pcDownloadMerged('${schoolName}')"> 합본 다운로드 (${successResults.length}개)</button></div>`
     : '';
   resultsList.innerHTML = mergeBtn + results.map(r =>
     `<div class="sn-result-item">
       <span>${r.status==='success'?'✅':'❌'} ${r.id}</span>
       ${r.status==='success'
-        ? `<button class="btn btn-sm btn-orange" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')">📥 다운로드</button>`
+        ? `<button class="btn btn-sm btn-orange" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')"> 다운로드</button>`
         : `<span style="color:#dc2626;font-size:12px;">${r.error}</span>`}
     </div>`
   ).join('');
@@ -2146,7 +2146,7 @@ async function doVariation() {
     let resultHtml = '';
     if (htmlUrl) {
       resultHtml += `<div class="sn-result-item">
-        <span>📝 변형문제 (문제+답지)</span>
+        <span> 변형문제 (문제+답지)</span>
         <span style="display:flex;gap:6px;">
           <a href="${downloadUrl}" download class="btn btn-sm" style="background:#6b7280;color:white;">📥 다운로드</a>
           <a href="${htmlUrl}" target="_blank" class="btn btn-sm btn-primary">🔗 열기</a>

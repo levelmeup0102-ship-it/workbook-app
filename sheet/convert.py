@@ -331,6 +331,19 @@ def build_sheet_data(pre: dict, translation: str = "", saved_sheet: dict = None)
     use_dt = (isinstance(dt, list) and len(dt) >= 2
               and all(isinstance(u, dict) and (u.get("e") or "").strip() for u in dt))
 
+    def _split_by_sentence(ue, ust, uen):
+        """[sheet][문장배치] 문장 경계를 걸친 구를 경계에서 잘라 (문장idx, 텍스트)로 반환.
+        경계를 걸친 구를 통째로 시작 문장에 넣으면 다음 문장 첫 단어가 앞 블록 꼬리에 붙는다."""
+        pieces, cur = [], ust
+        for si, (bs, be) in enumerate(sent_bounds):
+            if be <= cur or bs >= uen:
+                continue
+            seg = original[max(cur, bs):min(uen, be)].strip()
+            if seg:
+                pieces.append((si, seg))
+            cur = min(uen, be)
+        return pieces or [(_sent_of(ust), ue)]
+
     if use_dt:
         # ── 직독직해 경로: 구 단위(e,k)로 청크 구성 + 마커 얹기 (청크마다 한글) ──
         S = [[] for _ in range(max(1, len(sentences)))]
@@ -347,17 +360,18 @@ def build_sheet_data(pre: dict, translation: str = "", saved_sheet: dict = None)
                 ust = ucur
             uen = ust + len(ue)
             ucur = uen
-            si = _sent_of(ust)
-            chunk = {"e": ue, "k": uk}
-            # 이 구에 시작점이 들어오고, 마커 구가 이 구의 영어에 실제로 포함될 때만 얹는다
-            # (경계를 걸쳐 부분문자열이 아니면 렌더(split/replace)가 깨지므로 강조는 생략)
-            for (ms, _me, a) in marker_spans:
-                if ust <= ms < uen and a.get("h") and a["h"] in ue:
-                    chunk.update(a)
-                    break
-            if si >= len(S):
-                S.extend([[] for _ in range(si - len(S) + 1)])
-            S[si].append(chunk)
+            for pi, (si, seg) in enumerate(_split_by_sentence(ue, ust, uen)):
+                # 한글 해석은 첫 조각에만 (문장이 갈리면 뒤 조각은 비움)
+                chunk = {"e": seg, "k": uk if pi == 0 else ""}
+                # 이 구에 시작점이 들어오고, 마커 구가 이 조각의 영어에 실제로 포함될 때만 얹는다
+                # (경계를 걸쳐 부분문자열이 아니면 렌더(split/replace)가 깨지므로 강조는 생략)
+                for (ms, _me, a) in marker_spans:
+                    if ust <= ms < uen and a.get("h") and a["h"] in seg:
+                        chunk.update(a)
+                        break
+                if si >= len(S):
+                    S.extend([[] for _ in range(si - len(S) + 1)])
+                S[si].append(chunk)
         S = [s for s in S if s]
     else:
         # ── 기존 경로: 마커 토큰 단위 청크 + 문장 한글을 첫 청크 밑에 (폴백) ──

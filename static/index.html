@@ -855,11 +855,11 @@ async function doGenerate() {
   resultsSection.classList.remove('hidden');
   const successResults = results.filter(r=>r.status==='success');
   window._lastResults = successResults;
-  let mergeBtn = successResults.length>1 ? `<div style="margin-bottom:8px;"><button class="btn btn-orange" style="width:100%;" onclick="downloadMerged()">📦 합본 다운로드 (${successResults.length}개)</button></div>` : '';
+  let mergeBtn = successResults.length>1 ? `<div style="margin-bottom:8px;"><button class="btn btn-orange" style="width:100%;" onclick="downloadMerged()">합본 다운로드 (${successResults.length}개)</button></div>` : '';
   resultsList.innerHTML = mergeBtn + results.map(r=>`
     <div class="result-item">
       <span>${r.status==='success'?'✅':'❌'} ${r.id}</span>
-      ${r.status==='success' ? `<button class="btn btn-sm btn-primary" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')">📥 다운로드</button>` : `<span style="color:#dc2626;font-size:12px;">${r.error}</span>`}
+      ${r.status==='success' ? `<button class="btn btn-sm btn-primary" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')">다운로드</button>` : `<span style="color:#dc2626;font-size:12px;">${r.error}</span>`}
     </div>`).join('');
   btn.disabled=false;
   await loadPassages();

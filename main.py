@@ -1,2328 +1,788 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEVEL ME UP</title>
-<link rel="manifest" href="/static/manifest.json">
-<meta name="theme-color" content="#4A90D9">
-<style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f0f4f8; color: #1a1a1a; min-height: 100vh; }
-.hidden { display: none !important; }
-.btn { padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-.btn-primary { background: #2E4E8F; color: white; }
-.btn-primary:hover { background: #1f3766; }
-.btn-primary:disabled { background: #9db3d6; cursor: not-allowed; }
-.btn-orange { background: #4A90D9; color: white; }
-.btn-orange:hover { background: #3a7bc8; }
-.btn-sm { padding: 6px 12px; font-size: 12px; }
-.badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
-.badge-ready { background: #E8F5E9; color: #2E9E5A; }
-.badge-pending { background: #FFF8F0; color: #E8833A; }
+#!/usr/bin/env python3
+"""Workbook webapp server v12 - stable local + supabase passages, cache status"""
+import os, json, hashlib, re, shutil
+from pathlib import Path
 
-/* 헤더 */
-.header { background: linear-gradient(135deg, #2E4E8F 0%, #1f3766 100%); color: white; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
-.header-top { display: flex; align-items: center; padding: 10px 20px; gap: 10px; }
-.header-top h1 { font-size: 18px; flex-shrink: 0; }
-.header-top .sub { font-size: 11px; opacity: 0.7; flex-shrink: 0; }
-.header-notice-box { flex: 1; background: rgba(255,255,255,0.15); border-radius: 6px; padding: 5px 12px; font-size: 12px; min-height: 28px; display: flex; align-items: center; overflow: hidden; }
-.notice-text { color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.notice-empty { color: rgba(255,255,255,0.5); font-style: italic; font-size: 11px; }
-.logout-btn { background: rgba(255,255,255,0.2); border: none; color: white; padding: 5px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
-.header-tabs { display: flex; padding: 0 20px; }
-.header-tab { padding: 8px 20px; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.7); cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; }
-.header-tab.active { color: white; border-bottom-color: white; }
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
 
-/* 로그인 */
-#login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #2E4E8F 0%, #1f3766 100%); }
-.login-box { background: white; border-radius: 16px; padding: 40px 32px; width: 90%; max-width: 380px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.15); }
-.login-box h1 { font-size: 24px; font-weight: 800; letter-spacing: 0.5px; color: #2E4E8F; margin-bottom: 4px; }
-.login-box .sub { color: #666; font-size: 13px; margin-bottom: 24px; }
-.login-box input { width: 100%; padding: 14px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px; text-align: center; margin-bottom: 12px; outline: none; }
-.login-box input:focus { border-color: #4A90D9; }
-.login-error { color: #dc2626; font-size: 13px; margin-bottom: 8px; }
+APP_VERSION = "v12-main-replace"
 
-/* 3단 */
-.three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; padding: 14px 16px; max-width: 1400px; width: 100%; margin: 0 auto; box-sizing: border-box; }
-@media (max-width: 960px) { .three-col { grid-template-columns: 1fr 1fr; } .col-right { grid-column: 1 / -1; } }
-@media (max-width: 600px) { .three-col { grid-template-columns: 1fr; } }
+# Clear bytecode cache on startup (prevent stale .pyc from old deploys)
+for p in Path(".").glob("__pycache__"):
+    shutil.rmtree(p, ignore_errors=True)
 
-/* 카드 */
-.card { background: white; border-radius: 12px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 12px; }
-.card-title { font-size: 13px; font-weight: 700; color: #333; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+APP_PASSWORD = os.getenv("APP_PASSWORD", "levelmeup2026")
 
-/* 교재/지문 */
-select { width: 100%; padding: 9px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 13px; background: white; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; cursor: pointer; margin-bottom: 8px; }
-select:focus { border-color: #4A90D9; outline: none; }
-.passage-list { max-height: 380px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px; }
-.passage-item { display: flex; align-items: center; padding: 8px 10px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.15s; }
-.passage-item:hover { background: #f5f7fa; }
-.passage-item:last-child { border-bottom: none; }
-.passage-item input[type="checkbox"] { width: 16px; height: 16px; margin-right: 8px; accent-color: #4A90D9; flex-shrink: 0; }
-.passage-item .title { flex: 1; font-size: 13px; }
-.unit-header { padding: 7px 10px; background: #f0f4f8; font-weight: 700; font-size: 12px; color: #4A90D9; border-bottom: 1px solid #e0e0e0; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
-.unit-header:hover { background: #e5edf5; }
-.unit-header .unit-select { font-size: 11px; font-weight: 400; color: #666; }
+DATA_DIR = Path("data")
+DATA_DIR.mkdir(exist_ok=True)
 
-/* 레벨 */
-.level-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
-.level-btn { padding: 7px 4px; border: 2px solid #e5e7eb; border-radius: 7px; text-align: center; cursor: pointer; font-size: 11px; transition: all 0.15s; user-select: none; }
-.level-btn.selected { border-color: #4A90D9; background: #EBF4FB; color: #4A90D9; font-weight: 600; }
-.level-btn.green.selected { border-color: #2E9E5A; background: #E8F5E9; color: #2E9E5A; }
-.level-btn.orange.selected { border-color: #E8833A; background: #FFF8F0; color: #E8833A; }
-.preset-row { display: flex; gap: 5px; margin-bottom: 8px; flex-wrap: wrap; }
-.preset-btn { flex: 1; min-width: 60px; padding: 5px; border: 1px solid #ddd; border-radius: 6px; background: white; font-size: 11px; cursor: pointer; text-align: center; }
-.preset-btn:hover { background: #f5f7fa; }
+PASSAGES_FILE = DATA_DIR / "passages.json"  # data/ 안에 저장 → 볼륨으로 영속
 
-/* 생성 */
-.generate-area .btn { width: 100%; padding: 13px; font-size: 15px; }
-.progress { margin-top: 10px; }
-.progress-bar { height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
-.progress-fill { height: 100%; background: linear-gradient(90deg, #4A90D9, #2E9E5A); border-radius: 3px; transition: width 0.3s; }
-.progress-text { font-size: 12px; color: #666; text-align: center; margin-top: 5px; }
-.result-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 6px; font-size: 13px; }
+app = FastAPI()
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-/* 공지 카드 */
-.notice-card { background: white; border-radius: 12px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 12px; border: 2px solid #4A90D9; background: #EBF4FB; }
-.notice-card textarea { width: 100%; min-height: 80px; padding: 8px; border: 1px solid #c5dcf0; border-radius: 6px; font-size: 13px; resize: vertical; background: white; font-family: inherit; }
-.notice-card textarea:focus { outline: none; border-color: #4A90D9; }
-
-/* 업로드 탭 */
-textarea { width: 100%; min-height: 120px; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 13px; font-family: monospace; resize: vertical; }
-textarea:focus { border-color: #4A90D9; outline: none; }
-
-/* 토스트 */
-.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 8px; font-size: 14px; z-index: 1000; animation: fadeIn 0.3s; }
-@keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(10px); } }
-
-/* ★ 원문 추출 탭 스타일 */
-.ext-book-item { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--color-bg, #f8fafc); border-bottom: 1px solid #e5e7eb; cursor: pointer; }
-.ext-book-item:hover { background: #f0f4f8; }
-.ext-book-item.expanded { background: #EBF4FB; }
-.ext-unit-row { padding: 8px 12px 8px 32px; background: white; border-bottom: 1px solid #f0f0f0; }
-.ext-unit-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-.ext-pid-list { display: flex; flex-wrap: wrap; gap: 5px; padding-left: 20px; }
-.ext-pid-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all 0.15s; border: 1px solid #e5e7eb; background: #f8fafc; }
-.ext-pid-chip:hover { background: #f0f4f8; }
-.ext-pid-chip.selected { background: #EBF4FB; border-color: #4A90D9; color: #4A90D9; }
-.ext-count-badge { font-size: 11px; color: #666; margin-left: auto; }
-
-/* ★ 비밀노트 탭 스타일 */
-.sn-type-btn { flex:1; padding:12px 8px; border:none; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; transition:all 0.2s; }
-.sn-type-a { background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:white; }
-.sn-type-a:hover { background:linear-gradient(135deg,#1e40af,#2563eb); transform:translateY(-1px); }
-.sn-type-b { background:linear-gradient(135deg,#7c3aed,#a855f7); color:white; }
-.sn-type-b:hover { background:linear-gradient(135deg,#6d28d9,#9333ea); transform:translateY(-1px); }
-.sn-type-c { background:linear-gradient(135deg,#0369a1,#0ea5e9); color:white; }
-.sn-type-c:hover { background:linear-gradient(135deg,#075985,#0284c7); transform:translateY(-1px); }
-.sn-type-btn:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
-.sn-card { background:linear-gradient(135deg,#ede9fe,#faf5ff); border:1.5px solid #c4b5fd; border-radius:12px; padding:14px; margin-bottom:12px; }
-.sn-card .card-title { color:#6d28d9; }
-.sn-progress { margin-top:10px; }
-.sn-result-item { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border:1px solid #ddd8fe; border-radius:8px; margin-bottom:6px; font-size:13px; background:white; }
-.btn-purple { background:#7c3aed; color:white; }
-.btn-purple:hover { background:#6d28d9; }
-.pc-mode-tabs{display:flex;gap:4px}
-.pc-mode-tab{flex:1;padding:8px 6px;font-size:12px;font-weight:700;border:1.5px solid #fbbf24;background:#fff;color:#b45309;border-radius:6px;cursor:pointer;transition:all .15s;line-height:1.2;}
-.pc-mode-tab.active{background:#2E4E8F;color:#fff;border-color:#2E4E8F}
-</style>
-</head>
-<body>
-
-<!-- 로그인 -->
-<div id="login-screen">
-  <div class="login-box">
-    <h1>LEVEL ME UP</h1>
-    <p class="sub" style="text-transform:uppercase;letter-spacing:0.5px;">English Workbook</p>
-    <div id="login-error" class="login-error hidden"></div>
-    <input type="password" id="pw-input" placeholder="비밀번호를 입력하세요" autocomplete="off">
-    <button class="btn btn-primary" style="width:100%;" onclick="doLogin()">로그인</button>
-  </div>
-</div>
-
-<!-- 메인 -->
-<div id="main-screen" class="hidden">
-  <div class="header">
-    <div class="header-top">
-      <h1 style="font-weight:800;letter-spacing:0.5px;">LEVEL ME UP</h1>
-      <span class="sub" style="text-transform:uppercase;letter-spacing:0.5px;">English Workbook</span>
-      <div class="header-notice-box">
-        <span id="header-notice-text" class="notice-empty">공지사항 없음</span>
-      </div>
-      <button class="logout-btn" style="margin-right:4px;" onclick="refreshTemplate()" title="템플릿 재생성">🔄</button>
-      <button class="logout-btn" onclick="doLogout()">로그아웃</button>
-    </div>
-    <div class="header-tabs">
-      <div class="header-tab" onclick="switchTab('sheet', this)"> 분석지</div>
-      <div class="header-tab" onclick="switchTab('preclass', this)"> 0회독 — 수업 전 분석</div>
-      <div class="header-tab active" onclick="switchTab('generate', this)"> 1회독 교재 생성</div>
-      <div class="header-tab" onclick="switchTab('variation', this)"> 2회독 변형문제</div>
-      <div class="header-tab" onclick="switchTab('seosul', this)"> 2회독 서술형 종합</div>
-      <div class="header-tab" onclick="switchTab('secret', this)"> 비밀노트</div>
-      <div class="header-tab" onclick="switchTab('extract', this)"> 원문 추출</div>
-      <div class="header-tab" onclick="switchTab('upload', this)"> 지문 관리</div>
-    </div>
-  </div>
-
-  <!-- ★ 0회독 탭 (수업 전 4페이지 완전 분석) -->
-  <div id="tab-preclass" class="hidden">
-    <div class="three-col">
-      <div style="grid-column: span 2;">
-        <div class="card">
-          <div class="card-title"> 지문 선택 (중복 선택 가능)</div>
-          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-            <button class="btn btn-sm" onclick="pcExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
-            <button class="btn btn-sm" onclick="pcCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
-            <button class="btn btn-sm" onclick="pcClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
-            <span style="margin-left:auto;font-size:13px;color:#666;" id="pc-sel-count">0개 선택</span>
-          </div>
-          <div id="pc-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
-            <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-right">
-        <div class="card" style="border:2px solid #fbbf24;background:#fffbeb;">
-          <div class="card-title" style="color:#b45309;"> 0회독 — 수업 전 분석</div>
-          <div style="font-size:11px;color:#92400e;margin-bottom:10px;line-height:1.5;">
-            선생님 본인 수업 준비용 4페이지 완전 분석.<br>
-            지문(색상 마킹) · 주제·제목·해석 (2x2) · 어법 12~14개 상세박스 · 어휘심화(영영풀이) · 함축 빈칸 흐름
-          </div>
-          <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:10px;margin-bottom:10px;">
-            <div style="font-size:11px;font-weight:700;color:#b45309;margin-bottom:4px;">📄 4페이지 구성</div>
-            <div style="font-size:10px;color:#666;line-height:1.6;">
-              <b>PAGE 1</b> 지문(빨/파/검 마킹) + 주제·제목 2x2 + 어법/어휘 노트<br>
-              <b>PAGE 2</b> 어법 상세 1/2 (좌우 박스)<br>
-              <b>PAGE 3</b> 어법 상세 2/2 + 함축 박스<br>
-              <b>PAGE 4</b> 어휘 심화 6개(영영풀이) + 주제 어휘 6개
-            </div>
-          </div>
-          <div style="margin-bottom:8px;">
-            <label style="font-size:11px;color:#444;"> 학교명</label>
-            <input type="text" id="pc-school-name" placeholder="레벨미업학원" value="레벨미업학원"
-              style="width:100%;padding:8px 10px;border:2px solid #fbbf24;border-radius:6px;font-size:12px;outline:none;margin-top:4px;">
-          </div>
-          <!-- ★ 자료 종류 (탭) -->
-          <div style="background:#EBF0FA;border:1.5px dashed #2E4E8F;border-radius:6px;padding:8px;margin-bottom:8px;">
-            <div style="font-size:11px;font-weight:700;color:#2E4E8F;margin-bottom:6px;"> 자료 종류</div>
-            <div class="pc-mode-tabs">
-              <button type="button" class="pc-mode-tab active" data-mode="preclass" onclick="pcSetMode('preclass',this)"> 0회독</button>
-              <button type="button" class="pc-mode-tab" data-mode="sentence_order" onclick="pcSetMode('sentence_order',this)"> 순서</button>
-              <button type="button" class="pc-mode-tab" data-mode="both" onclick="pcSetMode('both',this)"> 0회독<br>+순서</button>
-              <button type="button" class="pc-mode-tab" data-mode="topic" onclick="pcSetMode('topic',this)"> 배경<br>지식</button>
-            </div>
-          </div>
-          <button class="btn btn-orange" id="pc-btn-d" onclick="doPreclass()" disabled style="width:100%;background:#2E4E8F;">
-             0회독 자료 생성
-          </button>
-          <div class="progress hidden" id="pc-progress">
-            <div class="progress-bar" style="margin-top:8px;"><div class="progress-fill" id="pc-progress-fill" style="width:0%"></div></div>
-            <div class="progress-text" id="pc-progress-text">생성 중...</div>
-          </div>
-        </div>
-        <div class="card hidden" id="pc-results-section">
-          <div class="card-title">✅ 생성 완료</div>
-          <div id="pc-results-list"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ★ 분석지 탭 (three_modes 저작) -->
-  <div id="tab-sheet" class="hidden">
-    <div class="three-col">
-      <div style="grid-column: span 2;">
-        <div class="card">
-          <div class="card-title"> 지문 선택 (0회독이 준비된 지문만 분석지 가능)</div>
-          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-            <button class="btn btn-sm" onclick="asExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
-            <button class="btn btn-sm" onclick="asCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
-            <button class="btn btn-sm" onclick="asClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
-            <span style="margin-left:auto;font-size:13px;color:#666;" id="as-sel-count">0개 선택</span>
-          </div>
-          <div id="as-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
-            <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-right">
-        <div class="card" style="border:2px solid #2E4E8F;background:#F7F9FC;">
-          <div class="card-title" style="color:#2E4E8F;"> 분석지 — 저작·인쇄·학생 공유</div>
-          <div style="font-size:11px;color:#445;margin-bottom:10px;line-height:1.6;">
-            0회독 분석을 그대로 불러와 <b>강조·편집</b>하는 3-모드 분석지입니다.<br>
-            · <b>저작</b> — 단어 클릭으로 어법·어휘·함축 강조<br>
-            · <b>정밀 인쇄물</b> — A4 가로 한 장 (선생님용)<br>
-            · <b>학생 게시물</b> — 공유 링크로 배포
-          </div>
-          <div style="background:#EBF0FA;border:1px solid #2E4E8F;border-radius:8px;padding:10px;margin-bottom:10px;font-size:10.5px;color:#445;line-height:1.6;">
-            ⓘ 분석지는 <b>0회독 자료</b>를 소스로 씁니다.<br>
-            0회독이 ⏳ 미생성인 지문은 먼저 0회독 탭에서 생성하세요.
-          </div>
-          <button class="btn btn-primary" id="as-btn-open" onclick="asOpenSheets()" disabled style="width:100%;background:#2E4E8F;">
-             분석지 열기 (새 창)
-          </button>
-          <div id="as-open-note" style="font-size:11px;color:#666;margin-top:8px;text-align:center;"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 생성 탭 -->
-  <div id="tab-generate">
-    <div class="three-col">
-
-      <!-- 왼쪽: 교재 + 지문 -->
-      <div>
-        <div class="card">
-          <div class="card-title"> 교재 선택</div>
-          <div style="display:flex;gap:6px;">
-            <select id="sel-book" onchange="onBookChange()" style="flex:1;margin-bottom:0;">
-              <option value="">교재를 선택하세요</option>
-            </select>
-            <button class="btn btn-sm" onclick="deleteBook()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;" title="교재 삭제">🗑️</button>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-title">
-             지문 선택
-            <span style="margin-left:auto;font-size:12px;color:#666;" id="sel-count">0개 선택</span>
-          </div>
-          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px;">
-            <button class="btn btn-sm" onclick="selectAll()" style="background:#eee;color:#333;">전체 선택</button>
-            <button class="btn btn-sm" onclick="selectNone()" style="background:#eee;color:#333;">선택 해제</button>
-            <button class="btn btn-sm" onclick="clearPassageCache()" style="background:#FFF8F0;color:#E8833A;border:1px solid #E8833A;">🗑️ 선택 캐시 삭제</button>
-          </div>
-          <div class="passage-list" id="passage-list">
-            <div style="padding:20px;text-align:center;color:#999;">교재를 먼저 선택하세요</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 가운데: 레벨 + 생성버튼 -->
-      <div>
-        <div class="card">
-          <div class="card-title"> 레벨 선택</div>
-          <div class="preset-row">
-            <div class="preset-btn" onclick="presetLevels([1,2,3,4])">수업 전+중</div>
-            <div class="preset-btn" onclick="presetLevels([5,6,7,8,9,10])">수업 후</div>
-            <div class="preset-btn" onclick="presetLevels([0,1,2,3,4,5,6,7,8,9,10])">전체</div>
-            <div class="preset-btn" onclick="presetLevels([])">해제</div>
-          </div>
-          <div class="level-grid">
-          <div class="level-btn selected" data-level="0" onclick="toggleLevel(this)">정답</div>
-            <div class="level-btn selected" data-level="1" onclick="toggleLevel(this)">Stage 1 어휘</div>
-            <div class="level-btn selected" data-level="2" onclick="toggleLevel(this)">Stage 2 해석</div>
-            <div class="level-btn green selected" data-level="3" onclick="toggleLevel(this)">Stage 3 분석</div>
-            <div class="level-btn green selected" data-level="4" onclick="toggleLevel(this)">Stage 4 주제</div>
-            <div class="level-btn orange selected" data-level="5" onclick="toggleLevel(this)">Stage 5 흐름</div>
-            <div class="level-btn orange selected" data-level="6" onclick="toggleLevel(this)">Stage 6 빈칸</div>
-            <div class="level-btn orange selected" data-level="7" onclick="toggleLevel(this)">Stage 7 어법</div>
-            <div class="level-btn orange selected" data-level="8" onclick="toggleLevel(this)">Stage 8 어휘</div>
-            <div class="level-btn orange selected" data-level="9" onclick="toggleLevel(this)">Stage 9 일치</div>
-            <div class="level-btn orange selected" data-level="10" onclick="toggleLevel(this)">Stage 10 영작</div>
-          </div>
-        </div>
-        <div class="card generate-area">
-          <button class="btn btn-primary" id="btn-generate" onclick="doGenerate()" disabled>워크북 생성하기</button>
-          <div class="progress hidden" id="progress">
-            <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
-            <div class="progress-text" id="progress-text">준비 중...</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 오른쪽: 공지 + 결과 -->
-      <div class="col-right">
-        <div class="notice-card">
-          <div class="card-title" style="color:#4A90D9;">📢 공지사항</div>
-          <textarea id="notice-input" placeholder="공지사항을 입력하세요. 저장하면 상단 헤더에 표시됩니다."></textarea>
-          <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
-            <button class="btn btn-sm btn-primary" onclick="saveNotice()">저장</button>
-            <button class="btn btn-sm" onclick="clearNotice()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">삭제</button>
-            <span id="notice-saved" class="hidden" style="font-size:12px;color:#2E9E5A;">✅ 저장됨</span>
-          </div>
-        </div>
-        <div class="card hidden" id="results-section">
-          <div class="card-title">✅ 생성 완료</div>
-          <div id="results-list"></div>
-        </div>
-      </div>
-
-    </div>
-  </div>
+# ============================================================
+# ★ 변형문제 (2회독) 라우터 등록 - 2026-05-13 추가
+# ============================================================
+try:
+    from variation.api import router as variation_router, download_router
+    app.include_router(variation_router)
+    app.include_router(download_router)
+    print("[variation] 변형문제 라우터 등록 완료")
+except Exception as e:
+    print(f"[variation] 라우터 등록 실패 (변형문제 기능 비활성): {e}")
 
 
-  <!-- ★ 비밀노트 탭 -->
-  <!-- ★ 변형문제 탭 (2회독) -->
-  <div id="tab-variation" class="hidden">
-    <div class="three-col">
-      <div style="grid-column: span 2;">
-        <div class="card">
-          <div class="card-title"> 지문 선택 (클릭 순서대로 출력됨)</div>
-          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-            <button class="btn btn-sm" onclick="vrExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
-            <button class="btn btn-sm" onclick="vrCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
-            <button class="btn btn-sm" onclick="vrClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
-            <span style="margin-left:auto;font-size:13px;color:#666;" id="vr-sel-count">0개 선택</span>
-          </div>
-          <div id="vr-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
-            <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-right">
-        <div class="vr-card card" style="border:1.5px solid #93b4d9;background:linear-gradient(135deg,#EBF0FA,#f5f8fc);">
-          <div class="card-title" style="color:#2E4E8F;"> 학교명</div>
-          <input type="text" id="vr-school-name" placeholder="레벨미업학원" value="레벨미업학원"
-            style="width:100%;padding:9px 12px;border:2px solid #93b4d9;border-radius:8px;font-size:13px;outline:none;">
-        </div>
+# ============================================================
+# ★ 서술형 종합 (2회독) 라우터 등록 - seosul 모듈
+# ============================================================
+try:
+    from seosul.api import router as seosul_router, download_router as seosul_dl
+    app.include_router(seosul_router)
+    app.include_router(seosul_dl)
+    print("[seosul] 서술형 종합 라우터 등록 완료")
+except Exception as e:
+    print(f"[seosul] 라우터 등록 실패 (서술형 기능 비활성): {e}")
 
-        <div class="vr-card card" style="border:1.5px solid #93b4d9;background:linear-gradient(135deg,#EBF0FA,#f5f8fc);">
-          <div class="card-title" style="color:#2E4E8F;"> 유형 선택 (다중 선택 가능)</div>
-          
-          <label style="display:flex;align-items:center;gap:8px;background:#dbeafe;border:1.5px solid #93c5fd;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;">
-            <input type="checkbox" id="vr-type-a" checked onchange="vrUpdateBtns()" style="width:18px;height:18px;">
-            <div style="flex:1;">
-              <div style="font-size:13px;font-weight:700;color:#1e40af;">유형 A — 종합 5문제</div>
-              <div style="font-size:11px;color:#666;">주제·순서·핵심빈칸·일치판단·빈칸영작</div>
-            </div>
-          </label>
-          
-          <label style="display:flex;align-items:center;gap:8px;background:#f3e8ff;border:1.5px solid #c4b5fd;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;">
-            <input type="checkbox" id="vr-type-b" checked onchange="vrUpdateBtns()" style="width:18px;height:18px;">
-            <div style="flex:1;">
-              <div style="font-size:13px;font-weight:700;color:#6d28d9;">유형 B — 위치·요약·서술 5문제</div>
-              <div style="font-size:11px;color:#666;">문장위치·주제·요약빈칸·요약영작·주제영작</div>
-            </div>
-          </label>
-        </div>
 
-        <div class="vr-card card" style="border:1.5px solid #93b4d9;background:linear-gradient(135deg,#EBF0FA,#f5f8fc);">
-          <div class="card-title" style="color:#2E4E8F;">출력 방식</div>
-          <label style="display:flex;align-items:center;gap:8px;padding:6px;cursor:pointer;">
-            <input type="radio" name="vr-mode" value="by-type" checked style="width:16px;height:16px;">
-            <div style="font-size:12px;">
-              <b>유형별 묶기</b><br>
-              <span style="color:#666;">A 지문1,2,3... → B 지문1,2,3...</span>
-            </div>
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;padding:6px;cursor:pointer;">
-            <input type="radio" name="vr-mode" value="by-passage" style="width:16px;height:16px;">
-            <div style="font-size:12px;">
-              <b>지문별 묶기</b><br>
-              <span style="color:#666;">지문1: A+B → 지문2: A+B...</span>
-            </div>
-          </label>
-        </div>
+# ============================================================
+# Auth
+# ============================================================
+def _token(pw: str) -> str:
+    return hashlib.sha256(f"{pw}_wb2026".encode()).hexdigest()[:32]
 
-        <div class="vr-card card" style="border:1.5px solid #93b4d9;background:linear-gradient(135deg,#EBF0FA,#f5f8fc);">
-          <button class="btn btn-primary" id="vr-btn-generate" onclick="doVariation()" disabled
-            style="width:100%;padding:14px;font-size:15px;font-weight:700;background:linear-gradient(135deg,#2E4E8F,#1f3766);color:white;border:none;border-radius:10px;cursor:pointer;">
-             변형문제 생성
-          </button>
-          <div class="progress hidden" id="vr-progress">
-            <div class="progress-bar" style="margin-top:8px;"><div class="progress-fill" id="vr-progress-fill" style="width:0%"></div></div>
-            <div class="progress-text" id="vr-progress-text">생성 중...</div>
-          </div>
-        </div>
+def _verify(r: Request) -> None:
+    got = r.headers.get("Authorization", "").replace("Bearer ", "")
+    if got != _token(APP_PASSWORD):
+        raise HTTPException(401)
 
-        <div class="card hidden" id="vr-results-section">
-          <div class="card-title">✅ 생성 완료</div>
-          <div id="vr-results-list"></div>
-        </div>
-      </div>
-    </div>
-  </div>
 
-<div id="tab-seosul" class="hidden">
-  <div class="three-col">
-    <div style="grid-column: span 2;">
-      <div class="card">
-        <div class="card-title"> 지문 선택 (클릭 순서대로 출력됨)</div>
-        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-          <button class="btn btn-sm" onclick="ssExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
-          <button class="btn btn-sm" onclick="ssCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
-          <button class="btn btn-sm" onclick="ssClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
-          <span style="margin-left:auto;font-size:13px;color:#666;" id="ss-sel-count">0개 선택</span>
-        </div>
-        <div id="ss-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
-          <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
-        </div>
-      </div>
-    </div>
-    <div class="col-right">
-      <div class="vr-card card" style="border:1.5px solid #93c5fd;background:linear-gradient(135deg,#eff6ff,#f5f3ff);">
-        <div class="card-title" style="color:#1d4ed8;"> 학교명</div>
-        <input type="text" id="ss-school-name" placeholder="레벨미업학원" value="레벨미업학원"
-          style="width:100%;padding:9px 12px;border:2px solid #93c5fd;border-radius:8px;font-size:13px;outline:none;">
-      </div>
+# ============================================================
+# DB Load/Save (Supabase first, local fallback)
+# ============================================================
+async def _load_db():
+    """Load passages - Supabase first, local fallback"""
+    # Supabase
+    try:
+        import supa
+        if supa._enabled():
+            rows = await supa.get_all_passages()
+            if isinstance(rows, list) and rows:
+                db = {"books": {}}
+                for r in rows:
+                    bk = r.get("book", "")
+                    unit = r.get("unit", "")
+                    pid = r.get("pid", "")
+                    if not (bk and unit and pid):
+                        continue
+                    db["books"].setdefault(bk, {"units": {}})
+                    db["books"][bk]["units"].setdefault(unit, {"passages": {}})
+                    db["books"][bk]["units"][unit]["passages"][pid] = {
+                        "title": r.get("title", pid),
+                        "text": r.get("passage_text", ""),
+                    }
+                return db
+    except Exception as e:
+        print(f"[supa] load error: {e}")
 
-      <div class="vr-card card" style="border:1.5px solid #93c5fd;background:linear-gradient(135deg,#eff6ff,#f5f3ff);">
-        <div class="card-title" style="color:#1d4ed8;"> 서술형 유형 (한 지문에 종합 출제 · 자유 조합)</div>
+    # Local fallback
+    if PASSAGES_FILE.exists():
+        try:
+            return json.loads(PASSAGES_FILE.read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"[local] passages.json parse error: {e}")
 
-        <label style="display:flex;align-items:center;gap:8px;background:#fef3e8;border:1.5px solid #fdba74;border-radius:8px;padding:9px;margin-bottom:7px;cursor:pointer;">
-          <input type="checkbox" id="ss-type-sa" checked onchange="ssUpdateBtns()" style="width:18px;height:18px;">
-          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#c2410c;">SA — 본문 빈칸 배열영작</div>
-            <div style="font-size:11px;color:#666;">보기 단어 배열, 어형변형 가능</div></div>
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;background:#fef3e8;border:1.5px solid #fdba74;border-radius:8px;padding:9px;margin-bottom:7px;cursor:pointer;">
-          <input type="checkbox" id="ss-type-sc" checked onchange="ssUpdateBtns()" style="width:18px;height:18px;">
-          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#c2410c;">SC — 요약문 빈칸 영작</div>
-            <div style="font-size:11px;color:#666;">변형 없이 배열, 구조 회전</div></div>
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;background:#dbeafe;border:1.5px solid #93c5fd;border-radius:8px;padding:9px;margin-bottom:7px;cursor:pointer;">
-          <input type="checkbox" id="ss-type-sd" checked onchange="ssUpdateBtns()" style="width:18px;height:18px;">
-          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#1e40af;">SD — 어법 틀린 곳 고치기</div>
-            <div style="font-size:11px;color:#666;">밑줄 없음, grammar_points 근거</div></div>
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;background:#f3e8ff;border:1.5px solid #c4b5fd;border-radius:8px;padding:9px;cursor:pointer;">
-          <input type="checkbox" id="ss-type-se" checked onchange="ssUpdateBtns()" style="width:18px;height:18px;">
-          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#6d28d9;">SE — 어휘 품사 변형 채우기</div>
-            <div style="font-size:11px;color:#666;">핵심어 4~5곳, 품사 변형</div></div>
-        </label>
-      </div>
+    return {"books": {}}
 
-      <div class="vr-card card" style="border:1.5px solid #93c5fd;background:linear-gradient(135deg,#eff6ff,#f5f3ff);">
-        <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;cursor:pointer;font-size:13px;color:#1e40af;">
-          <input type="checkbox" id="ss-answers-back" style="width:17px;height:17px;">
-          <span><b>정답을 맨 뒤로 모으기</b> — 모든 문제를 먼저 출력하고 정답·해설은 맨 뒤에 모음</span>
-        </label>
-        <button class="btn btn-primary" id="ss-btn-generate" onclick="doSeosul()" disabled
-          style="width:100%;padding:14px;font-size:15px;font-weight:700;background:linear-gradient(135deg,#2E4E8F,#1f3766);color:white;border:none;border-radius:10px;cursor:pointer;">
-           서술형 종합 생성
-        </button>
-        <div class="progress hidden" id="ss-progress">
-          <div class="progress-bar" style="margin-top:8px;"><div class="progress-fill" id="ss-progress-fill" style="width:0%"></div></div>
-          <div class="progress-text" id="ss-progress-text">생성 중...</div>
-        </div>
-      </div>
+async def _save_db(d):
+    """Save passages - local + Supabase (batch)"""
+    # local
+    PASSAGES_FILE.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    print("[save_db] local file written OK")
 
-      <div class="card hidden" id="ss-results-section">
-        <div class="card-title">✅ 생성 완료</div>
-        <div id="ss-results-list"></div>
-      </div>
-    </div>
-  </div>
-</div>
+    # supabase passages sync (best-effort)
+    try:
+        import supa
+        if not supa._enabled():
+            print("[save_db] Supabase not enabled")
+            return
 
-  <!-- 비밀노트 탭 -->
-  <div id="tab-secret" class="hidden">
-    <div class="three-col">
-      <div style="grid-column: span 2;">
-        <div class="card">
-          <div class="card-title"> 지문 선택 (중복 선택 가능)</div>
-          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-            <button class="btn btn-sm" onclick="snExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
-            <button class="btn btn-sm" onclick="snCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
-            <button class="btn btn-sm" onclick="snClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
-            <span style="margin-left:auto;font-size:13px;color:#666;" id="sn-sel-count">0개 선택</span>
-          </div>
-          <div id="sn-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
-            <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-right">
-        <div class="sn-card card">
-          <div class="card-title"> 학교명</div>
-          <input type="text" id="sn-school-name" placeholder="레벨미업학원" value="레벨미업학원"
-            style="width:100%;padding:9px 12px;border:2px solid #c4b5fd;border-radius:8px;font-size:13px;outline:none;">
-        </div>
-        <div class="sn-card card">
-          <div class="card-title"> 강사명 (선택)</div>
-          <input type="text" id="sn-teacher-name" placeholder="예: 홍길동"
-            style="width:100%;padding:9px 12px;border:2px solid #a5b4fc;border-radius:8px;font-size:13px;outline:none;">
-        </div>
-        <div class="sn-card card">
-          <div class="card-title"> 유형 선택</div>
-          <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:8px;margin-bottom:6px;">
-            <div style="font-size:11px;font-weight:700;color:#6d28d9;">유형 A — 반의어+요약</div>
-            <div style="font-size:10px;color:#666;">핵심어휘(반의어)·요약문·Paraphrase</div>
-          </div>
-          <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:8px;margin-bottom:6px;">
-            <div style="font-size:11px;font-weight:700;color:#7c3aed;">유형 B — 영어 중심</div>
-            <div style="font-size:10px;color:#666;">Summary · Vocabulary</div>
-          </div>
-          <div style="background:#e0f2fe;border:1px solid #7dd3fc;border-radius:8px;padding:8px;margin-bottom:10px;">
-            <div style="font-size:11px;font-weight:700;color:#0369a1;">유형 C — 고난이도유의어</div>
-            <div style="font-size:10px;color:#666;">핵심어휘(고난이도)·Paraphrase</div>
-          </div>
-          <div style="display:flex;gap:6px;">
-            <button class="sn-type-btn sn-type-a" id="sn-btn-a" onclick="doSecretNote('A')" disabled>A</button>
-            <button class="sn-type-btn sn-type-b" id="sn-btn-b" onclick="doSecretNote('B')" disabled>B</button>
-            <button class="sn-type-btn sn-type-c" id="sn-btn-c" onclick="doSecretNote('C')" disabled>C</button>
-          </div>
-          <div class="progress hidden" id="sn-progress">
-            <div class="progress-bar" style="margin-top:8px;"><div class="progress-fill" id="sn-progress-fill" style="width:0%"></div></div>
-            <div class="progress-text" id="sn-progress-text">생성 중...</div>
-          </div>
-        </div>
-        <div class="card hidden" id="sn-results-section">
-          <div class="card-title">✅ 생성 완료</div>
-          <div id="sn-results-list"></div>
-        </div>
-      </div>
-    </div>
-  </div>
+        rows = []
+        for bk, bd in d.get("books", {}).items():
+            for unit, ud in bd.get("units", {}).items():
+                for pid, pi in ud.get("passages", {}).items():
+                    rows.append({
+                        "book": bk,
+                        "unit": unit,
+                        "pid": pid,
+                        "title": pi.get("title", pid),
+                        "passage_text": pi.get("text", ""),
+                    })
 
-  <!-- ★ 원문 추출 탭 -->
-  <div id="tab-extract" class="hidden">
-    <div class="three-col">
-      <div style="grid-column: span 2;">
-        <div class="card">
-          <div class="card-title"> 지문 선택 (중복 선택 가능)</div>
-          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-            <button class="btn btn-sm" onclick="extExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
-            <button class="btn btn-sm" onclick="extCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
-            <button class="btn btn-sm" onclick="extClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
-            <span style="margin-left:auto;font-size:13px;color:#666;" id="ext-sel-count">0개 선택</span>
-          </div>
-          <div id="ext-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
-            <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-right">
-        <div class="card">
-          <div class="card-title"> 학교 이름</div>
-          <input type="text" id="ext-school-name" placeholder="예: 정명고2" style="width:100%;padding:10px 12px;border:2px solid #e5e7eb;border-radius:8px;font-size:14px;">
-        </div>
-        <div class="card">
-          <div class="card-title"> 옵션</div>
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
-            <input type="checkbox" id="ext-include-translation" style="width:16px;height:16px;">
-            해석 포함
-          </label>
-        </div>
-        <div class="card">
-          <div class="card-title"> HTML 추출</div>
-          <button class="btn btn-primary" style="width:100%;" onclick="extExtractHTML()">HTML 추출 (새 창) ↗</button>
-          <p style="font-size:12px;color:#666;margin-top:8px;text-align:center;">
-            새 창에서 <b>Ctrl+P</b> → PDF 저장
-          </p>
-        </div>
-        <div class="card" style="background:#EBF4FB;border:1.5px solid #4A90D9;">
-          <div class="card-title" style="color:#4A90D9;"> 원문 추출 안내</div>
-          <p style="font-size:12px;color:#555;line-height:1.7;">
-            여러 교재의 지문을 <b>중복 선택</b>하여<br>
-            한 번에 추출할 수 있습니다.<br><br>
-            <b>해석 포함</b> 체크 시<br>
-            영문 아래 한글 해석 표시
-          </p>
-        </div>
-      </div>
-    </div>
-  </div>
+        if not rows:
+            return
 
-  <!-- 업로드 탭 -->
-  <div id="tab-upload" class="hidden">
-    <div class="three-col">
-      <div>
-        <div class="card">
-          <div class="card-title"> 지문 업로드</div>
-          <p style="font-size:12px;color:#666;margin-bottom:8px;">###강 번호### 형식으로 입력하세요</p>
-          <input type="text" id="upload-book" list="book-list" placeholder="교재명 입력 (예: 26 수특 영어)" style="width:100%;padding:9px 12px;border:2px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px;">
-          <datalist id="book-list"></datalist>
-          <textarea id="upload-text" placeholder="###05강 01번###&#10;Many crises today...&#10;&#10;###05강 02번###&#10;Consumer surveys..."></textarea>
-          <button class="btn btn-orange" style="width:100%;margin-top:8px;" onclick="doUpload()">업로드</button>
-        </div>
-      </div>
-      <div style="grid-column: span 2;">
-        <div class="card">
-          <div class="card-title"> 현재 등록된 지문</div>
-          <div id="stats-list" style="font-size:13px;color:#666;">로딩 중...</div>
-          <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
-            <button class="btn btn-sm" onclick="syncSupabase()" style="background:#EBF4FB;color:#4A90D9;border:1px solid #4A90D9;">🔄 수파베이스 동기화</button>
-            <button class="btn btn-sm" onclick="clearCacheUI()" style="background:#FFF8F0;color:#E8833A;border:1px solid #E8833A;">🗑️ 캐시 초기화</button>
-          </div>
-          <div id="sync-status" style="font-size:12px;color:#666;margin-top:4px;"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+        batch_size = 50
+        for start in range(0, len(rows), batch_size):
+            batch = rows[start:start + batch_size]
+            print(f"[save_db] Supabase upsert batch {start//batch_size + 1} ({len(batch)} rows)")
+            await supa.upsert_passages_bulk(batch)
 
-<script>
-let TOKEN = localStorage.getItem('wb_token') || '';
-let PASSAGES_DATA = null;
-let selectedPassages = new Map();
-const API = '';
+        print(f"[save_db] Supabase sync done: {len(rows)} rows total")
+    except Exception as e:
+        print(f"[supa] save error: {e}")
 
-async function doLogin() {
-  const pw = document.getElementById('pw-input').value;
-  try {
-    const res = await fetch(API + '/api/auth', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({password: pw}) });
-    const data = await res.json();
-    if (data.ok) { TOKEN = data.token; localStorage.setItem('wb_token', TOKEN); showMain(); }
-    else throw new Error();
-  } catch(e) {
-    document.getElementById('login-error').textContent = '비밀번호가 틀렸습니다';
-    document.getElementById('login-error').classList.remove('hidden');
-  }
-}
 
-function doLogout() {
-  TOKEN = ''; localStorage.removeItem('wb_token');
-  document.getElementById('main-screen').classList.add('hidden');
-  document.getElementById('login-screen').classList.remove('hidden');
-  document.getElementById('pw-input').value = '';
-}
+# ============================================================
+# Cache Key / Cache Check
+# ============================================================
+def _ck(book: str, unit: str, pid: str) -> str:
+    """캐시 키: 책이름_과_번호_hash (한국어 포함, 가독성 우선)
+    예: 공통영어1비상홈_1과_01번_26c81a4e
+    """
+    raw = f"{book}_{unit}_{pid}"
+    h = hashlib.md5(raw.encode("utf-8")).hexdigest()[:8]
+    BAD = set(' ()[]/\\:*?"<>|')
+    def safe(s: str, maxlen: int = 20) -> str:
+        return "".join(ch for ch in s if ch not in BAD)[:maxlen]
+    return f"{safe(book,15)}_{safe(unit,8)}_{safe(pid,6)}_{h}"
 
-function headers() { return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN }; }
+async def _is_cached(ck: str) -> bool:
+    """Check cache - local first, then Supabase (count only)"""
+    # local cache: step*.json 8개 이상이면 ready로 간주
+    d = DATA_DIR / ck
+    if d.exists():
+        try:
+            if sum(1 for _ in d.glob("step*.json")) >= 8:
+                return True
+        except Exception:
+            pass
 
-async function showMain() {
-  document.getElementById('login-screen').classList.add('hidden');
-  document.getElementById('main-screen').classList.remove('hidden');
-  await Promise.all([loadPassages(), loadNotice()]);
-}
+    # supabase cache count (best-effort)
+    try:
+        import supa
+        if supa._enabled():
+            n = await supa.count_steps(ck)
+            if isinstance(n, int) and n >= 8:
+                return True
+    except Exception:
+        pass
 
-async function loadPassages() {
-  const prevBook = document.getElementById('sel-book').value;
-  const prevSelected = new Map(selectedPassages);
-  try {
-    const res = await fetch(API + '/api/passages', { headers: headers() });
-    if (res.status === 401) { doLogout(); return; }
-    PASSAGES_DATA = await res.json();
-    updateBookSelect();
-    if (prevBook) {
-      document.getElementById('sel-book').value = prevBook;
-      onBookChange();
-      prevSelected.forEach((val, key) => {
-        const cb = document.querySelector(`input[data-key="${key}"]`);
-        if (cb) { selectedPassages.set(key, val); cb.checked = true; }
-      });
-      updateSelCount(); updateGenerateBtn();
+    return False
+
+
+# ============================================================
+# Routes
+# ============================================================
+@app.get("/", response_class=HTMLResponse)
+async def index():
+    return Path("static/index.html").read_text(encoding="utf-8")
+
+
+@app.get("/api/version")
+async def version():
+    key = os.getenv("ANTHROPIC_API_KEY", "NOT_SET")
+
+    pf_exists = PASSAGES_FILE.exists()
+    passage_count = 0
+    supa_count = 0
+    supa_ok = False
+
+    try:
+        db = await _load_db()
+        for bk in db.get("books", {}).values():
+            for ud in bk.get("units", {}).values():
+                passage_count += len(ud.get("passages", {}))
+    except Exception:
+        pass
+
+    try:
+        import supa
+        if supa._enabled():
+            rows = await supa.get_all_passages()
+            supa_count = len(rows) if isinstance(rows, list) else 0
+            supa_ok = True
+    except Exception:
+        pass
+
+    cache_dirs = len(list(DATA_DIR.glob("*_*"))) if DATA_DIR.exists() else 0
+    return {
+        "version": APP_VERSION,
+        "key_ok": len(key) > 50,
+        "passages_file": str(PASSAGES_FILE),
+        "passages_exist": pf_exists,
+        "passage_count": passage_count,
+        "supa_ok": supa_ok,
+        "supa_count": supa_count,
+        "cache_dirs": cache_dirs,
     }
-    updateStats();
-  } catch(e) { console.error(e); }
-}
 
-// ============================================================
-// 공지사항
-// ============================================================
-async function loadNotice() {
-  try {
-    const res = await fetch(API + '/api/notice');
-    const data = await res.json();
-    const text = (data.text || '').trim();
-    document.getElementById('notice-input').value = text;
-    const el = document.getElementById('header-notice-text');
-    if (text) { el.textContent = '📢 ' + text; el.className = 'notice-text'; }
-    else { el.textContent = '공지사항 없음'; el.className = 'notice-empty'; }
-  } catch(e) {}
-}
 
-async function saveNotice() {
-  const text = document.getElementById('notice-input').value.trim();
-  try {
-    await fetch(API + '/api/notice', { method: 'POST', headers: headers(), body: JSON.stringify({ text }) });
-    const el = document.getElementById('header-notice-text');
-    if (text) { el.textContent = '📢 ' + text; el.className = 'notice-text'; }
-    else { el.textContent = '공지사항 없음'; el.className = 'notice-empty'; }
-    const saved = document.getElementById('notice-saved');
-    saved.classList.remove('hidden');
-    setTimeout(() => saved.classList.add('hidden'), 2000);
-  } catch(e) { toast('저장 실패'); }
-}
+@app.post("/api/auth")
+async def auth(request: Request):
+    body = await request.json()
+    if body.get("password") == APP_PASSWORD:
+        return {"ok": True, "token": _token(APP_PASSWORD)}
+    raise HTTPException(401, "wrong password")
 
-async function clearNotice() { document.getElementById('notice-input').value = ''; await saveNotice(); }
 
-// ============================================================
-// Book / Passage
-// ============================================================
-function updateBookSelect() {
-  const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
-  const sel = document.getElementById('sel-book');
-  const prev = sel.value;
-  sel.innerHTML = '<option value="">교재를 선택하세요</option>';
-  books.forEach(b => { sel.innerHTML += `<option value="${b}">${b}</option>`; });
-  if (prev && books.includes(prev)) sel.value = prev;
-}
+@app.get("/api/passages")
+async def list_passages(request: Request):
+    _verify(request)
+    db = await _load_db()
+    result = []
+    for bk, bd in db.get("books", {}).items():
+        for unit, ud in bd.get("units", {}).items():
+            for pid, pi in ud.get("passages", {}).items():
+                ck = _ck(bk, unit, pid)
+                result.append({
+                    "book": bk,
+                    "unit": unit,
+                    "id": pid,  # 프론트에서 p.id 로 씀
+                    "title": pi.get("title", pid),
+                    "passage_text": pi.get("text", ""),  # ★ 원문 추출용 추가
+                    "cache_status": "ready" if await _is_cached(ck) else "not_ready",
+                })
+    # unit(숫자 기준), pid(숫자 기준) 정렬
+    def _sort_key(p):
+        unit_num = int(re.search(r'\d+', p["unit"]).group()) if re.search(r'\d+', p["unit"]) else 0
+        pid_num = int(re.search(r'\d+', p["id"]).group()) if re.search(r'\d+', p["id"]) else 999
+        return (unit_num, pid_num)
+    result.sort(key=_sort_key)
+    return result
 
-function onBookChange() {
-  const book = document.getElementById('sel-book').value;
-  selectedPassages.clear();
-  const list = document.getElementById('passage-list');
-  if (!book) { list.innerHTML = '<div style="padding:20px;text-align:center;color:#999;">교재를 먼저 선택하세요</div>'; updateSelCount(); updateGenerateBtn(); return; }
-  const passages = PASSAGES_DATA.filter(p => p.book === book);
-  const units = [...new Set(passages.map(p => p.unit))];
-  units.sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0));
-  let html = '';
-  for (const unit of units) {
-    const up = passages.filter(p => p.unit === unit);
-    html += `<div class="unit-header" onclick="toggleUnit('${book}','${unit}')">📁 ${unit} (${up.length}개)<span class="unit-select">단원 전체선택</span></div>`;
-    for (const p of up) {
-      const key = `${p.book}|${p.unit}|${p.id}`;
-      html += `<div class="passage-item" style="position:relative;">
-        <div style="flex:1;display:flex;align-items:center;" onclick="togglePassage('${p.book}','${p.unit}','${p.id}',this.parentElement)">
-          <input type="checkbox" data-key="${key}">
-          <span class="title">${p.title}</span>
-          <span class="badge ${p.cache_status==='ready'?'badge-ready':'badge-pending'}">${p.cache_status==='ready'?'✅ 준비됨':'⏳ 미생성'}</span>
-        </div>
-        <button onclick="event.stopPropagation();deletePassage('${p.book}','${p.unit}','${p.id}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:13px;padding:3px 6px;opacity:0.5;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.5">✕</button>
-      </div>`;
+
+@app.post("/api/passages/upload")
+async def upload_passages(request: Request):
+    _verify(request)
+    body = await request.json()
+    book = (body.get("book") or "").strip()
+    text = body.get("text") or ""
+
+    if not book:
+        raise HTTPException(400, "book 필요")
+    if not text.strip():
+        raise HTTPException(400, "text 필요")
+
+    parts = re.split(r"###(.+?)###", text)
+    db = await _load_db()
+    db.setdefault("books", {})
+    db["books"].setdefault(book, {"units": {}})
+
+    count = 0
+    last_unit = None
+    last_pid = None
+
+    for i in range(1, len(parts), 2):
+        title = parts[i].strip()
+        passage = parts[i + 1].strip() if i + 1 < len(parts) else ""
+        if not passage:
+            continue
+
+        # ★ ###해석### → 이전 지문의 passage_text에 합침
+        if title == '해석' and last_unit and last_pid:
+            prev = db["books"][book]["units"][last_unit]["passages"].get(last_pid)
+            if prev:
+                prev["text"] = prev["text"] + "\n###해석###\n" + passage
+                print(f"[upload] 해석 → {last_unit}/{last_pid} 에 합침")
+            continue
+
+        # 다양한 교재 형식 매칭
+        m = re.match(
+            r"(\d+강|\d+과|Lesson\s*\d+|L\d+|Chapter\s*\d+|Unit\s*\d+|\d+단원|SL)\s*(.*)",
+            title,
+            re.IGNORECASE,
+        )
+        unit_name = m.group(1).strip() if m else "etc"
+        pid = m.group(2).strip() if (m and m.group(2).strip()) else title
+
+        db["books"][book]["units"].setdefault(unit_name, {"passages": {}})
+        db["books"][book]["units"][unit_name]["passages"][pid] = {"title": title, "text": passage}
+        last_unit = unit_name
+        last_pid = pid
+        count += 1
+
+    await _save_db(db)
+    print(f"[upload] saved ({count} passages) book='{book}'")
+    return {"ok": True, "count": count}
+
+
+@app.delete("/api/passages")
+async def delete_passage_api(request: Request):
+    """개별 지문 삭제"""
+    _verify(request)
+    body = await request.json()
+
+    # 프론트 deletePassage()는 {book, unit, pid}로 보냄
+    book = body.get("book")
+    unit = body.get("unit")
+    pid = body.get("pid")
+    if not all([book, unit, pid]):
+        raise HTTPException(400, "book, unit, pid 필요")
+
+    db = await _load_db()
+    try:
+        del db["books"][book]["units"][unit]["passages"][pid]
+        # 빈 단원/교재 정리
+        if not db["books"][book]["units"][unit]["passages"]:
+            del db["books"][book]["units"][unit]
+        if not db["books"][book]["units"]:
+            del db["books"][book]
+    except Exception:
+        raise HTTPException(404, "passage not found")
+
+    await _save_db(db)
+
+    # 로컬 캐시도 삭제
+    ck = _ck(book, unit, pid)
+    cache_dir = DATA_DIR / ck
+    if cache_dir.exists():
+        shutil.rmtree(cache_dir, ignore_errors=True)
+        print(f"[cache] deleted local cache dir {ck}")
+
+    # Supabase passage row 삭제 (best-effort)
+    try:
+        import supa
+        if supa._enabled():
+            await supa.delete_passage(book, unit, pid)
+    except Exception as e:
+        print(f"[supa] delete passage error: {e}")
+
+    return {"ok": True}
+
+
+@app.delete("/api/books")
+async def delete_book_api(request: Request):
+    """교재 전체 삭제"""
+    _verify(request)
+    body = await request.json()
+    book = body.get("book")
+    if not book:
+        raise HTTPException(400, "book 필요")
+
+    db = await _load_db()
+    if book not in db.get("books", {}):
+        raise HTTPException(404, "book not found")
+
+    # 로컬 캐시도 삭제
+    for unit, ud in db["books"][book].get("units", {}).items():
+        for pid in ud.get("passages", {}).keys():
+            ck = _ck(book, unit, pid)
+            cache_dir = DATA_DIR / ck
+            if cache_dir.exists():
+                shutil.rmtree(cache_dir, ignore_errors=True)
+    print(f"[cache] deleted all local cache for book '{book}'")
+
+    del db["books"][book]
+    await _save_db(db)
+
+    # Supabase에서도 삭제 (best-effort)
+    try:
+        import supa
+        if supa._enabled():
+            await supa.delete_book(book)
+    except Exception as e:
+        print(f"[supa] delete book error: {e}")
+
+    return {"ok": True}
+
+
+@app.post("/api/sync-supabase")
+async def sync_supabase(request: Request):
+    """로컬 DB를 수파베이스에 강제 동기화"""
+    _verify(request)
+    try:
+        import supa
+        if not supa._enabled():
+            return {"ok": False, "error": "Supabase not enabled"}
+
+        db = await _load_db()
+
+        rows = []
+        for bk, bd in db.get("books", {}).items():
+            for unit, ud in bd.get("units", {}).items():
+                for pid, pi in ud.get("passages", {}).items():
+                    rows.append({
+                        "book": bk,
+                        "unit": unit,
+                        "pid": pid,
+                        "title": pi.get("title", pid),
+                        "passage_text": pi.get("text", ""),
+                    })
+
+        if not rows:
+            return {"ok": True, "count": 0, "total": 0}
+
+        batch_size = 50
+        success = 0
+        for start in range(0, len(rows), batch_size):
+            batch = rows[start:start + batch_size]
+            result = await supa.upsert_passages_bulk(batch)
+            if isinstance(result, list):
+                success += len(result)
+
+        return {"ok": True, "count": success, "total": len(rows)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.post("/api/clear-cache")
+async def clear_cache(request: Request):
+    """특정 교재/지문의 step 캐시 삭제 (로컬 + Supabase step_cache 같이 삭제)"""
+    _verify(request)
+    body = await request.json()
+
+    book = body.get("book")
+    unit = body.get("unit")
+    pid = body.get("passage_id")
+    scope = body.get("scope", "all")  # "all" = 교재 전체, "passage" = 특정 지문
+
+    deleted_local = 0
+    deleted_supa_targets = 0  # 몇 개 cache_key를 대상으로 supa delete 요청했는지(카운트용)
+
+    # supabase helper (없어도 서버가 죽지 않게)
+    try:
+        import supa
+    except Exception:
+        supa = None
+
+    if scope == "passage" and all([book, unit, pid]):
+        ck = _ck(book, unit, pid)
+
+        # 로컬 step*.json 삭제
+        cache_dir = DATA_DIR / ck
+        if cache_dir.exists():
+            for f in cache_dir.glob("step*.json"):
+                try:
+                    f.unlink()
+                    deleted_local += 1
+                except Exception:
+                    pass
+            print(f"[cache] deleted {deleted_local} local cache files for {ck}")
+
+        # Supabase step_cache 삭제
+        try:
+            if supa and supa._enabled():
+                await supa.delete_steps_by_cache_key(ck)
+                deleted_supa_targets += 1
+                print(f"[cache] deleted supabase step_cache for {ck}")
+        except Exception as e:
+            print(f"[cache] supabase delete error: {e}")
+
+    elif scope == "all" and book:
+        db = await _load_db()
+        if book in db.get("books", {}):
+            for u, ud in db["books"][book].get("units", {}).items():
+                for p in ud.get("passages", {}).keys():
+                    ck = _ck(book, u, p)
+
+                    # 로컬 삭제
+                    cache_dir = DATA_DIR / ck
+                    if cache_dir.exists():
+                        for f in cache_dir.glob("step*.json"):
+                            try:
+                                f.unlink()
+                                deleted_local += 1
+                            except Exception:
+                                pass
+
+                    # Supabase 삭제
+                    try:
+                        if supa and supa._enabled():
+                            await supa.delete_steps_by_cache_key(ck)
+                            deleted_supa_targets += 1
+                    except Exception as e:
+                        print(f"[cache] supabase delete error: {e}")
+
+        print(f"[cache] deleted {deleted_local} local cache files for book '{book}'")
+        if deleted_supa_targets:
+            print(f"[cache] supabase step_cache delete targets: {deleted_supa_targets}")
+
+    else:
+        raise HTTPException(400, "book 필요")
+
+    return {
+        "ok": True,
+        "deleted": deleted_local,
+        "supa_targets": deleted_supa_targets,
     }
-  }
-  list.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
-  updateSelCount(); updateGenerateBtn();
-}
 
-function togglePassage(book, unit, id, el) {
-  const key = `${book}|${unit}|${id}`;
-  const cb = el.querySelector('input[type="checkbox"]');
-  if (selectedPassages.has(key)) { selectedPassages.delete(key); cb.checked = false; }
-  else { selectedPassages.set(key, {book,unit,id}); cb.checked = true; }
-  updateSelCount(); updateGenerateBtn();
-}
 
-function toggleUnit(book, unit) {
-  const up = PASSAGES_DATA.filter(p => p.book===book && p.unit===unit);
-  const allSel = up.every(p => selectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
-  up.forEach(p => {
-    const key = `${p.book}|${p.unit}|${p.id}`;
-    if (allSel) { selectedPassages.delete(key); if(cb) cb.checked=false; }
-    else { selectedPassages.set(key,{book:p.book,unit:p.unit,id:p.id}); if(cb) cb.checked=true; }
-  });
-  updateSelCount(); updateGenerateBtn();
-}
+@app.post("/api/generate")
+async def generate(request: Request):
+    _verify(request)
+    body = await request.json()
 
-function selectAll() {
-  const book = document.getElementById('sel-book').value;
-  if (!book) return;
-  PASSAGES_DATA.filter(p => p.book===book).forEach(p => {
-    const key = `${p.book}|${p.unit}|${p.id}`;
-    selectedPassages.set(key,{book:p.book,unit:p.unit,id:p.id});
-    const cb = document.querySelector(`input[data-key="${key}"]`);
-    if(cb) cb.checked=true;
-  });
-  updateSelCount(); updateGenerateBtn();
-}
+    book = body.get("book")
+    unit = body.get("unit")
+    pid = body.get("passage_id")
+    levels = body.get("levels")
 
-function selectNone() {
-  selectedPassages.clear();
-  document.querySelectorAll('.passage-item input').forEach(cb => cb.checked=false);
-  updateSelCount(); updateGenerateBtn();
-}
+    if not all([book, unit, pid]):
+        raise HTTPException(400, "book, unit, passage_id 필요")
 
-function updateSelCount() { document.getElementById('sel-count').textContent = `${selectedPassages.size}개 선택`; }
+    db = await _load_db()
 
-// ============================================================
-// Levels
-// ============================================================
-function toggleLevel(el) { el.classList.toggle('selected'); updateGenerateBtn(); }
-function presetLevels(levels) {
-  document.querySelectorAll('.level-btn').forEach(el => el.classList.toggle('selected', levels.includes(parseInt(el.dataset.level))));
-  updateGenerateBtn();
-}
-function getSelectedLevels() { return [...document.querySelectorAll('.level-btn.selected')].map(el => parseInt(el.dataset.level)); }
+    try:
+        pinfo = db["books"][book]["units"][unit]["passages"][pid]
+    except Exception as e:
+        print(f"[generate] passage not found: {e}")
+        raise HTTPException(404, f"passage not found: book={book}, unit={unit}, pid={pid}")
 
-// ============================================================
-// Generate
-// ============================================================
-function updateGenerateBtn() {
-  const btn = document.getElementById('btn-generate');
-  const levels = getSelectedLevels();
-  btn.disabled = selectedPassages.size===0 || levels.length===0;
-  btn.textContent = selectedPassages.size>0 ? `워크북 생성하기 (${selectedPassages.size}개 지문)` : '워크북 생성하기';
-}
+    passage_text = pinfo.get("text", "")
+    title = pinfo.get("title", pid)
 
-async function doGenerate() {
-  const levels = getSelectedLevels();
-  const passages = [...selectedPassages.values()];
-  const btn = document.getElementById('btn-generate');
-  const progress = document.getElementById('progress');
-  const progressFill = document.getElementById('progress-fill');
-  const progressText = document.getElementById('progress-text');
-  const resultsSection = document.getElementById('results-section');
-  const resultsList = document.getElementById('results-list');
-  btn.disabled=true; progress.classList.remove('hidden');
-  resultsSection.classList.add('hidden'); resultsList.innerHTML='';
-  let completed=0; const results=[];
-  for (const p of passages) {
-    progressText.textContent = `생성 중... ${completed+1}/${passages.length} — ${p.unit} ${p.id}`;
-    progressFill.style.width = `${(completed/passages.length)*100}%`;
-    try {
-      const res = await fetch(API+'/api/generate', { method:'POST', headers:headers(), body:JSON.stringify({book:p.book,unit:p.unit,passage_id:p.id,levels:levels.length===11?null:levels}) });
-      const data = await res.json();
-      if (data.ok) results.push({id:`${p.unit} ${p.id}`,status:'success',html:data.html,filename:data.filename});
-      else results.push({id:`${p.unit} ${p.id}`,status:'error',error:data.detail});
-    } catch(e) { results.push({id:`${p.unit} ${p.id}`,status:'error',error:e.message}); }
-    completed++;
-    progressFill.style.width = `${(completed/passages.length)*100}%`;
-  }
-  progressText.textContent = `완료! ${results.filter(r=>r.status==='success').length}/${passages.length} 성공`;
-  resultsSection.classList.remove('hidden');
-  const successResults = results.filter(r=>r.status==='success');
-  window._lastResults = successResults;
-  let mergeBtn = successResults.length>1 ? `<div style="margin-bottom:8px;"><button class="btn btn-orange" style="width:100%;" onclick="downloadMerged()">📦 합본 다운로드 (${successResults.length}개)</button></div>` : '';
-  resultsList.innerHTML = mergeBtn + results.map(r=>`
-    <div class="result-item">
-      <span>${r.status==='success'?'✅':'❌'} ${r.id}</span>
-      ${r.status==='success' ? `<button class="btn btn-sm btn-primary" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')">📥 다운로드</button>` : `<span style="color:#dc2626;font-size:12px;">${r.error}</span>`}
-    </div>`).join('');
-  btn.disabled=false;
-  await loadPassages();
-}
+    m = re.match(r"(\d+)", unit or "")
+    lesson_num = m.group(1) if m else "00"
 
-function downloadHtml(encodedHtml, filename) {
-  const html = decodeURIComponent(encodedHtml);
-  const blob = new Blob([html],{type:'text/html; charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url; a.download=filename; a.click();
-  URL.revokeObjectURL(url);
-}
+    ck = _ck(book, unit, pid)
 
-function downloadMerged() {
-  if (!window._lastResults||!window._lastResults.length) return;
-  const css = (window._lastResults[0].html.match(/<style[^>]*>([\s\S]*?)<\/style>/)||['',''])[1];
-  const bodies = window._lastResults.map(r=>(r.html.match(/<body[^>]*>([\s\S]*?)<\/body>/)||['',r.html])[1]);
-  const unit = document.getElementById('sel-book').value||'합본';
-  const merged = `<!DOCTYPE html>\n<html lang="ko">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>${unit} 합본</title>\n<style>\nhtml{-webkit-text-size-adjust:100%;}\nbody{margin:0;}\n${css}\n</style>\n</head>\n<body>\n${bodies.join('\n')}\n</body>\n</html>`;
-  const blob = new Blob([merged],{type:'text/html; charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url; a.download=`${unit}_합본_워크북.html`; a.click();
-  URL.revokeObjectURL(url);
-}
+    try:
+        import pipeline as pl
 
-// ============================================================
-// Delete
-// ============================================================
-async function deleteBook() {
-  const book = document.getElementById('sel-book').value;
-  if (!book) { toast('삭제할 교재를 선택하세요'); return; }
-  if (!confirm(`"${book}" 교재의 모든 지문을 삭제하시겠습니까?`)) return;
-  try {
-    const res = await fetch(API+'/api/books',{method:'DELETE',headers:headers(),body:JSON.stringify({book})});
-    const data = await res.json();
-    if (data.ok) { toast(`✅ "${book}" 삭제 완료`); selectedPassages.clear(); await loadPassages(); onBookChange(); }
-  } catch(e) { toast('삭제 실패'); }
-}
+        pl.DATA_DIR = DATA_DIR
+        pl.TEMPLATE_DIR = Path(".")
+        pl.OUTPUT_DIR = Path("output")
+        pl.OUTPUT_DIR.mkdir(exist_ok=True)
 
-async function deletePassage(book, unit, pid) {
-  if (!confirm(`"${pid}" 지문을 삭제하시겠습니까?`)) return;
-  try {
-    const res = await fetch(API+'/api/passages',{method:'DELETE',headers:headers(),body:JSON.stringify({book,unit,pid})});
-    const data = await res.json();
-    if (data.ok) {
-      toast('✅ 지문 삭제 완료');
-      selectedPassages.delete(`${book}|${unit}|${pid}`);
-      await loadPassages();
-      if (document.getElementById('sel-book').value) onBookChange();
-    }
-  } catch(e) { toast('삭제 실패'); }
-}
-
-// ============================================================
-// Upload
-// ============================================================
-async function doUpload() {
-  const book = document.getElementById('upload-book').value;
-  const text = document.getElementById('upload-text').value;
-  if (!book.trim()) { toast('교재명을 입력하세요'); return; }
-  if (!text.trim()) { toast('지문 텍스트를 입력하세요'); return; }
-  try {
-    const res = await fetch(API+'/api/passages/upload',{method:'POST',headers:headers(),body:JSON.stringify({book,text})});
-    const data = await res.json();
-    if (data.ok) { toast(`✅ ${data.count}개 지문 업로드 완료!`); document.getElementById('upload-text').value=''; await loadPassages(); }
-  } catch(e) { toast('업로드 실패'); }
-}
-
-function updateStats() {
-  if (!PASSAGES_DATA) return;
-  const books = {};
-  PASSAGES_DATA.forEach(p => { if(!books[p.book]) books[p.book]={total:0,ready:0}; books[p.book].total++; if(p.cache_status==='ready') books[p.book].ready++; });
-  document.getElementById('book-list').innerHTML = Object.keys(books).map(b=>`<option value="${b}">`).join('');
-  const el = document.getElementById('stats-list');
-  if (!Object.keys(books).length) { el.innerHTML='<p>등록된 지문이 없습니다.</p>'; return; }
-  el.innerHTML = Object.entries(books).map(([n,i])=>`<p style="margin-bottom:4px;"><strong>${n}</strong>: ${i.total}개 지문 (${i.ready}개 생성완료)</p>`).join('');
-}
-
-async function syncSupabase() {
-  const status = document.getElementById('sync-status');
-  status.textContent=' 동기화 중...'; status.style.color='#4A90D9';
-  try {
-    const res = await fetch(API+'/api/sync-supabase',{method:'POST',headers:headers()});
-    const data = await res.json();
-    if(data.ok){status.textContent=`✅ 완료! ${data.count}/${data.total}개`;status.style.color='#2E9E5A';}
-    else{status.textContent=`❌ ${data.error}`;status.style.color='#dc2626';}
-  } catch(e){status.textContent=`❌ ${e.message}`;status.style.color='#dc2626';}
-}
-
-async function clearPassageCache() {
-  const passages = [...selectedPassages.values()];
-  if (!passages.length) { alert('지문을 먼저 선택해주세요.'); return; }
-  if (!confirm(`${passages.length}개 지문의 캐시를 삭제하시겠습니까?`)) return;
-  let total=0;
-  for (const p of passages) {
-    try {
-      const res = await fetch(API+'/api/clear-cache',{method:'POST',headers:headers(),body:JSON.stringify({book:p.book,unit:p.unit,passage_id:p.id,scope:'passage'})});
-      const data = await res.json();
-      if(data.ok) total+=data.deleted;
-    } catch(e){}
-  }
-  alert(`✅ 캐시 삭제 완료! ${total}개 삭제됨.`);
-}
-
-async function clearCacheUI() {
-  const book = document.getElementById('sel-book').value;
-  if (!book) { alert('워크북 생성 탭에서 교재를 선택하세요.'); return; }
-  if (!confirm(`"${book}" 교재의 캐시를 초기화하시겠습니까?`)) return;
-  const status = document.getElementById('sync-status');
-  status.textContent='🗑️ 초기화 중...'; status.style.color='#E8833A';
-  try {
-    const res = await fetch(API+'/api/clear-cache',{method:'POST',headers:headers(),body:JSON.stringify({book,scope:'all'})});
-    const data = await res.json();
-    if(data.ok){status.textContent=`✅ 완료! ${data.deleted}개 삭제됨`;status.style.color='#2E9E5A';}
-    else{status.textContent=`❌ ${data.error}`;status.style.color='#dc2626';}
-  } catch(e){status.textContent=`❌ ${e.message}`;status.style.color='#dc2626';}
-}
-
-function switchTab(tab, el) {
-  document.querySelectorAll('.header-tab').forEach(t => t.classList.remove('active'));
-  if(el) el.classList.add('active');
-  document.getElementById('tab-preclass').classList.toggle('hidden', tab!=='preclass');
-  document.getElementById('tab-sheet').classList.toggle('hidden', tab!=='sheet');
-  document.getElementById('tab-generate').classList.toggle('hidden', tab!=='generate');
-  document.getElementById('tab-variation').classList.toggle('hidden', tab!=='variation');
-  document.getElementById('tab-seosul').classList.toggle('hidden', tab!=='seosul');
-  document.getElementById('tab-upload').classList.toggle('hidden', tab!=='upload');
-  document.getElementById('tab-secret').classList.toggle('hidden', tab!=='secret');
-  document.getElementById('tab-extract').classList.toggle('hidden', tab!=='extract');
-  if(tab==='preclass') pcRefreshBooks();
-  if(tab==='sheet') asRefreshBooks();
-  if(tab==='secret') snRefreshBooks();
-  if(tab==='extract') extRefreshBooks();
-  if(tab==='variation') vrRefreshBooks();
-  if(tab==='seosul') ssRefreshBooks();
-}
-
-// ============================================================
-// ★ 서술형 종합 (2회독) - seosul
-// ============================================================
-let ssSelectedPassages = new Map();   // 클릭 순서 유지
-let ssExpandedBooks = new Set();
-
-function ssRefreshBooks(){ if(PASSAGES_DATA) ssRenderBookList(); }
-
-function ssRenderBookList(){
-  const books = {};
-  PASSAGES_DATA.forEach(p => {
-    (books[p.book] = books[p.book] || {});
-    (books[p.book][p.unit] = books[p.book][p.unit] || []).push(p);
-  });
-  let html = '';
-  for(const book of Object.keys(books).sort()){
-    const units = Object.keys(books[book]).sort((a,b)=>(parseInt(a.match(/\d+/)?.[0])||0)-(parseInt(b.match(/\d+/)?.[0])||0)||a.localeCompare(b));
-    const all = Object.values(books[book]).flat();
-    const sel = all.filter(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
-    const exp = ssExpandedBooks.has(book);
-    html += `<div class="ext-book-item ${exp?'expanded':''}" onclick="ssToggleExpand('${book}')">
-      <span style="color:#666;font-size:12px;">${exp?'▼':'▶'}</span>
-      <input type="checkbox" ${sel===all.length&&all.length?'checked':''} onclick="event.stopPropagation();ssToggleBook('${book}')" style="width:15px;height:15px;">
-      <span style="flex:1;font-size:13px;font-weight:500;">${book}</span>
-      <span class="ext-count-badge">${sel}/${all.length}</span></div>`;
-    if(exp){
-      for(const unit of units){
-        const ups = books[book][unit];
-        const usel = ups.filter(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
-        html += `<div class="ext-unit-row"><div class="ext-unit-header">
-          <input type="checkbox" ${usel===ups.length?'checked':''} onclick="ssToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
-          <span style="font-size:13px;font-weight:600;color:#1d4ed8;">${unit}</span>
-          <span style="font-size:11px;color:#999;">(${usel}/${ups.length})</span></div><div class="ext-pid-list">`;
-        for(const p of ups){
-          const key = `${p.book}|${p.unit}|${p.id}`;
-          const is = ssSelectedPassages.has(key);
-          let ord = is ? `<span style="background:#2563eb;color:#fff;font-weight:700;padding:0 4px;border-radius:8px;font-size:9px;margin-right:2px;">${[...ssSelectedPassages.keys()].indexOf(key)+1}</span>`:'';
-          html += `<label class="ext-pid-chip ${is?'selected':''}" style="${is?'background:#dbeafe;border-color:#60a5fa;':''}">
-            <input type="checkbox" ${is?'checked':''} onchange="ssTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">${ord}${p.id}</label>`;
+        meta = {
+            "lesson_num": lesson_num,
+            "lesson_n": lesson_num,
+            "challenge_title": title,
+            "subject": book,
         }
-        html += '</div></div>';
-      }
-    }
-  }
-  document.getElementById('ss-book-list').innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
-  ssUpdateCount(); ssUpdateBtns();
-}
-function ssToggleExpand(b){ ssExpandedBooks.has(b)?ssExpandedBooks.delete(b):ssExpandedBooks.add(b); ssRenderBookList(); }
-function ssTogglePassage(book,unit,id){ const k=`${book}|${unit}|${id}`; ssSelectedPassages.has(k)?ssSelectedPassages.delete(k):ssSelectedPassages.set(k,{book,unit,id}); ssRenderBookList(); }
-function ssToggleUnit(book,unit){ const ups=PASSAGES_DATA.filter(p=>p.book===book&&p.unit===unit); const allSel=ups.every(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)); ups.forEach(p=>{const k=`${p.book}|${p.unit}|${p.id}`; allSel?ssSelectedPassages.delete(k):ssSelectedPassages.set(k,{book:p.book,unit:p.unit,id:p.id});}); ssRenderBookList(); }
-function ssToggleBook(book){ const bp=PASSAGES_DATA.filter(p=>p.book===book); const allSel=bp.every(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)); bp.forEach(p=>{const k=`${p.book}|${p.unit}|${p.id}`; allSel?ssSelectedPassages.delete(k):ssSelectedPassages.set(k,{book:p.book,unit:p.unit,id:p.id});}); ssRenderBookList(); }
-function ssExpandAll(){ PASSAGES_DATA.forEach(p=>ssExpandedBooks.add(p.book)); ssRenderBookList(); }
-function ssCollapseAll(){ ssExpandedBooks.clear(); ssRenderBookList(); }
-function ssClearSelection(){ ssSelectedPassages.clear(); ssRenderBookList(); }
-function ssUpdateCount(){ document.getElementById('ss-sel-count').textContent = `${ssSelectedPassages.size}개 선택`; }
-function ssUpdateBtns(){
-  const types = ['sa','sc','sd','se'].filter(t=>document.getElementById('ss-type-'+t).checked);
-  document.getElementById('ss-btn-generate').disabled = !(ssSelectedPassages.size && types.length);
-}
 
-async function doSeosul(){
-  const passages = [...ssSelectedPassages.values()];
-  if(!passages.length){ toast('지문을 선택하세요'); return; }
-  const types = [];
-  if(document.getElementById('ss-type-sa').checked) types.push('SA');
-  if(document.getElementById('ss-type-sc').checked) types.push('SC');
-  if(document.getElementById('ss-type-sd').checked) types.push('SD');
-  if(document.getElementById('ss-type-se').checked) types.push('SE');
-  if(!types.length){ toast('유형을 1개 이상 선택하세요'); return; }
-  const schoolName = document.getElementById('ss-school-name').value.trim() || '레벨미업학원';
+        result_path = pl.process_passage(
+            passage=passage_text,
+            meta=meta,
+            passage_id=ck,
+            levels=levels,
+        )
 
-  const btn=document.getElementById('ss-btn-generate'), progress=document.getElementById('ss-progress');
-  const fill=document.getElementById('ss-progress-fill'), ptext=document.getElementById('ss-progress-text');
-  const rsec=document.getElementById('ss-results-section'), rlist=document.getElementById('ss-results-list');
-  btn.disabled=true; progress.classList.remove('hidden'); rsec.classList.add('hidden'); rlist.innerHTML='';
-  ptext.textContent = `생성 중... (지문 ${passages.length}개 × 유형 ${types.length}개)`;
+        if result_path:
+            hp = result_path.with_suffix(".html") if result_path.suffix != ".html" else result_path
+            if hp.exists():
+                return {"ok": True, "html": hp.read_text(encoding="utf-8"), "filename": hp.name}
 
-  try{
-    const res = await fetch(API+'/api/seosul', {
-      method:'POST', headers:{...headers(),'Content-Type':'application/json'},
-      body: JSON.stringify({ passages, types, school_name: schoolName, answers_at_back: document.getElementById('ss-answers-back').checked })
-    });
-    if(!res.ok) throw new Error(await res.text() || 'API 오류');
-    const data = await res.json();
-    fill.style.width='100%'; ptext.textContent = `✓ 완료 (지문 ${data.passages_generated}개)`;
-    rsec.classList.remove('hidden');
-    const url=data.html_url, dl=data.download_url;
-    let h = `<div class="sn-result-item"><span> 서술형 종합 (문제+정답)</span>
-      <span style="display:flex;gap:6px;">
-        <a href="${dl}" download class="btn btn-sm" style="background:#6b7280;color:white;"> 다운로드</a>
-        <a href="${url}" target="_blank" class="btn btn-sm btn-primary"> 열기</a></span></div>
-      <div style="font-size:11px;color:#666;padding:8px;background:#eff6ff;border-radius:6px;margin-top:8px;">
-        💡 '열기' 후 Ctrl+P (Mac: Cmd+P)로 인쇄/PDF 저장</div>`;
-    if(data.warnings && data.warnings.length){
-      h += `<div style="margin-top:10px;padding:8px;background:#fee;border:1px solid #fca5a5;border-radius:6px;font-size:11px;color:#991b1b;">
-        ❌ 생성 실패 항목:<br>${data.warnings.map(w=>'• '+w).join('<br>')}</div>`;
-    }
-    rlist.innerHTML=h;
-    try{ window.open(url,'_blank'); }catch(e){}
-    toast('서술형 종합 생성 완료!');
-  }catch(e){ ptext.textContent='❌ '+(e.message||'생성 실패'); toast('생성 실패: '+(e.message||'')); }
-  finally{ setTimeout(()=>{ progress.classList.add('hidden'); fill.style.width='0%'; ssUpdateBtns(); },2000); }
-}
+        raise HTTPException(500, "generation failed")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
-function toast(msg) {
-  const el = document.createElement('div'); el.className='toast'; el.textContent=msg;
-  document.body.appendChild(el); setTimeout(()=>el.remove(),3000);
-}
 
-document.getElementById('pw-input').addEventListener('keypress', e => { if(e.key==='Enter') doLogin(); });
 
-(async () => {
-  if (TOKEN) {
-    try {
-      const res = await fetch(API+'/api/passages',{headers:headers()});
-      if(res.ok){showMain();return;}
-    } catch(e){}
-  }
-  document.getElementById('login-screen').classList.remove('hidden');
-})();
+@app.get("/api/notice")
+async def get_notice():
+    """공지사항 조회"""
+    import json
+    notice_file = DATA_DIR / "notice.json"
+    if notice_file.exists():
+        return json.loads(notice_file.read_text(encoding="utf-8"))
+    return {"text": "", "updated_at": ""}
 
-// ============================================================
-// ★ 비밀노트 - 추가 코드 (중복 선택 UI)
-// ============================================================
-let snSelectedPassages = new Map();
-let snExpandedBooks = new Set();
+@app.post("/api/notice")
+async def set_notice(request: Request):
+    """공지사항 저장"""
+    _verify(request)
+    import json
+    from datetime import datetime
+    body = await request.json()
+    text = body.get("text", "").strip()
+    data = {"text": text, "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M")}
+    (DATA_DIR / "notice.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return {"ok": True}
 
-function snRefreshBooks() {
-  if (!PASSAGES_DATA) return;
-  snRenderBookList();
-}
+# ============================================================
+# ★ 비밀노트 엔드포인트 - 추가 코드
+# ============================================================
+@app.post("/api/secret-note")
+async def secret_note(request: Request):
+    """비밀노트 / 0회독 생성: type A (한국어 종합) / B (영어 중심) / C (어휘+분석) / D (0회독 수업 전 4페이지 분석)
+    
+    ★ 에러 시 JSON 응답으로 반환 (Internal Server Error HTML 방지) — 프론트에 명확한 에러 메시지 표시
+    """
+    _verify(request)
+    try:
+        body = await request.json()
+        return await _secret_note_impl(body)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        # 서버 로그 — 어디서 깨졌는지 정확히 파악용
+        print(f"[/api/secret-note ERROR] {type(e).__name__}: {e}\n{tb}", flush=True)
+        # 프론트 — 한 줄 요약만
+        last_line = tb.strip().splitlines()[-1] if tb else ""
+        return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:200]} ({last_line[:150]})"}
 
-function snRenderBookList() {
-  const books = {};
-  PASSAGES_DATA.forEach(p => {
-    if (!books[p.book]) books[p.book] = {};
-    if (!books[p.book][p.unit]) books[p.book][p.unit] = [];
-    books[p.book][p.unit].push(p);
-  });
 
-  const bookNames = Object.keys(books).sort();
-  const container = document.getElementById('sn-book-list');
-  
-  let html = '';
-  for (const book of bookNames) {
-    const units = Object.keys(books[book]).sort((a,b) => {
-      const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
-      const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
-      return numA - numB || a.localeCompare(b);
-    });
-    const bookPassages = Object.values(books[book]).flat();
-    const selectedCount = bookPassages.filter(p => snSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
-    const isExpanded = snExpandedBooks.has(book);
-    const allSelected = selectedCount === bookPassages.length && bookPassages.length > 0;
+async def _secret_note_impl(body: dict):
+    """secret-note 실제 처리 로직 (예외 처리 분리)"""
+    note_type    = (body.get("type") or "B").upper()          # "A", "B", "C", or "D"
+    school_name  = (body.get("school_name") or "레벨미업학원").strip()
+    teacher_name = (body.get("teacher_name") or "").strip()   # 강사명 (선택)
+    passages_in  = body.get("passages") or []
+    # ★ 0회독(D) 전용 옵션: "preclass"(기본·0회독만) / "both"(0회독+순서배열) / "sentence_order"(순서배열만)
+    pc_mode      = (body.get("mode") or "preclass").lower()
+    # passages_in: [{"book":"...", "unit":"...", "id":"..."}]
 
-    html += `<div class="ext-book-item ${isExpanded?'expanded':''}" onclick="snToggleExpand('${book}')">
-      <span style="color:#666;font-size:12px;">${isExpanded?'▼':'▶'}</span>
-      <input type="checkbox" ${allSelected?'checked':''} onclick="event.stopPropagation();snToggleBook('${book}')" style="width:15px;height:15px;">
-      <span style="flex:1;font-size:13px;font-weight:500;">${book}</span>
-      <span class="ext-count-badge">${selectedCount}/${bookPassages.length}</span>
-    </div>`;
+    if not passages_in:
+        raise HTTPException(400, "passages 필요")
 
-    if (isExpanded) {
-      for (const unit of units) {
-        const unitPassages = books[book][unit];
-        const unitSelectedCount = unitPassages.filter(p => snSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
-        const unitAllSelected = unitSelectedCount === unitPassages.length;
+    db = await _load_db()
 
-        html += `<div class="ext-unit-row">
-          <div class="ext-unit-header">
-            <input type="checkbox" ${unitAllSelected?'checked':''} onclick="snToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
-            <span style="font-size:13px;font-weight:600;color:#6d28d9;">${unit}</span>
-            <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
-          </div>
-          <div class="ext-pid-list">`;
-        
-        for (const p of unitPassages) {
-          const key = `${p.book}|${p.unit}|${p.id}`;
-          const isSelected = snSelectedPassages.has(key);
-          html += `<label class="ext-pid-chip ${isSelected?'selected':''}">
-            <input type="checkbox" ${isSelected?'checked':''} onchange="snTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
-            ${p.id}
-          </label>`;
+    import pipeline as pl
+    pl.DATA_DIR = DATA_DIR
+    pl.TEMPLATE_DIR = Path(".")
+    import topic_background as tbk   # ★ 수업배경자료 렌더러
+    import tb_generate as tbg          # ★ 수업배경자료 자동 생성(web_search)
+
+    passages_data = []
+    for p in passages_in:
+        book, unit, pid = p.get("book"), p.get("unit"), p.get("id")
+        if not all([book, unit, pid]):
+            continue
+        try:
+            pinfo = db["books"][book]["units"][unit]["passages"][pid]
+        except Exception:
+            continue
+
+        raw_text = pinfo.get("text", "")
+        label = f"{unit} {pid}"
+        ck = _ck(book, unit, pid)
+        passage_dir = DATA_DIR / ck
+
+        # ###해석### 구분자로 영어만 추출 (변형 없이 그대로)
+        if "###해석###" in raw_text:
+            parts = raw_text.split("###해석###", 1)
+            passage_text = parts[0].strip()
+            translation = "\n".join(l.strip() for l in parts[1].strip().splitlines() if l.strip())
+        else:
+            passage_text = raw_text.strip()
+            translation = ""
+            # step1 캐시에서 번역 가져오기 (유형A 프롬프트용)
+            try:
+                s1 = pl.load_step(passage_dir, "step1_basic")
+                if s1:
+                    translation = s1.get("translation", "")
+            except Exception:
+                pass
+
+        # ★ 한 지문 생성 실패가 전체 합본을 죽이지 않도록 격리.
+        #   (특히 0회독은 출력 JSON이 커서 따옴표·토큰한도로 파싱 실패 가능)
+        #   실패하면 그 지문만 에러 표시하고 다음 지문 계속 생성.
+        # ★ 동기 블로킹 호출(subprocess.run)을 executor 로 빼서 이벤트 루프를 막지 않음.
+        #   안 그러면 한 지문이 수 분 걸릴 때 서버 전체가 멈춤.
+        import asyncio as _asyncio
+        _loop = _asyncio.get_event_loop()
+        try:
+            if note_type == "A":
+                note_data = await _loop.run_in_executor(
+                    None, pl.generate_secret_note_a, passage_text, translation, passage_dir)
+            elif note_type == "C":
+                note_data = await _loop.run_in_executor(
+                    None, pl.generate_secret_note_c, passage_text, passage_dir, translation)
+            elif note_type == "D":
+                if pc_mode == "topic":
+                    note_data = None   # ★ 수업배경자료는 LLM 생성 안 함 (조각 조립)
+                else:
+                    # 유형 D — 0회독 (수업 전 4페이지 완전 분석)
+                    note_data = await _loop.run_in_executor(
+                        None, pl.generate_preclass_analysis, passage_text, passage_dir, translation)
+            else:  # B가 기본
+                note_data = await _loop.run_in_executor(
+                    None, pl.generate_secret_note_b, passage_text, passage_dir, translation)
+        except Exception as e:
+            import traceback as _tb_gen
+            _emsg = f"{type(e).__name__}: {str(e)[:300]}"
+            try:
+                print(f"  [X] 생성 실패 [{label}]: {_emsg}")
+                print(_tb_gen.format_exc())
+            except Exception:
+                pass
+            passages_data.append({
+                "label": label,
+                "passage": passage_text,
+                "translation": translation,
+                "data": None,
+                "gen_error": _emsg,   # 프런트가 'undefined' 대신 이 메시지를 보여줄 수 있음
+            })
+            continue
+
+        item = {
+            "label":       label,
+            "passage":     passage_text,
+            "translation": translation,
+            # ★ 분석지(강사 sheet) 병합본이 있으면 그걸 우선 사용 (4박스·노트까지 강사 반영)
+            "data":        (note_data.get("_display") if isinstance(note_data, dict) and note_data.get("_display") else note_data),
         }
-        html += '</div></div>';
-      }
-    }
-  }
-  container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
-  snUpdateCount();
-  snUpdateBtns();
-}
-
-function snToggleExpand(book) {
-  if (snExpandedBooks.has(book)) snExpandedBooks.delete(book);
-  else snExpandedBooks.add(book);
-  snRenderBookList();
-}
-
-function snExpandAll() {
-  const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
-  books.forEach(b => snExpandedBooks.add(b));
-  snRenderBookList();
-}
-
-function snCollapseAll() {
-  snExpandedBooks.clear();
-  snRenderBookList();
-}
-
-function snToggleBook(book) {
-  const bookPassages = PASSAGES_DATA.filter(p => p.book === book);
-  const allSelected = bookPassages.every(p => snSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
-  bookPassages.forEach(p => {
-    const key = `${p.book}|${p.unit}|${p.id}`;
-    if (allSelected) snSelectedPassages.delete(key);
-    else snSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
-  });
-  snRenderBookList();
-}
-
-function snToggleUnit(book, unit) {
-  const unitPassages = PASSAGES_DATA.filter(p => p.book === book && p.unit === unit);
-  const allSelected = unitPassages.every(p => snSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
-  unitPassages.forEach(p => {
-    const key = `${p.book}|${p.unit}|${p.id}`;
-    if (allSelected) snSelectedPassages.delete(key);
-    else snSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
-  });
-  snRenderBookList();
-}
-
-function snTogglePassage(book, unit, id) {
-  const key = `${book}|${unit}|${id}`;
-  if (snSelectedPassages.has(key)) {
-    snSelectedPassages.delete(key);
-  } else {
-    snSelectedPassages.set(key, {book, unit, id});
-  }
-  snRenderBookList();
-}
-
-function snClearSelection() {
-  snSelectedPassages.clear();
-  snRenderBookList();
-}
-
-function snUpdateCount() {
-  document.getElementById('sn-sel-count').textContent = `${snSelectedPassages.size}개 선택`;
-}
-
-function snUpdateBtns() {
-  const has = snSelectedPassages.size > 0;
-  document.getElementById('sn-btn-a').disabled = !has;
-  document.getElementById('sn-btn-b').disabled = !has;
-  document.getElementById('sn-btn-c').disabled = !has;
-}
-
-async function doSecretNote(type) {
-  const passages = [...snSelectedPassages.values()];
-  if (!passages.length) { toast('지문을 선택하세요'); return; }
-  const schoolName = document.getElementById('sn-school-name').value.trim() || '레벨미업학원';
-  const teacherName = document.getElementById('sn-teacher-name').value.trim() || '';
-
-  const btnA = document.getElementById('sn-btn-a');
-  const btnB = document.getElementById('sn-btn-b');
-  const btnC = document.getElementById('sn-btn-c');
-  const progress = document.getElementById('sn-progress');
-  const progressFill = document.getElementById('sn-progress-fill');
-  const progressText = document.getElementById('sn-progress-text');
-  const resultsSection = document.getElementById('sn-results-section');
-  const resultsList = document.getElementById('sn-results-list');
-
-  btnA.disabled = true; btnB.disabled = true; btnC.disabled = true;
-  progress.classList.remove('hidden');
-  resultsSection.classList.add('hidden'); resultsList.innerHTML = '';
-
-  let completed = 0; const results = [];
-  for (const p of passages) {
-    progressText.textContent = `생성 중... ${completed+1}/${passages.length} — ${p.unit} ${p.id}`;
-    progressFill.style.width = `${(completed/passages.length)*100}%`;
-    try {
-      const res = await fetch(API+'/api/secret-note', {
-        method: 'POST', headers: headers(),
-        body: JSON.stringify({type, school_name: schoolName, teacher_name: teacherName, passages:[{book:p.book,unit:p.unit,id:p.id}]})
-      });
-      const data = await res.json();
-      if (data.ok) results.push({id:`${p.unit} ${p.id}`,status:'success',html:data.html,filename:data.filename});
-      else results.push({id:`${p.unit} ${p.id}`,status:'error',error:data.detail});
-    } catch(e) { results.push({id:`${p.unit} ${p.id}`,status:'error',error:e.message}); }
-    completed++;
-    progressFill.style.width = `${(completed/passages.length)*100}%`;
-  }
-
-  progressText.textContent = `완료! ${results.filter(r=>r.status==='success').length}/${passages.length} 성공`;
-  resultsSection.classList.remove('hidden');
-  const successResults = results.filter(r=>r.status==='success');
-  window._lastSnResults = successResults;
-
-  let mergeBtn = successResults.length > 1
-    ? `<div style="margin-bottom:8px;"><button class="btn btn-purple" style="width:100%;" onclick="snDownloadMerged('${type}','${schoolName}')">📦 합본 다운로드 (${successResults.length}개)</button></div>`
-    : '';
-  resultsList.innerHTML = mergeBtn + results.map(r =>
-    `<div class="sn-result-item">
-      <span>${r.status==='success'?'✅':'❌'} ${r.id}</span>
-      ${r.status==='success'
-        ? `<button class="btn btn-sm btn-purple" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')"> 다운로드</button>`
-        : `<span style="color:#dc2626;font-size:12px;">${r.error}</span>`}
-    </div>`
-  ).join('');
-
-  btnA.disabled = false; btnB.disabled = false; btnC.disabled = false;
-}
-
-function snDownloadMerged(type, schoolName) {
-  if (!window._lastSnResults || !window._lastSnResults.length) return;
-  const css = (window._lastSnResults[0].html.match(/<style[^>]*>([\s\S]*?)<\/style>/) || ['',''])[1];
-  const bodies = window._lastSnResults.map(r => (r.html.match(/<body[^>]*>([\s\S]*?)<\/body>/) || ['',r.html])[1]);
-  const merged = `<!DOCTYPE html>\n<html lang="ko">\n<head>\n<meta charset="UTF-8">\n<title>${schoolName} 비밀노트 합본</title>\n<style>\n${css}\n</style>\n</head>\n<body>\n${bodies.join('\n')}\n</body>\n</html>`;
-  const blob = new Blob([merged], {type:'text/html; charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url; a.download=`${schoolName}_비밀노트_유형${type}_합본.html`; a.click();
-  URL.revokeObjectURL(url);
-}
-
-// ============================================================
-// ★ 0회독 — 수업 전 분석 (4페이지 완전 분석) - 추가 코드
-// ============================================================
-// 비밀노트(sn*) 함수 패턴을 그대로 따르되 prefix만 pc로 분리
-let pcSelectedPassages = new Map();
-let pcExpandedBooks = new Set();
-
-function pcRefreshBooks() {
-  if (!PASSAGES_DATA) return;
-  pcRenderBookList();
-}
-
-function pcRenderBookList() {
-  const books = {};
-  PASSAGES_DATA.forEach(p => {
-    if (!books[p.book]) books[p.book] = {};
-    if (!books[p.book][p.unit]) books[p.book][p.unit] = [];
-    books[p.book][p.unit].push(p);
-  });
-
-  const bookNames = Object.keys(books).sort();
-  const container = document.getElementById('pc-book-list');
-
-  let html = '';
-  for (const book of bookNames) {
-    const units = Object.keys(books[book]).sort((a,b) => {
-      const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
-      const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
-      return numA - numB || a.localeCompare(b);
-    });
-    const bookPassages = Object.values(books[book]).flat();
-    const selectedCount = bookPassages.filter(p => pcSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
-    const isExpanded = pcExpandedBooks.has(book);
-    const allSelected = selectedCount === bookPassages.length && bookPassages.length > 0;
-
-    html += `<div class="ext-book-item ${isExpanded?'expanded':''}" onclick="pcToggleExpand('${book}')">
-      <span style="color:#666;font-size:12px;">${isExpanded?'▼':'▶'}</span>
-      <input type="checkbox" ${allSelected?'checked':''} onclick="event.stopPropagation();pcToggleBook('${book}')" style="width:15px;height:15px;">
-      <span style="flex:1;font-size:13px;font-weight:500;">${book}</span>
-      <span class="ext-count-badge">${selectedCount}/${bookPassages.length}</span>
-    </div>`;
-
-    if (isExpanded) {
-      for (const unit of units) {
-        const unitPassages = books[book][unit];
-        const unitSelectedCount = unitPassages.filter(p => pcSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
-        const unitAllSelected = unitSelectedCount === unitPassages.length;
-
-        html += `<div class="ext-unit-row">
-          <div class="ext-unit-header">
-            <input type="checkbox" ${unitAllSelected?'checked':''} onclick="pcToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
-            <span style="font-size:13px;font-weight:600;color:#b45309;">${unit}</span>
-            <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
-          </div>
-          <div class="ext-pid-list">`;
-
-        for (const p of unitPassages) {
-          const key = `${p.book}|${p.unit}|${p.id}`;
-          const isSelected = pcSelectedPassages.has(key);
-          html += `<label class="ext-pid-chip ${isSelected?'selected':''}">
-            <input type="checkbox" ${isSelected?'checked':''} onchange="pcTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
-            ${p.id}
-          </label>`;
-        }
-        html += '</div></div>';
-      }
-    }
-  }
-  container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
-  pcUpdateCount();
-  pcUpdateBtn();
-}
-
-function pcToggleExpand(book) {
-  if (pcExpandedBooks.has(book)) pcExpandedBooks.delete(book);
-  else pcExpandedBooks.add(book);
-  pcRenderBookList();
-}
-
-function pcExpandAll() {
-  const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
-  books.forEach(b => pcExpandedBooks.add(b));
-  pcRenderBookList();
-}
-
-function pcCollapseAll() {
-  pcExpandedBooks.clear();
-  pcRenderBookList();
-}
-
-function pcToggleBook(book) {
-  const bookPassages = PASSAGES_DATA.filter(p => p.book === book);
-  const allSelected = bookPassages.every(p => pcSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
-  bookPassages.forEach(p => {
-    const key = `${p.book}|${p.unit}|${p.id}`;
-    if (allSelected) pcSelectedPassages.delete(key);
-    else pcSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
-  });
-  pcRenderBookList();
-}
-
-function pcToggleUnit(book, unit) {
-  const unitPassages = PASSAGES_DATA.filter(p => p.book === book && p.unit === unit);
-  const allSelected = unitPassages.every(p => pcSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
-  unitPassages.forEach(p => {
-    const key = `${p.book}|${p.unit}|${p.id}`;
-    if (allSelected) pcSelectedPassages.delete(key);
-    else pcSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
-  });
-  pcRenderBookList();
-}
-
-function pcTogglePassage(book, unit, id) {
-  const key = `${book}|${unit}|${id}`;
-  if (pcSelectedPassages.has(key)) {
-    pcSelectedPassages.delete(key);
-  } else {
-    pcSelectedPassages.set(key, {book, unit, id});
-  }
-  pcRenderBookList();
-}
-
-function pcClearSelection() {
-  pcSelectedPassages.clear();
-  pcRenderBookList();
-}
-
-function pcUpdateCount() {
-  document.getElementById('pc-sel-count').textContent = `${pcSelectedPassages.size}개 선택`;
-}
-
-function pcUpdateBtn() {
-  document.getElementById('pc-btn-d').disabled = pcSelectedPassages.size === 0;
-}
-
-let pcMode = 'preclass';
-function pcSetMode(m, el){
-  pcMode = m;
-  document.querySelectorAll('.pc-mode-tab').forEach(b => b.classList.toggle('active', b === el));
-  pcUpdateButtonLabel();
-}
-function pcGetMode(){ return pcMode; }
-
-async function doPreclass() {
-  const passages = [...pcSelectedPassages.values()];
-  if (!passages.length) { toast('지문을 선택하세요'); return; }
-  const schoolName = document.getElementById('pc-school-name').value.trim() || '레벨미업학원';
-
-  const btn = document.getElementById('pc-btn-d');
-  const progress = document.getElementById('pc-progress');
-  const progressFill = document.getElementById('pc-progress-fill');
-  const progressText = document.getElementById('pc-progress-text');
-  const resultsSection = document.getElementById('pc-results-section');
-  const resultsList = document.getElementById('pc-results-list');
-
-  btn.disabled = true;
-  progress.classList.remove('hidden');
-  resultsSection.classList.add('hidden'); resultsList.innerHTML = '';
-
-  // ★ 배경지식(수업배경자료): 선택 지문을 한 번에 묶어 요청 → iframe 미리보기
-  if (pcGetMode() === 'topic') {
-    progressText.textContent = `배경지식 조립 중... (${passages.length}개 지문)`;
-    progressFill.style.width = '40%';
-    try {
-      const res = await fetch(API + '/api/secret-note', {
-        method: 'POST', headers: headers(),
-        body: JSON.stringify({ type: 'D', mode: 'topic', school_name: schoolName,
-          passages: passages.map(p => ({ book: p.book, unit: p.unit, id: p.id })) })
-      });
-      const data = await res.json();
-      progressFill.style.width = '100%';
-      if (data.ok) {
-        progressText.textContent = '완료!';
-        resultsSection.classList.remove('hidden');
-        const enc = encodeURIComponent(data.html);
-        const srcdoc = data.html.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-        resultsList.innerHTML =
-          `<div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;">
-             <button class="btn btn-sm btn-orange" onclick="downloadHtml(\`${enc}\`,'${data.filename}')"> 다운로드</button>
-             <button class="btn btn-sm" style="background:#eee;color:#333;" onclick="const w=window.open();w.document.write(decodeURIComponent('${enc}'));w.document.close();">↗ 새 창으로</button>
-           </div>
-           <iframe title="배경지식" sandbox="allow-scripts allow-popups"
-             style="width:100%;height:75vh;border:1px solid #e5e7eb;border-radius:8px;background:#fff;"
-             srcdoc="${srcdoc}"></iframe>`;
-      } else {
-        progressText.textContent = '실패';
-        resultsSection.classList.remove('hidden');
-        resultsList.innerHTML = `<div style="color:#dc2626;font-size:13px;padding:8px;">${data.detail || '생성 실패'}</div>`;
-      }
-    } catch (e) {
-      resultsSection.classList.remove('hidden');
-      resultsList.innerHTML = `<div style="color:#dc2626;font-size:13px;padding:8px;">${e.message}</div>`;
-    }
-    btn.disabled = false;
-    return;
-  }
-
-  let completed = 0; const results = [];
-  for (const p of passages) {
-    progressText.textContent = `생성 중... ${completed+1}/${passages.length} — ${p.unit} ${p.id}  (40~60초 소요)`;
-    progressFill.style.width = `${(completed/passages.length)*100}%`;
-    try {
-      // 백엔드는 /api/secret-note 라우트에서 type=D + mode 분기 처리
-      const pcMode = pcGetMode();
-      const res = await fetch(API+'/api/secret-note', {
-        method: 'POST', headers: headers(),
-        body: JSON.stringify({type:'D', mode: pcMode, school_name: schoolName, passages:[{book:p.book,unit:p.unit,id:p.id}]})
-      });
-      const data = await res.json();
-      if (data.ok) results.push({id:`${p.unit} ${p.id}`,status:'success',html:data.html,filename:data.filename});
-      else results.push({id:`${p.unit} ${p.id}`,status:'error',error:data.detail});
-    } catch(e) { results.push({id:`${p.unit} ${p.id}`,status:'error',error:e.message}); }
-    completed++;
-    progressFill.style.width = `${(completed/passages.length)*100}%`;
-  }
-
-  progressText.textContent = `완료! ${results.filter(r=>r.status==='success').length}/${passages.length} 성공`;
-  resultsSection.classList.remove('hidden');
-  const successResults = results.filter(r=>r.status==='success');
-  window._lastPcResults = successResults;
-
-  let mergeBtn = successResults.length > 1
-    ? `<div style="margin-bottom:8px;"><button class="btn btn-orange" style="width:100%;" onclick="pcDownloadMerged('${schoolName}')">📦 합본 다운로드 (${successResults.length}개)</button></div>`
-    : '';
-  resultsList.innerHTML = mergeBtn + results.map(r =>
-    `<div class="sn-result-item">
-      <span>${r.status==='success'?'✅':'❌'} ${r.id}</span>
-      ${r.status==='success'
-        ? `<button class="btn btn-sm btn-orange" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')"> 다운로드</button>`
-        : `<span style="color:#dc2626;font-size:12px;">${r.error}</span>`}
-    </div>`
-  ).join('');
-
-  btn.disabled = false;
-}
-
-function pcUpdateButtonLabel() {
-  const mode = pcGetMode();
-  const btn = document.getElementById('pc-btn-d');
-  if (!btn) return;
-  const labels = {
-    'preclass': ' 0회독 자료 생성',
-    'sentence_order': ' 한 문장 순서배열 생성',
-    'both': ' 0회독 + 순서배열 생성',
-    'topic': ' 배경지식 보기',
-  };
-  btn.textContent = labels[mode] || labels.preclass;
-}
-
-function pcDownloadMerged(schoolName) {
-  console.log('[pcDownloadMerged v2] 페이지당 2지문 + 답지 모음 모드');
-  if (!window._lastPcResults || !window._lastPcResults.length) return;
-  const results = window._lastPcResults;
-  const css = (results[0].html.match(/<style[^>]*>([\s\S]*?)<\/style>/) || ['',''])[1];
-  
-  const mode = pcGetMode();
-  const titleMap = {
-    'preclass': '0회독 수업전분석 합본',
-    'sentence_order': '한문장 순서배열 합본',
-    'both': '0회독+순서배열 합본',
-    'topic': '배경지식 합본',
-  };
-  const fnameMap = {
-    'preclass': '0회독_수업전분석_합본',
-    'sentence_order': '한문장순서배열_합본',
-    'both': '0회독_순서배열_합본',
-    'topic': '배경지식_합본',
-  };
-  const docTitle = titleMap[mode] || titleMap.preclass;
-  const fnameBase = fnameMap[mode] || fnameMap.preclass;
-  
-  // ─────────────────────────────────────
-  // 각 결과 HTML에서 body 내용 추출
-  // ─────────────────────────────────────
-  const bodies = results.map(r => (r.html.match(/<body[^>]*>([\s\S]*?)<\/body>/) || ['',r.html])[1]);
-  
-  let mergedBody = '';
-  
-  if (mode === 'preclass') {
-    // 0회독만 — 그대로 이어붙이면 됨
-    mergedBody = bodies.join('\n');
-  } else {
-    // sentence_order 또는 both — so-block과 답지를 모아서 재구성
-    
-    // 1) 0회독 본체 (so-page와 so-answer-page 제외한 부분)만 추출 (both 모드용)
-    const preclassBodies = bodies.map(b => {
-      let cleaned = b;
-      // so-page 페이지 제거
-      cleaned = cleaned.replace(/<div class="page so-page"[^>]*>[\s\S]*?<\/div>\s*(?=<div class="page|$)/g, '');
-      // so-answer-page 페이지 제거
-      cleaned = cleaned.replace(/<div class="page so-answer-page"[^>]*>[\s\S]*?<\/div>\s*(?=<div class="page|$)/g, '');
-      return cleaned;
-    });
-    
-    // 2) 모든 본문에서 so-block만 추출 (라벨과 정답 정보 보존)
-    const allBlocks = [];  // [{label, blockHtml, answer}]
-    bodies.forEach((b, idx) => {
-      // so-block 추출
-      const blockMatches = [...b.matchAll(/<div class="so-block">([\s\S]*?)<\/div>\s*(?=<div class="so-block|<div class="so-answer-line">|<\/div>\s*<\/div>\s*<div class="page so-answer)/g)];
-      // 위 정규식이 복잡하니 더 간단하게 — so-block 단위로
-      const simpleMatches = [...b.matchAll(/<div class="so-block">[\s\S]*?<div class="so-answer-line">[\s\S]*?<\/div>\s*<\/div>/g)];
-      simpleMatches.forEach(m => allBlocks.push({html: m[0], passageLabel: results[idx].id}));
-    });
-    
-    // 3) 모든 본문의 정답 행 추출 (so-answer-table의 tr들)
-    const allAnswerRows = [];
-    bodies.forEach((b, idx) => {
-      // so-answer-table 내부 tr 추출
-      const tableMatch = b.match(/<table class="so-answer-table">([\s\S]*?)<\/table>/);
-      if (tableMatch) {
-        const trMatches = [...tableMatch[1].matchAll(/<tr>[\s\S]*?<\/tr>/g)];
-        trMatches.forEach(m => allAnswerRows.push(m[0]));
-      }
-    });
-    
-    // 4) 페이지당 2개씩 so-block 묶어서 페이지 재구성
-    let soPages = '';
-    for (let i = 0; i < allBlocks.length; i += 2) {
-      soPages += '<div class="page so-page">\n';
-      soPages += '  <div class="so-hdr">●  한 문장 순서배열</div>\n';
-      soPages += '  ' + allBlocks[i].html + '\n';
-      if (allBlocks[i+1]) {
-        soPages += '  ' + allBlocks[i+1].html + '\n';
-      }
-      soPages += '</div>\n';
-    }
-    
-    // 5) 정답 페이지 (모든 정답 한 페이지에)
-    let answerPage = '';
-    if (allAnswerRows.length) {
-      answerPage = '<div class="page so-answer-page">\n';
-      answerPage += '  <div class="so-hdr so-answer-hdr">●  한 문장 순서배열 — 정답</div>\n';
-      answerPage += '  <div class="so-answer-note">출력 후 잘라서 시험·정답 호출용으로 사용하세요.</div>\n';
-      answerPage += '  <table class="so-answer-table">\n';
-      answerPage += allAnswerRows.join('\n');
-      answerPage += '\n  </table>\n</div>\n';
-    }
-    
-    if (mode === 'sentence_order') {
-      mergedBody = soPages + answerPage;
-    } else {
-      // both: 0회독 본체 → 순서배열 페이지 → 정답 페이지
-      mergedBody = preclassBodies.join('\n') + soPages + answerPage;
-    }
-  }
-  
-  const merged = `<!DOCTYPE html>\n<html lang="ko">\n<head>\n<meta charset="UTF-8">\n<title>${schoolName} ${docTitle}</title>\n<!-- pcDownloadMerged_v2: ${mode} mode, ${results.length} passages -->\n<style>\n${css}\n</style>\n</head>\n<body>\n${mergedBody}\n</body>\n</html>`;
-  const blob = new Blob([merged], {type:'text/html; charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url; a.download=`${schoolName}_${fnameBase}.html`; a.click();
-  URL.revokeObjectURL(url);
-}
-
-// ============================================================
-// ★ 원문 추출 - 추가 코드
-// ============================================================
-let extSelectedPassages = new Map();
-let extExpandedBooks = new Set();
-
-function extRefreshBooks() {
-  if (!PASSAGES_DATA) return;
-  extRenderBookList();
-}
-
-function extRenderBookList() {
-  const books = {};
-  PASSAGES_DATA.forEach(p => {
-    if (!books[p.book]) books[p.book] = {};
-    if (!books[p.book][p.unit]) books[p.book][p.unit] = [];
-    books[p.book][p.unit].push(p);
-  });
-
-  const bookNames = Object.keys(books).sort();
-  const container = document.getElementById('ext-book-list');
-  
-  let html = '';
-  for (const book of bookNames) {
-    const units = Object.keys(books[book]).sort((a,b) => {
-      const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
-      const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
-      return numA - numB || a.localeCompare(b);
-    });
-    const bookPassages = Object.values(books[book]).flat();
-    const selectedCount = bookPassages.filter(p => extSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
-    const isExpanded = extExpandedBooks.has(book);
-    const allSelected = selectedCount === bookPassages.length && bookPassages.length > 0;
-
-    html += `<div class="ext-book-item ${isExpanded?'expanded':''}" onclick="extToggleExpand('${book}')">
-      <span style="color:#666;font-size:12px;">${isExpanded?'▼':'▶'}</span>
-      <input type="checkbox" ${allSelected?'checked':''} onclick="event.stopPropagation();extToggleBook('${book}')" style="width:15px;height:15px;">
-      <span style="flex:1;font-size:13px;font-weight:500;">${book}</span>
-      <span class="ext-count-badge">${selectedCount}/${bookPassages.length}</span>
-    </div>`;
-
-    if (isExpanded) {
-      for (const unit of units) {
-        const unitPassages = books[book][unit];
-        const unitSelectedCount = unitPassages.filter(p => extSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
-        const unitAllSelected = unitSelectedCount === unitPassages.length;
-
-        html += `<div class="ext-unit-row">
-          <div class="ext-unit-header">
-            <input type="checkbox" ${unitAllSelected?'checked':''} onclick="extToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
-            <span style="font-size:13px;font-weight:600;color:#4A90D9;">${unit}</span>
-            <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
-          </div>
-          <div class="ext-pid-list">`;
-        
-        for (const p of unitPassages) {
-          const key = `${p.book}|${p.unit}|${p.id}`;
-          const isSelected = extSelectedPassages.has(key);
-          html += `<label class="ext-pid-chip ${isSelected?'selected':''}">
-            <input type="checkbox" ${isSelected?'checked':''} onchange="extTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
-            ${p.id}
-          </label>`;
-        }
-        html += '</div></div>';
-      }
-    }
-  }
-  container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
-  extUpdateSelCount();
-}
-
-function extToggleExpand(book) {
-  if (extExpandedBooks.has(book)) extExpandedBooks.delete(book);
-  else extExpandedBooks.add(book);
-  extRenderBookList();
-}
-
-function extExpandAll() {
-  const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
-  books.forEach(b => extExpandedBooks.add(b));
-  extRenderBookList();
-}
-
-function extCollapseAll() {
-  extExpandedBooks.clear();
-  extRenderBookList();
-}
-
-function extToggleBook(book) {
-  const bookPassages = PASSAGES_DATA.filter(p => p.book === book);
-  const allSelected = bookPassages.every(p => extSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
-  bookPassages.forEach(p => {
-    const key = `${p.book}|${p.unit}|${p.id}`;
-    if (allSelected) extSelectedPassages.delete(key);
-    else extSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id, text:p.passage_text});
-  });
-  extRenderBookList();
-}
-
-function extToggleUnit(book, unit) {
-  const unitPassages = PASSAGES_DATA.filter(p => p.book === book && p.unit === unit);
-  const allSelected = unitPassages.every(p => extSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
-  unitPassages.forEach(p => {
-    const key = `${p.book}|${p.unit}|${p.id}`;
-    if (allSelected) extSelectedPassages.delete(key);
-    else extSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id, text:p.passage_text});
-  });
-  extRenderBookList();
-}
-
-function extTogglePassage(book, unit, id) {
-  const key = `${book}|${unit}|${id}`;
-  if (extSelectedPassages.has(key)) {
-    extSelectedPassages.delete(key);
-  } else {
-    const p = PASSAGES_DATA.find(x => x.book===book && x.unit===unit && x.id===id);
-    if (p) extSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id, text:p.passage_text});
-  }
-  extRenderBookList();
-}
-
-function extClearSelection() {
-  extSelectedPassages.clear();
-  extRenderBookList();
-}
-
-function extUpdateSelCount() {
-  document.getElementById('ext-sel-count').textContent = `${extSelectedPassages.size}개 선택`;
-}
-
-function extExtractHTML() {
-  if (extSelectedPassages.size === 0) {
-    toast('지문을 선택해주세요!');
-    return;
-  }
-
-  const schoolName = document.getElementById('ext-school-name').value.trim() || '학교명';
-  const includeTranslation = document.getElementById('ext-include-translation').checked;
-  const header = `${schoolName}/정독하며 모르는 단어 체크/ 기억 안나는 지문 체크/ 체크한 곳 리뷰/ 그리고는 3번 정독 (1회), (2회), (3회)`;
-
-  // 선택된 지문들을 book, unit, id 순으로 정렬
-  const selectedList = [...extSelectedPassages.values()].sort((a, b) => {
-    if (a.book !== b.book) return a.book.localeCompare(b.book);
-    const unitNumA = parseInt(a.unit.match(/\d+/)?.[0]) || 0;
-    const unitNumB = parseInt(b.unit.match(/\d+/)?.[0]) || 0;
-    if (unitNumA !== unitNumB) return unitNumA - unitNumB;
-    if (a.unit !== b.unit) return a.unit.localeCompare(b.unit);
-    return a.id.localeCompare(b.id);
-  });
-
-  let content = '';
-  for (const p of selectedList) {
-    const label = `${p.book} ${p.unit} ${p.id}`;
-    let rawText = p.text || '';
-    
-    // ###해석### 기준으로 영문/한글 분리
-    let englishText = rawText;
-    let koreanText = '';
-    const splitMarker = '###해석###';
-    if (rawText.includes(splitMarker)) {
-      const parts = rawText.split(splitMarker);
-      englishText = parts[0].trim();
-      koreanText = parts[1] ? parts[1].trim() : '';
-    }
-    
-    content += `<div class="passage-block">
-  <p class="passage-label">${label}</p>
-  <p class="passage-text">${englishText}</p>
-  ${includeTranslation && koreanText ? `<p class="passage-translation">${koreanText}</p>` : ''}
-</div>\n`;
-  }
-
-  const html = `<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="UTF-8">
-<title>원문 정독 - ${schoolName}</title>
-<style>
-@page { 
-  size: A4; 
-  margin: 10mm 10mm 10mm 10mm;
-}
-@media print { 
-  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .passage-block { page-break-inside: avoid; }
-}
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { 
-  font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif; 
-  font-size: 10pt; 
-  line-height: 1.3; 
-  color: #000; 
-}
-.header { 
-  font-size: 9pt; 
-  color: #333; 
-  font-weight: 500;
-  margin-bottom: 3mm;
-  padding-bottom: 2mm;
-  border-bottom: 1px solid #333;
-}
-.passage-block {
-  margin-bottom: 10px;
-}
-.passage-label {
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 3px;
-  font-size: 10pt;
-}
-.passage-text {
-  line-height: 1.4;
-  text-align: justify;
-  font-size: 10pt;
-}
-.passage-translation {
-  margin-top: 4px;
-  padding: 4px 5px;
-  background: #f5f5f5;
-  border-left: 2px solid #4A90D9;
-  font-size: 9pt;
-  line-height: 1.3;
-  color: #333;
-}
-</style>
-</head>
-<body>
-<div class="header">${header}</div>
-<div class="content">
-${content}
-</div>
-</body>
-</html>`;
-
-  const newWindow = window.open('', '_blank');
-  newWindow.document.write(html);
-  newWindow.document.close();
-}
-
-function refreshTemplate() {
-  if (selectedPassages.size > 0) {
-    doGenerate();
-  } else {
-    toast('선택된 지문이 없습니다');
-  }
-}
-
-if (TOKEN) showMain();
-
-// ============================================================
-// ★ 변형문제 (2회독) - 클릭 순서 유지 + 다중 유형 선택
-// ============================================================
-let vrSelectedPassages = new Map();  // Map은 삽입 순서 유지 — 클릭한 순서대로 처리됨
-let vrExpandedBooks = new Set();
-
-function vrRefreshBooks() {
-  if (!PASSAGES_DATA) return;
-  vrRenderBookList();
-}
-
-function vrRenderBookList() {
-  const books = {};
-  PASSAGES_DATA.forEach(p => {
-    if (!books[p.book]) books[p.book] = {};
-    if (!books[p.book][p.unit]) books[p.book][p.unit] = [];
-    books[p.book][p.unit].push(p);
-  });
-
-  const bookNames = Object.keys(books).sort();
-  const container = document.getElementById('vr-book-list');
-  
-  let html = '';
-  for (const book of bookNames) {
-    const units = Object.keys(books[book]).sort((a,b) => {
-      const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
-      const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
-      return numA - numB || a.localeCompare(b);
-    });
-    const bookPassages = Object.values(books[book]).flat();
-    const selectedCount = bookPassages.filter(p => vrSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
-    const isExpanded = vrExpandedBooks.has(book);
-    const allSelected = selectedCount === bookPassages.length && bookPassages.length > 0;
-
-    html += `<div class="ext-book-item ${isExpanded?'expanded':''}" onclick="vrToggleExpand('${book}')">
-      <span style="color:#666;font-size:12px;">${isExpanded?'▼':'▶'}</span>
-      <input type="checkbox" ${allSelected?'checked':''} onclick="event.stopPropagation();vrToggleBook('${book}')" style="width:15px;height:15px;">
-      <span style="flex:1;font-size:13px;font-weight:500;">${book}</span>
-      <span class="ext-count-badge">${selectedCount}/${bookPassages.length}</span>
-    </div>`;
-
-    if (isExpanded) {
-      for (const unit of units) {
-        const unitPassages = books[book][unit];
-        const unitSelectedCount = unitPassages.filter(p => vrSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
-        const unitAllSelected = unitSelectedCount === unitPassages.length;
-
-        html += `<div class="ext-unit-row">
-          <div class="ext-unit-header">
-            <input type="checkbox" ${unitAllSelected?'checked':''} onclick="vrToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
-            <span style="font-size:13px;font-weight:600;color:#c2410c;">${unit}</span>
-            <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
-          </div>
-          <div class="ext-pid-list">`;
-        
-        for (const p of unitPassages) {
-          const key = `${p.book}|${p.unit}|${p.id}`;
-          const isSelected = vrSelectedPassages.has(key);
-          // 클릭 순서 표시 (선택된 경우 순서 번호 보이기)
-          let orderNum = '';
-          if (isSelected) {
-            const idx = [...vrSelectedPassages.keys()].indexOf(key);
-            orderNum = `<span style="background:#ea580c;color:white;font-weight:700;padding:0 4px;border-radius:8px;font-size:9px;margin-right:2px;">${idx+1}</span>`;
-          }
-          html += `<label class="ext-pid-chip ${isSelected?'selected':''}" style="${isSelected?'background:#fed7aa;border-color:#fb923c;':''}">
-            <input type="checkbox" ${isSelected?'checked':''} onchange="vrTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
-            ${orderNum}${p.id}
-          </label>`;
-        }
-        html += '</div></div>';
-      }
-    }
-  }
-  container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
-  vrUpdateCount();
-  vrUpdateBtns();
-}
-
-function vrToggleExpand(book) {
-  if (vrExpandedBooks.has(book)) vrExpandedBooks.delete(book);
-  else vrExpandedBooks.add(book);
-  vrRenderBookList();
-}
-
-function vrExpandAll() {
-  const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
-  books.forEach(b => vrExpandedBooks.add(b));
-  vrRenderBookList();
-}
-
-function vrCollapseAll() {
-  vrExpandedBooks.clear();
-  vrRenderBookList();
-}
-
-function vrToggleBook(book) {
-  const bookPassages = PASSAGES_DATA.filter(p => p.book === book);
-  const allSelected = bookPassages.every(p => vrSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
-  bookPassages.forEach(p => {
-    const key = `${p.book}|${p.unit}|${p.id}`;
-    if (allSelected) vrSelectedPassages.delete(key);
-    else if (!vrSelectedPassages.has(key)) vrSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
-  });
-  vrRenderBookList();
-}
-
-function vrToggleUnit(book, unit) {
-  const unitPassages = PASSAGES_DATA.filter(p => p.book === book && p.unit === unit);
-  const allSelected = unitPassages.every(p => vrSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
-  unitPassages.forEach(p => {
-    const key = `${p.book}|${p.unit}|${p.id}`;
-    if (allSelected) vrSelectedPassages.delete(key);
-    else if (!vrSelectedPassages.has(key)) vrSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
-  });
-  vrRenderBookList();
-}
-
-function vrTogglePassage(book, unit, id) {
-  const key = `${book}|${unit}|${id}`;
-  if (vrSelectedPassages.has(key)) {
-    vrSelectedPassages.delete(key);
-  } else {
-    vrSelectedPassages.set(key, {book, unit, id});  // 새로 추가 = Map의 끝에 들어감 = 클릭 순서대로
-  }
-  vrRenderBookList();
-}
-
-function vrClearSelection() {
-  vrSelectedPassages.clear();
-  vrRenderBookList();
-}
-
-function vrUpdateCount() {
-  document.getElementById('vr-sel-count').textContent = `${vrSelectedPassages.size}개 선택`;
-}
-
-function vrUpdateBtns() {
-  const hasPassage = vrSelectedPassages.size > 0;
-  const typeA = document.getElementById('vr-type-a').checked;
-  const typeB = document.getElementById('vr-type-b').checked;
-  const hasType = typeA || typeB;
-  document.getElementById('vr-btn-generate').disabled = !(hasPassage && hasType);
-}
-
-async function doVariation() {
-  const passages = [...vrSelectedPassages.values()];
-  if (!passages.length) { toast('지문을 선택하세요'); return; }
-  
-  const types = [];
-  if (document.getElementById('vr-type-a').checked) types.push('A');
-  if (document.getElementById('vr-type-b').checked) types.push('B');
-  if (!types.length) { toast('유형을 1개 이상 선택하세요'); return; }
-  
-  const mode = document.querySelector('input[name="vr-mode"]:checked').value;
-  const schoolName = document.getElementById('vr-school-name').value.trim() || '레벨미업학원';
-  
-  const btn = document.getElementById('vr-btn-generate');
-  const progress = document.getElementById('vr-progress');
-  const progressFill = document.getElementById('vr-progress-fill');
-  const progressText = document.getElementById('vr-progress-text');
-  const resultsSection = document.getElementById('vr-results-section');
-  const resultsList = document.getElementById('vr-results-list');
-
-  btn.disabled = true;
-  progress.classList.remove('hidden');
-  resultsSection.classList.add('hidden');
-  resultsList.innerHTML = '';
-
-  const total = passages.length * types.length;
-  let completed = 0;
-  
-  try {
-    // 1단계: 항목을 하나씩 생성 (각 요청이 짧아 타임아웃 회피)
-    const items = [];
-    for (const p of passages) for (const t of types) items.push({ p, t });
-    for (let i = 0; i < items.length; i++) {
-      const it = items[i];
-      progressText.textContent = `생성 중... (${i+1}/${items.length}) ${it.p.id} · 유형 ${it.t}`;
-      progressFill.style.width = `${Math.round((i / items.length) * 90)}%`;
-      try {
-        const r = await fetch(API+'/api/variation/item', {
-          method: 'POST',
-          headers: { ...headers(), 'Content-Type':'application/json' },
-          body: JSON.stringify({ book: it.p.book, unit: it.p.unit, id: it.p.id, type: it.t })
-        });
-        // 개별 실패는 여기서 중단하지 않음 — 최종 합치기 단계에서 warnings로 모임
-        if (r.ok) { await r.json().catch(()=>{}); }
-      } catch (err) {
-        // 네트워크 오류도 무시하고 계속 — 다음 항목 진행
-        console.warn('item 생성 실패', it, err);
-      }
-    }
-
-    // 2단계: HTML 합치기 (위에서 캐시에 적재됨 → 캐시 히트로 즉시)
-    progressText.textContent = 'HTML 합치는 중...';
-    progressFill.style.width = '95%';
-
-    const res = await fetch(API+'/api/variation', {
-      method: 'POST',
-      headers: { ...headers(), 'Content-Type':'application/json' },
-      body: JSON.stringify({
-        passages: passages,
-        types: types,
-        mode: mode,
-        school_name: schoolName,
-      })
-    });
-    
-    if (!res.ok) {
-      const errTxt = await res.text();
-      throw new Error(errTxt || 'API 오류');
-    }
-    
-    const data = await res.json();
-    progressFill.style.width = '100%';
-    progressText.textContent = `✓ 완료 (지문 ${data.passages_generated}개 · A ${data.a_count||0}개 / B ${data.b_count||0}개)`;
-    
-    resultsSection.classList.remove('hidden');
-    const htmlUrl = data.html_url || data.questions_pdf;
-    const downloadUrl = data.download_url || (htmlUrl + '?download=1');
-    let resultHtml = '';
-    if (htmlUrl) {
-      resultHtml += `<div class="sn-result-item">
-        <span> 변형문제 (문제+답지)</span>
-        <span style="display:flex;gap:6px;">
-          <a href="${downloadUrl}" download class="btn btn-sm" style="background:#6b7280;color:white;">📥 다운로드</a>
-          <a href="${htmlUrl}" target="_blank" class="btn btn-sm btn-primary">🔗 열기</a>
-        </span>
-      </div>
-      <div style="font-size:11px;color:#666;padding:8px;background:#fef3c7;border-radius:6px;margin-top:8px;">
-        💡 '열기'로 새 창에서 본 뒤 <b>Ctrl+P</b> (Mac: Cmd+P)로 인쇄/PDF 저장 가능
-      </div>`;
-      // 자동으로 새 창 열기
-      try { window.open(htmlUrl, '_blank'); } catch(e) {}
-    }
-    
-    // A/B 카운트 검증 디버그
-    const expectedA = document.getElementById('vr-type-a').checked ? passages.length : 0;
-    const expectedB = document.getElementById('vr-type-b').checked ? passages.length : 0;
-    const actualA = data.a_count || 0;
-    const actualB = data.b_count || 0;
-    if (actualA < expectedA || actualB < expectedB) {
-      resultHtml += `<div style="margin-top:10px;padding:8px;background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;font-size:11px;color:#92400e;">
-        ⚠️ 일부 유형이 생성되지 않았습니다.<br>
-        A 유형: ${actualA}/${expectedA}개 · B 유형: ${actualB}/${expectedB}개<br>
-        ${(expectedA-actualA+expectedB-actualB) > 0 ? '<b>Railway 로그에서 [VAR][A] 또는 [VAR][B] 메시지로 원인 확인하세요.</b>' : ''}
-      </div>`;
-    }
-    
-    if (data.warnings && data.warnings.length) {
-      resultHtml += `<div style="margin-top:10px;padding:8px;background:#fee;border:1px solid #fca5a5;border-radius:6px;font-size:11px;color:#991b1b;">
-        ❌ 생성 실패 항목:<br>${data.warnings.map(w => '• ' + w).join('<br>')}
-      </div>`;
-    }
-    resultsList.innerHTML = resultHtml;
-    toast('변형문제 생성 완료!');
-  } catch (e) {
-    progressText.textContent = '❌ ' + (e.message || '생성 실패');
-    toast('생성 실패: ' + (e.message || ''));
-  } finally {
-    setTimeout(() => {
-      progress.classList.add('hidden');
-      progressFill.style.width = '0%';
-      vrUpdateBtns();
-    }, 2000);
-  }
-}
-
-// ============================================================
-// ★ 분석지 (three_modes 저작) — pc* 패턴 재사용, prefix=as
-// ============================================================
-let asSelectedPassages = new Map();
-let asExpandedBooks = new Set();
-
-function asRefreshBooks() { if (PASSAGES_DATA) asRenderBookList(); }
-
-function asRenderBookList() {
-  const books = {};
-  PASSAGES_DATA.forEach(p => {
-    if (!books[p.book]) books[p.book] = {};
-    if (!books[p.book][p.unit]) books[p.book][p.unit] = [];
-    books[p.book][p.unit].push(p);
-  });
-  const bookNames = Object.keys(books).sort();
-  const container = document.getElementById('as-book-list');
-  let html = '';
-  for (const book of bookNames) {
-    const units = Object.keys(books[book]).sort((a,b) => {
-      const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
-      const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
-      return numA - numB || a.localeCompare(b);
-    });
-    const bookPassages = Object.values(books[book]).flat();
-    const selectedCount = bookPassages.filter(p => asSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
-    const isExpanded = asExpandedBooks.has(book);
-    const allSelected = selectedCount === bookPassages.length && bookPassages.length > 0;
-    html += `<div class="ext-book-item ${isExpanded?'expanded':''}" onclick="asToggleExpand('${book}')">
-      <span style="color:#666;font-size:12px;">${isExpanded?'▼':'▶'}</span>
-      <input type="checkbox" ${allSelected?'checked':''} onclick="event.stopPropagation();asToggleBook('${book}')" style="width:15px;height:15px;">
-      <span style="flex:1;font-size:13px;font-weight:500;">${book}</span>
-      <span class="ext-count-badge">${selectedCount}/${bookPassages.length}</span>
-    </div>`;
-    if (isExpanded) {
-      for (const unit of units) {
-        const unitPassages = books[book][unit];
-        const unitSelectedCount = unitPassages.filter(p => asSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
-        const unitAllSelected = unitSelectedCount === unitPassages.length;
-        html += `<div class="ext-unit-row">
-          <div class="ext-unit-header">
-            <input type="checkbox" ${unitAllSelected?'checked':''} onclick="asToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
-            <span style="font-size:13px;font-weight:600;color:#2E4E8F;">${unit}</span>
-            <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
-          </div>
-          <div class="ext-pid-list">`;
-        for (const p of unitPassages) {
-          const key = `${p.book}|${p.unit}|${p.id}`;
-          const isSelected = asSelectedPassages.has(key);
-          const ready = p.cache_status === 'ready';
-          const badge = ready
-            ? `<span style="color:#2E9E5A;font-size:9px;margin-left:3px;">●</span>`
-            : `<span style="color:#E8833A;font-size:9px;margin-left:3px;" title="0회독 미생성">○</span>`;
-          html += `<label class="ext-pid-chip ${isSelected?'selected':''}" title="${ready?'0회독 준비됨':'0회독 미생성 — 먼저 0회독 생성 필요'}">
-            <input type="checkbox" ${isSelected?'checked':''} onchange="asTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
-            ${p.id}${badge}
-          </label>`;
-        }
-        html += '</div></div>';
-      }
-    }
-  }
-  container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
-  asUpdateCount();
-  asUpdateBtn();
-}
-
-function asToggleExpand(book) {
-  if (asExpandedBooks.has(book)) asExpandedBooks.delete(book);
-  else asExpandedBooks.add(book);
-  asRenderBookList();
-}
-function asExpandAll() {
-  [...new Set(PASSAGES_DATA.map(p => p.book))].forEach(b => asExpandedBooks.add(b));
-  asRenderBookList();
-}
-function asCollapseAll() { asExpandedBooks.clear(); asRenderBookList(); }
-function asToggleBook(book) {
-  const bp = PASSAGES_DATA.filter(p => p.book === book);
-  const allSel = bp.every(p => asSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
-  bp.forEach(p => {
-    const key = `${p.book}|${p.unit}|${p.id}`;
-    if (allSel) asSelectedPassages.delete(key);
-    else asSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
-  });
-  asRenderBookList();
-}
-function asToggleUnit(book, unit) {
-  const up = PASSAGES_DATA.filter(p => p.book === book && p.unit === unit);
-  const allSel = up.every(p => asSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
-  up.forEach(p => {
-    const key = `${p.book}|${p.unit}|${p.id}`;
-    if (allSel) asSelectedPassages.delete(key);
-    else asSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
-  });
-  asRenderBookList();
-}
-function asTogglePassage(book, unit, id) {
-  const key = `${book}|${unit}|${id}`;
-  if (asSelectedPassages.has(key)) asSelectedPassages.delete(key);
-  else asSelectedPassages.set(key, {book, unit, id});
-  asRenderBookList();
-}
-function asClearSelection() { asSelectedPassages.clear(); asRenderBookList(); }
-function asUpdateCount() {
-  document.getElementById('as-sel-count').textContent = `${asSelectedPassages.size}개 선택`;
-}
-function asUpdateBtn() {
-  document.getElementById('as-btn-open').disabled = asSelectedPassages.size === 0;
-}
-function asOpenSheets() {
-  const passages = [...asSelectedPassages.values()];
-  if (!passages.length) { toast('지문을 선택하세요'); return; }
-  const note = document.getElementById('as-open-note');
-  let opened = 0;
-  for (const p of passages) {
-    const url = '/sheet?book=' + encodeURIComponent(p.book)
-              + '&unit=' + encodeURIComponent(p.unit)
-              + '&pid=' + encodeURIComponent(p.id);
-    const w = window.open(url, '_blank');
-    if (w) opened++;
-  }
-  if (opened < passages.length) {
-    note.innerHTML = `일부 창이 팝업 차단됨. 이 사이트의 팝업을 허용해주세요. (${opened}/${passages.length} 열림)`;
-    note.style.color = '#E8833A';
-  } else {
-    note.innerHTML = `✅ ${opened}개 분석지 열림`;
-    note.style.color = '#2E9E5A';
-  }
-}
-
-</script>
-</body>
-</html>
+        if note_type == "D" and pc_mode == "topic":
+            # 캐시 우선, 없으면 web_search 기반 자동 생성
+            try:
+                item["topic"] = tbg.generate_topic_background(
+                    passage_text, passage_dir, label=label,
+                    save_step_fn=pl.save_step, load_step_fn=pl.load_step,
+                    step_name=tbk.TOPIC_STEP_NAME, max_uses=5,
+                )
+            except Exception as e:
+                item["topic"] = None
+                item["topic_error"] = str(e)[:200]
+        passages_data.append(item)
+
+    if not passages_data:
+        raise HTTPException(404, "처리 가능한 지문 없음")
+
+    # 유형 D는 별도 템플릿(preclass_analysis.html) + 다른 파일명
+    if note_type == "D":
+        # ★ pc_mode에 따라 render 옵션 다르게 호출
+        if pc_mode == "topic":   # ★ 수업배경자료 (캐시 or 자동 생성, web_search)
+            html = tbk.render_topic_background(passages_data, school_name)
+            return {"ok": True, "html": html, "filename": "수업배경자료.html"}
+        if pc_mode == "sentence_order":
+            html = pl.render_preclass_analysis(passages_data, school_name,
+                                                sentence_order_only=True)
+            filename = "한문장순서배열.html"
+        elif pc_mode == "both":
+            html = pl.render_preclass_analysis(passages_data, school_name,
+                                                include_sentence_order=True)
+            filename = "0회독_수업전분석_순서배열포함.html"
+        else:  # "preclass" (기본 — 0회독만)
+            html = pl.render_preclass_analysis(passages_data, school_name)
+            filename = "0회독_수업전분석.html"
+        return {"ok": True, "html": html, "filename": filename}
+
+    html = pl.render_secret_note(passages_data, note_type, school_name, teacher_name)
+    return {"ok": True, "html": html, "filename": f"비밀노트_유형{note_type}.html"}
+
+
+# ============================================================
+# ★ 분석지 (3-mode 저작/인쇄/학생) 라우터 등록 - 2026-06 추가
+#   - GET  /sheet?book=&unit=&pid=  : 분석지 저작 화면 (three_modes)
+#   - POST /api/sheet/save          : sheet_cache 저장
+#   - POST /api/sheet/publish       : 공유 토큰 발급
+#   - GET  /s/{token}               : 학생 게시물 (읽기 전용)
+# ============================================================
+try:
+    from sheet import routes as sheet_routes
+    sheet_routes.set_deps(
+        ck=_ck,
+        verify=_verify,
+        load_db=_load_db,
+        data_dir=DATA_DIR,
+        template_dir=Path("sheet"),
+    )
+    app.include_router(sheet_routes.router)
+    print("[sheet] 분석지 라우터 등록 완료")
+except Exception as e:
+    print(f"[sheet] 라우터 등록 실패 (분석지 기능 비활성): {e}")
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))

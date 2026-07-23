@@ -124,7 +124,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
 .btn-purple { background:#7c3aed; color:white; }
 .btn-purple:hover { background:#6d28d9; }
 .pc-mode-tabs{display:flex;gap:4px}
-.pc-mode-tab{flex:1;padding:8px 6px;font-size:12px;font-weight:700;border:1.5px solid #fbbf24;background:#fff;color:#b45309;border-radius:6px;cursor:pointer;transition:all .15s;line-height:1.2;}
+.pc-mode-tab{flex:1;padding:8px 6px;font-size:12px;font-weight:700;border:1.5px solid #93b4d9;background:#fff;color:#2E4E8F;border-radius:6px;cursor:pointer;transition:all .15s;line-height:1.2;}
 .pc-mode-tab.active{background:#2E4E8F;color:#fff;border-color:#2E4E8F}
 </style>
 </head>
@@ -183,14 +183,14 @@ textarea:focus { border-color: #4A90D9; outline: none; }
         </div>
       </div>
       <div class="col-right">
-        <div class="card" style="border:2px solid #fbbf24;background:#fffbeb;">
-          <div class="card-title" style="color:#b45309;"> 0회독 — 수업 전 분석</div>
-          <div style="font-size:11px;color:#92400e;margin-bottom:10px;line-height:1.5;">
+        <div class="card" style="border:2px solid #93b4d9;background:#EBF0FA;">
+          <div class="card-title" style="color:#2E4E8F;"> 0회독 — 수업 전 분석</div>
+          <div style="font-size:11px;color:#334;margin-bottom:10px;line-height:1.5;">
             선생님 본인 수업 준비용 4페이지 완전 분석.<br>
             지문(색상 마킹) · 주제·제목·해석 (2x2) · 어법 12~14개 상세박스 · 어휘심화(영영풀이) · 함축 빈칸 흐름
           </div>
-          <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:10px;margin-bottom:10px;">
-            <div style="font-size:11px;font-weight:700;color:#b45309;margin-bottom:4px;">📄 4페이지 구성</div>
+          <div style="background:#f5f8fc;border:1px solid #93b4d9;border-radius:8px;padding:10px;margin-bottom:10px;">
+            <div style="font-size:11px;font-weight:700;color:#2E4E8F;margin-bottom:4px;">📄 4페이지 구성</div>
             <div style="font-size:10px;color:#666;line-height:1.6;">
               <b>PAGE 1</b> 지문(빨/파/검 마킹) + 주제·제목 2x2 + 어법/어휘 노트<br>
               <b>PAGE 2</b> 어법 상세 1/2 (좌우 박스)<br>
@@ -201,7 +201,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
           <div style="margin-bottom:8px;">
             <label style="font-size:11px;color:#444;"> 학교명</label>
             <input type="text" id="pc-school-name" placeholder="레벨미업학원" value="레벨미업학원"
-              style="width:100%;padding:8px 10px;border:2px solid #fbbf24;border-radius:6px;font-size:12px;outline:none;margin-top:4px;">
+              style="width:100%;padding:8px 10px;border:2px solid #93b4d9;border-radius:6px;font-size:12px;outline:none;margin-top:4px;">
           </div>
           <!-- ★ 자료 종류 (탭) -->
           <div style="background:#EBF0FA;border:1.5px dashed #2E4E8F;border-radius:6px;padding:8px;margin-bottom:8px;">
@@ -1373,7 +1373,7 @@ function pcRenderBookList() {
         html += `<div class="ext-unit-row">
           <div class="ext-unit-header">
             <input type="checkbox" ${unitAllSelected?'checked':''} onclick="pcToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
-            <span style="font-size:13px;font-weight:600;color:#b45309;">${unit}</span>
+            <span style="font-size:13px;font-weight:600;color:#2E4E8F;">${unit}</span>
             <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
           </div>
           <div class="ext-pid-list">`;
@@ -2153,7 +2153,7 @@ async function doVariation() {
           <a href="${htmlUrl}" target="_blank" class="btn btn-sm btn-primary">🔗 열기</a>
         </span>
       </div>
-      <div style="font-size:11px;color:#666;padding:8px;background:#fef3c7;border-radius:6px;margin-top:8px;">
+      <div style="font-size:11px;color:#666;padding:8px;background:#f5f8fc;border-radius:6px;margin-top:8px;">
         💡 '열기'로 새 창에서 본 뒤 <b>Ctrl+P</b> (Mac: Cmd+P)로 인쇄/PDF 저장 가능
       </div>`;
       // 자동으로 새 창 열기
@@ -2166,7 +2166,7 @@ async function doVariation() {
     const actualA = data.a_count || 0;
     const actualB = data.b_count || 0;
     if (actualA < expectedA || actualB < expectedB) {
-      resultHtml += `<div style="margin-top:10px;padding:8px;background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;font-size:11px;color:#92400e;">
+      resultHtml += `<div style="margin-top:10px;padding:8px;background:#f5f8fc;border:1px solid #93b4d9;border-radius:6px;font-size:11px;color:#2E4E8F;">
         ⚠️ 일부 유형이 생성되지 않았습니다.<br>
         A 유형: ${actualA}/${expectedA}개 · B 유형: ${actualB}/${expectedB}개<br>
         ${(expectedA-actualA+expectedB-actualB) > 0 ? '<b>Railway 로그에서 [VAR][A] 또는 [VAR][B] 메시지로 원인 확인하세요.</b>' : ''}

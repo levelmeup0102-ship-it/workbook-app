@@ -14,8 +14,8 @@ body { font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f0f
 .btn-primary { background: #2E4E8F; color: white; }
 .btn-primary:hover { background: #1f3766; }
 .btn-primary:disabled { background: #9db3d6; cursor: not-allowed; }
-.btn-orange { background: #2E4E8F; color: white; }
-.btn-orange:hover { background: #d6732a; }
+.btn-orange { background: #4A90D9; color: white; }
+.btn-orange:hover { background: #3a7bc8; }
 .btn-sm { padding: 6px 12px; font-size: 12px; }
 .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
 .badge-ready { background: #E8F5E9; color: #2E9E5A; }
@@ -70,7 +70,7 @@ select:focus { border-color: #4A90D9; outline: none; }
 .level-btn { padding: 7px 4px; border: 2px solid #e5e7eb; border-radius: 7px; text-align: center; cursor: pointer; font-size: 11px; transition: all 0.15s; user-select: none; }
 .level-btn.selected { border-color: #4A90D9; background: #EBF4FB; color: #4A90D9; font-weight: 600; }
 .level-btn.green.selected { border-color: #2E9E5A; background: #E8F5E9; color: #2E9E5A; }
-.level-btn.orange.selected { border-color: #E8833A; background: #FFF8F0; color: #E8833A; }
+.level-btn.orange.selected { border-color: #c4b5fd; background: #f3e8ff; color: #6d28d9; }
 .preset-row { display: flex; gap: 5px; margin-bottom: 8px; flex-wrap: wrap; }
 .preset-btn { flex: 1; min-width: 60px; padding: 5px; border: 1px solid #ddd; border-radius: 6px; background: white; font-size: 11px; cursor: pointer; text-align: center; }
 .preset-btn:hover { background: #f5f7fa; }
@@ -291,7 +291,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
           <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px;">
             <button class="btn btn-sm" onclick="selectAll()" style="background:#eee;color:#333;">전체 선택</button>
             <button class="btn btn-sm" onclick="selectNone()" style="background:#eee;color:#333;">선택 해제</button>
-            <button class="btn btn-sm" onclick="clearPassageCache()" style="background:#FFF8F0;color:#E8833A;border:1px solid #E8833A;">🗑️ 선택 캐시 삭제</button>
+            <button class="btn btn-sm" onclick="clearPassageCache()" style="background:#f3e8ff;color:#6d28d9;border:1px solid #c4b5fd;">🗑️ 선택 캐시 삭제</button>
           </div>
           <div class="passage-list" id="passage-list">
             <div style="padding:20px;text-align:center;color:#999;">교재를 먼저 선택하세요</div>

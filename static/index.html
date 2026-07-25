@@ -757,12 +757,33 @@ async function clearNotice() { document.getElementById('notice-input').value = '
 // ============================================================
 // Book / Passage
 // ============================================================
+function categorizeBook(name) {
+  if (/모의고사/.test(name)) return '모의고사';
+  if (/리딩파워|올림포스|라이트|light|영독|독해연습/i.test(name)) return '수능연계교재';
+  if (/수특|수능특강/.test(name)) return '수능특강';
+  return '교과서';
+}
+
 function updateBookSelect() {
   const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
   const sel = document.getElementById('sel-book');
   const prev = sel.value;
-  sel.innerHTML = '<option value="">교재를 선택하세요</option>';
-  books.forEach(b => { sel.innerHTML += `<option value="${b}">${b}</option>`; });
+
+  const CATEGORY_ORDER = ['교과서', '수능특강', '수능연계교재', '모의고사'];
+  const groups = {};
+  books.forEach(b => {
+    const cat = categorizeBook(b);
+    (groups[cat] = groups[cat] || []).push(b);
+  });
+
+  let html = '<option value="">교재를 선택하세요</option>';
+  CATEGORY_ORDER.forEach(cat => {
+    if (!groups[cat] || !groups[cat].length) return;
+    html += `<optgroup label="${cat}">`;
+    groups[cat].forEach(b => { html += `<option value="${b}">${b}</option>`; });
+    html += `</optgroup>`;
+  });
+  sel.innerHTML = html;
   if (prev && books.includes(prev)) sel.value = prev;
 }
 

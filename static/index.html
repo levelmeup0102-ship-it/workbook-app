@@ -783,7 +783,7 @@ function categorizeBook(name) {
   return '교과서';
 }
 
-let bpOpenCategories = new Set();
+let bpOpenCategory = null; // 한 번에 하나의 카테고리만 펼침 (아코디언)
 
 function updateBookSelect() {
   const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
@@ -808,17 +808,17 @@ function updateBookSelect() {
   sel.innerHTML = selHtml;
   if (prev && books.includes(prev)) sel.value = prev;
 
-  renderBookPicker(groups, CATEGORY_ORDER, sel.value);
+  renderBookPicker(groups, CATEGORY_ORDER, sel.value, true);
 }
 
-function renderBookPicker(groups, CATEGORY_ORDER, currentBook) {
+function renderBookPicker(groups, CATEGORY_ORDER, currentBook, autoOpen) {
   const panel = document.getElementById('book-picker-panel');
   if (!panel) return;
   let html = '';
   CATEGORY_ORDER.forEach(cat => {
     if (!groups[cat] || !groups[cat].length) return;
-    const isOpen = bpOpenCategories.has(cat) || groups[cat].includes(currentBook);
-    if (isOpen) bpOpenCategories.add(cat);
+    if (autoOpen && bpOpenCategory === null && groups[cat].includes(currentBook)) bpOpenCategory = cat;
+    const isOpen = bpOpenCategory === cat;
     html += `<div class="bp-category" onclick="toggleBookCategory('${cat}')">
         <span>${cat} (${groups[cat].length})</span><span>${isOpen ? '▲' : '▼'}</span>
       </div>
@@ -836,15 +836,14 @@ function renderBookPicker(groups, CATEGORY_ORDER, currentBook) {
 }
 
 function toggleBookCategory(cat) {
-  if (bpOpenCategories.has(cat)) bpOpenCategories.delete(cat);
-  else bpOpenCategories.add(cat);
+  bpOpenCategory = (bpOpenCategory === cat) ? null : cat;
   const sel = document.getElementById('sel-book');
   const currentBook = sel ? sel.value : '';
   // 카테고리만 다시 그리기 (books 재계산 없이 패널만 갱신)
   const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
   const groups = {};
   books.forEach(b => { const c = categorizeBook(b); (groups[c] = groups[c] || []).push(b); });
-  renderBookPicker(groups, ['교과서','수능특강','수능연계교재','모의고사'], currentBook);
+  renderBookPicker(groups, ['교과서','수능특강','수능연계교재','모의고사'], currentBook, false);
 }
 
 function pickBook(book) {

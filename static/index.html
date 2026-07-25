@@ -55,6 +55,18 @@ body { font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f0f
 /* 교재/지문 */
 select { width: 100%; padding: 9px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 13px; background: white; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; cursor: pointer; margin-bottom: 8px; }
 select:focus { border-color: #4A90D9; outline: none; }
+
+/* ★ 교재 선택 - 카테고리 펼침형 드롭다운 */
+.book-picker-btn { width: 100%; text-align: left; padding: 9px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 13px; background: white; cursor: pointer; color: #1a1a1a; }
+.book-picker-btn:hover { border-color: #4A90D9; }
+.book-picker-panel { position: absolute; z-index: 50; top: calc(100% + 4px); left: 0; right: 0; background: white; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.12); max-height: 340px; overflow-y: auto; padding: 4px 0; }
+.bp-category { padding: 8px 12px; font-size: 12px; font-weight: 700; color: #2E4E8F; background: #EBF0FA; cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none; }
+.bp-category:hover { background: #dbe4f5; }
+.bp-books { display: none; }
+.bp-books.open { display: block; }
+.bp-book-item { padding: 8px 12px 8px 22px; font-size: 13px; cursor: pointer; color: #333; }
+.bp-book-item:hover { background: #f5f7fa; }
+.bp-book-item.selected { background: #EBF4FB; color: #4A90D9; font-weight: 600; }
 .passage-list { max-height: 380px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px; }
 .passage-item { display: flex; align-items: center; padding: 8px 10px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.15s; }
 .passage-item:hover { background: #f5f7fa; }
@@ -279,9 +291,15 @@ textarea:focus { border-color: #4A90D9; outline: none; }
         <div class="card">
           <div class="card-title"> 교재 선택</div>
           <div style="display:flex;gap:6px;">
-            <select id="sel-book" onchange="onBookChange()" style="flex:1;margin-bottom:0;">
-              <option value="">교재를 선택하세요</option>
-            </select>
+            <div class="book-picker" id="book-picker" style="position:relative;flex:1;">
+              <button type="button" id="book-picker-btn" class="book-picker-btn" onclick="toggleBookPicker()">
+                <span id="book-picker-label">교재를 선택하세요</span><span style="float:right;color:#999;">▾</span>
+              </button>
+              <div id="book-picker-panel" class="book-picker-panel hidden"></div>
+              <select id="sel-book" onchange="onBookChange()" style="display:none;">
+                <option value="">교재를 선택하세요</option>
+              </select>
+            </div>
             <button class="btn btn-sm" onclick="deleteBook()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;" title="교재 삭제">🗑️</button>
           </div>
         </div>
@@ -764,6 +782,8 @@ function categorizeBook(name) {
   return '교과서';
 }
 
+let bpOpenCategories = new Set();
+
 function updateBookSelect() {
   const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
   const sel = document.getElementById('sel-book');
@@ -776,16 +796,80 @@ function updateBookSelect() {
     (groups[cat] = groups[cat] || []).push(b);
   });
 
-  let html = '<option value="">교재를 선택하세요</option>';
+  // 숨겨진 select (기존 로직 호환용)
+  let selHtml = '<option value="">교재를 선택하세요</option>';
   CATEGORY_ORDER.forEach(cat => {
     if (!groups[cat] || !groups[cat].length) return;
-    html += `<optgroup label="${cat}">`;
-    groups[cat].forEach(b => { html += `<option value="${b}">${b}</option>`; });
-    html += `</optgroup>`;
+    selHtml += `<optgroup label="${cat}">`;
+    groups[cat].forEach(b => { selHtml += `<option value="${b}">${b}</option>`; });
+    selHtml += `</optgroup>`;
   });
-  sel.innerHTML = html;
+  sel.innerHTML = selHtml;
   if (prev && books.includes(prev)) sel.value = prev;
+
+  renderBookPicker(groups, CATEGORY_ORDER, sel.value);
 }
+
+function renderBookPicker(groups, CATEGORY_ORDER, currentBook) {
+  const panel = document.getElementById('book-picker-panel');
+  if (!panel) return;
+  let html = '';
+  CATEGORY_ORDER.forEach(cat => {
+    if (!groups[cat] || !groups[cat].length) return;
+    const isOpen = bpOpenCategories.has(cat) || groups[cat].includes(currentBook);
+    if (isOpen) bpOpenCategories.add(cat);
+    html += `<div class="bp-category" onclick="toggleBookCategory('${cat}')">
+        <span>${cat} (${groups[cat].length})</span><span>${isOpen ? '▲' : '▼'}</span>
+      </div>
+      <div class="bp-books ${isOpen ? 'open' : ''}" data-cat="${cat}">`;
+    groups[cat].forEach(b => {
+      const sel = b === currentBook ? 'selected' : '';
+      html += `<div class="bp-book-item ${sel}" onclick="pickBook('${b.replace(/'/g,"\\'")}')">${b}</div>`;
+    });
+    html += `</div>`;
+  });
+  panel.innerHTML = html || '<div style="padding:12px;color:#999;font-size:13px;text-align:center;">등록된 교재가 없습니다</div>';
+
+  const label = document.getElementById('book-picker-label');
+  if (label) label.textContent = currentBook || '교재를 선택하세요';
+}
+
+function toggleBookCategory(cat) {
+  if (bpOpenCategories.has(cat)) bpOpenCategories.delete(cat);
+  else bpOpenCategories.add(cat);
+  const sel = document.getElementById('sel-book');
+  const currentBook = sel ? sel.value : '';
+  // 카테고리만 다시 그리기 (books 재계산 없이 패널만 갱신)
+  const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
+  const groups = {};
+  books.forEach(b => { const c = categorizeBook(b); (groups[c] = groups[c] || []).push(b); });
+  renderBookPicker(groups, ['교과서','수능특강','수능연계교재','모의고사'], currentBook);
+}
+
+function pickBook(book) {
+  const sel = document.getElementById('sel-book');
+  sel.value = book;
+  closeBookPicker();
+  onBookChange();
+  updateBookSelect();
+}
+
+function toggleBookPicker() {
+  const panel = document.getElementById('book-picker-panel');
+  if (!panel) return;
+  panel.classList.toggle('hidden');
+}
+
+function closeBookPicker() {
+  const panel = document.getElementById('book-picker-panel');
+  if (panel) panel.classList.add('hidden');
+}
+
+document.addEventListener('click', (e) => {
+  const picker = document.getElementById('book-picker');
+  if (picker && !picker.contains(e.target)) closeBookPicker();
+});
+
 
 function pgDragStart(ev, book, unit, pid) {
   ev.dataTransfer.effectAllowed = 'move';

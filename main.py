@@ -85,6 +85,7 @@ async def _load_db():
                     db["books"][bk]["units"][unit]["passages"][pid] = {
                         "title": r.get("title", pid),
                         "text": r.get("passage_text", ""),
+                        "order": r.get("order_index"),  # ★ 컬럼 없으면 자동으로 None
                     }
                 return db
     except Exception as e:
@@ -116,13 +117,16 @@ async def _save_db(d):
         for bk, bd in d.get("books", {}).items():
             for unit, ud in bd.get("units", {}).items():
                 for pid, pi in ud.get("passages", {}).items():
-                    rows.append({
+                    row = {
                         "book": bk,
                         "unit": unit,
                         "pid": pid,
                         "title": pi.get("title", pid),
                         "passage_text": pi.get("text", ""),
-                    })
+                    }
+                    if pi.get("order") is not None:
+                        row["order_index"] = pi.get("order")
+                    rows.append(row)
 
         if not rows:
             return
@@ -246,15 +250,46 @@ async def list_passages(request: Request):
                     "id": pid,  # 프론트에서 p.id 로 씀
                     "title": pi.get("title", pid),
                     "passage_text": pi.get("text", ""),  # ★ 원문 추출용 추가
+                    "order": pi.get("order"),  # ★ 수동 지정 순서 (없으면 None)
                     "cache_status": "ready" if await _is_cached(ck) else "not_ready",
                 })
-    # unit(숫자 기준), pid(숫자 기준) 정렬
+    # unit(숫자 기준) 정렬 후, 같은 단원 안에서는 수동 order가 있으면 그것을 우선,
+    # 없으면 pid(숫자 기준)로 정렬
     def _sort_key(p):
         unit_num = int(re.search(r'\d+', p["unit"]).group()) if re.search(r'\d+', p["unit"]) else 0
+        if p.get("order") is not None:
+            return (unit_num, 0, p["order"])
         pid_num = int(re.search(r'\d+', p["id"]).group()) if re.search(r'\d+', p["id"]) else 999
-        return (unit_num, pid_num)
+        return (unit_num, 1, pid_num)
     result.sort(key=_sort_key)
     return result
+
+
+@app.post("/api/passages/reorder")
+async def reorder_passages(request: Request):
+    """같은 book/unit 안 지문들의 표시 순서를 수동으로 지정.
+    body: {book, unit, order: [pid1, pid2, ...]}  (원하는 순서대로 pid 나열)
+    """
+    _verify(request)
+    body = await request.json()
+    book = body.get("book")
+    unit = body.get("unit")
+    order = body.get("order")
+    if not (book and unit and isinstance(order, list)):
+        raise HTTPException(400, "book, unit, order(list) 필요")
+
+    db = await _load_db()
+    try:
+        passages = db["books"][book]["units"][unit]["passages"]
+    except Exception:
+        raise HTTPException(404, "book/unit not found")
+
+    for idx, pid in enumerate(order):
+        if pid in passages:
+            passages[pid]["order"] = idx
+
+    await _save_db(db)
+    return {"ok": True}
 
 
 @app.post("/api/passages/upload")

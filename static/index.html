@@ -121,6 +121,8 @@ textarea:focus { border-color: #4A90D9; outline: none; }
 .ext-pid-chip:hover { background: #f0f4f8; }
 .ext-pid-chip.selected { background: #EBF4FB; border-color: #4A90D9; color: #4A90D9; }
 .ext-count-badge { font-size: 11px; color: #666; margin-left: auto; }
+.lst-cat { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; font-size: 12.5px; font-weight: 700; color: #2E4E8F; background: #EBF0FA; border-bottom: 1px solid #d8e2f2; cursor: pointer; user-select: none; }
+.lst-cat:hover { background: #dbe4f5; }
 
 /* ★ 비밀노트 탭 스타일 */
 .sn-type-btn { flex:1; padding:12px 8px; border:none; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; transition:all 0.2s; }
@@ -776,6 +778,29 @@ async function clearNotice() { document.getElementById('notice-input').value = '
 // ============================================================
 // Book / Passage
 // ============================================================
+const BOOK_CATEGORY_ORDER = ['교과서', '수능특강', '수능연계교재', '모의고사'];
+const listOpenCats = { pc:new Set(), as:new Set(), sn:new Set(), ext:new Set(), vr:new Set(), ss:new Set() };
+
+function groupBooksByCategory(names) {
+  const g = {};
+  names.forEach(b => { const c = categorizeBook(b); (g[c] = g[c] || []).push(b); });
+  return BOOK_CATEGORY_ORDER.filter(c => g[c] && g[c].length).map(c => [c, g[c]]);
+}
+
+function bookCatHeader(prefix, cat, count, open) {
+  return `<div class="lst-cat" onclick="toggleListCat('${prefix}','${cat}')">
+    <span>${cat} (${count})</span><span>${open ? '▲' : '▼'}</span></div>`;
+}
+
+function toggleListCat(prefix, cat) {
+  const s = listOpenCats[prefix];
+  if (!s) return;
+  if (s.has(cat)) s.delete(cat); else s.add(cat);
+  const fns = { pc: pcRenderBookList, as: asRenderBookList, sn: snRenderBookList,
+                ext: extRenderBookList, vr: vrRenderBookList, ss: ssRenderBookList };
+  if (fns[prefix]) fns[prefix]();
+}
+
 function categorizeBook(name) {
   if (/모의고사/.test(name)) return '모의고사';
   if (/리딩파워|올림포스|라이트|light|영독|독해연습/i.test(name)) return '수능연계교재';
@@ -1218,7 +1243,11 @@ function ssRenderBookList(){
     (books[p.book][p.unit] = books[p.book][p.unit] || []).push(p);
   });
   let html = '';
-  for(const book of Object.keys(books).sort()){
+  for (const [__cat, __catBooks] of groupBooksByCategory(Object.keys(books).sort())) {
+    const __catOpen = listOpenCats.ss.has(__cat);
+    html += bookCatHeader('ss', __cat, __catBooks.length, __catOpen);
+    if (!__catOpen) continue;
+  for (const book of __catBooks) {
     const units = Object.keys(books[book]).sort((a,b)=>(parseInt(a.match(/\d+/)?.[0])||0)-(parseInt(b.match(/\d+/)?.[0])||0)||a.localeCompare(b));
     const all = Object.values(books[book]).flat();
     const sel = all.filter(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
@@ -1247,6 +1276,7 @@ function ssRenderBookList(){
       }
     }
   }
+  }
   document.getElementById('ss-book-list').innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
   ssUpdateCount(); ssUpdateBtns();
 }
@@ -1254,7 +1284,7 @@ function ssToggleExpand(b){ ssExpandedBooks.has(b)?ssExpandedBooks.delete(b):ssE
 function ssTogglePassage(book,unit,id){ const k=`${book}|${unit}|${id}`; ssSelectedPassages.has(k)?ssSelectedPassages.delete(k):ssSelectedPassages.set(k,{book,unit,id}); ssRenderBookList(); }
 function ssToggleUnit(book,unit){ const ups=PASSAGES_DATA.filter(p=>p.book===book&&p.unit===unit); const allSel=ups.every(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)); ups.forEach(p=>{const k=`${p.book}|${p.unit}|${p.id}`; allSel?ssSelectedPassages.delete(k):ssSelectedPassages.set(k,{book:p.book,unit:p.unit,id:p.id});}); ssRenderBookList(); }
 function ssToggleBook(book){ const bp=PASSAGES_DATA.filter(p=>p.book===book); const allSel=bp.every(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)); bp.forEach(p=>{const k=`${p.book}|${p.unit}|${p.id}`; allSel?ssSelectedPassages.delete(k):ssSelectedPassages.set(k,{book:p.book,unit:p.unit,id:p.id});}); ssRenderBookList(); }
-function ssExpandAll(){ PASSAGES_DATA.forEach(p=>ssExpandedBooks.add(p.book)); ssRenderBookList(); }
+function ssExpandAll(){ BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.ss.add(x)); PASSAGES_DATA.forEach(p=>ssExpandedBooks.add(p.book)); ssRenderBookList(); }
 function ssCollapseAll(){ ssExpandedBooks.clear(); ssRenderBookList(); }
 function ssClearSelection(){ ssSelectedPassages.clear(); ssRenderBookList(); }
 function ssUpdateCount(){ document.getElementById('ss-sel-count').textContent = `${ssSelectedPassages.size}개 선택`; }
@@ -1347,7 +1377,11 @@ function snRenderBookList() {
   const container = document.getElementById('sn-book-list');
   
   let html = '';
-  for (const book of bookNames) {
+  for (const [__cat, __catBooks] of groupBooksByCategory(bookNames)) {
+    const __catOpen = listOpenCats.sn.has(__cat);
+    html += bookCatHeader('sn', __cat, __catBooks.length, __catOpen);
+    if (!__catOpen) continue;
+  for (const book of __catBooks) {
     const units = Object.keys(books[book]).sort((a,b) => {
       const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
       const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
@@ -1391,6 +1425,7 @@ function snRenderBookList() {
       }
     }
   }
+  }
   container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
   snUpdateCount();
   snUpdateBtns();
@@ -1403,6 +1438,7 @@ function snToggleExpand(book) {
 }
 
 function snExpandAll() {
+  BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.sn.add(x));
   const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
   books.forEach(b => snExpandedBooks.add(b));
   snRenderBookList();
@@ -1552,7 +1588,11 @@ function pcRenderBookList() {
   const container = document.getElementById('pc-book-list');
 
   let html = '';
-  for (const book of bookNames) {
+  for (const [__cat, __catBooks] of groupBooksByCategory(bookNames)) {
+    const __catOpen = listOpenCats.pc.has(__cat);
+    html += bookCatHeader('pc', __cat, __catBooks.length, __catOpen);
+    if (!__catOpen) continue;
+  for (const book of __catBooks) {
     const units = Object.keys(books[book]).sort((a,b) => {
       const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
       const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
@@ -1596,6 +1636,7 @@ function pcRenderBookList() {
       }
     }
   }
+  }
   container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
   pcUpdateCount();
   pcUpdateBtn();
@@ -1608,6 +1649,7 @@ function pcToggleExpand(book) {
 }
 
 function pcExpandAll() {
+  BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.pc.add(x));
   const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
   books.forEach(b => pcExpandedBooks.add(b));
   pcRenderBookList();
@@ -1904,7 +1946,11 @@ function extRenderBookList() {
   const container = document.getElementById('ext-book-list');
   
   let html = '';
-  for (const book of bookNames) {
+  for (const [__cat, __catBooks] of groupBooksByCategory(bookNames)) {
+    const __catOpen = listOpenCats.ext.has(__cat);
+    html += bookCatHeader('ext', __cat, __catBooks.length, __catOpen);
+    if (!__catOpen) continue;
+  for (const book of __catBooks) {
     const units = Object.keys(books[book]).sort((a,b) => {
       const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
       const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
@@ -1948,6 +1994,7 @@ function extRenderBookList() {
       }
     }
   }
+  }
   container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
   extUpdateSelCount();
 }
@@ -1959,6 +2006,7 @@ function extToggleExpand(book) {
 }
 
 function extExpandAll() {
+  BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.ext.add(x));
   const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
   books.forEach(b => extExpandedBooks.add(b));
   extRenderBookList();
@@ -2153,7 +2201,11 @@ function vrRenderBookList() {
   const container = document.getElementById('vr-book-list');
   
   let html = '';
-  for (const book of bookNames) {
+  for (const [__cat, __catBooks] of groupBooksByCategory(bookNames)) {
+    const __catOpen = listOpenCats.vr.has(__cat);
+    html += bookCatHeader('vr', __cat, __catBooks.length, __catOpen);
+    if (!__catOpen) continue;
+  for (const book of __catBooks) {
     const units = Object.keys(books[book]).sort((a,b) => {
       const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
       const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
@@ -2203,6 +2255,7 @@ function vrRenderBookList() {
       }
     }
   }
+  }
   container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
   vrUpdateCount();
   vrUpdateBtns();
@@ -2215,6 +2268,7 @@ function vrToggleExpand(book) {
 }
 
 function vrExpandAll() {
+  BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.vr.add(x));
   const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
   books.forEach(b => vrExpandedBooks.add(b));
   vrRenderBookList();
@@ -2416,7 +2470,11 @@ function asRenderBookList() {
   const bookNames = Object.keys(books).sort();
   const container = document.getElementById('as-book-list');
   let html = '';
-  for (const book of bookNames) {
+  for (const [__cat, __catBooks] of groupBooksByCategory(bookNames)) {
+    const __catOpen = listOpenCats.as.has(__cat);
+    html += bookCatHeader('as', __cat, __catBooks.length, __catOpen);
+    if (!__catOpen) continue;
+  for (const book of __catBooks) {
     const units = Object.keys(books[book]).sort((a,b) => {
       const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
       const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
@@ -2460,6 +2518,7 @@ function asRenderBookList() {
       }
     }
   }
+  }
   container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
   asUpdateCount();
   asUpdateBtn();
@@ -2471,6 +2530,7 @@ function asToggleExpand(book) {
   asRenderBookList();
 }
 function asExpandAll() {
+  BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.as.add(x));
   [...new Set(PASSAGES_DATA.map(p => p.book))].forEach(b => asExpandedBooks.add(b));
   asRenderBookList();
 }

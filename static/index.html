@@ -312,6 +312,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
             <button class="btn btn-sm" onclick="selectAll()" style="background:#eee;color:#333;">전체 선택</button>
             <button class="btn btn-sm" onclick="selectNone()" style="background:#eee;color:#333;">선택 해제</button>
             <button class="btn btn-sm" onclick="clearPassageCache()" style="background:#f3e8ff;color:#6d28d9;border:1px solid #c4b5fd;">🗑️ 선택 캐시 삭제</button>
+            <button id="pg-save-order-btn" class="btn btn-sm hidden" onclick="pgSaveAllOrders()" style="background:#2E4E8F;color:white;margin-left:auto;">✅ 순서 저장</button>
           </div>
           <div class="passage-list" id="passage-list">
             <div style="padding:20px;text-align:center;color:#999;">교재를 먼저 선택하세요</div>
@@ -871,6 +872,8 @@ document.addEventListener('click', (e) => {
 });
 
 
+let pgDirtyUnits = new Map(); // unit -> book (아직 저장 안 된 순서 변경이 있는 단원들)
+
 function pgDragStart(ev, book, unit, pid) {
   ev.dataTransfer.effectAllowed = 'move';
   ev.dataTransfer.setData('text/plain', JSON.stringify({book, unit, pid}));
@@ -883,42 +886,67 @@ function pgDragOver(ev) {
   ev.preventDefault();
   ev.dataTransfer.dropEffect = 'move';
 }
-async function pgDrop(ev, book, unit, targetPid) {
+function pgFindItemEl(unit, pid) {
+  return [...document.querySelectorAll('#passage-list .passage-item')]
+    .find(el => el.dataset.unit === unit && el.dataset.pid === pid);
+}
+function pgDrop(ev, book, unit, targetPid) {
   ev.preventDefault();
   let data;
   try { data = JSON.parse(ev.dataTransfer.getData('text/plain')); } catch(e) { return; }
   if (!data || data.book !== book || data.unit !== unit || data.pid === targetPid) return;
 
-  const container = document.getElementById('passage-list');
-  const items = [...container.querySelectorAll('.passage-item')].filter(el => el.dataset.unit === unit);
-  const order = items.map(el => el.dataset.pid);
-  const fromIdx = order.indexOf(data.pid);
-  const toIdx = order.indexOf(targetPid);
-  if (fromIdx === -1 || toIdx === -1) return;
-  order.splice(fromIdx, 1);
-  order.splice(toIdx, 0, data.pid);
-  await pgSaveOrder(book, unit, order);
+  const draggedEl = pgFindItemEl(unit, data.pid);
+  const targetEl = ev.currentTarget;
+  if (!draggedEl || !targetEl || draggedEl === targetEl) return;
+
+  // 마우스 위치가 대상의 위쪽 절반이면 그 앞에, 아래쪽 절반이면 그 뒤에 삽입 — 저장은 아직 안 함(로컬 재배치만)
+  const rect = targetEl.getBoundingClientRect();
+  const before = (ev.clientY - rect.top) < rect.height / 2;
+  if (before) targetEl.parentNode.insertBefore(draggedEl, targetEl);
+  else targetEl.parentNode.insertBefore(draggedEl, targetEl.nextSibling);
+
+  pgMarkUnitDirty(book, unit);
 }
-async function pgSaveOrder(book, unit, order) {
+function pgMarkUnitDirty(book, unit) {
+  pgDirtyUnits.set(unit, book);
+  const btn = document.getElementById('pg-save-order-btn');
+  if (btn) btn.classList.remove('hidden');
+}
+async function pgSaveAllOrders() {
+  if (!pgDirtyUnits.size) return;
+  const btn = document.getElementById('pg-save-order-btn');
+  const book = document.getElementById('sel-book').value;
+  if (btn) { btn.disabled = true; btn.textContent = '저장 중...'; }
   try {
-    const res = await fetch(API + '/api/passages/reorder', {
-      method: 'POST', headers: headers(),
-      body: JSON.stringify({ book, unit, order })
-    });
-    const data = await res.json();
-    if (data.ok) {
-      toast('✅ 순서 저장됨');
-      await loadPassages();
-      if (document.getElementById('sel-book').value === book) onBookChange();
-    } else {
-      toast('순서 저장 실패');
+    for (const [unit, bk] of pgDirtyUnits.entries()) {
+      const items = [...document.querySelectorAll('#passage-list .passage-item')].filter(el => el.dataset.unit === unit);
+      const order = items.map(el => el.dataset.pid);
+      const res = await fetch(API + '/api/passages/reorder', {
+        method: 'POST', headers: headers(),
+        body: JSON.stringify({ book: bk, unit, order })
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.detail || '저장 실패');
     }
-  } catch(e) { toast('순서 저장 실패: ' + (e.message||'')); }
+    toast('✅ 순서 저장 완료');
+    pgDirtyUnits.clear();
+    if (btn) btn.classList.add('hidden');
+    await loadPassages();
+    if (book) onBookChange();
+  } catch(e) {
+    toast('순서 저장 실패: ' + (e.message||''));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✅ 순서 저장'; }
+  }
 }
 
 function onBookChange() {
   const book = document.getElementById('sel-book').value;
   selectedPassages.clear();
+  pgDirtyUnits.clear();
+  const saveBtn = document.getElementById('pg-save-order-btn');
+  if (saveBtn) saveBtn.classList.add('hidden');
   const list = document.getElementById('passage-list');
   if (!book) { list.innerHTML = '<div style="padding:20px;text-align:center;color:#999;">교재를 먼저 선택하세요</div>'; updateSelCount(); updateGenerateBtn(); return; }
   const passages = PASSAGES_DATA.filter(p => p.book === book);

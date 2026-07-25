@@ -120,6 +120,9 @@ textarea:focus { border-color: #4A90D9; outline: none; }
 .ext-pid-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all 0.15s; border: 1px solid #e5e7eb; background: #f8fafc; }
 .ext-pid-chip:hover { background: #f0f4f8; }
 .ext-pid-chip.selected { background: #EBF4FB; border-color: #4A90D9; color: #4A90D9; }
+.chip-handle { cursor: grab; color: #b8bfcc; font-size: 11px; user-select: none; }
+.chip-handle:active { cursor: grabbing; }
+.ext-pid-chip.chip-dragging { opacity: 0.4; }
 .ext-count-badge { font-size: 11px; color: #666; margin-left: auto; }
 .lst-cat { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; font-size: 12.5px; font-weight: 700; color: #2E4E8F; background: #EBF0FA; border-bottom: 1px solid #d8e2f2; cursor: pointer; user-select: none; }
 .lst-cat:hover { background: #dbe4f5; }
@@ -666,6 +669,12 @@ textarea:focus { border-color: #4A90D9; outline: none; }
   </div>
 </div>
 
+<!-- ★ 지문 순서 저장 플로팅 버튼 (드래그로 순서 변경 시 나타남) -->
+<button id="chip-save-order-btn" class="hidden" onclick="chipSaveAllOrders()"
+  style="position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:900;padding:11px 22px;border:none;border-radius:10px;background:#2E4E8F;color:#fff;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.25);">
+  ✅ 지문 순서 저장
+</button>
+
 <script>
 let TOKEN = localStorage.getItem('wb_token') || '';
 let PASSAGES_DATA = null;
@@ -778,6 +787,76 @@ async function clearNotice() { document.getElementById('notice-input').value = '
 // ============================================================
 // Book / Passage
 // ============================================================
+// ★ 지문 칩 드래그 순서 변경 (0회독/분석지/변형문제/서술형/비밀노트/원문추출 공용)
+let chipDirty = new Map(); // "book|unit" -> {book, unit}
+let __chipDragEl = null;
+
+function chipDragStart(ev) {
+  const chip = ev.currentTarget.closest('.ext-pid-chip');
+  if (!chip) return;
+  __chipDragEl = chip;
+  ev.dataTransfer.effectAllowed = 'move';
+  ev.dataTransfer.setData('text/plain', 'chip');
+  chip.classList.add('chip-dragging');
+}
+function chipDragEnd(ev) {
+  if (__chipDragEl) __chipDragEl.classList.remove('chip-dragging');
+  __chipDragEl = null;
+}
+function chipDragOver(ev) {
+  if (!__chipDragEl) return;
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = 'move';
+}
+function chipDrop(ev) {
+  const dragged = __chipDragEl;
+  const target = ev.currentTarget;
+  if (!dragged || dragged === target) return;
+  // 같은 교재 · 같은 단원 안에서만 순서 변경 허용
+  if (dragged.dataset.book !== target.dataset.book || dragged.dataset.unit !== target.dataset.unit) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  const rect = target.getBoundingClientRect();
+  const before = (ev.clientX - rect.left) < rect.width / 2;
+  target.parentNode.insertBefore(dragged, before ? target : target.nextSibling);
+  chipMarkDirty(dragged.dataset.book, dragged.dataset.unit);
+}
+function chipMarkDirty(book, unit) {
+  chipDirty.set(`${book}|${unit}`, { book, unit });
+  const btn = document.getElementById('chip-save-order-btn');
+  if (btn) btn.classList.remove('hidden');
+}
+async function chipSaveAllOrders() {
+  if (!chipDirty.size) return;
+  const btn = document.getElementById('chip-save-order-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '저장 중...'; }
+  try {
+    for (const { book, unit } of chipDirty.values()) {
+      const chips = [...document.querySelectorAll('.ext-pid-chip')]
+        .filter(el => el.dataset.book === book && el.dataset.unit === unit);
+      const order = chips.map(el => el.dataset.pid);
+      if (!order.length) continue;
+      const res = await fetch(API + '/api/passages/reorder', {
+        method: 'POST', headers: headers(),
+        body: JSON.stringify({ book, unit, order })
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.detail || '저장 실패');
+    }
+    toast('✅ 지문 순서 저장 완료');
+    chipDirty.clear();
+    if (btn) btn.classList.add('hidden');
+    await loadPassages();
+    // 현재 열려 있는 탭 목록 새로고침
+    [pcRefreshBooks, asRefreshBooks, snRefreshBooks, extRefreshBooks, vrRefreshBooks, ssRefreshBooks]
+      .forEach(fn => { try { fn(); } catch(e) {} });
+  } catch(e) {
+    toast('순서 저장 실패: ' + (e.message || ''));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✅ 지문 순서 저장'; }
+  }
+}
+
 const BOOK_CATEGORY_ORDER = ['교과서', '수능특강', '수능연계교재', '모의고사'];
 const listOpenCats = { pc:new Set(), as:new Set(), sn:new Set(), ext:new Set(), vr:new Set(), ss:new Set() };
 
@@ -1269,7 +1348,7 @@ function ssRenderBookList(){
           const key = `${p.book}|${p.unit}|${p.id}`;
           const is = ssSelectedPassages.has(key);
           let ord = is ? `<span style="background:#2563eb;color:#fff;font-weight:700;padding:0 4px;border-radius:8px;font-size:9px;margin-right:2px;">${[...ssSelectedPassages.keys()].indexOf(key)+1}</span>`:'';
-          html += `<label class="ext-pid-chip ${is?'selected':''}" style="${is?'background:#dbeafe;border-color:#60a5fa;':''}">
+          html += `<label class="ext-pid-chip ${is?'selected':''}" style="${is?'background:#dbeafe;border-color:#60a5fa;':''}" data-book="${p.book}" data-unit="${p.unit}" data-pid="${p.id}" ondragover="chipDragOver(event)" ondrop="chipDrop(event)"><span class="chip-handle" draggable="true" ondragstart="chipDragStart(event)" ondragend="chipDragEnd(event)" title="드래그해서 순서 변경">⠿</span>
             <input type="checkbox" ${is?'checked':''} onchange="ssTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">${ord}${p.id}</label>`;
         }
         html += '</div></div>';
@@ -1416,7 +1495,7 @@ function snRenderBookList() {
         for (const p of unitPassages) {
           const key = `${p.book}|${p.unit}|${p.id}`;
           const isSelected = snSelectedPassages.has(key);
-          html += `<label class="ext-pid-chip ${isSelected?'selected':''}">
+          html += `<label class="ext-pid-chip ${isSelected?'selected':''}" data-book="${p.book}" data-unit="${p.unit}" data-pid="${p.id}" ondragover="chipDragOver(event)" ondrop="chipDrop(event)"><span class="chip-handle" draggable="true" ondragstart="chipDragStart(event)" ondragend="chipDragEnd(event)" title="드래그해서 순서 변경">⠿</span>
             <input type="checkbox" ${isSelected?'checked':''} onchange="snTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
             ${p.id}
           </label>`;
@@ -1627,7 +1706,7 @@ function pcRenderBookList() {
         for (const p of unitPassages) {
           const key = `${p.book}|${p.unit}|${p.id}`;
           const isSelected = pcSelectedPassages.has(key);
-          html += `<label class="ext-pid-chip ${isSelected?'selected':''}">
+          html += `<label class="ext-pid-chip ${isSelected?'selected':''}" data-book="${p.book}" data-unit="${p.unit}" data-pid="${p.id}" ondragover="chipDragOver(event)" ondrop="chipDrop(event)"><span class="chip-handle" draggable="true" ondragstart="chipDragStart(event)" ondragend="chipDragEnd(event)" title="드래그해서 순서 변경">⠿</span>
             <input type="checkbox" ${isSelected?'checked':''} onchange="pcTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
             ${p.id}
           </label>`;
@@ -1985,7 +2064,7 @@ function extRenderBookList() {
         for (const p of unitPassages) {
           const key = `${p.book}|${p.unit}|${p.id}`;
           const isSelected = extSelectedPassages.has(key);
-          html += `<label class="ext-pid-chip ${isSelected?'selected':''}">
+          html += `<label class="ext-pid-chip ${isSelected?'selected':''}" data-book="${p.book}" data-unit="${p.unit}" data-pid="${p.id}" ondragover="chipDragOver(event)" ondrop="chipDrop(event)"><span class="chip-handle" draggable="true" ondragstart="chipDragStart(event)" ondragend="chipDragEnd(event)" title="드래그해서 순서 변경">⠿</span>
             <input type="checkbox" ${isSelected?'checked':''} onchange="extTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
             ${p.id}
           </label>`;
@@ -2246,7 +2325,7 @@ function vrRenderBookList() {
             const idx = [...vrSelectedPassages.keys()].indexOf(key);
             orderNum = `<span style="background:#ea580c;color:white;font-weight:700;padding:0 4px;border-radius:8px;font-size:9px;margin-right:2px;">${idx+1}</span>`;
           }
-          html += `<label class="ext-pid-chip ${isSelected?'selected':''}" style="${isSelected?'background:#fed7aa;border-color:#fb923c;':''}">
+          html += `<label class="ext-pid-chip ${isSelected?'selected':''}" style="${isSelected?'background:#fed7aa;border-color:#fb923c;':''}" data-book="${p.book}" data-unit="${p.unit}" data-pid="${p.id}" ondragover="chipDragOver(event)" ondrop="chipDrop(event)"><span class="chip-handle" draggable="true" ondragstart="chipDragStart(event)" ondragend="chipDragEnd(event)" title="드래그해서 순서 변경">⠿</span>
             <input type="checkbox" ${isSelected?'checked':''} onchange="vrTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
             ${orderNum}${p.id}
           </label>`;
@@ -2509,7 +2588,7 @@ function asRenderBookList() {
           const badge = ready
             ? `<span style="color:#2E9E5A;font-size:9px;margin-left:3px;">●</span>`
             : `<span style="color:#E8833A;font-size:9px;margin-left:3px;" title="0회독 미생성">○</span>`;
-          html += `<label class="ext-pid-chip ${isSelected?'selected':''}" title="${ready?'0회독 준비됨':'0회독 미생성 — 먼저 0회독 생성 필요'}">
+          html += `<label class="ext-pid-chip ${isSelected?'selected':''}" title="${ready?'0회독 준비됨':'0회독 미생성 — 먼저 0회독 생성 필요'}" data-book="${p.book}" data-unit="${p.unit}" data-pid="${p.id}" ondragover="chipDragOver(event)" ondrop="chipDrop(event)"><span class="chip-handle" draggable="true" ondragstart="chipDragStart(event)" ondragend="chipDragEnd(event)" title="드래그해서 순서 변경">⠿</span>
             <input type="checkbox" ${isSelected?'checked':''} onchange="asTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
             ${p.id}${badge}
           </label>`;

@@ -40,6 +40,7 @@
   .sline{display:flex;gap:8px;align-items:flex-start}
   .bul{flex:none;width:18px;height:18px;border-radius:50%;background:var(--ink);color:#fff;font-size:10px;font-weight:800;display:grid;place-items:center;margin-top:3px}
   .en{font-family:var(--serif);font-size:14px;line-height:1.85;color:#1A1A1A}
+  .snum{font-weight:800;color:var(--ink);margin-right:5px}
   .en .wd{cursor:pointer;border-radius:2px;padding:0 .5px}
   .en .wd:hover{background:#EEF3FC}
   .en .wd.gp{border-bottom:2px solid var(--red)}.en .wd.vp{border-bottom:2px solid var(--blue)}
@@ -74,7 +75,7 @@
   .tgchips{display:flex;flex-wrap:wrap;gap:4px}
   .tchip{font-size:10px;font-weight:600;color:var(--faint);background:#fff;border:1px solid var(--line);border-radius:7px;padding:3px 7px;cursor:pointer}
   .tchip.on{color:#1A1A1A;border-color:#2E4E8F;background:#F0F4FB}
-  .atag{display:inline-block;font-size:9px;font-weight:800;color:#fff;border-radius:5px;padding:1px 7px;margin-bottom:4px;cursor:pointer;letter-spacing:.02em}
+  .atag{display:inline-block;font-size:9px;font-weight:800;color:#fff;border-radius:5px;padding:1px 7px;margin-right:6px;vertical-align:2px;cursor:pointer;letter-spacing:.02em}
   .atag.red{background:#CC2222}.atag.blue{background:#2E4E8F}.atag.purple{background:#6A1B9A}.atag.orange{background:#C2660A}.atag.none{background:#B7BDC8}
   .hltog{font-size:8.5px;font-weight:800;padding:1px 6px;border-radius:8px;cursor:pointer;background:#F0F1F4;color:#9AA0AC;border:1px solid #E0E3EA}
   .hltog.on{background:#FFF1A0;color:#8A6A00;border-color:#E8C84B}
@@ -376,7 +377,7 @@ function renderAuth(){
     const tg=STAG[si]||{t:"(없음)",c:"none"};
     let dd='';
     if(SEL.openTag===si)dd='<div class="tagdd">'+TAGOPTS.map((o,oi)=>`<span class="tagopt ${o.c} ${tg.t===o.t?'sel':''}" data-tagpick="${si}" data-oi="${oi}">${o.t}</span>`).join('')+'</div>';
-    h+=`<div class="sent"><div class="sline"><div class="bul">${si+1}</div><div style="flex:1"><span class="atag ${tg.c}" data-tagsi="${si}">${tg.t} ▾</span>${dd}<div class="en">${line}</div></div></div></div>`;
+    h+=`<div class="sent">${dd}<div class="en"><span class="snum">${si+1}.</span><span class="atag ${tg.c}" data-tagsi="${si}">${tg.t} ▾</span>${line}</div></div>`;
   });
   h+='</div><div class="a-side"><h3>분석 결과 — 후보에서 선택</h3>';
   h+=`<div class="pick"><div class="pl">지문난이도 <span style="color:var(--faint);font-weight:600">클릭해 별 조정 (내신출제 가능성)</span></div><div class="stars-edit">`+[1,2,3,4,5].map(n=>`<span class="stedit ${n<=DIFF?'on':''}" data-diff="${n}">★</span>`).join('')+`</div></div>`;

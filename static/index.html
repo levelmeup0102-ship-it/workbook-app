@@ -59,6 +59,8 @@ select:focus { border-color: #4A90D9; outline: none; }
 .passage-item { display: flex; align-items: center; padding: 8px 10px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.15s; }
 .passage-item:hover { background: #f5f7fa; }
 .passage-item:last-child { border-bottom: none; }
+.passage-item.pg-dragging { opacity: 0.4; background: #eef3fa; }
+.passage-item .pg-drag-handle:active { cursor: grabbing; }
 .passage-item input[type="checkbox"] { width: 16px; height: 16px; margin-right: 8px; accent-color: #4A90D9; flex-shrink: 0; }
 .passage-item .title { flex: 1; font-size: 13px; }
 .unit-header { padding: 7px 10px; background: #f0f4f8; font-weight: 700; font-size: 12px; color: #4A90D9; border-bottom: 1px solid #e0e0e0; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
@@ -649,6 +651,29 @@ let PASSAGES_DATA = null;
 let selectedPassages = new Map();
 const API = '';
 
+// ★ 지문 정렬: 같은 book/unit 안에서 번호 지문(01번,02번..)은 숫자순으로,
+//   Read More / Further Reading / Gateway 등 이름만 있는 지문은 그 단원의 맨 뒤로 보낸다.
+function passagePositionKey(p) {
+  if (p && p.order !== undefined && p.order !== null) return p.order; // 수동 지정 순서 우선
+  const id = (p && p.id) || p;
+  const m = String(id).match(/^(\d+)/); // 맨 앞 숫자 추출 (예: "01번" -> 1)
+  if (m) return parseInt(m[1], 10);
+  return Infinity; // 숫자로 안 시작하면 맨 뒤
+}
+function unitPositionKey(unit) {
+  const m = String(unit).match(/\d+/);
+  return m ? parseInt(m[0], 10) : 0;
+}
+function sortPassagesData(data) {
+  return [...data].sort((a, b) => {
+    if (a.book !== b.book) return a.book.localeCompare(b.book);
+    const ua = unitPositionKey(a.unit), ub = unitPositionKey(b.unit);
+    if (ua !== ub) return ua - ub;
+    if (a.unit !== b.unit) return a.unit.localeCompare(b.unit);
+    return passagePositionKey(a) - passagePositionKey(b);
+  });
+}
+
 async function doLogin() {
   const pw = document.getElementById('pw-input').value;
   try {
@@ -684,6 +709,7 @@ async function loadPassages() {
     const res = await fetch(API + '/api/passages', { headers: headers() });
     if (res.status === 401) { doLogout(); return; }
     PASSAGES_DATA = await res.json();
+    PASSAGES_DATA = sortPassagesData(PASSAGES_DATA);
     updateBookSelect();
     if (prevBook) {
       document.getElementById('sel-book').value = prevBook;
@@ -740,6 +766,51 @@ function updateBookSelect() {
   if (prev && books.includes(prev)) sel.value = prev;
 }
 
+function pgDragStart(ev, book, unit, pid) {
+  ev.dataTransfer.effectAllowed = 'move';
+  ev.dataTransfer.setData('text/plain', JSON.stringify({book, unit, pid}));
+  ev.currentTarget.classList.add('pg-dragging');
+}
+function pgDragEnd(ev) {
+  ev.currentTarget.classList.remove('pg-dragging');
+}
+function pgDragOver(ev) {
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = 'move';
+}
+async function pgDrop(ev, book, unit, targetPid) {
+  ev.preventDefault();
+  let data;
+  try { data = JSON.parse(ev.dataTransfer.getData('text/plain')); } catch(e) { return; }
+  if (!data || data.book !== book || data.unit !== unit || data.pid === targetPid) return;
+
+  const container = document.getElementById('passage-list');
+  const items = [...container.querySelectorAll('.passage-item')].filter(el => el.dataset.unit === unit);
+  const order = items.map(el => el.dataset.pid);
+  const fromIdx = order.indexOf(data.pid);
+  const toIdx = order.indexOf(targetPid);
+  if (fromIdx === -1 || toIdx === -1) return;
+  order.splice(fromIdx, 1);
+  order.splice(toIdx, 0, data.pid);
+  await pgSaveOrder(book, unit, order);
+}
+async function pgSaveOrder(book, unit, order) {
+  try {
+    const res = await fetch(API + '/api/passages/reorder', {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify({ book, unit, order })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast('✅ 순서 저장됨');
+      await loadPassages();
+      if (document.getElementById('sel-book').value === book) onBookChange();
+    } else {
+      toast('순서 저장 실패');
+    }
+  } catch(e) { toast('순서 저장 실패: ' + (e.message||'')); }
+}
+
 function onBookChange() {
   const book = document.getElementById('sel-book').value;
   selectedPassages.clear();
@@ -754,7 +825,10 @@ function onBookChange() {
     html += `<div class="unit-header" onclick="toggleUnit('${book}','${unit}')">📁 ${unit} (${up.length}개)<span class="unit-select">단원 전체선택</span></div>`;
     for (const p of up) {
       const key = `${p.book}|${p.unit}|${p.id}`;
-      html += `<div class="passage-item" style="position:relative;">
+      html += `<div class="passage-item" style="position:relative;" draggable="true" data-unit="${unit}" data-pid="${p.id}"
+          ondragstart="pgDragStart(event,'${book}','${unit}','${p.id}')" ondragend="pgDragEnd(event)"
+          ondragover="pgDragOver(event)" ondrop="pgDrop(event,'${book}','${unit}','${p.id}')">
+        <span class="pg-drag-handle" title="드래그해서 순서 변경" style="cursor:grab;color:#bbb;padding:0 6px 0 2px;font-size:14px;user-select:none;">⠿</span>
         <div style="flex:1;display:flex;align-items:center;" onclick="togglePassage('${p.book}','${p.unit}','${p.id}',this.parentElement)">
           <input type="checkbox" data-key="${key}">
           <span class="title">${p.title}</span>

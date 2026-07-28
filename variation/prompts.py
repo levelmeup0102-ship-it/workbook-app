@@ -482,8 +482,12 @@ def build_topic_sentence_prompt(passage_text: str) -> str:
         "(X and Y) takes a plural verb ('context and surroundings ALTER ...' not 'alters').\n"
         "- No bare-verb subject; do not end with a preposition; no 'Despite + clause'; no 'modal + adjective'.\n"
         "- This is the ONLY thing you are writing now — focus entirely on making this one sentence perfect.\n\n"
+        "- ★ Also give the Korean translation of THAT SAME sentence (topic_sentence_kr). "
+        "It must be a translation of the sentence you just wrote — not of the passage, not of anything else. "
+        "PLAIN declarative style (~한다/~이다), never honorific (~합니다).\n\n"
         "[OUTPUT JSON]\n"
-        '{"topic_sentence": "<one perfect topic sentence>"}'
+        '{"topic_sentence": "<one perfect topic sentence>", '
+        '"topic_sentence_kr": "<Korean translation of that exact sentence>"}'
     )
 
 
@@ -518,10 +522,19 @@ def build_summary_sentence_prompt(passage_text: str) -> str:
         "- Also pick TWO phrases that ALREADY appear verbatim inside your sentence (each MUST be AT LEAST 4 words, ideally 4-8 words, "
         "separated by other words) — these become the two writing blanks. Copy them character-for-character.\n"
         "- This is the ONLY thing you are writing now — focus entirely on making this one sentence perfect.\n\n"
+        "- ★ NEVER pick a phrase that contains a comma, semicolon, or colon, and never let a phrase start or "
+        "end on one. The word bank shown to students has no punctuation, so a comma inside the answer makes it "
+        "impossible to reproduce. Cut the phrase so it sits cleanly between punctuation marks.\n"
+        "- ★ blank_A must appear EARLIER in the sentence than blank_B (blank_A first, then blank_B), with at "
+        "least 3 words between them.\n"
+        "- ★ Also give the Korean translation of THAT SAME summary sentence (full_summary_kr). "
+        "It must be a translation of the sentence you just wrote — not of the passage, not of anything else. "
+        "PLAIN declarative style (~한다/~이다), never honorific (~합니다).\n\n"
         "[OUTPUT JSON]\n"
         '{"full_summary": "<one perfect summary sentence>", '
-        '"blank_A": "<exact substring of full_summary, ~4-8 words>", '
-        '"blank_B": "<another exact substring, ~4-8 words, separated from blank_A>"}'
+        '"full_summary_kr": "<Korean translation of that exact sentence>", '
+        '"blank_A": "<exact substring of full_summary, ~4-8 words, no commas>", '
+        '"blank_B": "<another exact substring, ~4-8 words, after blank_A, no commas>"}'
     )
 
 

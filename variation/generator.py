@@ -207,14 +207,26 @@ _Q5_MODALS = {"can", "will", "must", "should", "would", "could", "may", "might",
 
 def _quote_ok(s: str) -> bool:
     """빈칸 후보 검사: 문장경계(.!?) 없고, 따옴표 '짝'이 갈리지 않음(균형).
-    따옴표가 있어도 쌍이 맞으면 허용 — "good student" 통째는 OK, 여는 짝만 먹으면 제외."""
+    따옴표가 있어도 쌍이 맞으면 허용 — "good student" 통째는 OK, 여는 짝만 먹으면 제외.
+
+    ★ 쉼표/세미콜론/콜론도 제외한다. 보기(bogi)는 구두점을 떼고 만들어지므로,
+      정답 안에 쉼표가 있으면 학생이 그 쉼표를 복원할 근거가 없고 채점이 갈린다.
+      (16강 03번 'empty, landlocked patch of desert,' 사례)"""
     if re.search(r'[.!?]', s):
+        return False
+    if re.search(r'[,;:]', s):
         return False
     if s.count('"') % 2 != 0:
         return False
     if s.count('\u201c') != s.count('\u201d'):
         return False
     return True
+
+
+def _strip_edge_punct(s: str) -> str:
+    """구절 양끝의 구두점·공백 제거. 픽커가 span을 자를 때 끝에 붙어 오는
+    쉼표/마침표를 떨어낸다. 안쪽 구두점은 _quote_ok가 이미 거른다."""
+    return str(s or "").strip().strip(",.;:!?").strip()
 
 
 # (더) 빈칸 경계 어휘 — 시작/끝 공통 사용
@@ -360,6 +372,16 @@ def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?
                         continue
                     if new[kb][1].replace("<BLANK_B>", vb) != texts[kb]:
                         continue
+                    # ★ (A)(B) 라벨을 본문 등장 순서로 재배정 — 학생은 (A)→(B) 순으로 쓰는데
+                    #   지문이 (B)→(A) 순이면 읽기 흐름이 어긋난다. 마커만 맞바꾸면 되므로
+                    #   verbatim·복원 검증에는 영향이 없다.
+                    joined2 = " ".join(p[1] for p in new)
+                    if joined2.find("<BLANK_B>") < joined2.find("<BLANK_A>"):
+                        for p in new:
+                            p[1] = (p[1].replace("<BLANK_A>", "\x00")
+                                        .replace("<BLANK_B>", "<BLANK_A>")
+                                        .replace("\x00", "<BLANK_B>"))
+                        va, vb = vb, va
                     return {"paragraphs": new, "blank_A": va, "blank_B": vb}
     return None
 
@@ -439,6 +461,16 @@ def pick_b_q4_blanks(full_summary, llm_a: str = "", llm_b: str = "", min_w: int 
                 continue
             if fill_boundary_dup(tmpl, [("(A)", va), ("(B)", vb)]):
                 continue
+            # ★ 두 빈칸 사이 최소 3단어 확보 — 붙어 있으면 사실상 빈칸 하나가 된다.
+            #   (16강 04번 'Reference groups (A) (B) against peers' 사례)
+            if hi[0] - lo[1] < 4:      # lo 끝 인덱스와 hi 시작 인덱스 사이 단어 수
+                continue
+            # ★ (A)가 (B)보다 앞에 오도록 라벨 재배정
+            if ca[0] > cb[0]:
+                va, vb = vb, va
+                tmpl = hn.replace(va, "(A)", 1).replace(vb, "(B)", 1)
+                if "(A)" not in tmpl or "(B)" not in tmpl:
+                    continue
             return {"blank_A": va, "blank_B": vb}
     return None
 
@@ -502,8 +534,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s46 = (더) 빈칸 경계 픽커 2단계화(깐깐→소진시 완화) + Q4 개수 정합성 검사. _s45 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s46"
+    # _s47 = 빈칸 구두점 제거 + (A)(B) 등장순 재배정 + 빈칸 간격 + 한글 해석 동기화. _s46 누적분 포함.
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s47"
 
 
 # ============ Supabase 캐시 ============
@@ -988,6 +1020,10 @@ def generate_variation_b(
                 _ts = (_t.get("topic_sentence") or "").strip()
                 if _ts and len(_ts.split()) >= 6:
                     data["topic_writing_answer"] = _ts  # 집중 생성한 깔끔한 주제문으로 교체
+                    # ★ 한글 해석도 같은 문장의 번역으로 함께 교체.
+                    #   영문만 바꾸고 한글은 1차 호출 결과를 남겨두면 답지에서 서로 다른 문장이 된다.
+                    _tk = (_t.get("topic_sentence_kr") or "").strip()
+                    data["topic_writing_kr"] = _tk if _tk else ""
             except Exception:
                 pass  # 실패하면 기존(한번에 만든) 주제문 유지
 
@@ -1004,6 +1040,9 @@ def generate_variation_b(
                     data["full_summary"] = _fs
                     data["blank_A"] = _ba
                     data["blank_B"] = _bb
+                    # ★ 요약문 해석도 같은 문장의 번역으로 함께 교체 (topic과 동일 이유).
+                    _sk = (_s.get("full_summary_kr") or "").strip()
+                    data["blank_summary_template_kr"] = _sk if _sk else ""
             except Exception:
                 pass  # 실패하면 기존(한번에 만든) 요약문 유지
 

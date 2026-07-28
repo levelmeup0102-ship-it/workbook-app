@@ -225,20 +225,20 @@ def tokenize_for_comparison(text: str) -> list:
 def check_cutout_match(bogi: list, answer_parts: list, pid: str = "?", q_name: str = "Q") -> list:
     """보기 단어 = 정답 단어 (대소문자/구두점/하이픈 무시, 개수만 일치)"""
     errors = []
-    
+
     # 정답을 토큰화 (하이픈 분리 포함)
     all_ans_words = []
     for part in answer_parts:
         all_ans_words.extend(tokenize_for_comparison(part))
-    
+
     # 보기도 토큰화 (혹시 보기에 하이픈 단어 있을 경우 대비)
     bogi_normalized = []
     for w in bogi:
         bogi_normalized.extend(tokenize_for_comparison(w))
-    
+
     bogi_c = Counter(bogi_normalized)
     ans_c = Counter(all_ans_words)
-    
+
     if bogi_c != ans_c:
         missing = ans_c - bogi_c
         extra = bogi_c - ans_c
@@ -247,7 +247,7 @@ def check_cutout_match(bogi: list, answer_parts: list, pid: str = "?", q_name: s
             f"   정답에 있는데 보기에 없음: {dict(missing) if missing else '없음'}\n"
             f"   보기에 있는데 정답에 없음: {dict(extra) if extra else '없음'}"
         )
-    
+
     return errors
 
 
@@ -502,6 +502,24 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
     # statements 5개
     if not isinstance(data.get("statements"), list) or len(data["statements"]) != 5:
         errors.append(f"[{pid}] statements는 5개 항목이어야 함")
+    else:
+        # ★ Q4 개수 정합성 — 답지는 mismatch_count를 선지 번호로 그대로 쓰는데(mismatch_count-1),
+        #   이 값이 statements의 실제 불일치 개수와 다르면 "3개인데 정답은 ②" 꼴로 어긋난다.
+        #   0이면 음수 인덱스가 되어 정답이 ⑤로 뒤집히고, 6 이상이면 렌더가 터진다.
+        actual = sum(1 for s in data["statements"]
+                     if isinstance(s, (list, tuple)) and len(s) >= 3 and not s[2])
+        mc = data.get("mismatch_count")
+        if not isinstance(mc, int) or not (1 <= mc <= 5):
+            errors.append(
+                f"[{pid}] [CRITICAL] Q4 mismatch_count 범위 오류({mc}) — 선지는 1~5개뿐. "
+                f"0이면 답지에 ⑤로 잘못 찍힘")
+        elif mc != actual:
+            errors.append(
+                f"[{pid}] [CRITICAL] Q4 개수 불일치 — mismatch_count={mc}인데 "
+                f"statements의 실제 불일치는 {actual}개. 정답 번호와 나열 항목이 어긋남")
+        if actual == 0:
+            errors.append(
+                f"[{pid}] [CRITICAL] Q4 불일치 진술이 하나도 없음 — 최소 1개는 거짓이어야 함")
 
     return errors
 
@@ -512,7 +530,7 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
     strict=False면 단어 수 / 중복 검증을 풀어줌 (마지막 retry용)
     """
     errors = []
-    
+
     # 필수 필드 존재
     required = ["given_sentence", "passage_with_marks", "position_correct",
                 "topic_options", "topic_correct", "summary_options", "summary_correct",
@@ -522,7 +540,7 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
         if f not in data:
             errors.append(f"[{pid}] 필수 필드 누락: {f}")
             return errors
-    
+
     # 정답 인덱스 범위 (필수)
     for key in ["summary_correct", "topic_correct", "position_correct"]:
         v = data.get(key, -1)
@@ -559,7 +577,7 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
                         f"[{pid}] [CRITICAL] Q1 삽입 정답 위치 오류 — 정답({pcorr + 1}번) 자리에 "
                         f"주어진 문장을 넣어도 원문이 복원되지 않음 (주어진 문장이 실제로 빠진 위치를 정답으로 표시할 것)"
                     )
-    
+
     # ★ Q4 요약문 / Q3 요약문에 (A)(B) 빈칸 표시가 반드시 있어야 함 (완성문 금지)
     #   strict/soft 무관 필수 — 빈칸이 없으면 문제 자체가 성립하지 않음
     bst = str(data.get("blank_summary_template", "") or "")
@@ -585,7 +603,7 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
             errors.append(f"[{pid}] [CRITICAL] Q4 blank_B 단어 수 과다 ({wb}개 > {max_blank_words}개) — 영작 빈칸으로 너무 김, 5~7단어로 줄일 것")
     except (KeyError, AttributeError) as e:
         errors.append(f"[{pid}] B blank_A/B 형식 오류: {e}")
-    
+
     # ★ Q5 topic_writing_answer 단어 수 (strict 14개, soft 3개)
     min_topic_words = 10  # 너무 짧은 것만 차단 (자연스러움 우선)
     try:
@@ -634,7 +652,7 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
             )
         except Exception as e:
             errors.append(f"[{pid}] Q4 보기 검증 예외: {e}")
-    
+
     # Q5 잘라쓰기 (주제 영작) - strict일 때만 필수, soft는 통과
     if strict:
         try:
@@ -645,7 +663,7 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
             )
         except Exception as e:
             errors.append(f"[{pid}] Q5 보기 검증 예외: {e}")
-    
+
     # 마커 위치 분산 - strict일 때만 필수, soft는 마커 개수만 체크
     try:
         if strict:
@@ -665,7 +683,7 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
                 errors.append(f"[{pid}] 마커 수 부족: {len(positions)}개 (최소 2개)")
     except Exception as e:
         errors.append(f"[{pid}] 마커 검증 예외: {e}")
-    
+
     # ★ Q3 정답 (A)(B)가 본문 단어 그대로면 거부 (패러프레이즈/추상화 강제, strict만)
     if strict and original_passage:
         sc = data.get("summary_correct")
@@ -713,14 +731,14 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
                 )
             a_words.append(a_val.strip().lower())
             b_words.append(b_val.strip().lower())
-        
+
         # 5개 (A) 모두 다른 단어, 5개 (B) 모두 다른 단어 (strict일 때만 체크)
         if strict:
             if len(set(a_words)) < len(a_words):
                 errors.append(f"[{pid}] Q3 summary_options의 (A) 값들이 중복됨: {a_words}")
             if len(set(b_words)) < len(b_words):
                 errors.append(f"[{pid}] Q3 summary_options의 (B) 값들이 중복됨: {b_words}")
-    
+
     return errors
 
 

@@ -792,6 +792,19 @@ async function clearNotice() { document.getElementById('notice-input').value = '
 // ============================================================
 // Book / Passage
 // ============================================================
+// 선택된 지문을 해당 탭 목록의 화면 순서(드래그로 바꾼 순서)대로 정렬
+function selectionInListOrder(containerId, selMap) {
+  const domOrder = [...document.querySelectorAll(`#${containerId} .ext-pid-chip`)]
+    .map(el => `${el.dataset.book}|${el.dataset.unit}|${el.dataset.pid}`);
+  const picked = [...selMap.entries()];
+  picked.sort((a, b) => {
+    const ia = domOrder.indexOf(a[0]);
+    const ib = domOrder.indexOf(b[0]);
+    return (ia === -1 ? Infinity : ia) - (ib === -1 ? Infinity : ib);
+  });
+  return picked.map(([, v]) => v);
+}
+
 // ★ 지문 칩 드래그 순서 변경 (0회독/분석지/변형문제/서술형/비밀노트/원문추출 공용)
 let chipDirty = new Map(); // "book|unit" -> {book, unit}
 let __chipDragEl = null;
@@ -1199,9 +1212,22 @@ function updateGenerateBtn() {
   btn.textContent = selectedPassages.size>0 ? `워크북 생성하기 (${selectedPassages.size}개 지문)` : '워크북 생성하기';
 }
 
+// 선택된 지문을 화면 목록(드래그로 바꾼 순서)에 맞춰 정렬해서 반환
+function getSelectedPassagesInListOrder() {
+  const domOrder = [...document.querySelectorAll('#passage-list .passage-item')]
+    .map(el => `${document.getElementById('sel-book').value}|${el.dataset.unit}|${el.dataset.pid}`);
+  const picked = [...selectedPassages.entries()];
+  picked.sort((a, b) => {
+    const ia = domOrder.indexOf(a[0]);
+    const ib = domOrder.indexOf(b[0]);
+    return (ia === -1 ? Infinity : ia) - (ib === -1 ? Infinity : ib);
+  });
+  return picked.map(([, v]) => v);
+}
+
 async function doGenerate() {
   const levels = getSelectedLevels();
-  const passages = [...selectedPassages.values()];
+  const passages = getSelectedPassagesInListOrder();
   const btn = document.getElementById('btn-generate');
   const progress = document.getElementById('progress');
   const progressFill = document.getElementById('progress-fill');
@@ -1639,7 +1665,7 @@ function snUpdateBtns() {
 }
 
 async function doSecretNote(type) {
-  const passages = [...snSelectedPassages.values()];
+  const passages = selectionInListOrder('sn-book-list', snSelectedPassages);
   if (!passages.length) { toast('지문을 선택하세요'); return; }
   const schoolName = document.getElementById('sn-school-name').value.trim() || '레벨미업학원';
   const teacherName = document.getElementById('sn-teacher-name').value.trim() || '';
@@ -1855,7 +1881,7 @@ function pcSetMode(m, el){
 function pcGetMode(){ return pcMode; }
 
 async function doPreclass() {
-  const passages = [...pcSelectedPassages.values()];
+  const passages = selectionInListOrder('pc-book-list', pcSelectedPassages);
   if (!passages.length) { toast('지문을 선택하세요'); return; }
   const schoolName = document.getElementById('pc-school-name').value.trim() || '레벨미업학원';
 
@@ -2210,15 +2236,8 @@ function extExtractHTML() {
   const includeTranslation = document.getElementById('ext-include-translation').checked;
   const header = `${schoolName}/정독하며 모르는 단어 체크/ 기억 안나는 지문 체크/ 체크한 곳 리뷰/ 그리고는 3번 정독 (1회), (2회), (3회)`;
 
-  // 선택된 지문들을 book, unit, id 순으로 정렬
-  const selectedList = [...extSelectedPassages.values()].sort((a, b) => {
-    if (a.book !== b.book) return a.book.localeCompare(b.book);
-    const unitNumA = parseInt(a.unit.match(/\d+/)?.[0]) || 0;
-    const unitNumB = parseInt(b.unit.match(/\d+/)?.[0]) || 0;
-    if (unitNumA !== unitNumB) return unitNumA - unitNumB;
-    if (a.unit !== b.unit) return a.unit.localeCompare(b.unit);
-    return a.id.localeCompare(b.id);
-  });
+  // 선택된 지문들을 화면 목록(드래그로 바꾼 순서)대로 정렬
+  const selectedList = selectionInListOrder('ext-book-list', extSelectedPassages);
 
   let content = '';
   for (const p of selectedList) {
@@ -2710,7 +2729,7 @@ function asUpdateBtn() {
   document.getElementById('as-btn-open').disabled = asSelectedPassages.size === 0;
 }
 function asOpenSheets() {
-  const passages = [...asSelectedPassages.values()];
+  const passages = selectionInListOrder('as-book-list', asSelectedPassages);
   if (!passages.length) { toast('지문을 선택하세요'); return; }
   const note = document.getElementById('as-open-note');
   let opened = 0;

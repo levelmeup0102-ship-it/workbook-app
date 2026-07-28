@@ -311,6 +311,22 @@ def check_marker_positions(passage_with_marks: str, pid: str = "?", min_between:
     return errors
 
 
+def blank_has_punct(s: str) -> bool:
+    """영작 빈칸 정답에 쉼표·세미콜론·콜론이 들어 있는가.
+    보기(bogi)는 구두점을 떼고 만들어지므로, 정답 안에 쉼표가 있으면 학생이
+    그것을 복원할 근거가 없어 채점이 갈린다. 끝에 붙은 것도 마찬가지."""
+    t = str(s or "")
+    return bool(re.search(r'[,;:]', t)) or bool(re.search(r'[.,;:!?]\s*$', t))
+
+
+def blank_order_wrong(text: str, mk_a: str, mk_b: str) -> bool:
+    """본문/요약문에서 (B) 빈칸이 (A)보다 먼저 나오면 True.
+    학생은 (A)→(B) 순으로 답을 쓰는데 지문이 반대면 읽기 흐름이 어긋난다."""
+    t = str(text or "")
+    ia, ib = t.find(mk_a), t.find(mk_b)
+    return ia >= 0 and ib >= 0 and ib < ia
+
+
 # ====================== 유형 A 검증 (완화) ======================
 def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient: bool = False) -> list:
     """유형 A 검증 - 평가원 순서형 (intro + (A)(B)(C) 3문단 + 고정 5선지)"""
@@ -382,6 +398,22 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
                     f"[{pid}] [CRITICAL] Q3 정답이 빈칸에 문법적으로 안 맞음 — 빈칸 앞이 절 유도어(that 등)인데 "
                     f"정답('{opts[ci]}')이 동사 없는 명사구임. 원문이 절(주어+동사)이면 정답도 절로 패러프레이즈할 것."
                 )
+
+    # ★ A Q5 영작 정답에 구두점이 들어갔는지 — 보기엔 구두점이 없어 학생이 복원 불가 (CRITICAL)
+    for key in ("blank_A", "blank_B"):
+        v = data.get(key)
+        if v and blank_has_punct(v):
+            errors.append(
+                f"[{pid}] [CRITICAL] Q5 {key}에 구두점 포함 — 보기엔 구두점이 없어 학생이 복원 불가 "
+                f"('{v}'). 구두점 사이의 깨끗한 구절로 다시 고를 것.")
+
+    # ★ A Q5 (A)(B)가 본문 등장 순서와 어긋나는지
+    _joined_ab = " ".join(p[1] for p in data.get("paragraphs", [])
+                          if isinstance(p, (list, tuple)) and len(p) > 1)
+    if blank_order_wrong(_joined_ab, "<BLANK_A>", "<BLANK_B>"):
+        errors.append(
+            f"[{pid}] Q5 본문에서 (B) 빈칸이 (A)보다 먼저 나옴 — 학생은 (A)→(B) 순으로 쓰므로 "
+            f"라벨을 등장 순서에 맞게 바꿀 것")
 
     # ★ A Q5 영작 정답(blank_A/B) 비문/중복 검사 — lenient(마지막 시도)에서도 실행 (CRITICAL은 끝까지 막아야 함)
     for key in ("blank_A", "blank_B"):
@@ -631,6 +663,29 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
         # 구절에서도 명백한 비문인 '조동사+형용사'(can controllable)만 검사한다.
         if v and modal_no_verb(v):
             errors.append(f"[{pid}] [CRITICAL] Q4 {key} 비문 — 조동사 뒤에 동사원형이 아닌 형용사가 옴 ('{v}')")
+    # ★ B Q4 영작 정답에 구두점이 들어갔는지 (A Q5와 동일 사유, CRITICAL)
+    for key in ("blank_A", "blank_B"):
+        v = data.get(key)
+        if v and blank_has_punct(v):
+            errors.append(
+                f"[{pid}] [CRITICAL] Q4 {key}에 구두점 포함 — 보기엔 구두점이 없어 학생이 복원 불가 "
+                f"('{v}'). 구두점 사이의 깨끗한 구절로 다시 고를 것.")
+
+    # ★ B Q4 (A)(B) 등장 순서 + 두 빈칸 간격
+    _bst = str(data.get("blank_summary_template", "") or "")
+    if blank_order_wrong(_bst, "(A)", "(B)"):
+        errors.append(
+            f"[{pid}] Q4 요약문에서 (B) 빈칸이 (A)보다 먼저 나옴 — 라벨을 등장 순서에 맞게 바꿀 것")
+    if "(A)" in _bst and "(B)" in _bst:
+        _ia, _ib = _bst.find("(A)"), _bst.find("(B)")
+        _lo, _hi = (_ia, _ib) if _ia < _ib else (_ib, _ia)
+        _between = _bst[_lo + 3:_hi].strip()
+        _wc = len(_between.split()) if _between else 0
+        if _wc < 3:
+            errors.append(
+                f"[{pid}] [CRITICAL] Q4 (A)와 (B) 빈칸 사이 {_wc}단어 — 붙어 있으면 사실상 빈칸 하나다. "
+                f"최소 3단어 떨어뜨릴 것")
+
     # ★ B Q4 빈칸에 정답을 넣었을 때 경계 단어/구절 중복 (빈칸이 앞/뒤 단어를 먹음)
     if data.get("blank_A") and data.get("blank_B") and data.get("blank_summary_template"):
         dup = fill_boundary_dup(

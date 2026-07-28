@@ -1091,6 +1091,7 @@ function toggleUnit(book, unit) {
   const allSel = up.every(p => selectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
   up.forEach(p => {
     const key = `${p.book}|${p.unit}|${p.id}`;
+    const cb = document.querySelector(`input[data-key="${key}"]`);
     if (allSel) { selectedPassages.delete(key); if(cb) cb.checked=false; }
     else { selectedPassages.set(key,{book:p.book,unit:p.unit,id:p.id}); if(cb) cb.checked=true; }
   });

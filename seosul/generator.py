@@ -58,8 +58,10 @@ def _sb_post(path: str, rows: list, params: dict = None) -> list:
         r.raise_for_status()
         return r.json() if r.text else []
 
-def _cache_key(book: str, unit: str, pid: str, types: List[str]) -> str:
-    return f"{book}|{unit}|{pid}|{','.join(sorted(types))}"
+_SEOSUL_VER = "_s01"          # 로직 고칠 때마다 +1
+
+def _cache_key(book, unit, pid, types):
+    return f"{book}|{unit}|{pid}|{','.join(sorted(types))}|{_SEOSUL_VER}"
 
 def cache_get(book: str, unit: str, pid: str, types: List[str]) -> Optional[dict]:
     if not SUPABASE_URL:

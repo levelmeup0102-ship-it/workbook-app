@@ -219,28 +219,39 @@ def _quote_ok(s: str) -> bool:
 
 def _q5_candidates(ptext: str, min_w: int = 5, max_w: int = 7) -> list:
     """단락에서 '문장 중간 연속 구절'(verbatim) 후보 생성. 가운데 우선.
-    문장경계/따옴표 포함 제외, 조동사 시작 제외, 단락 내 유일 등장만."""
+    문장경계/따옴표 포함 제외, 조동사 시작 제외, 단락 내 유일 등장만.
+
+    (더) 2단계: 깐깐한 경계로 먼저 훑고, 후보가 하나도 없으면 완화 경계로
+    한 번 더 훑는다. 짧은 단락에서 후보가 소진돼 A가 통째로 누락되던 위험 없이
+    경계 품질만 올린다."""
     spans = [(m.start(), m.end()) for m in re.finditer(r'\S+', ptext)]
     toks = [ptext[s:e] for s, e in spans]
     n = len(toks)
-    cands = []
-    for L in range(min_w, max_w + 1):
-        for i in range(1, n - L):  # 양끝 한 토큰씩 비워 경계 확보
-            j = i + L - 1
-            sub = ptext[spans[i][0]:spans[j][1]]
-            if not _quote_ok(sub):
-                continue
-            if not _clean_boundary_ok(sub, ptext):
-                continue
-            fw = re.sub(r'[^a-z]', '', toks[i].lower())
-            if fw in _Q5_MODALS:
-                continue
-            if ptext.count(sub) != 1:
-                continue
-            mid = abs((i + j) / 2 - n / 2)
-            cands.append((mid, sub))
-    cands.sort(key=lambda x: x[0])
-    return [c[1] for c in cands]
+
+    def _scan(strict):
+        cands = []
+        for L in range(min_w, max_w + 1):
+            for i in range(1, n - L):  # 양끝 한 토큰씩 비워 경계 확보
+                j = i + L - 1
+                sub = ptext[spans[i][0]:spans[j][1]]
+                if not _quote_ok(sub):
+                    continue
+                if not _clean_boundary_ok(sub, ptext, strict=strict):
+                    continue
+                fw = re.sub(r'[^a-z]', '', toks[i].lower())
+                if fw in _Q5_MODALS:
+                    continue
+                if ptext.count(sub) != 1:
+                    continue
+                mid = abs((i + j) / 2 - n / 2)
+                cands.append((mid, sub))
+        cands.sort(key=lambda x: x[0])
+        return [c[1] for c in cands]
+
+    out = _scan(True)
+    if not out:
+        out = _scan(False)
+    return out
 # (더) 빈칸 경계 어휘 — 시작/끝 공통 사용
 _BAD_EDGE = {"the","a","an","of","for","to","in","on","at","by","with","from","into","onto",
              "and","or","but","that","which","who","whose","whom","as","than","is","are",
@@ -351,25 +362,33 @@ def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?
 
 
 def _b_candidates(hn: str, min_w: int = 4, max_w: int = 7) -> list:
+    """(더) 2단계: _q5_candidates와 동일. 깐깐한 경계로 먼저, 0개면 완화."""
     spans = [(m.start(), m.end()) for m in re.finditer(r'\S+', hn)]
     toks = [hn[s:e] for s, e in spans]
     n = len(toks)
-    out = []
-    for L in range(min_w, max_w + 1):
-        for i in range(0, n - L + 1):
-            j = i + L - 1
-            sub = hn[spans[i][0]:spans[j][1]]
-            if not _quote_ok(sub):
-                continue
-            if not _clean_boundary_ok(sub, hn):
-                continue
-            fw = re.sub(r'[^a-z]', '', toks[i].lower())
-            if fw in _Q5_MODALS:
-                continue
-            if hn.count(sub) != 1:
-                continue
-            out.append((i, j, sub))
-    return out
+
+    def _scan(strict):
+        out = []
+        for L in range(min_w, max_w + 1):
+            for i in range(0, n - L + 1):
+                j = i + L - 1
+                sub = hn[spans[i][0]:spans[j][1]]
+                if not _quote_ok(sub):
+                    continue
+                if not _clean_boundary_ok(sub, hn, strict=strict):
+                    continue
+                fw = re.sub(r'[^a-z]', '', toks[i].lower())
+                if fw in _Q5_MODALS:
+                    continue
+                if hn.count(sub) != 1:
+                    continue
+                out.append((i, j, sub))
+        return out
+
+    res = _scan(True)
+    if not res:
+        res = _scan(False)
+    return res
 
 
 def pick_b_q4_blanks(full_summary, llm_a: str = "", llm_b: str = "", min_w: int = 4, max_w: int = 7) -> Optional[dict]:
@@ -480,7 +499,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-   # _s46 = (더) 빈칸 경계 픽커 2단계화(깐깐→소진시 완화) + Q4 개수 정합성 검사. _s45 누적분 포함.
+    # _s46 = (더) 빈칸 경계 픽커 2단계화(깐깐→소진시 완화) + Q4 개수 정합성 검사. _s45 누적분 포함.
     return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s46"
 
 # ============ Supabase 캐시 ============

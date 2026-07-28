@@ -241,17 +241,30 @@ def _q5_candidates(ptext: str, min_w: int = 5, max_w: int = 7) -> list:
             cands.append((mid, sub))
     cands.sort(key=lambda x: x[0])
     return [c[1] for c in cands]
-def _clean_boundary_ok(phrase: str, full_text: str) -> bool:
-    """빈칸 경계가 깔끔한지: 관사/전치사/접속사/관계사로 시작·끝나지 않고,
-    괄호 짝이 맞고, 고유명사(대문자 단어)를 중간에서 쪼개지 않을 것."""
-    bad_end = {"the","a","an","of","for","to","in","on","at","by","with","from","into","onto",
-               "and","or","but","that","which","who","whose","whom","as","than","is","are",
-               "was","were","be","been","this","these","those","their","her","his","its",
-               "our","your","my","not","no","so","if","when","while","because",
-               "they","we","i","he","she","it","you",
-               "may","might","can","could","will","would","shall","should","must"}
-    bad_start = {"and","or","but","that","which","who","of","to","for","than","as",
-                 "is","are","was","were"}
+# (더) 빈칸 경계 어휘 — 시작/끝 공통 사용
+_BAD_EDGE = {"the","a","an","of","for","to","in","on","at","by","with","from","into","onto",
+             "and","or","but","that","which","who","whose","whom","as","than","is","are",
+             "was","were","be","been","being","this","these","those","their","her","his","its",
+             "our","your","my","not","no","so","if","when","while","because",
+             "they","we","i","he","she","it","you",
+             "have","has","had","having","do","does","did",
+             "may","might","can","could","will","would","shall","should","must"}
+# 완화 모드에서 시작으로 절대 허용하지 않는 것 (기존 bad_start와 동일)
+_BAD_START_MIN = {"and","or","but","that","which","who","of","to","for","than","as",
+                  "is","are","was","were"}
+
+
+def _clean_boundary_ok(phrase: str, full_text: str, strict: bool = True) -> bool:
+    """빈칸 경계가 깔끔한지: 관사/전치사/접속사/관계사/주격대명사/조동사로 시작·끝나지 않고,
+    괄호 짝이 맞고, 고유명사(대문자 단어)를 중간에서 쪼개지 않을 것.
+
+    strict=True  : 시작·끝 모두 _BAD_EDGE로 판정 (깐깐)
+    strict=False : 끝만 _BAD_EDGE, 시작은 _BAD_START_MIN만 (기존 동작)
+
+    호출부가 strict로 먼저 훑고 후보가 0이면 완화 모드로 재시도하므로,
+    깐깐하게 걸러도 항목이 통째로 누락되지 않는다."""
+    bad_end = _BAD_EDGE
+    bad_start = _BAD_EDGE if strict else _BAD_START_MIN
     ws = phrase.split()
     if not ws:
         return False
@@ -467,9 +480,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s45 = (버 하드닝) 핵심빈칸(A Q3) 정답위치 셔플을 소스에서 직접 수행 — 바깥 루프 미적용 우회. _s44 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s45"
-
+   # _s46 = (더) 빈칸 경계 픽커 2단계화(깐깐→소진시 완화) + Q4 개수 정합성 검사. _s45 누적분 포함.
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s46"
 
 # ============ Supabase 캐시 ============
 def load_cached(cache_key: str, step_name: str) -> Optional[dict]:

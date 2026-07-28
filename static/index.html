@@ -67,6 +67,11 @@ select:focus { border-color: #4A90D9; outline: none; }
 .bp-book-item { padding: 8px 12px 8px 22px; font-size: 13px; cursor: pointer; color: #333; }
 .bp-book-item:hover { background: #f5f7fa; }
 .bp-book-item.selected { background: #EBF4FB; color: #4A90D9; font-weight: 600; }
+.bp-subcategory { padding: 6px 12px 6px 22px; font-size: 12px; font-weight: 600; color: #445; background: #f5f8fc; cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none; border-top: 1px solid #eef2f7; }
+.bp-subcategory:hover { background: #eaf0f8; }
+.bp-subbooks { display: none; }
+.bp-subbooks.open { display: block; }
+.bp-book-item.bp-book-sub { padding-left: 34px; }
 .passage-list { max-height: 380px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px; }
 .passage-item { display: flex; align-items: center; padding: 8px 10px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.15s; }
 .passage-item:hover { background: #f5f7fa; }
@@ -880,6 +885,26 @@ function toggleListCat(prefix, cat) {
   if (fns[prefix]) fns[prefix]();
 }
 
+// 카테고리 안의 2차 분류 (모의고사 → 고1/고2/고3, 교과서 → 공통영어1/2, 영어1/2)
+function subCategorizeBook(cat, name) {
+  if (cat === '모의고사') {
+    const m = name.match(/고\s*([123])/);
+    return m ? `고${m[1]}` : '기타';
+  }
+  if (cat === '교과서') {
+    if (/공통\s*영어\s*1|공통영어1/.test(name)) return '공통영어1';
+    if (/공통\s*영어\s*2|공통영어2/.test(name)) return '공통영어2';
+    if (/영어\s*1(?!\d)/.test(name)) return '영어1';
+    if (/영어\s*2(?!\d)/.test(name)) return '영어2';
+    return '기타';
+  }
+  return null; // 하위분류 없음
+}
+const SUBCAT_ORDER = {
+  '모의고사': ['고1', '고2', '고3', '기타'],
+  '교과서': ['공통영어1', '공통영어2', '영어1', '영어2', '기타'],
+};
+
 function categorizeBook(name) {
   if (/모의고사/.test(name)) return '모의고사';
   if (/리딩파워|올림포스|라이트|light|영독|독해연습/i.test(name)) return '수능연계교재';
@@ -888,6 +913,18 @@ function categorizeBook(name) {
 }
 
 let bpOpenCategory = null; // 한 번에 하나의 카테고리만 펼침 (아코디언)
+let bpOpenSubs = new Set(); // 하위 카테고리(고1/고2/공통영어1 등) 열림 상태
+
+function toggleBookSubCategory(cat, sub) {
+  const key = cat + '::' + sub;
+  if (bpOpenSubs.has(key)) bpOpenSubs.delete(key); else bpOpenSubs.add(key);
+  const sel = document.getElementById('sel-book');
+  const currentBook = sel ? sel.value : '';
+  const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
+  const groups = {};
+  books.forEach(b => { const c = categorizeBook(b); (groups[c] = groups[c] || []).push(b); });
+  renderBookPicker(groups, BOOK_CATEGORY_ORDER, currentBook, false);
+}
 
 function updateBookSelect() {
   const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
@@ -927,10 +964,34 @@ function renderBookPicker(groups, CATEGORY_ORDER, currentBook, autoOpen) {
         <span>${cat} (${groups[cat].length})</span><span>${isOpen ? '▲' : '▼'}</span>
       </div>
       <div class="bp-books ${isOpen ? 'open' : ''}" data-cat="${cat}">`;
-    groups[cat].forEach(b => {
-      const sel = b === currentBook ? 'selected' : '';
-      html += `<div class="bp-book-item ${sel}" onclick="pickBook('${b.replace(/'/g,"\\'")}')">${b}</div>`;
-    });
+    const subOrder = SUBCAT_ORDER[cat];
+    if (subOrder) {
+      const subs = {};
+      groups[cat].forEach(b => {
+        const s = subCategorizeBook(cat, b) || '기타';
+        (subs[s] = subs[s] || []).push(b);
+      });
+      subOrder.forEach(sc => {
+        if (!subs[sc] || !subs[sc].length) return;
+        const subKey = cat + '::' + sc;
+        const subOpen = bpOpenSubs.has(subKey) || subs[sc].includes(currentBook);
+        if (subs[sc].includes(currentBook)) bpOpenSubs.add(subKey);
+        html += `<div class="bp-subcategory" onclick="event.stopPropagation();toggleBookSubCategory('${cat}','${sc}')">
+            <span>${sc} (${subs[sc].length})</span><span>${subOpen ? '▲' : '▼'}</span>
+          </div>
+          <div class="bp-subbooks ${subOpen ? 'open' : ''}">`;
+        subs[sc].forEach(b => {
+          const selCls = b === currentBook ? 'selected' : '';
+          html += `<div class="bp-book-item bp-book-sub ${selCls}" onclick="pickBook('${b.replace(/'/g,"\\'")}')">${b}</div>`;
+        });
+        html += `</div>`;
+      });
+    } else {
+      groups[cat].forEach(b => {
+        const sel = b === currentBook ? 'selected' : '';
+        html += `<div class="bp-book-item ${sel}" onclick="pickBook('${b.replace(/'/g,"\\'")}')">${b}</div>`;
+      });
+    }
     html += `</div>`;
   });
   panel.innerHTML = html || '<div style="padding:12px;color:#999;font-size:13px;text-align:center;">등록된 교재가 없습니다</div>';

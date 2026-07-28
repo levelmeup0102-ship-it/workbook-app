@@ -1,1196 +1,2754 @@
-"""
-variation/generator.py
-변형문제 데이터 생성 - Claude API + httpx Supabase REST + 자동 검증 + 재시도
-
-기존 워크북 시스템과 일관성 유지:
-- supa.py처럼 httpx 사용
-- anthropic, supabase 라이브러리 추가 의존성 없음
-"""
-import os
-import hashlib
-import random
-import re
-import traceback
-from typing import Optional
-
-import httpx
-
-from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt, CORE_BLANK_SYS, build_core_blank_prompt
-from variation.validator import validate_a, validate_b, check_marker_positions, fill_boundary_dup, modal_no_verb
-
-
-# ============================================================
-# 문장 분리 (0회독 pipeline.py와 동일 — 경칭/약어/따옴표 보호, 무손실)
-# ============================================================
-def split_sentences(text: str) -> list:
-    """영어 지문 문장 분리 (원문 무손실). 0회독 워크북과 동일 로직."""
-    protected = text
-
-    def protect_quote_internals(match):
-        inner = match.group(1)
-        open_q = match.group(0)[0]
-        close_q = match.group(0)[-1]
-        protected_inner = re.sub(
-            r'([.!?])\s+([A-Z])',
-            lambda m2: f"{m2.group(1)}§QSEP§{m2.group(2)}",
-            inner
-        )
-        return open_q + protected_inner + close_q
-
-    protected = re.sub(r'["\u201c](.*?)["\u201d]', protect_quote_internals, protected, flags=re.DOTALL)
-
-    abbrevs = [
-        'Dr.', 'Mr.', 'Ms.', 'Mrs.', 'Prof.', 'Jr.', 'Sr.', 'St.',
-        'vs.', 'etc.', 'No.', 'Vol.', 'Fig.', 'Gen.', 'Gov.', 'Rev.',
-        'Sgt.', 'Cpl.', 'Lt.', 'Co.', 'Inc.', 'Ltd.', 'Corp.', 'Dept.',
-        'Est.', 'al.', 'e.g.', 'i.e.', 'U.S.', 'U.K.', 'U.N.',
-    ]
-    replacements = {}
-    for ab in abbrevs:
-        token = ab.replace('.', '§DOT§')
-        pattern = r'(?<!\w)' + re.escape(ab)
-        if re.search(pattern, protected):
-            replacements[token] = ab
-            protected = re.sub(pattern, token, protected)
-
-    def protect_initial(m):
-        return m.group(0).replace('.', '§DOT§')
-    protected = re.sub(r'(?<!\w)([A-Z])\.\s*(?=[A-Z][\.\s]|[A-Z][a-z])', protect_initial, protected)
-
-    sentences = [s.strip() for s in re.split(
-        r'(?<=[.!?])\s+(?=[\u201c\u201d\u0022]?[A-Z])|(?<=[.!?][\u201c\u201d\u0022])\s+(?=[\u201c\u201d\u0022]?[A-Z])',
-        protected
-    ) if s.strip()]
-
-    restored = []
-    for s in sentences:
-        for token, original in replacements.items():
-            s = s.replace(token, original)
-        s = s.replace('§DOT§', '.')
-        s = s.replace('§QSEP§', ' ')
-        restored.append(s)
-    return restored
-
-
-# 순서형 5선지: order_correct 인덱스 → 복원(원문) 라벨 순서
-FIXED_ORDER = [["A", "C", "B"], ["B", "A", "C"], ["B", "C", "A"], ["C", "A", "B"], ["C", "B", "A"]]
-
-
-def build_order_blocks_a(en_text: str, pid: str = "?", seed_extra: str = "") -> Optional[dict]:
-    """
-    원문을 코드로 분할 → intro + (A)(B)(C) + order_correct 구성 (원문 무손실).
-    LLM이 단락을 만들지 않으므로 복원검증이 절대 깨지지 않는다.
-    반환: {"intro", "paragraphs":[["A",t],["B",t],["C",t]], "order_correct"} 또는 None(분할 불가).
-    """
-    sents = split_sentences(en_text)
-    if len(sents) < 4:
-        print(f"[VAR][A][{pid}] 문장 {len(sents)}개 — 순서배열(intro+3단락) 불가")
-        return None
-
-    # ★ 제목 분리: 첫 문장이 짧은 라벨(≤4단어)이면 제목으로 보고 떼어 둠.
-    #   연속된 라벨(제목+소제목+"Where:"...)도 모두 흡수. 단 본문이 최소 4문장은 남아야 함.
-    title = ""
-    while len(sents) >= 5 and len(sents[0].split()) <= 4:
-        title = (title + " " + sents[0]).strip()
-        sents = sents[1:]
-
-    # intro = (제목 +) 첫 진짜 문장. 제목은 intro 앞에 붙여 원문 무손실 유지.
-    if len(sents) < 4:
-        return None
-    intro_text = (title + " " + sents[0]).strip() if title else sents[0].strip()
-    rest = sents[1:]
-    if len(rest) < 3:
-        return None
-
-    # rest를 연속 3덩어리로 (앞쪽에 +1)
-    k = len(rest)
-    sizes = [k // 3, k // 3, k // 3]
-    for i in range(k % 3):
-        sizes[i] += 1
-    blocks, idx = [], 0
-    for s in sizes:
-        blocks.append(" ".join(rest[idx:idx + s]).strip())
-        idx += s
-    # blocks[0]=원문1번째덩어리, [1]=2번째, [2]=3번째
-
-    # 라벨 셔플: 원문순서 그대로(A-B-C)는 선지에 없으니 제외
-    seed = int(hashlib.md5((pid + seed_extra + en_text[:40]).encode()).hexdigest()[:8], 16)
-    rng = random.Random(seed)
-    perm = [0, 1, 2]
-    for _ in range(10):
-        rng.shuffle(perm)
-        # (A)=blocks[perm[0]], (B)=blocks[perm[1]], (C)=blocks[perm[2]]
-        label_of = {}
-        for li, bi in enumerate(perm):
-            label_of[bi] = ["A", "B", "C"][li]
-        restore = [label_of[0], label_of[1], label_of[2]]  # 원문순서대로의 라벨
-        if restore in FIXED_ORDER:
-            break
-    else:
-        restore = ["B", "A", "C"]
-        perm = [1, 0, 2]
-
-    paragraphs = [
-        ["A", blocks[perm[0]]],
-        ["B", blocks[perm[1]]],
-        ["C", blocks[perm[2]]],
-    ]
-    order_correct = FIXED_ORDER.index(restore)
-    return {"intro": intro_text, "paragraphs": paragraphs, "order_correct": order_correct}
-
-def build_insert_blocks_b(en_text: str, pid: str = "?") -> Optional[dict]:
-    """원문에서 문장 하나를 떼어 given_sentence로, 나머지에 코드가 마커를 박아
-    삽입문제(Q1)를 무손실로 재구성한다. (순서배열 build_order_blocks_a와 같은 철학)
-    validator.check_marker_positions를 통과하고 '정답 자리에 도로 넣으면 원문 복원'이
-    성립하는 구성만 반환. 재구성 불가하면 None(→ 기존 LLM 결과 유지).
-    LLM이 given/본문을 변형해 '어느 자리도 복원 안 되는' 항목을 코드가 살린다."""
-    def _alnum_ib(t):
-        return re.sub(r"[^a-z0-9]", "", str(t).lower())
-    sents = split_sentences(en_text)
-    m = len(sents)
-    if m < 4:
-        return None
-    mid = m // 2
-    order = sorted(range(1, m), key=lambda g: abs(g - mid))  # 가운데 문장부터 시도(첫 문장 제외)
-    for g in order:
-        given = sents[g]
-        remaining = sents[:g] + sents[g + 1:]
-        L = len(remaining)
-        real_gap = g
-        pool = list(range(1, L + 1))  # 각 갭은 앞에 최소 한 문장 → 문장경계 보장
-        if real_gap not in pool or len(pool) < 3:
-            continue
-        target = 5 if len(pool) >= 5 else (4 if len(pool) >= 4 else 3)
-        picks = {pool[0], pool[-1], real_gap}
-        if target > len(picks):
-            for i in range(target):
-                ix = round(i * (len(pool) - 1) / (target - 1))
-                picks.add(pool[ix])
-        chosen = sorted(picks)
-        protected = {pool[0], pool[-1], real_gap}
-        while len(chosen) > 5:
-            for c in chosen:
-                if c not in protected:
-                    chosen.remove(c)
-                    break
-            else:
-                break
-        chosen = sorted(chosen)
-        rank = {gap: i + 1 for i, gap in enumerate(chosen)}  # gap → MARK번호(위치순)
-        out = []
-        for j in range(L + 1):
-            if j in rank:
-                out.append(f"<MARK{rank[j]}>")
-            if j < L:
-                out.append(remaining[j])
-        pwm = " ".join(out)
-        pos_correct = chosen.index(real_gap)
-        pos_count = len(chosen)
-        # 1) 정답 자리에 given 도로 넣으면 원문 복원?
-        recon = pwm.replace(f"<MARK{pos_correct + 1}>", " " + given + " ")
-        recon = re.sub(r"<MARK\d>", "", recon)
-        if _alnum_ib(recon) != _alnum_ib(en_text):
-            continue
-        # 2) 배포 validator 마커 검사 통과?
-        errs = check_marker_positions(pwm, pid, min_between=3,
-                                      position_correct=pos_correct,
-                                      position_count=pos_count, strict=True)
-        if errs:
-            continue
-        return {"given_sentence": given, "passage_with_marks": pwm,
-                "position_correct": pos_correct, "position_count": pos_count}
-    return None
-
-
-_Q5_MODALS = {"can", "will", "must", "should", "would", "could", "may", "might", "shall"}
-
-
-def _quote_ok(s: str) -> bool:
-    """빈칸 후보 검사: 문장경계(.!?) 없고, 따옴표 '짝'이 갈리지 않음(균형).
-    따옴표가 있어도 쌍이 맞으면 허용 — "good student" 통째는 OK, 여는 짝만 먹으면 제외.
-
-    ★ 쉼표/세미콜론/콜론도 제외한다. 보기(bogi)는 구두점을 떼고 만들어지므로,
-      정답 안에 쉼표가 있으면 학생이 그 쉼표를 복원할 근거가 없고 채점이 갈린다.
-      (16강 03번 'empty, landlocked patch of desert,' 사례)"""
-    if re.search(r'[.!?]', s):
-        return False
-    if re.search(r'[,;:]', s):
-        return False
-    if s.count('"') % 2 != 0:
-        return False
-    if s.count('\u201c') != s.count('\u201d'):
-        return False
-    return True
-
-
-def _strip_edge_punct(s: str) -> str:
-    """구절 양끝의 구두점·공백 제거. 픽커가 span을 자를 때 끝에 붙어 오는
-    쉼표/마침표를 떨어낸다. 안쪽 구두점은 _quote_ok가 이미 거른다."""
-    return str(s or "").strip().strip(",.;:!?").strip()
-
-
-# (더) 빈칸 경계 어휘 — 시작/끝 공통 사용
-_BAD_EDGE = {"the","a","an","of","for","to","in","on","at","by","with","from","into","onto",
-             "and","or","but","that","which","who","whose","whom","as","than","is","are",
-             "was","were","be","been","being","this","these","those","their","her","his","its",
-             "our","your","my","not","no","so","if","when","while","because",
-             "they","we","i","he","she","it","you",
-             "have","has","had","having","do","does","did",
-             "may","might","can","could","will","would","shall","should","must"}
-# 완화 모드에서 시작으로 절대 허용하지 않는 것 (기존 bad_start와 동일)
-_BAD_START_MIN = {"and","or","but","that","which","who","of","to","for","than","as",
-                  "is","are","was","were"}
-
-
-def _clean_boundary_ok(phrase: str, full_text: str, strict: bool = True) -> bool:
-    """빈칸 경계가 깔끔한지: 관사/전치사/접속사/관계사/주격대명사/조동사로 시작·끝나지 않고,
-    괄호 짝이 맞고, 고유명사(대문자 단어)를 중간에서 쪼개지 않을 것.
-
-    strict=True  : 시작·끝 모두 _BAD_EDGE로 판정 (깐깐)
-    strict=False : 끝만 _BAD_EDGE, 시작은 _BAD_START_MIN만 (기존 동작)
-
-    호출부가 strict로 먼저 훑고 후보가 0이면 완화 모드로 재시도하므로,
-    깐깐하게 걸러도 항목이 통째로 누락되지 않는다."""
-    bad_end = _BAD_EDGE
-    bad_start = _BAD_EDGE if strict else _BAD_START_MIN
-    ws = phrase.split()
-    if not ws:
-        return False
-    if phrase.count("(") != phrase.count(")") or phrase.count("[") != phrase.count("]"):
-        return False
-    bare = lambda w: re.sub(r"[^A-Za-z'-]", "", w).lower()
-    if bare(ws[0]) in bad_start or bare(ws[-1]) in bad_end:
-        return False
-    m = re.search(re.escape(phrase), full_text)
-    if m:
-        before = full_text[:m.start()].split()
-        after = full_text[m.end():].split()
-        if ws[-1][:1].isupper() and after and after[0][:1].isupper():
-            return False
-        if ws[0][:1].isupper() and before and before[-1][:1].isupper():
-            return False
-    return True
-
-
-def _q5_candidates(ptext: str, min_w: int = 5, max_w: int = 7) -> list:
-    """단락에서 '문장 중간 연속 구절'(verbatim) 후보 생성. 가운데 우선.
-    문장경계/따옴표 포함 제외, 조동사 시작 제외, 단락 내 유일 등장만.
-
-    (더) 2단계: 깐깐한 경계(strict)로 먼저 훑고, 후보가 하나도 없으면 완화 경계로
-    한 번 더 훑는다. 짧은 단락에서 후보가 소진돼 A가 통째로 누락되던 위험 없이
-    경계 품질만 올린다."""
-    spans = [(m.start(), m.end()) for m in re.finditer(r'\S+', ptext)]
-    toks = [ptext[s:e] for s, e in spans]
-    n = len(toks)
-
-    def _scan(strict):
-        cands = []
-        for L in range(min_w, max_w + 1):
-            for i in range(1, n - L):  # 양끝 한 토큰씩 비워 경계 확보
-                j = i + L - 1
-                sub = ptext[spans[i][0]:spans[j][1]]
-                if not _quote_ok(sub):
-                    continue
-                if not _clean_boundary_ok(sub, ptext, strict=strict):
-                    continue
-                fw = re.sub(r'[^a-z]', '', toks[i].lower())
-                if fw in _Q5_MODALS:
-                    continue
-                if ptext.count(sub) != 1:
-                    continue
-                mid = abs((i + j) / 2 - n / 2)
-                cands.append((mid, sub))
-        cands.sort(key=lambda x: x[0])
-        return [c[1] for c in cands]
-
-    out = _scan(True)
-    if not out:
-        out = _scan(False)
-    return out
-
-
-MAX_BLANK_WORDS = 9  # 영작 빈칸(A Q5 / B Q4) 최대 단어 수 — 초과 LLM 빈칸은 거부하고 코드가 5~7단어로 대체
-
-
-def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?") -> Optional[dict]:
-    """A Q5 빈칸을 코드가 (A)(B)(C)에서 직접 골라 마킹 (B 빈칸뚫기와 같은 철학).
-    LLM이 고른 구절(blank_A/B)이 유효하면 우선 사용, 아니면 코드가 깨끗한 구절 선택.
-    fill_boundary_dup None + verbatim 복원 + 서로 다른 단락이 보장되는 조합만 반환. 실패 시 None.
-    → 빈칸 짧음/원문 미발견/경계 단어중복(예: 'questions' 중복) 원천 차단."""
-    try:
-        texts = [p[1] for p in paragraphs]
-    except Exception:
-        return None
-    if len(texts) < 2:
-        return None
-    cand = [_q5_candidates(t) for t in texts]
-
-    def _valid_llm(val, idx):
-        if not val:
-            return None
-        v = str(val).strip()
-        if len(v.split()) < 4:
-            return None
-        if len(v.split()) > MAX_BLANK_WORDS:   # 너무 길면(예: 27단어) 거부 → 코드가 깔끔한 5~7단어로 대체
-            return None
-        if texts[idx].count(v) != 1:
-            return None
-        if not _quote_ok(v):
-            return None
-        if modal_no_verb(v):
-            return None
-        return v
-
-    order = sorted(range(len(texts)), key=lambda k: -len(texts[k].split()))
-    pool = []
-    for k in order:
-        lst = []
-        for llm in (llm_a, llm_b):
-            vv = _valid_llm(llm, k)
-            if vv and vv not in lst:
-                lst.append(vv)
-        lst += [c for c in cand[k] if c not in lst]
-        pool.append((k, lst))
-
-    for ai in range(len(pool)):
-        ka, la = pool[ai]
-        for bi in range(len(pool)):
-            if bi == ai:
-                continue
-            kb, lb = pool[bi]
-            for va in la[:6]:
-                for vb in lb[:6]:
-                    new = [list(p) for p in paragraphs]
-                    new[ka][1] = texts[ka].replace(va, "<BLANK_A>", 1)
-                    new[kb][1] = texts[kb].replace(vb, "<BLANK_B>", 1)
-                    joined = " ".join(p[1] for p in new)
-                    if "<BLANK_A>" not in joined or "<BLANK_B>" not in joined:
-                        continue
-                    if fill_boundary_dup(joined, [("<BLANK_A>", va), ("<BLANK_B>", vb)]):
-                        continue
-                    if new[ka][1].replace("<BLANK_A>", va) != texts[ka]:
-                        continue
-                    if new[kb][1].replace("<BLANK_B>", vb) != texts[kb]:
-                        continue
-                    # ★ (A)(B) 라벨을 본문 등장 순서로 재배정 — 학생은 (A)→(B) 순으로 쓰는데
-                    #   지문이 (B)→(A) 순이면 읽기 흐름이 어긋난다. 마커만 맞바꾸면 되므로
-                    #   verbatim·복원 검증에는 영향이 없다.
-                    joined2 = " ".join(p[1] for p in new)
-                    if joined2.find("<BLANK_B>") < joined2.find("<BLANK_A>"):
-                        for p in new:
-                            p[1] = (p[1].replace("<BLANK_A>", "\x00")
-                                        .replace("<BLANK_B>", "<BLANK_A>")
-                                        .replace("\x00", "<BLANK_B>"))
-                        va, vb = vb, va
-                    return {"paragraphs": new, "blank_A": va, "blank_B": vb}
-    return None
-
-
-def _b_candidates(hn: str, min_w: int = 4, max_w: int = 7) -> list:
-    """(더) 2단계: _q5_candidates와 동일. 깐깐한 경계로 먼저, 0개면 완화."""
-    spans = [(m.start(), m.end()) for m in re.finditer(r'\S+', hn)]
-    toks = [hn[s:e] for s, e in spans]
-    n = len(toks)
-
-    def _scan(strict):
-        out = []
-        for L in range(min_w, max_w + 1):
-            for i in range(0, n - L + 1):
-                j = i + L - 1
-                sub = hn[spans[i][0]:spans[j][1]]
-                if not _quote_ok(sub):
-                    continue
-                if not _clean_boundary_ok(sub, hn, strict=strict):
-                    continue
-                fw = re.sub(r'[^a-z]', '', toks[i].lower())
-                if fw in _Q5_MODALS:
-                    continue
-                if hn.count(sub) != 1:
-                    continue
-                out.append((i, j, sub))
-        return out
-
-    res = _scan(True)
-    if not res:
-        res = _scan(False)
-    return res
-
-
-def pick_b_q4_blanks(full_summary, llm_a: str = "", llm_b: str = "", min_w: int = 4, max_w: int = 7) -> Optional[dict]:
-    """B Q4 빈칸을 코드가 요약문에서 직접 골라줌 (A Q5와 같은 철학).
-    각 4단어 이상, 서로 안 겹침, 경계중복 None. LLM 구절이 유효하면 우선 사용. 실패 시 None.
-    요약문은 우리가 만든 한 문장이라, 짧거나 비verbatim인 LLM 빈칸을 코드가 대체해 누락을 막는다."""
-    hn = re.sub(r'\s+', ' ', str(full_summary or "")).strip()
-    if len(hn.split()) < (2 * min_w + 1):
-        return None
-    cands = _b_candidates(hn, min_w, max_w)
-    if not cands:
-        return None
-
-    def span_of(v):
-        v = re.sub(r'\s+', ' ', str(v or "")).strip()
-        if len(v.split()) < min_w or len(v.split()) > MAX_BLANK_WORDS or hn.count(v) != 1:
-            return None
-        if not _quote_ok(v):
-            return None
-        if modal_no_verb(v):
-            return None
-        toks = hn.split(); pw = v.split()
-        for i in range(len(toks) - len(pw) + 1):
-            if toks[i:i + len(pw)] == pw:
-                return (i, i + len(pw) - 1, v)
-        return None
-
-    la = [span_of(llm_a)] if span_of(llm_a) else []
-    lb = [span_of(llm_b)] if span_of(llm_b) else []
-    poolA = la + cands
-    poolB = lb + cands
-    for ca in poolA:
-        for cb in poolB:
-            lo, hi = (ca, cb) if ca[1] < cb[0] else (cb, ca)
-            if not (lo[1] < hi[0]):  # 겹치거나 인접(사이 0단어) 제외
-                continue
-            va, vb = ca[2], cb[2]
-            if va == vb:
-                continue
-            tmpl = hn.replace(va, "(A)", 1)
-            if "(A)" not in tmpl:
-                continue
-            tmpl = tmpl.replace(vb, "(B)", 1)
-            if "(B)" not in tmpl:
-                continue
-            if fill_boundary_dup(tmpl, [("(A)", va), ("(B)", vb)]):
-                continue
-            # ★ 두 빈칸 사이 최소 3단어 확보 — 붙어 있으면 사실상 빈칸 하나가 된다.
-            #   (16강 04번 'Reference groups (A) (B) against peers' 사례)
-            if hi[0] - lo[1] < 4:      # lo 끝 인덱스와 hi 시작 인덱스 사이 단어 수
-                continue
-            # ★ (A)가 (B)보다 앞에 오도록 라벨 재배정
-            if ca[0] > cb[0]:
-                va, vb = vb, va
-                tmpl = hn.replace(va, "(A)", 1).replace(vb, "(B)", 1)
-                if "(A)" not in tmpl or "(B)" not in tmpl:
-                    continue
-            return {"blank_A": va, "blank_B": vb}
-    return None
-
-
-# ============================================================
-# (버) 객관식 정답 위치 셔플 — 핵심빈칸·요약빈칸·주제 정답이 ①에 쏠리던 문제 교정
-#   LLM/프롬프트가 정답을 0번에 두고 내려보내므로, 코드가 보기를 셔플하고 정답
-#   인덱스를 재계산한다. 인덱스 순열로 옮기므로 중복 원소가 있어도(원소 ordinality
-#   추적) 정답 의미는 불변. pid+태그 기반 seed라 같은 지문은 항상 같은 배열이고
-#   네 유형은 태그가 달라 서로 다르게 섞인다(deterministic).
-# ============================================================
-def _shuffle_choices(options, correct, seed):
-    if not isinstance(options, list) or not isinstance(correct, int):
-        return options, correct
-    n = len(options)
-    if n <= 1 or not (0 <= correct < n):
-        return options, correct
-    order = list(range(n))
-    random.Random(seed).shuffle(order)
-    new_options = [options[i] for i in order]
-    new_correct = order.index(correct)  # 정답 원소가 옮겨간 새 위치
-    return new_options, new_correct
-
-
-def _choice_seed(pid, tag, payload=""):
-    return int(hashlib.md5((str(pid) + tag + str(payload)).encode()).hexdigest()[:8], 16)
-
-
-# ============ 환경 변수 ============
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5")
-ANTHROPIC_VERSION = "2023-06-01"
-MAX_RETRIES = 3
-
-SB_URL = os.environ.get("SUPABASE_URL", "")
-SB_KEY = (
-    os.environ.get("SUPABASE_SERVICE_KEY")
-    or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    or os.environ.get("SUPABASE_KEY", "")
-)
-
-
-# ============ Supabase REST 헬퍼 ============
-def _supabase_enabled() -> bool:
-    return bool(SB_URL and SB_KEY)
-
-
-def _sb_headers() -> dict:
-    return {
-        "apikey": SB_KEY,
-        "Authorization": f"Bearer {SB_KEY}",
-        "Content-Type": "application/json",
-        "Prefer": "return=representation",
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LEVEL ME UP</title>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#4A90D9">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f0f4f8; color: #1a1a1a; min-height: 100vh; }
+.hidden { display: none !important; }
+.btn { padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.btn-primary { background: #2E4E8F; color: white; }
+.btn-primary:hover { background: #1f3766; }
+.btn-primary:disabled { background: #9db3d6; cursor: not-allowed; }
+.btn-orange { background: #2E4E8F; color: white; }
+.btn-orange:hover { background: #1f3766; }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+.badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge-ready { background: #E8F5E9; color: #2E9E5A; }
+.badge-pending { background: #FFF8F0; color: #E8833A; }
+
+/* 헤더 */
+.header { background: linear-gradient(135deg, #2E4E8F 0%, #1f3766 100%); color: white; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+.header-top { display: flex; align-items: center; padding: 10px 20px; gap: 10px; }
+.header-top h1 { font-size: 18px; flex-shrink: 0; }
+.header-top .sub { font-size: 11px; opacity: 0.7; flex-shrink: 0; }
+.header-notice-box { flex: 1; background: rgba(255,255,255,0.15); border-radius: 6px; padding: 5px 12px; font-size: 12px; min-height: 28px; display: flex; align-items: center; overflow: hidden; }
+.notice-text { color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.notice-empty { color: rgba(255,255,255,0.5); font-style: italic; font-size: 11px; }
+.logout-btn { background: rgba(255,255,255,0.2); border: none; color: white; padding: 5px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
+.header-tabs { display: flex; padding: 0 20px; }
+.header-tab { padding: 8px 20px; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.7); cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; }
+.header-tab.active { color: white; border-bottom-color: white; }
+
+/* 로그인 */
+#login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #2E4E8F 0%, #1f3766 100%); }
+.login-box { background: white; border-radius: 16px; padding: 40px 32px; width: 90%; max-width: 380px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.15); }
+.login-box h1 { font-size: 24px; font-weight: 800; letter-spacing: 0.5px; color: #2E4E8F; margin-bottom: 4px; }
+.login-box .sub { color: #666; font-size: 13px; margin-bottom: 24px; }
+.login-box input { width: 100%; padding: 14px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 16px; text-align: center; margin-bottom: 12px; outline: none; }
+.login-box input:focus { border-color: #4A90D9; }
+.login-error { color: #dc2626; font-size: 13px; margin-bottom: 8px; }
+
+/* 3단 */
+.three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; padding: 14px 16px; max-width: 1400px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+@media (max-width: 960px) { .three-col { grid-template-columns: 1fr 1fr; } .col-right { grid-column: 1 / -1; } }
+@media (max-width: 600px) { .three-col { grid-template-columns: 1fr; } }
+
+/* 카드 */
+.card { background: white; border-radius: 12px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 12px; }
+.card-title { font-size: 13px; font-weight: 700; color: #333; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+
+/* 교재/지문 */
+select { width: 100%; padding: 9px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 13px; background: white; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; cursor: pointer; margin-bottom: 8px; }
+select:focus { border-color: #4A90D9; outline: none; }
+
+/* ★ 교재 선택 - 카테고리 펼침형 드롭다운 */
+.book-picker-btn { width: 100%; text-align: left; padding: 9px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 13px; background: white; cursor: pointer; color: #1a1a1a; }
+.book-picker-btn:hover { border-color: #4A90D9; }
+.book-picker-panel { position: absolute; z-index: 50; top: calc(100% + 4px); left: 0; right: 0; background: white; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.12); max-height: 340px; overflow-y: auto; padding: 4px 0; }
+.bp-category { padding: 8px 12px; font-size: 12px; font-weight: 700; color: #2E4E8F; background: #EBF0FA; cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none; }
+.bp-category:hover { background: #dbe4f5; }
+.bp-books { display: none; }
+.bp-books.open { display: block; }
+.bp-book-item { padding: 8px 12px 8px 22px; font-size: 13px; cursor: pointer; color: #333; }
+.bp-book-item:hover { background: #f5f7fa; }
+.bp-book-item.selected { background: #EBF4FB; color: #4A90D9; font-weight: 600; }
+.bp-subcategory { padding: 6px 12px 6px 22px; font-size: 12px; font-weight: 600; color: #445; background: #f5f8fc; cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none; border-top: 1px solid #eef2f7; }
+.bp-subcategory:hover { background: #eaf0f8; }
+.bp-subbooks { display: none; }
+.bp-subbooks.open { display: block; }
+.bp-book-item.bp-book-sub { padding-left: 34px; }
+.passage-list { max-height: 380px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px; }
+.passage-item { display: flex; align-items: center; padding: 8px 10px; border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.15s; }
+.passage-item:hover { background: #f5f7fa; }
+.passage-item:last-child { border-bottom: none; }
+.passage-item.pg-dragging { opacity: 0.4; background: #eef3fa; }
+.passage-item .pg-drag-handle:active { cursor: grabbing; }
+.passage-item input[type="checkbox"] { width: 16px; height: 16px; margin-right: 8px; accent-color: #4A90D9; flex-shrink: 0; }
+.passage-item .title { flex: 1; font-size: 13px; }
+.unit-header { padding: 7px 10px; background: #f0f4f8; font-weight: 700; font-size: 12px; color: #4A90D9; border-bottom: 1px solid #e0e0e0; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+.unit-header:hover { background: #e5edf5; }
+.unit-header .unit-select { font-size: 11px; font-weight: 400; color: #666; }
+
+/* 레벨 */
+.level-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.level-btn { padding: 7px 4px; border: 2px solid #e5e7eb; border-radius: 7px; text-align: center; cursor: pointer; font-size: 11px; transition: all 0.15s; user-select: none; }
+.level-btn.selected { border-color: #4A90D9; background: #EBF4FB; color: #4A90D9; font-weight: 600; }
+.level-btn.green.selected { border-color: #f9a8d4; background: #fdf2f8; color: #ec4899; }
+.level-btn.orange.selected { border-color: #ddd6fe; background: #f5f3ff; color: #7c3aed; }
+.preset-row { display: flex; gap: 5px; margin-bottom: 8px; flex-wrap: wrap; }
+.preset-btn { flex: 1; min-width: 60px; padding: 5px; border: 1px solid #ddd; border-radius: 6px; background: white; font-size: 11px; cursor: pointer; text-align: center; }
+.preset-btn:hover { background: #f5f7fa; }
+
+/* 생성 */
+.generate-area .btn { width: 100%; padding: 13px; font-size: 15px; }
+.progress { margin-top: 10px; }
+.progress-bar { height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, #4A90D9, #2E9E5A); border-radius: 3px; transition: width 0.3s; }
+.progress-text { font-size: 12px; color: #666; text-align: center; margin-top: 5px; }
+.result-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 6px; font-size: 13px; }
+
+/* 공지 카드 */
+.notice-card { background: white; border-radius: 12px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 12px; border: 2px solid #4A90D9; background: #EBF4FB; }
+.notice-card textarea { width: 100%; min-height: 80px; padding: 8px; border: 1px solid #c5dcf0; border-radius: 6px; font-size: 13px; resize: vertical; background: white; font-family: inherit; }
+.notice-card textarea:focus { outline: none; border-color: #4A90D9; }
+
+/* 업로드 탭 */
+textarea { width: 100%; min-height: 120px; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 13px; font-family: monospace; resize: vertical; }
+textarea:focus { border-color: #4A90D9; outline: none; }
+
+/* 토스트 */
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 8px; font-size: 14px; z-index: 1000; animation: fadeIn 0.3s; }
+@keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(10px); } }
+
+/* ★ 원문 추출 탭 스타일 */
+.ext-book-item { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--color-bg, #f8fafc); border-bottom: 1px solid #e5e7eb; cursor: pointer; }
+.ext-book-item:hover { background: #f0f4f8; }
+.ext-book-item.expanded { background: #EBF4FB; }
+.ext-unit-row { padding: 8px 12px 8px 32px; background: white; border-bottom: 1px solid #f0f0f0; }
+.ext-unit-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.ext-pid-list { display: flex; flex-wrap: wrap; gap: 5px; padding-left: 20px; }
+.ext-pid-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all 0.15s; border: 1px solid #e5e7eb; background: #f8fafc; }
+.ext-pid-chip:hover { background: #f0f4f8; }
+.ext-pid-chip.selected { background: #EBF4FB; border-color: #4A90D9; color: #4A90D9; }
+.chip-handle { cursor: grab; color: #b8bfcc; font-size: 11px; user-select: none; }
+.chip-handle:active { cursor: grabbing; }
+.ext-pid-chip.chip-dragging { opacity: 0.4; }
+.ext-count-badge { font-size: 11px; color: #666; margin-left: auto; }
+.lst-cat { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; font-size: 12.5px; font-weight: 700; color: #2E4E8F; background: #EBF0FA; border-bottom: 1px solid #d8e2f2; cursor: pointer; user-select: none; }
+.lst-cat:hover { background: #dbe4f5; }
+
+/* ★ 비밀노트 탭 스타일 */
+.sn-type-btn { flex:1; padding:12px 8px; border:none; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; transition:all 0.2s; }
+.sn-type-a { background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:white; }
+.sn-type-a:hover { background:linear-gradient(135deg,#1e40af,#2563eb); transform:translateY(-1px); }
+.sn-type-b { background:linear-gradient(135deg,#7c3aed,#a855f7); color:white; }
+.sn-type-b:hover { background:linear-gradient(135deg,#6d28d9,#9333ea); transform:translateY(-1px); }
+.sn-type-c { background:linear-gradient(135deg,#0369a1,#0ea5e9); color:white; }
+.sn-type-c:hover { background:linear-gradient(135deg,#075985,#0284c7); transform:translateY(-1px); }
+.sn-type-btn:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+.sn-card { background:linear-gradient(135deg,#ede9fe,#faf5ff); border:1.5px solid #c4b5fd; border-radius:12px; padding:14px; margin-bottom:12px; }
+.sn-card .card-title { color:#6d28d9; }
+.sn-progress { margin-top:10px; }
+.sn-result-item { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border:1px solid #ddd8fe; border-radius:8px; margin-bottom:6px; font-size:13px; background:white; }
+.btn-purple { background:#7c3aed; color:white; }
+.btn-purple:hover { background:#6d28d9; }
+.pc-mode-tabs{display:flex;gap:4px}
+.pc-mode-tab{flex:1;padding:8px 6px;font-size:12px;font-weight:700;border:1.5px solid #93b4d9;background:#fff;color:#2E4E8F;border-radius:6px;cursor:pointer;transition:all .15s;line-height:1.2;}
+.pc-mode-tab.active{background:#2E4E8F;color:#fff;border-color:#2E4E8F}
+</style>
+</head>
+<body>
+
+<!-- 로그인 -->
+<div id="login-screen">
+  <div class="login-box">
+    <h1>LEVEL ME UP</h1>
+    <p class="sub" style="text-transform:uppercase;letter-spacing:0.5px;">English Workbook</p>
+    <div id="login-error" class="login-error hidden"></div>
+    <input type="password" id="pw-input" placeholder="비밀번호를 입력하세요" autocomplete="off">
+    <button class="btn btn-primary" style="width:100%;" onclick="doLogin()">로그인</button>
+  </div>
+</div>
+
+<!-- 메인 -->
+<div id="main-screen" class="hidden">
+  <div class="header">
+    <div class="header-top">
+      <h1 style="font-weight:800;letter-spacing:0.5px;">LEVEL ME UP</h1>
+      <span class="sub" style="text-transform:uppercase;letter-spacing:0.5px;">English Workbook</span>
+      <div class="header-notice-box">
+        <span id="header-notice-text" class="notice-empty">공지사항 없음</span>
+      </div>
+      <button class="logout-btn" style="margin-right:4px;" onclick="refreshTemplate()" title="템플릿 재생성">🔄</button>
+      <button class="logout-btn" onclick="doLogout()">로그아웃</button>
+    </div>
+    <div class="header-tabs">
+      <div class="header-tab" onclick="switchTab('sheet', this)"> 분석지</div>
+      <div class="header-tab" onclick="switchTab('preclass', this)"> 0회독 — 수업 전 분석</div>
+      <div class="header-tab active" onclick="switchTab('generate', this)"> 1회독 교재 생성</div>
+      <div class="header-tab" onclick="switchTab('variation', this)"> 2회독 AB 변형문제</div>
+      <div class="header-tab" onclick="switchTab('seosul', this)"> 2회독 서술형 종합</div>
+      <div class="header-tab" onclick="switchTab('secret', this)"> 비밀노트</div>
+      <div class="header-tab" onclick="switchTab('extract', this)"> 원문 추출</div>
+      <div class="header-tab" onclick="switchTab('upload', this)"> 지문 관리</div>
+    </div>
+  </div>
+
+  <!-- ★ 0회독 탭 (수업 전 4페이지 완전 분석) -->
+  <div id="tab-preclass" class="hidden">
+    <div class="three-col">
+      <div style="grid-column: span 2;">
+        <div class="card">
+          <div class="card-title"> 지문 선택 (중복 선택 가능)</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <button class="btn btn-sm" onclick="pcExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
+            <button class="btn btn-sm" onclick="pcCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
+            <button class="btn btn-sm" onclick="pcClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
+            <span style="margin-left:auto;font-size:13px;color:#666;" id="pc-sel-count">0개 선택</span>
+          </div>
+          <div id="pc-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
+            <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-right">
+        <div class="card" style="border:2px solid #93b4d9;background:#EBF0FA;">
+          <div class="card-title" style="color:#2E4E8F;"> 0회독 — 수업 전 분석</div>
+          <div style="font-size:11px;color:#334;margin-bottom:10px;line-height:1.5;">
+            선생님 본인 수업 준비용 4페이지 완전 분석.<br>
+            지문(색상 마킹) · 주제·제목·해석 (2x2) · 어법 12~14개 상세박스 · 어휘심화(영영풀이) · 함축 빈칸 흐름
+          </div>
+          <div style="background:#f5f8fc;border:1px solid #93b4d9;border-radius:8px;padding:10px;margin-bottom:10px;">
+            <div style="font-size:11px;font-weight:700;color:#2E4E8F;margin-bottom:4px;">📄 4페이지 구성</div>
+            <div style="font-size:10px;color:#666;line-height:1.6;">
+              <b>PAGE 1</b> 지문(빨/파/검 마킹) + 주제·제목 2x2 + 어법/어휘 노트<br>
+              <b>PAGE 2</b> 어법 상세 1/2 (좌우 박스)<br>
+              <b>PAGE 3</b> 어법 상세 2/2 + 함축 박스<br>
+              <b>PAGE 4</b> 어휘 심화 6개(영영풀이) + 주제 어휘 6개
+            </div>
+          </div>
+          <div style="margin-bottom:8px;">
+            <label style="font-size:11px;color:#444;"> 학교명</label>
+            <input type="text" id="pc-school-name" placeholder="레벨미업학원" value="레벨미업학원"
+              style="width:100%;padding:8px 10px;border:2px solid #93b4d9;border-radius:6px;font-size:12px;outline:none;margin-top:4px;">
+          </div>
+          <!-- ★ 자료 종류 (탭) -->
+          <div style="background:#EBF0FA;border:1.5px dashed #2E4E8F;border-radius:6px;padding:8px;margin-bottom:8px;">
+            <div style="font-size:11px;font-weight:700;color:#2E4E8F;margin-bottom:6px;"> 자료 종류</div>
+            <div class="pc-mode-tabs">
+              <button type="button" class="pc-mode-tab active" data-mode="preclass" onclick="pcSetMode('preclass',this)"> 0회독</button>
+              <button type="button" class="pc-mode-tab" data-mode="sentence_order" onclick="pcSetMode('sentence_order',this)"> 순서</button>
+              <button type="button" class="pc-mode-tab" data-mode="both" onclick="pcSetMode('both',this)"> 0회독<br>+순서</button>
+              <button type="button" class="pc-mode-tab" data-mode="topic" onclick="pcSetMode('topic',this)"> 배경<br>지식</button>
+            </div>
+          </div>
+          <button class="btn btn-orange" id="pc-btn-d" onclick="doPreclass()" disabled style="width:100%;background:#2E4E8F;">
+             0회독 자료 생성
+          </button>
+          <div class="progress hidden" id="pc-progress">
+            <div class="progress-bar" style="margin-top:8px;"><div class="progress-fill" id="pc-progress-fill" style="width:0%"></div></div>
+            <div class="progress-text" id="pc-progress-text">생성 중...</div>
+          </div>
+        </div>
+        <div class="card hidden" id="pc-results-section">
+          <div class="card-title">✅ 생성 완료</div>
+          <div id="pc-results-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ★ 분석지 탭 (three_modes 저작) -->
+  <div id="tab-sheet" class="hidden">
+    <div class="three-col">
+      <div style="grid-column: span 2;">
+        <div class="card">
+          <div class="card-title"> 지문 선택 (0회독이 준비된 지문만 분석지 가능)</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <button class="btn btn-sm" onclick="asExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
+            <button class="btn btn-sm" onclick="asCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
+            <button class="btn btn-sm" onclick="asClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
+            <span style="margin-left:auto;font-size:13px;color:#666;" id="as-sel-count">0개 선택</span>
+          </div>
+          <div id="as-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
+            <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-right">
+        <div class="card" style="border:2px solid #2E4E8F;background:#F7F9FC;">
+          <div class="card-title" style="color:#2E4E8F;"> 분석지 — 저작·인쇄·학생 공유</div>
+          <div style="font-size:11px;color:#445;margin-bottom:10px;line-height:1.6;">
+            0회독 분석을 그대로 불러와 <b>강조·편집</b>하는 3-모드 분석지입니다.<br>
+            · <b>저작</b> — 단어 클릭으로 어법·어휘·함축 강조<br>
+            · <b>정밀 인쇄물</b> — A4 가로 한 장 (선생님용)<br>
+            · <b>학생 게시물</b> — 공유 링크로 배포
+          </div>
+          <div style="background:#EBF0FA;border:1px solid #2E4E8F;border-radius:8px;padding:10px;margin-bottom:10px;font-size:10.5px;color:#445;line-height:1.6;">
+            ⓘ 분석지는 <b>0회독 자료</b>를 소스로 씁니다.<br>
+            0회독이 ⏳ 미생성인 지문은 먼저 0회독 탭에서 생성하세요.
+          </div>
+          <button class="btn btn-primary" id="as-btn-open" onclick="asOpenSheets()" disabled style="width:100%;background:#2E4E8F;">
+             분석지 열기 (새 창)
+          </button>
+          <div id="as-open-note" style="font-size:11px;color:#666;margin-top:8px;text-align:center;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 생성 탭 -->
+  <div id="tab-generate">
+    <div class="three-col">
+
+      <!-- 왼쪽: 교재 + 지문 -->
+      <div>
+        <div class="card">
+          <div class="card-title"> 교재 선택</div>
+          <div style="display:flex;gap:6px;">
+            <div class="book-picker" id="book-picker" style="position:relative;flex:1;">
+              <button type="button" id="book-picker-btn" class="book-picker-btn" onclick="toggleBookPicker()">
+                <span id="book-picker-label">교재를 선택하세요</span><span style="float:right;color:#999;">▾</span>
+              </button>
+              <div id="book-picker-panel" class="book-picker-panel hidden"></div>
+              <select id="sel-book" onchange="onBookChange()" style="display:none;">
+                <option value="">교재를 선택하세요</option>
+              </select>
+            </div>
+            <button class="btn btn-sm" onclick="deleteBook()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;" title="교재 삭제">🗑️</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">
+             지문 선택
+            <span style="margin-left:auto;font-size:12px;color:#666;" id="sel-count">0개 선택</span>
+          </div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px;">
+            <button class="btn btn-sm" onclick="selectAll()" style="background:#eee;color:#333;">전체 선택</button>
+            <button class="btn btn-sm" onclick="selectNone()" style="background:#eee;color:#333;">선택 해제</button>
+            <button class="btn btn-sm" onclick="clearPassageCache()" style="background:#f3e8ff;color:#6d28d9;border:1px solid #c4b5fd;">🗑️ 선택 캐시 삭제</button>
+            <button id="pg-save-order-btn" class="btn btn-sm hidden" onclick="pgSaveAllOrders()" style="background:#2E4E8F;color:white;margin-left:auto;">✅ 순서 저장</button>
+          </div>
+          <div class="passage-list" id="passage-list">
+            <div style="padding:20px;text-align:center;color:#999;">교재를 먼저 선택하세요</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 가운데: 레벨 + 생성버튼 -->
+      <div>
+        <div class="card">
+          <div class="card-title"> 레벨 선택</div>
+          <div class="preset-row">
+            <div class="preset-btn" onclick="presetLevels([1,2,3,4])">수업 전+중</div>
+            <div class="preset-btn" onclick="presetLevels([5,6,7,8,9,10])">수업 후</div>
+            <div class="preset-btn" onclick="presetLevels([0,1,2,3,4,5,6,7,8,9,10])">전체</div>
+            <div class="preset-btn" onclick="presetLevels([])">해제</div>
+          </div>
+          <div class="level-grid">
+          <div class="level-btn selected" data-level="0" onclick="toggleLevel(this)">정답</div>
+            <div class="level-btn selected" data-level="1" onclick="toggleLevel(this)">Stage 1 어휘</div>
+            <div class="level-btn selected" data-level="2" onclick="toggleLevel(this)">Stage 2 해석</div>
+            <div class="level-btn green selected" data-level="3" onclick="toggleLevel(this)">Stage 3 분석</div>
+            <div class="level-btn green selected" data-level="4" onclick="toggleLevel(this)">Stage 4 주제</div>
+            <div class="level-btn orange selected" data-level="5" onclick="toggleLevel(this)">Stage 5 흐름</div>
+            <div class="level-btn orange selected" data-level="6" onclick="toggleLevel(this)">Stage 6 빈칸</div>
+            <div class="level-btn orange selected" data-level="7" onclick="toggleLevel(this)">Stage 7 어법</div>
+            <div class="level-btn orange selected" data-level="8" onclick="toggleLevel(this)">Stage 8 어휘</div>
+            <div class="level-btn orange selected" data-level="9" onclick="toggleLevel(this)">Stage 9 일치</div>
+            <div class="level-btn orange selected" data-level="10" onclick="toggleLevel(this)">Stage 10 영작</div>
+          </div>
+        </div>
+        <div class="card generate-area">
+          <button class="btn btn-primary" id="btn-generate" onclick="doGenerate()" disabled>워크북 생성하기</button>
+          <div class="progress hidden" id="progress">
+            <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+            <div class="progress-text" id="progress-text">준비 중...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 오른쪽: 공지 + 결과 -->
+      <div class="col-right">
+        <div class="notice-card">
+          <div class="card-title" style="color:#4A90D9;">📢 공지사항</div>
+          <textarea id="notice-input" placeholder="공지사항을 입력하세요. 저장하면 상단 헤더에 표시됩니다."></textarea>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+            <button class="btn btn-sm btn-primary" onclick="saveNotice()">저장</button>
+            <button class="btn btn-sm" onclick="clearNotice()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">삭제</button>
+            <span id="notice-saved" class="hidden" style="font-size:12px;color:#2E9E5A;">✅ 저장됨</span>
+          </div>
+        </div>
+        <div class="card hidden" id="results-section">
+          <div class="card-title">✅ 생성 완료</div>
+          <div id="results-list"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- ★ 비밀노트 탭 -->
+  <!-- ★ 변형문제 탭 (2회독) -->
+  <div id="tab-variation" class="hidden">
+    <div class="three-col">
+      <div style="grid-column: span 2;">
+        <div class="card">
+          <div class="card-title"> 지문 선택 (클릭 순서대로 출력됨)</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <button class="btn btn-sm" onclick="vrExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
+            <button class="btn btn-sm" onclick="vrCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
+            <button class="btn btn-sm" onclick="vrClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
+            <span style="margin-left:auto;font-size:13px;color:#666;" id="vr-sel-count">0개 선택</span>
+          </div>
+          <div id="vr-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
+            <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-right">
+        <div class="vr-card card" style="border:1.5px solid #93b4d9;background:linear-gradient(135deg,#EBF0FA,#f5f8fc);">
+          <div class="card-title" style="color:#2E4E8F;"> 학교명</div>
+          <input type="text" id="vr-school-name" placeholder="레벨미업학원" value="레벨미업학원"
+            style="width:100%;padding:9px 12px;border:2px solid #93b4d9;border-radius:8px;font-size:13px;outline:none;">
+        </div>
+
+        <div class="vr-card card" style="border:1.5px solid #93b4d9;background:linear-gradient(135deg,#EBF0FA,#f5f8fc);">
+          <div class="card-title" style="color:#2E4E8F;"> 유형 선택 (다중 선택 가능)</div>
+          
+          <label style="display:flex;align-items:center;gap:8px;background:#dbeafe;border:1.5px solid #93c5fd;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;">
+            <input type="checkbox" id="vr-type-a" checked onchange="vrUpdateBtns()" style="width:18px;height:18px;">
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:700;color:#1e40af;">유형 A — 종합 5문제</div>
+              <div style="font-size:11px;color:#666;">주제·순서·핵심빈칸·일치판단·빈칸영작</div>
+            </div>
+          </label>
+          
+          <label style="display:flex;align-items:center;gap:8px;background:#f3e8ff;border:1.5px solid #c4b5fd;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;">
+            <input type="checkbox" id="vr-type-b" checked onchange="vrUpdateBtns()" style="width:18px;height:18px;">
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:700;color:#6d28d9;">유형 B — 위치·요약·서술 5문제</div>
+              <div style="font-size:11px;color:#666;">문장위치·주제·요약빈칸·요약영작·주제영작</div>
+            </div>
+          </label>
+        </div>
+
+        <div class="vr-card card" style="border:1.5px solid #93b4d9;background:linear-gradient(135deg,#EBF0FA,#f5f8fc);">
+          <div class="card-title" style="color:#2E4E8F;">출력 방식</div>
+          <label style="display:flex;align-items:center;gap:8px;padding:6px;cursor:pointer;">
+            <input type="radio" name="vr-mode" value="by-type" checked style="width:16px;height:16px;">
+            <div style="font-size:12px;">
+              <b>유형별 묶기</b><br>
+              <span style="color:#666;">A 지문1,2,3... → B 지문1,2,3...</span>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;padding:6px;cursor:pointer;">
+            <input type="radio" name="vr-mode" value="by-passage" style="width:16px;height:16px;">
+            <div style="font-size:12px;">
+              <b>지문별 묶기</b><br>
+              <span style="color:#666;">지문1: A+B → 지문2: A+B...</span>
+            </div>
+          </label>
+        </div>
+
+        <div class="vr-card card" style="border:1.5px solid #93b4d9;background:linear-gradient(135deg,#EBF0FA,#f5f8fc);">
+          <button class="btn btn-primary" id="vr-btn-generate" onclick="doVariation()" disabled
+            style="width:100%;padding:14px;font-size:15px;font-weight:700;background:linear-gradient(135deg,#2E4E8F,#1f3766);color:white;border:none;border-radius:10px;cursor:pointer;">
+             변형문제 생성
+          </button>
+          <div class="progress hidden" id="vr-progress">
+            <div class="progress-bar" style="margin-top:8px;"><div class="progress-fill" id="vr-progress-fill" style="width:0%"></div></div>
+            <div class="progress-text" id="vr-progress-text">생성 중...</div>
+          </div>
+        </div>
+
+        <div class="card hidden" id="vr-results-section">
+          <div class="card-title">✅ 생성 완료</div>
+          <div id="vr-results-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<div id="tab-seosul" class="hidden">
+  <div class="three-col">
+    <div style="grid-column: span 2;">
+      <div class="card">
+        <div class="card-title"> 지문 선택 (클릭 순서대로 출력됨)</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+          <button class="btn btn-sm" onclick="ssExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
+          <button class="btn btn-sm" onclick="ssCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
+          <button class="btn btn-sm" onclick="ssClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
+          <span style="margin-left:auto;font-size:13px;color:#666;" id="ss-sel-count">0개 선택</span>
+        </div>
+        <div id="ss-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
+          <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-right">
+      <div class="vr-card card" style="border:1.5px solid #93c5fd;background:linear-gradient(135deg,#eff6ff,#f5f3ff);">
+        <div class="card-title" style="color:#1d4ed8;"> 학교명</div>
+        <input type="text" id="ss-school-name" placeholder="레벨미업학원" value="레벨미업학원"
+          style="width:100%;padding:9px 12px;border:2px solid #93c5fd;border-radius:8px;font-size:13px;outline:none;">
+      </div>
+
+      <div class="vr-card card" style="border:1.5px solid #93c5fd;background:linear-gradient(135deg,#eff6ff,#f5f3ff);">
+        <div class="card-title" style="color:#1d4ed8;"> 서술형 유형 (한 지문에 종합 출제 · 자유 조합)</div>
+
+        <label style="display:flex;align-items:center;gap:8px;background:#fdf2f8;border:1.5px solid #f9a8d4;border-radius:8px;padding:9px;margin-bottom:7px;cursor:pointer;">
+          <input type="checkbox" id="ss-type-sa" checked onchange="ssUpdateBtns()" style="width:18px;height:18px;">
+          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#ec4899;">SA — 본문 빈칸 배열영작</div>
+            <div style="font-size:11px;color:#666;">보기 단어 배열, 어형변형 가능</div></div>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;background:#fdf2f8;border:1.5px solid #f9a8d4;border-radius:8px;padding:9px;margin-bottom:7px;cursor:pointer;">
+          <input type="checkbox" id="ss-type-sc" checked onchange="ssUpdateBtns()" style="width:18px;height:18px;">
+          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#ec4899;">SC — 요약문 빈칸 영작</div>
+            <div style="font-size:11px;color:#666;">변형 없이 배열, 구조 회전</div></div>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;background:#dbeafe;border:1.5px solid #93c5fd;border-radius:8px;padding:9px;margin-bottom:7px;cursor:pointer;">
+          <input type="checkbox" id="ss-type-sd" checked onchange="ssUpdateBtns()" style="width:18px;height:18px;">
+          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#1e40af;">SD — 어법 틀린 곳 고치기</div>
+            <div style="font-size:11px;color:#666;">밑줄 없음, grammar_points 근거</div></div>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;background:#f5f3ff;border:1.5px solid #ddd6fe;border-radius:8px;padding:9px;cursor:pointer;">
+          <input type="checkbox" id="ss-type-se" checked onchange="ssUpdateBtns()" style="width:18px;height:18px;">
+          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#7c3aed;">SE — 어휘 품사 변형 채우기</div>
+            <div style="font-size:11px;color:#666;">핵심어 4~5곳, 품사 변형</div></div>
+        </label>
+      </div>
+
+      <div class="vr-card card" style="border:1.5px solid #93c5fd;background:linear-gradient(135deg,#eff6ff,#f5f3ff);">
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;cursor:pointer;font-size:13px;color:#1e40af;">
+          <input type="checkbox" id="ss-answers-back" style="width:17px;height:17px;">
+          <span><b>정답을 맨 뒤로 모으기</b> — 모든 문제를 먼저 출력하고 정답·해설은 맨 뒤에 모음</span>
+        </label>
+        <button class="btn btn-primary" id="ss-btn-generate" onclick="doSeosul()" disabled
+          style="width:100%;padding:14px;font-size:15px;font-weight:700;background:linear-gradient(135deg,#2E4E8F,#1f3766);color:white;border:none;border-radius:10px;cursor:pointer;">
+           서술형 종합 생성
+        </button>
+        <div class="progress hidden" id="ss-progress">
+          <div class="progress-bar" style="margin-top:8px;"><div class="progress-fill" id="ss-progress-fill" style="width:0%"></div></div>
+          <div class="progress-text" id="ss-progress-text">생성 중...</div>
+        </div>
+      </div>
+
+      <div class="card hidden" id="ss-results-section">
+        <div class="card-title">✅ 생성 완료</div>
+        <div id="ss-results-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- 비밀노트 탭 -->
+  <div id="tab-secret" class="hidden">
+    <div class="three-col">
+      <div style="grid-column: span 2;">
+        <div class="card">
+          <div class="card-title"> 지문 선택 (중복 선택 가능)</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <button class="btn btn-sm" onclick="snExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
+            <button class="btn btn-sm" onclick="snCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
+            <button class="btn btn-sm" onclick="snClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
+            <span style="margin-left:auto;font-size:13px;color:#666;" id="sn-sel-count">0개 선택</span>
+          </div>
+          <div id="sn-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
+            <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-right">
+        <div class="sn-card card">
+          <div class="card-title"> 학교명</div>
+          <input type="text" id="sn-school-name" placeholder="레벨미업학원" value="레벨미업학원"
+            style="width:100%;padding:9px 12px;border:2px solid #c4b5fd;border-radius:8px;font-size:13px;outline:none;">
+        </div>
+        <div class="sn-card card">
+          <div class="card-title"> 강사명 (선택)</div>
+          <input type="text" id="sn-teacher-name" placeholder="예: 홍길동"
+            style="width:100%;padding:9px 12px;border:2px solid #a5b4fc;border-radius:8px;font-size:13px;outline:none;">
+        </div>
+        <div class="sn-card card">
+          <div class="card-title"> 유형 선택</div>
+          <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:8px;margin-bottom:6px;">
+            <div style="font-size:11px;font-weight:700;color:#6d28d9;">유형 A — 반의어+요약</div>
+            <div style="font-size:10px;color:#666;">핵심어휘(반의어)·요약문·Paraphrase</div>
+          </div>
+          <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:8px;margin-bottom:6px;">
+            <div style="font-size:11px;font-weight:700;color:#7c3aed;">유형 B — 영어 중심</div>
+            <div style="font-size:10px;color:#666;">Summary · Vocabulary</div>
+          </div>
+          <div style="background:#e0f2fe;border:1px solid #7dd3fc;border-radius:8px;padding:8px;margin-bottom:10px;">
+            <div style="font-size:11px;font-weight:700;color:#0369a1;">유형 C — 고난이도유의어</div>
+            <div style="font-size:10px;color:#666;">핵심어휘(고난이도)·Paraphrase</div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button class="sn-type-btn sn-type-a" id="sn-btn-a" onclick="doSecretNote('A')" disabled>A</button>
+            <button class="sn-type-btn sn-type-b" id="sn-btn-b" onclick="doSecretNote('B')" disabled>B</button>
+            <button class="sn-type-btn sn-type-c" id="sn-btn-c" onclick="doSecretNote('C')" disabled>C</button>
+          </div>
+          <div class="progress hidden" id="sn-progress">
+            <div class="progress-bar" style="margin-top:8px;"><div class="progress-fill" id="sn-progress-fill" style="width:0%"></div></div>
+            <div class="progress-text" id="sn-progress-text">생성 중...</div>
+          </div>
+        </div>
+        <div class="card hidden" id="sn-results-section">
+          <div class="card-title">✅ 생성 완료</div>
+          <div id="sn-results-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ★ 원문 추출 탭 -->
+  <div id="tab-extract" class="hidden">
+    <div class="three-col">
+      <div style="grid-column: span 2;">
+        <div class="card">
+          <div class="card-title"> 지문 선택 (중복 선택 가능)</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <button class="btn btn-sm" onclick="extExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
+            <button class="btn btn-sm" onclick="extCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
+            <button class="btn btn-sm" onclick="extClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
+            <span style="margin-left:auto;font-size:13px;color:#666;" id="ext-sel-count">0개 선택</span>
+          </div>
+          <div id="ext-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
+            <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-right">
+        <div class="card">
+          <div class="card-title"> 학교 이름</div>
+          <input type="text" id="ext-school-name" placeholder="예: 정명고2" style="width:100%;padding:10px 12px;border:2px solid #e5e7eb;border-radius:8px;font-size:14px;">
+        </div>
+        <div class="card">
+          <div class="card-title"> 옵션</div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+            <input type="checkbox" id="ext-include-translation" style="width:16px;height:16px;">
+            해석 포함
+          </label>
+        </div>
+        <div class="card">
+          <div class="card-title"> HTML 추출</div>
+          <button class="btn btn-primary" style="width:100%;" onclick="extExtractHTML()">HTML 추출 (새 창) ↗</button>
+          <p style="font-size:12px;color:#666;margin-top:8px;text-align:center;">
+            새 창에서 <b>Ctrl+P</b> → PDF 저장
+          </p>
+        </div>
+        <div class="card" style="background:#EBF4FB;border:1.5px solid #4A90D9;">
+          <div class="card-title" style="color:#4A90D9;"> 원문 추출 안내</div>
+          <p style="font-size:12px;color:#555;line-height:1.7;">
+            여러 교재의 지문을 <b>중복 선택</b>하여<br>
+            한 번에 추출할 수 있습니다.<br><br>
+            <b>해석 포함</b> 체크 시<br>
+            영문 아래 한글 해석 표시
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 업로드 탭 -->
+  <div id="tab-upload" class="hidden">
+    <div class="three-col">
+      <div>
+        <div class="card">
+          <div class="card-title"> 지문 업로드</div>
+          <p style="font-size:12px;color:#666;margin-bottom:8px;">###강 번호### 형식으로 입력하세요</p>
+          <input type="text" id="upload-book" list="book-list" placeholder="교재명 입력 (예: 26 수특 영어)" style="width:100%;padding:9px 12px;border:2px solid #e5e7eb;border-radius:8px;font-size:13px;margin-bottom:8px;">
+          <datalist id="book-list"></datalist>
+          <textarea id="upload-text" placeholder="###05강 01번###&#10;Many crises today...&#10;&#10;###05강 02번###&#10;Consumer surveys..."></textarea>
+          <button class="btn btn-orange" style="width:100%;margin-top:8px;" onclick="doUpload()">업로드</button>
+        </div>
+      </div>
+      <div style="grid-column: span 2;">
+        <div class="card">
+          <div class="card-title"> 현재 등록된 지문</div>
+          <div id="stats-list" style="font-size:13px;color:#666;">로딩 중...</div>
+          <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+            <button class="btn btn-sm" onclick="syncSupabase()" style="background:#EBF4FB;color:#4A90D9;border:1px solid #4A90D9;">🔄 수파베이스 동기화</button>
+            <button class="btn btn-sm" onclick="clearCacheUI()" style="background:#fdf2f8;color:#ec4899;border:1px solid #f9a8d4;">🗑️ 캐시 초기화</button>
+          </div>
+          <div id="sync-status" style="font-size:12px;color:#666;margin-top:4px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ★ 지문 순서 저장 플로팅 버튼 (드래그로 순서 변경 시 나타남) -->
+<button id="chip-save-order-btn" class="hidden" onclick="chipSaveAllOrders()"
+  style="position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:900;padding:11px 22px;border:none;border-radius:10px;background:#2E4E8F;color:#fff;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.25);">
+  ✅ 지문 순서 저장
+</button>
+
+<script>
+let TOKEN = localStorage.getItem('wb_token') || '';
+let PASSAGES_DATA = null;
+let selectedPassages = new Map();
+const API = '';
+
+// ★ 지문 정렬: 같은 book/unit 안에서 번호 지문(01번,02번..)은 숫자순으로,
+//   Read More / Further Reading / Gateway 등 이름만 있는 지문은 그 단원의 맨 뒤로 보낸다.
+function passagePositionKey(p) {
+  if (p && p.order !== undefined && p.order !== null) return p.order; // 수동 지정 순서 우선
+  const id = (p && p.id) || p;
+  const m = String(id).match(/^(\d+)/); // 맨 앞 숫자 추출 (예: "01번" -> 1)
+  if (m) return parseInt(m[1], 10);
+  return Infinity; // 숫자로 안 시작하면 맨 뒤
+}
+function unitPositionKey(unit) {
+  const m = String(unit).match(/\d+/);
+  return m ? parseInt(m[0], 10) : 0;
+}
+function sortPassagesData(data) {
+  return [...data].sort((a, b) => {
+    if (a.book !== b.book) return a.book.localeCompare(b.book);
+    const ua = unitPositionKey(a.unit), ub = unitPositionKey(b.unit);
+    if (ua !== ub) return ua - ub;
+    if (a.unit !== b.unit) return a.unit.localeCompare(b.unit);
+    return passagePositionKey(a) - passagePositionKey(b);
+  });
+}
+
+async function doLogin() {
+  const pw = document.getElementById('pw-input').value;
+  try {
+    const res = await fetch(API + '/api/auth', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({password: pw}) });
+    const data = await res.json();
+    if (data.ok) { TOKEN = data.token; localStorage.setItem('wb_token', TOKEN); showMain(); }
+    else throw new Error();
+  } catch(e) {
+    document.getElementById('login-error').textContent = '비밀번호가 틀렸습니다';
+    document.getElementById('login-error').classList.remove('hidden');
+  }
+}
+
+function doLogout() {
+  TOKEN = ''; localStorage.removeItem('wb_token');
+  document.getElementById('main-screen').classList.add('hidden');
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('pw-input').value = '';
+}
+
+function headers() { return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN }; }
+
+async function showMain() {
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('main-screen').classList.remove('hidden');
+  await Promise.all([loadPassages(), loadNotice()]);
+}
+
+async function loadPassages() {
+  const prevBook = document.getElementById('sel-book').value;
+  const prevSelected = new Map(selectedPassages);
+  try {
+    const res = await fetch(API + '/api/passages', { headers: headers() });
+    if (res.status === 401) { doLogout(); return; }
+    PASSAGES_DATA = await res.json();
+    PASSAGES_DATA = sortPassagesData(PASSAGES_DATA);
+    updateBookSelect();
+    if (prevBook) {
+      document.getElementById('sel-book').value = prevBook;
+      onBookChange();
+      prevSelected.forEach((val, key) => {
+        const cb = document.querySelector(`input[data-key="${key}"]`);
+        if (cb) { selectedPassages.set(key, val); cb.checked = true; }
+      });
+      updateSelCount(); updateGenerateBtn();
+    }
+    updateStats();
+  } catch(e) { console.error(e); }
+}
+
+// ============================================================
+// 공지사항
+// ============================================================
+async function loadNotice() {
+  try {
+    const res = await fetch(API + '/api/notice');
+    const data = await res.json();
+    const text = (data.text || '').trim();
+    document.getElementById('notice-input').value = text;
+    const el = document.getElementById('header-notice-text');
+    if (text) { el.textContent = '📢 ' + text; el.className = 'notice-text'; }
+    else { el.textContent = '공지사항 없음'; el.className = 'notice-empty'; }
+  } catch(e) {}
+}
+
+async function saveNotice() {
+  const text = document.getElementById('notice-input').value.trim();
+  try {
+    await fetch(API + '/api/notice', { method: 'POST', headers: headers(), body: JSON.stringify({ text }) });
+    const el = document.getElementById('header-notice-text');
+    if (text) { el.textContent = '📢 ' + text; el.className = 'notice-text'; }
+    else { el.textContent = '공지사항 없음'; el.className = 'notice-empty'; }
+    const saved = document.getElementById('notice-saved');
+    saved.classList.remove('hidden');
+    setTimeout(() => saved.classList.add('hidden'), 2000);
+  } catch(e) { toast('저장 실패'); }
+}
+
+async function clearNotice() { document.getElementById('notice-input').value = ''; await saveNotice(); }
+
+// ============================================================
+// Book / Passage
+// ============================================================
+// 선택된 지문을 해당 탭 목록의 화면 순서(드래그로 바꾼 순서)대로 정렬
+function selectionInListOrder(containerId, selMap) {
+  const domOrder = [...document.querySelectorAll(`#${containerId} .ext-pid-chip`)]
+    .map(el => `${el.dataset.book}|${el.dataset.unit}|${el.dataset.pid}`);
+  const picked = [...selMap.entries()];
+  picked.sort((a, b) => {
+    const ia = domOrder.indexOf(a[0]);
+    const ib = domOrder.indexOf(b[0]);
+    return (ia === -1 ? Infinity : ia) - (ib === -1 ? Infinity : ib);
+  });
+  return picked.map(([, v]) => v);
+}
+
+// ★ 지문 칩 드래그 순서 변경 (0회독/분석지/변형문제/서술형/비밀노트/원문추출 공용)
+let chipDirty = new Map(); // "book|unit" -> {book, unit}
+let __chipDragEl = null;
+
+function chipDragStart(ev) {
+  const chip = ev.currentTarget.closest('.ext-pid-chip');
+  if (!chip) return;
+  __chipDragEl = chip;
+  ev.dataTransfer.effectAllowed = 'move';
+  ev.dataTransfer.setData('text/plain', 'chip');
+  chip.classList.add('chip-dragging');
+}
+function chipDragEnd(ev) {
+  if (__chipDragEl) __chipDragEl.classList.remove('chip-dragging');
+  __chipDragEl = null;
+}
+function chipDragOver(ev) {
+  if (!__chipDragEl) return;
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = 'move';
+}
+function chipDrop(ev) {
+  const dragged = __chipDragEl;
+  const target = ev.currentTarget;
+  if (!dragged || dragged === target) return;
+  // 같은 교재 · 같은 단원 안에서만 순서 변경 허용
+  if (dragged.dataset.book !== target.dataset.book || dragged.dataset.unit !== target.dataset.unit) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  const rect = target.getBoundingClientRect();
+  const before = (ev.clientX - rect.left) < rect.width / 2;
+  target.parentNode.insertBefore(dragged, before ? target : target.nextSibling);
+  chipMarkDirty(dragged.dataset.book, dragged.dataset.unit);
+}
+function chipMarkDirty(book, unit) {
+  chipDirty.set(`${book}|${unit}`, { book, unit });
+  const btn = document.getElementById('chip-save-order-btn');
+  if (btn) btn.classList.remove('hidden');
+}
+async function chipSaveAllOrders() {
+  if (!chipDirty.size) return;
+  const btn = document.getElementById('chip-save-order-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '저장 중...'; }
+  try {
+    for (const { book, unit } of chipDirty.values()) {
+      const chips = [...document.querySelectorAll('.ext-pid-chip')]
+        .filter(el => el.dataset.book === book && el.dataset.unit === unit);
+      const order = chips.map(el => el.dataset.pid);
+      if (!order.length) continue;
+      const res = await fetch(API + '/api/passages/reorder', {
+        method: 'POST', headers: headers(),
+        body: JSON.stringify({ book, unit, order })
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.detail || '저장 실패');
+    }
+    toast('✅ 지문 순서 저장 완료');
+    chipDirty.clear();
+    if (btn) btn.classList.add('hidden');
+    await loadPassages();
+    // 현재 열려 있는 탭 목록 새로고침
+    [pcRefreshBooks, asRefreshBooks, snRefreshBooks, extRefreshBooks, vrRefreshBooks, ssRefreshBooks]
+      .forEach(fn => { try { fn(); } catch(e) {} });
+  } catch(e) {
+    toast('순서 저장 실패: ' + (e.message || ''));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✅ 지문 순서 저장'; }
+  }
+}
+
+const BOOK_CATEGORY_ORDER = ['교과서', '수능특강', '수능연계교재', '모의고사'];
+const listOpenCats = { pc:new Set(), as:new Set(), sn:new Set(), ext:new Set(), vr:new Set(), ss:new Set() };
+
+function groupBooksByCategory(names) {
+  const g = {};
+  names.forEach(b => { const c = categorizeBook(b); (g[c] = g[c] || []).push(b); });
+  return BOOK_CATEGORY_ORDER.filter(c => g[c] && g[c].length).map(c => [c, g[c]]);
+}
+
+function bookCatHeader(prefix, cat, count, open) {
+  return `<div class="lst-cat" onclick="toggleListCat('${prefix}','${cat}')">
+    <span>${cat} (${count})</span><span>${open ? '▲' : '▼'}</span></div>`;
+}
+
+function toggleListCat(prefix, cat) {
+  const s = listOpenCats[prefix];
+  if (!s) return;
+  if (s.has(cat)) s.delete(cat); else s.add(cat);
+  const fns = { pc: pcRenderBookList, as: asRenderBookList, sn: snRenderBookList,
+                ext: extRenderBookList, vr: vrRenderBookList, ss: ssRenderBookList };
+  if (fns[prefix]) fns[prefix]();
+}
+
+// 카테고리 안의 2차 분류 (모의고사 → 고1/고2/고3, 교과서 → 공통영어1/2, 영어1/2)
+function subCategorizeBook(cat, name) {
+  if (cat === '모의고사') {
+    const m = name.match(/고\s*([123])/);
+    return m ? `고${m[1]}` : '기타';
+  }
+  if (cat === '교과서') {
+    if (/공통\s*영어\s*1|공통영어1/.test(name)) return '공통영어1';
+    if (/공통\s*영어\s*2|공통영어2/.test(name)) return '공통영어2';
+    if (/영어\s*1(?!\d)/.test(name)) return '영어1';
+    if (/영어\s*2(?!\d)/.test(name)) return '영어2';
+    return '기타';
+  }
+  return null; // 하위분류 없음
+}
+const SUBCAT_ORDER = {
+  '모의고사': ['고1', '고2', '고3', '기타'],
+  '교과서': ['공통영어1', '공통영어2', '영어1', '영어2', '기타'],
+};
+
+function categorizeBook(name) {
+  if (/모의고사/.test(name)) return '모의고사';
+  if (/리딩파워|올림포스|라이트|light|영독|독해연습/i.test(name)) return '수능연계교재';
+  if (/수특|수능특강/.test(name)) return '수능특강';
+  return '교과서';
+}
+
+let bpOpenCategory = null; // 한 번에 하나의 카테고리만 펼침 (아코디언)
+let bpOpenSubs = new Set(); // 하위 카테고리(고1/고2/공통영어1 등) 열림 상태
+
+function toggleBookSubCategory(cat, sub) {
+  const key = cat + '::' + sub;
+  if (bpOpenSubs.has(key)) bpOpenSubs.delete(key); else bpOpenSubs.add(key);
+  const sel = document.getElementById('sel-book');
+  const currentBook = sel ? sel.value : '';
+  const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
+  const groups = {};
+  books.forEach(b => { const c = categorizeBook(b); (groups[c] = groups[c] || []).push(b); });
+  renderBookPicker(groups, BOOK_CATEGORY_ORDER, currentBook, false);
+}
+
+function updateBookSelect() {
+  const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
+  const sel = document.getElementById('sel-book');
+  const prev = sel.value;
+
+  const CATEGORY_ORDER = ['교과서', '수능특강', '수능연계교재', '모의고사'];
+  const groups = {};
+  books.forEach(b => {
+    const cat = categorizeBook(b);
+    (groups[cat] = groups[cat] || []).push(b);
+  });
+
+  // 숨겨진 select (기존 로직 호환용)
+  let selHtml = '<option value="">교재를 선택하세요</option>';
+  CATEGORY_ORDER.forEach(cat => {
+    if (!groups[cat] || !groups[cat].length) return;
+    selHtml += `<optgroup label="${cat}">`;
+    groups[cat].forEach(b => { selHtml += `<option value="${b}">${b}</option>`; });
+    selHtml += `</optgroup>`;
+  });
+  sel.innerHTML = selHtml;
+  if (prev && books.includes(prev)) sel.value = prev;
+
+  renderBookPicker(groups, CATEGORY_ORDER, sel.value, true);
+}
+
+function renderBookPicker(groups, CATEGORY_ORDER, currentBook, autoOpen) {
+  const panel = document.getElementById('book-picker-panel');
+  if (!panel) return;
+  let html = '';
+  CATEGORY_ORDER.forEach(cat => {
+    if (!groups[cat] || !groups[cat].length) return;
+    if (autoOpen && bpOpenCategory === null && groups[cat].includes(currentBook)) bpOpenCategory = cat;
+    const isOpen = bpOpenCategory === cat;
+    html += `<div class="bp-category" onclick="toggleBookCategory('${cat}')">
+        <span>${cat} (${groups[cat].length})</span><span>${isOpen ? '▲' : '▼'}</span>
+      </div>
+      <div class="bp-books ${isOpen ? 'open' : ''}" data-cat="${cat}">`;
+    const subOrder = SUBCAT_ORDER[cat];
+    if (subOrder) {
+      const subs = {};
+      groups[cat].forEach(b => {
+        const s = subCategorizeBook(cat, b) || '기타';
+        (subs[s] = subs[s] || []).push(b);
+      });
+      subOrder.forEach(sc => {
+        if (!subs[sc] || !subs[sc].length) return;
+        const subKey = cat + '::' + sc;
+        const subOpen = bpOpenSubs.has(subKey) || subs[sc].includes(currentBook);
+        if (subs[sc].includes(currentBook)) bpOpenSubs.add(subKey);
+        html += `<div class="bp-subcategory" onclick="event.stopPropagation();toggleBookSubCategory('${cat}','${sc}')">
+            <span>${sc} (${subs[sc].length})</span><span>${subOpen ? '▲' : '▼'}</span>
+          </div>
+          <div class="bp-subbooks ${subOpen ? 'open' : ''}">`;
+        subs[sc].forEach(b => {
+          const selCls = b === currentBook ? 'selected' : '';
+          html += `<div class="bp-book-item bp-book-sub ${selCls}" onclick="pickBook('${b.replace(/'/g,"\\'")}')">${b}</div>`;
+        });
+        html += `</div>`;
+      });
+    } else {
+      groups[cat].forEach(b => {
+        const sel = b === currentBook ? 'selected' : '';
+        html += `<div class="bp-book-item ${sel}" onclick="pickBook('${b.replace(/'/g,"\\'")}')">${b}</div>`;
+      });
+    }
+    html += `</div>`;
+  });
+  panel.innerHTML = html || '<div style="padding:12px;color:#999;font-size:13px;text-align:center;">등록된 교재가 없습니다</div>';
+
+  const label = document.getElementById('book-picker-label');
+  if (label) label.textContent = currentBook || '교재를 선택하세요';
+}
+
+function toggleBookCategory(cat) {
+  bpOpenCategory = (bpOpenCategory === cat) ? null : cat;
+  const sel = document.getElementById('sel-book');
+  const currentBook = sel ? sel.value : '';
+  // 카테고리만 다시 그리기 (books 재계산 없이 패널만 갱신)
+  const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
+  const groups = {};
+  books.forEach(b => { const c = categorizeBook(b); (groups[c] = groups[c] || []).push(b); });
+  renderBookPicker(groups, ['교과서','수능특강','수능연계교재','모의고사'], currentBook, false);
+}
+
+function pickBook(book) {
+  const sel = document.getElementById('sel-book');
+  sel.value = book;
+  closeBookPicker();
+  onBookChange();
+  updateBookSelect();
+}
+
+function toggleBookPicker() {
+  const panel = document.getElementById('book-picker-panel');
+  if (!panel) return;
+  panel.classList.toggle('hidden');
+}
+
+function closeBookPicker() {
+  const panel = document.getElementById('book-picker-panel');
+  if (panel) panel.classList.add('hidden');
+}
+
+document.addEventListener('click', (e) => {
+  const picker = document.getElementById('book-picker');
+  if (picker && !picker.contains(e.target)) closeBookPicker();
+});
+
+
+let pgDirtyUnits = new Map(); // unit -> book (아직 저장 안 된 순서 변경이 있는 단원들)
+
+function pgDragStart(ev, book, unit, pid) {
+  ev.dataTransfer.effectAllowed = 'move';
+  ev.dataTransfer.setData('text/plain', JSON.stringify({book, unit, pid}));
+  ev.currentTarget.classList.add('pg-dragging');
+}
+function pgDragEnd(ev) {
+  ev.currentTarget.classList.remove('pg-dragging');
+}
+function pgDragOver(ev) {
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = 'move';
+}
+function pgFindItemEl(unit, pid) {
+  return [...document.querySelectorAll('#passage-list .passage-item')]
+    .find(el => el.dataset.unit === unit && el.dataset.pid === pid);
+}
+function pgDrop(ev, book, unit, targetPid) {
+  ev.preventDefault();
+  let data;
+  try { data = JSON.parse(ev.dataTransfer.getData('text/plain')); } catch(e) { return; }
+  if (!data || data.book !== book || data.unit !== unit || data.pid === targetPid) return;
+
+  const draggedEl = pgFindItemEl(unit, data.pid);
+  const targetEl = ev.currentTarget;
+  if (!draggedEl || !targetEl || draggedEl === targetEl) return;
+
+  // 마우스 위치가 대상의 위쪽 절반이면 그 앞에, 아래쪽 절반이면 그 뒤에 삽입 — 저장은 아직 안 함(로컬 재배치만)
+  const rect = targetEl.getBoundingClientRect();
+  const before = (ev.clientY - rect.top) < rect.height / 2;
+  if (before) targetEl.parentNode.insertBefore(draggedEl, targetEl);
+  else targetEl.parentNode.insertBefore(draggedEl, targetEl.nextSibling);
+
+  pgMarkUnitDirty(book, unit);
+}
+function pgMarkUnitDirty(book, unit) {
+  pgDirtyUnits.set(unit, book);
+  const btn = document.getElementById('pg-save-order-btn');
+  if (btn) btn.classList.remove('hidden');
+}
+async function pgSaveAllOrders() {
+  if (!pgDirtyUnits.size) return;
+  const btn = document.getElementById('pg-save-order-btn');
+  const book = document.getElementById('sel-book').value;
+  if (btn) { btn.disabled = true; btn.textContent = '저장 중...'; }
+  try {
+    for (const [unit, bk] of pgDirtyUnits.entries()) {
+      const items = [...document.querySelectorAll('#passage-list .passage-item')].filter(el => el.dataset.unit === unit);
+      const order = items.map(el => el.dataset.pid);
+      const res = await fetch(API + '/api/passages/reorder', {
+        method: 'POST', headers: headers(),
+        body: JSON.stringify({ book: bk, unit, order })
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.detail || '저장 실패');
+    }
+    toast('✅ 순서 저장 완료');
+    pgDirtyUnits.clear();
+    if (btn) btn.classList.add('hidden');
+    await loadPassages();
+    if (book) onBookChange();
+  } catch(e) {
+    toast('순서 저장 실패: ' + (e.message||''));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✅ 순서 저장'; }
+  }
+}
+
+function onBookChange() {
+  const book = document.getElementById('sel-book').value;
+  selectedPassages.clear();
+  pgDirtyUnits.clear();
+  const saveBtn = document.getElementById('pg-save-order-btn');
+  if (saveBtn) saveBtn.classList.add('hidden');
+  const list = document.getElementById('passage-list');
+  if (!book) { list.innerHTML = '<div style="padding:20px;text-align:center;color:#999;">교재를 먼저 선택하세요</div>'; updateSelCount(); updateGenerateBtn(); return; }
+  const passages = PASSAGES_DATA.filter(p => p.book === book);
+  const units = [...new Set(passages.map(p => p.unit))];
+  units.sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0));
+  let html = '';
+  for (const unit of units) {
+    const up = passages.filter(p => p.unit === unit);
+    html += `<div class="unit-header" onclick="toggleUnit('${book}','${unit}')">📁 ${unit} (${up.length}개)<span class="unit-select">단원 전체선택</span></div>`;
+    for (const p of up) {
+      const key = `${p.book}|${p.unit}|${p.id}`;
+      html += `<div class="passage-item" style="position:relative;" draggable="true" data-unit="${unit}" data-pid="${p.id}"
+          ondragstart="pgDragStart(event,'${book}','${unit}','${p.id}')" ondragend="pgDragEnd(event)"
+          ondragover="pgDragOver(event)" ondrop="pgDrop(event,'${book}','${unit}','${p.id}')">
+        <span class="pg-drag-handle" title="드래그해서 순서 변경" style="cursor:grab;color:#bbb;padding:0 6px 0 2px;font-size:14px;user-select:none;">⠿</span>
+        <div style="flex:1;display:flex;align-items:center;" onclick="togglePassage('${p.book}','${p.unit}','${p.id}',this.parentElement)">
+          <input type="checkbox" data-key="${key}">
+          <span class="title">${p.title}</span>
+          <span class="badge ${p.cache_status==='ready'?'badge-ready':'badge-pending'}">${p.cache_status==='ready'?'✅ 준비됨':'⏳ 미생성'}</span>
+        </div>
+        <button onclick="event.stopPropagation();deletePassage('${p.book}','${p.unit}','${p.id}')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:13px;padding:3px 6px;opacity:0.5;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.5">✕</button>
+      </div>`;
+    }
+  }
+  list.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
+  updateSelCount(); updateGenerateBtn();
+}
+
+function togglePassage(book, unit, id, el) {
+  const key = `${book}|${unit}|${id}`;
+  const cb = el.querySelector('input[type="checkbox"]');
+  if (selectedPassages.has(key)) { selectedPassages.delete(key); cb.checked = false; }
+  else { selectedPassages.set(key, {book,unit,id}); cb.checked = true; }
+  updateSelCount(); updateGenerateBtn();
+}
+
+function toggleUnit(book, unit) {
+  const up = PASSAGES_DATA.filter(p => p.book===book && p.unit===unit);
+  const allSel = up.every(p => selectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  up.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    const cb = document.querySelector(`input[data-key="${key}"]`);
+    if (allSel) { selectedPassages.delete(key); if(cb) cb.checked=false; }
+    else { selectedPassages.set(key,{book:p.book,unit:p.unit,id:p.id}); if(cb) cb.checked=true; }
+  });
+  updateSelCount(); updateGenerateBtn();
+}
+
+function selectAll() {
+  const book = document.getElementById('sel-book').value;
+  if (!book) return;
+  PASSAGES_DATA.filter(p => p.book===book).forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    selectedPassages.set(key,{book:p.book,unit:p.unit,id:p.id});
+    const cb = document.querySelector(`input[data-key="${key}"]`);
+    if(cb) cb.checked=true;
+  });
+  updateSelCount(); updateGenerateBtn();
+}
+
+function selectNone() {
+  selectedPassages.clear();
+  document.querySelectorAll('.passage-item input').forEach(cb => cb.checked=false);
+  updateSelCount(); updateGenerateBtn();
+}
+
+function updateSelCount() { document.getElementById('sel-count').textContent = `${selectedPassages.size}개 선택`; }
+
+// ============================================================
+// Levels
+// ============================================================
+function toggleLevel(el) { el.classList.toggle('selected'); updateGenerateBtn(); }
+function presetLevels(levels) {
+  document.querySelectorAll('.level-btn').forEach(el => el.classList.toggle('selected', levels.includes(parseInt(el.dataset.level))));
+  updateGenerateBtn();
+}
+function getSelectedLevels() { return [...document.querySelectorAll('.level-btn.selected')].map(el => parseInt(el.dataset.level)); }
+
+// ============================================================
+// Generate
+// ============================================================
+function updateGenerateBtn() {
+  const btn = document.getElementById('btn-generate');
+  const levels = getSelectedLevels();
+  btn.disabled = selectedPassages.size===0 || levels.length===0;
+  btn.textContent = selectedPassages.size>0 ? `워크북 생성하기 (${selectedPassages.size}개 지문)` : '워크북 생성하기';
+}
+
+// 선택된 지문을 화면 목록(드래그로 바꾼 순서)에 맞춰 정렬해서 반환
+function getSelectedPassagesInListOrder() {
+  const domOrder = [...document.querySelectorAll('#passage-list .passage-item')]
+    .map(el => `${document.getElementById('sel-book').value}|${el.dataset.unit}|${el.dataset.pid}`);
+  const picked = [...selectedPassages.entries()];
+  picked.sort((a, b) => {
+    const ia = domOrder.indexOf(a[0]);
+    const ib = domOrder.indexOf(b[0]);
+    return (ia === -1 ? Infinity : ia) - (ib === -1 ? Infinity : ib);
+  });
+  return picked.map(([, v]) => v);
+}
+
+async function doGenerate() {
+  const levels = getSelectedLevels();
+  const passages = getSelectedPassagesInListOrder();
+  const btn = document.getElementById('btn-generate');
+  const progress = document.getElementById('progress');
+  const progressFill = document.getElementById('progress-fill');
+  const progressText = document.getElementById('progress-text');
+  const resultsSection = document.getElementById('results-section');
+  const resultsList = document.getElementById('results-list');
+  btn.disabled=true; progress.classList.remove('hidden');
+  resultsSection.classList.add('hidden'); resultsList.innerHTML='';
+  let completed=0; const results=[];
+  for (const p of passages) {
+    progressText.textContent = `생성 중... ${completed+1}/${passages.length} — ${p.unit} ${p.id}`;
+    progressFill.style.width = `${(completed/passages.length)*100}%`;
+    try {
+      const res = await fetch(API+'/api/generate', { method:'POST', headers:headers(), body:JSON.stringify({book:p.book,unit:p.unit,passage_id:p.id,levels:levels.length===11?null:levels}) });
+      const data = await res.json();
+      if (data.ok) results.push({id:`${p.unit} ${p.id}`,status:'success',html:data.html,filename:data.filename});
+      else results.push({id:`${p.unit} ${p.id}`,status:'error',error:data.detail});
+    } catch(e) { results.push({id:`${p.unit} ${p.id}`,status:'error',error:e.message}); }
+    completed++;
+    progressFill.style.width = `${(completed/passages.length)*100}%`;
+  }
+  progressText.textContent = `완료! ${results.filter(r=>r.status==='success').length}/${passages.length} 성공`;
+  resultsSection.classList.remove('hidden');
+  const successResults = results.filter(r=>r.status==='success');
+  window._lastResults = successResults;
+  let mergeBtn = successResults.length>1 ? `<div style="margin-bottom:8px;"><button class="btn btn-orange" style="width:100%;" onclick="downloadMerged()">합본 다운로드 (${successResults.length}개)</button></div>` : '';
+  resultsList.innerHTML = mergeBtn + results.map(r=>`
+    <div class="result-item">
+      <span>${r.status==='success'?'✅':'❌'} ${r.id}</span>
+      ${r.status==='success' ? `<button class="btn btn-sm btn-primary" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')">다운로드</button>` : `<span style="color:#dc2626;font-size:12px;">${r.error}</span>`}
+    </div>`).join('');
+  btn.disabled=false;
+  await loadPassages();
+}
+
+function downloadHtml(encodedHtml, filename) {
+  const html = decodeURIComponent(encodedHtml);
+  const blob = new Blob([html],{type:'text/html; charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadMerged() {
+  if (!window._lastResults||!window._lastResults.length) return;
+  const css = (window._lastResults[0].html.match(/<style[^>]*>([\s\S]*?)<\/style>/)||['',''])[1];
+  const bodies = window._lastResults.map(r=>(r.html.match(/<body[^>]*>([\s\S]*?)<\/body>/)||['',r.html])[1]);
+  const unit = document.getElementById('sel-book').value||'합본';
+  const merged = `<!DOCTYPE html>\n<html lang="ko">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>${unit} 합본</title>\n<style>\nhtml{-webkit-text-size-adjust:100%;}\nbody{margin:0;}\n${css}\n</style>\n</head>\n<body>\n${bodies.join('\n')}\n</body>\n</html>`;
+  const blob = new Blob([merged],{type:'text/html; charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=`${unit}_합본_워크북.html`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ============================================================
+// Delete
+// ============================================================
+async function deleteBook() {
+  const book = document.getElementById('sel-book').value;
+  if (!book) { toast('삭제할 교재를 선택하세요'); return; }
+  if (!confirm(`"${book}" 교재의 모든 지문을 삭제하시겠습니까?`)) return;
+  try {
+    const res = await fetch(API+'/api/books',{method:'DELETE',headers:headers(),body:JSON.stringify({book})});
+    const data = await res.json();
+    if (data.ok) { toast(`✅ "${book}" 삭제 완료`); selectedPassages.clear(); await loadPassages(); onBookChange(); }
+  } catch(e) { toast('삭제 실패'); }
+}
+
+async function deletePassage(book, unit, pid) {
+  if (!confirm(`"${pid}" 지문을 삭제하시겠습니까?`)) return;
+  try {
+    const res = await fetch(API+'/api/passages',{method:'DELETE',headers:headers(),body:JSON.stringify({book,unit,pid})});
+    const data = await res.json();
+    if (data.ok) {
+      toast('✅ 지문 삭제 완료');
+      selectedPassages.delete(`${book}|${unit}|${pid}`);
+      await loadPassages();
+      if (document.getElementById('sel-book').value) onBookChange();
+    }
+  } catch(e) { toast('삭제 실패'); }
+}
+
+// ============================================================
+// Upload
+// ============================================================
+async function doUpload() {
+  const book = document.getElementById('upload-book').value;
+  const text = document.getElementById('upload-text').value;
+  if (!book.trim()) { toast('교재명을 입력하세요'); return; }
+  if (!text.trim()) { toast('지문 텍스트를 입력하세요'); return; }
+  try {
+    const res = await fetch(API+'/api/passages/upload',{method:'POST',headers:headers(),body:JSON.stringify({book,text})});
+    const data = await res.json();
+    if (data.ok) { toast(`✅ ${data.count}개 지문 업로드 완료!`); document.getElementById('upload-text').value=''; await loadPassages(); }
+  } catch(e) { toast('업로드 실패'); }
+}
+
+function updateStats() {
+  if (!PASSAGES_DATA) return;
+  const books = {};
+  PASSAGES_DATA.forEach(p => { if(!books[p.book]) books[p.book]={total:0,ready:0}; books[p.book].total++; if(p.cache_status==='ready') books[p.book].ready++; });
+  document.getElementById('book-list').innerHTML = Object.keys(books).map(b=>`<option value="${b}">`).join('');
+  const el = document.getElementById('stats-list');
+  if (!Object.keys(books).length) { el.innerHTML='<p>등록된 지문이 없습니다.</p>'; return; }
+  el.innerHTML = Object.entries(books).map(([n,i])=>`<p style="margin-bottom:4px;"><strong>${n}</strong>: ${i.total}개 지문 (${i.ready}개 생성완료)</p>`).join('');
+}
+
+async function syncSupabase() {
+  const status = document.getElementById('sync-status');
+  status.textContent=' 동기화 중...'; status.style.color='#4A90D9';
+  try {
+    const res = await fetch(API+'/api/sync-supabase',{method:'POST',headers:headers()});
+    const data = await res.json();
+    if(data.ok){status.textContent=`✅ 완료! ${data.count}/${data.total}개`;status.style.color='#2E9E5A';}
+    else{status.textContent=`❌ ${data.error}`;status.style.color='#dc2626';}
+  } catch(e){status.textContent=`❌ ${e.message}`;status.style.color='#dc2626';}
+}
+
+async function clearPassageCache() {
+  const passages = [...selectedPassages.values()];
+  if (!passages.length) { alert('지문을 먼저 선택해주세요.'); return; }
+  if (!confirm(`${passages.length}개 지문의 캐시를 삭제하시겠습니까?`)) return;
+  let total=0;
+  for (const p of passages) {
+    try {
+      const res = await fetch(API+'/api/clear-cache',{method:'POST',headers:headers(),body:JSON.stringify({book:p.book,unit:p.unit,passage_id:p.id,scope:'passage'})});
+      const data = await res.json();
+      if(data.ok) total+=data.deleted;
+    } catch(e){}
+  }
+  alert(`✅ 캐시 삭제 완료! ${total}개 삭제됨.`);
+}
+
+async function clearCacheUI() {
+  const book = document.getElementById('sel-book').value;
+  if (!book) { alert('워크북 생성 탭에서 교재를 선택하세요.'); return; }
+  if (!confirm(`"${book}" 교재의 캐시를 초기화하시겠습니까?`)) return;
+  const status = document.getElementById('sync-status');
+  status.textContent='🗑️ 초기화 중...'; status.style.color='#ec4899';
+  try {
+    const res = await fetch(API+'/api/clear-cache',{method:'POST',headers:headers(),body:JSON.stringify({book,scope:'all'})});
+    const data = await res.json();
+    if(data.ok){status.textContent=`✅ 완료! ${data.deleted}개 삭제됨`;status.style.color='#2E9E5A';}
+    else{status.textContent=`❌ ${data.error}`;status.style.color='#dc2626';}
+  } catch(e){status.textContent=`❌ ${e.message}`;status.style.color='#dc2626';}
+}
+
+function switchTab(tab, el) {
+  document.querySelectorAll('.header-tab').forEach(t => t.classList.remove('active'));
+  if(el) el.classList.add('active');
+  document.getElementById('tab-preclass').classList.toggle('hidden', tab!=='preclass');
+  document.getElementById('tab-sheet').classList.toggle('hidden', tab!=='sheet');
+  document.getElementById('tab-generate').classList.toggle('hidden', tab!=='generate');
+  document.getElementById('tab-variation').classList.toggle('hidden', tab!=='variation');
+  document.getElementById('tab-seosul').classList.toggle('hidden', tab!=='seosul');
+  document.getElementById('tab-upload').classList.toggle('hidden', tab!=='upload');
+  document.getElementById('tab-secret').classList.toggle('hidden', tab!=='secret');
+  document.getElementById('tab-extract').classList.toggle('hidden', tab!=='extract');
+  if(tab==='preclass') pcRefreshBooks();
+  if(tab==='sheet') asRefreshBooks();
+  if(tab==='secret') snRefreshBooks();
+  if(tab==='extract') extRefreshBooks();
+  if(tab==='variation') vrRefreshBooks();
+  if(tab==='seosul') ssRefreshBooks();
+}
+
+// ============================================================
+// ★ 서술형 종합 (2회독) - seosul
+// ============================================================
+let ssSelectedPassages = new Map();   // 클릭 순서 유지
+let ssExpandedBooks = new Set();
+
+function ssRefreshBooks(){ if(PASSAGES_DATA) ssRenderBookList(); }
+
+function ssRenderBookList(){
+  const books = {};
+  PASSAGES_DATA.forEach(p => {
+    (books[p.book] = books[p.book] || {});
+    (books[p.book][p.unit] = books[p.book][p.unit] || []).push(p);
+  });
+  let html = '';
+  for (const [__cat, __catBooks] of groupBooksByCategory(Object.keys(books).sort())) {
+    const __catOpen = listOpenCats.ss.has(__cat);
+    html += bookCatHeader('ss', __cat, __catBooks.length, __catOpen);
+    if (!__catOpen) continue;
+  for (const book of __catBooks) {
+    const units = Object.keys(books[book]).sort((a,b)=>(parseInt(a.match(/\d+/)?.[0])||0)-(parseInt(b.match(/\d+/)?.[0])||0)||a.localeCompare(b));
+    const all = Object.values(books[book]).flat();
+    const sel = all.filter(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+    const exp = ssExpandedBooks.has(book);
+    html += `<div class="ext-book-item ${exp?'expanded':''}" onclick="ssToggleExpand('${book}')">
+      <span style="color:#666;font-size:12px;">${exp?'▼':'▶'}</span>
+      <input type="checkbox" ${sel===all.length&&all.length?'checked':''} onclick="event.stopPropagation();ssToggleBook('${book}')" style="width:15px;height:15px;">
+      <span style="flex:1;font-size:13px;font-weight:500;">${book}</span>
+      <span class="ext-count-badge">${sel}/${all.length}</span></div>`;
+    if(exp){
+      for(const unit of units){
+        const ups = books[book][unit];
+        const usel = ups.filter(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+        html += `<div class="ext-unit-row"><div class="ext-unit-header">
+          <input type="checkbox" ${usel===ups.length?'checked':''} onclick="ssToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
+          <span style="font-size:13px;font-weight:600;color:#1d4ed8;">${unit}</span>
+          <span style="font-size:11px;color:#999;">(${usel}/${ups.length})</span></div><div class="ext-pid-list">`;
+        for(const p of ups){
+          const key = `${p.book}|${p.unit}|${p.id}`;
+          const is = ssSelectedPassages.has(key);
+          let ord = is ? `<span style="background:#2563eb;color:#fff;font-weight:700;padding:0 4px;border-radius:8px;font-size:9px;margin-right:2px;">${[...ssSelectedPassages.keys()].indexOf(key)+1}</span>`:'';
+          html += `<label class="ext-pid-chip ${is?'selected':''}" style="${is?'background:#dbeafe;border-color:#60a5fa;':''}" data-book="${p.book}" data-unit="${p.unit}" data-pid="${p.id}" ondragover="chipDragOver(event)" ondrop="chipDrop(event)"><span class="chip-handle" draggable="true" ondragstart="chipDragStart(event)" ondragend="chipDragEnd(event)" title="드래그해서 순서 변경">⠿</span>
+            <input type="checkbox" ${is?'checked':''} onchange="ssTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">${ord}${p.id}</label>`;
+        }
+        html += '</div></div>';
+      }
+    }
+  }
+  }
+  document.getElementById('ss-book-list').innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
+  ssUpdateCount(); ssUpdateBtns();
+}
+function ssToggleExpand(b){ ssExpandedBooks.has(b)?ssExpandedBooks.delete(b):ssExpandedBooks.add(b); ssRenderBookList(); }
+function ssTogglePassage(book,unit,id){ const k=`${book}|${unit}|${id}`; ssSelectedPassages.has(k)?ssSelectedPassages.delete(k):ssSelectedPassages.set(k,{book,unit,id}); ssRenderBookList(); }
+function ssToggleUnit(book,unit){ const ups=PASSAGES_DATA.filter(p=>p.book===book&&p.unit===unit); const allSel=ups.every(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)); ups.forEach(p=>{const k=`${p.book}|${p.unit}|${p.id}`; allSel?ssSelectedPassages.delete(k):ssSelectedPassages.set(k,{book:p.book,unit:p.unit,id:p.id});}); ssRenderBookList(); }
+function ssToggleBook(book){ const bp=PASSAGES_DATA.filter(p=>p.book===book); const allSel=bp.every(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)); bp.forEach(p=>{const k=`${p.book}|${p.unit}|${p.id}`; allSel?ssSelectedPassages.delete(k):ssSelectedPassages.set(k,{book:p.book,unit:p.unit,id:p.id});}); ssRenderBookList(); }
+function ssExpandAll(){ BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.ss.add(x)); PASSAGES_DATA.forEach(p=>ssExpandedBooks.add(p.book)); ssRenderBookList(); }
+function ssCollapseAll(){ ssExpandedBooks.clear(); ssRenderBookList(); }
+function ssClearSelection(){ ssSelectedPassages.clear(); ssRenderBookList(); }
+function ssUpdateCount(){ document.getElementById('ss-sel-count').textContent = `${ssSelectedPassages.size}개 선택`; }
+function ssUpdateBtns(){
+  const types = ['sa','sc','sd','se'].filter(t=>document.getElementById('ss-type-'+t).checked);
+  document.getElementById('ss-btn-generate').disabled = !(ssSelectedPassages.size && types.length);
+}
+
+async function doSeosul(){
+  const passages = [...ssSelectedPassages.values()];
+  if(!passages.length){ toast('지문을 선택하세요'); return; }
+  const types = [];
+  if(document.getElementById('ss-type-sa').checked) types.push('SA');
+  if(document.getElementById('ss-type-sc').checked) types.push('SC');
+  if(document.getElementById('ss-type-sd').checked) types.push('SD');
+  if(document.getElementById('ss-type-se').checked) types.push('SE');
+  if(!types.length){ toast('유형을 1개 이상 선택하세요'); return; }
+  const schoolName = document.getElementById('ss-school-name').value.trim() || '레벨미업학원';
+
+  const btn=document.getElementById('ss-btn-generate'), progress=document.getElementById('ss-progress');
+  const fill=document.getElementById('ss-progress-fill'), ptext=document.getElementById('ss-progress-text');
+  const rsec=document.getElementById('ss-results-section'), rlist=document.getElementById('ss-results-list');
+  btn.disabled=true; progress.classList.remove('hidden'); rsec.classList.add('hidden'); rlist.innerHTML='';
+  ptext.textContent = `생성 중... (지문 ${passages.length}개 × 유형 ${types.length}개)`;
+
+  try{
+    const res = await fetch(API+'/api/seosul', {
+      method:'POST', headers:{...headers(),'Content-Type':'application/json'},
+      body: JSON.stringify({ passages, types, school_name: schoolName, answers_at_back: document.getElementById('ss-answers-back').checked })
+    });
+    if(!res.ok) throw new Error(await res.text() || 'API 오류');
+    const data = await res.json();
+    fill.style.width='100%'; ptext.textContent = `✓ 완료 (지문 ${data.passages_generated}개)`;
+    rsec.classList.remove('hidden');
+    const url=data.html_url, dl=data.download_url;
+    let h = `<div class="sn-result-item"><span> 서술형 종합 (문제+정답)</span>
+      <span style="display:flex;gap:6px;">
+        <a href="${dl}" download class="btn btn-sm" style="background:#6b7280;color:white;"> 다운로드</a>
+        <a href="${url}" target="_blank" class="btn btn-sm btn-primary"> 열기</a></span></div>
+      <div style="font-size:11px;color:#666;padding:8px;background:#eff6ff;border-radius:6px;margin-top:8px;">
+        💡 '열기' 후 Ctrl+P (Mac: Cmd+P)로 인쇄/PDF 저장</div>`;
+    if(data.warnings && data.warnings.length){
+      h += `<div style="margin-top:10px;padding:8px;background:#fee;border:1px solid #fca5a5;border-radius:6px;font-size:11px;color:#991b1b;">
+        ❌ 생성 실패 항목:<br>${data.warnings.map(w=>'• '+w).join('<br>')}</div>`;
+    }
+    rlist.innerHTML=h;
+    try{ window.open(url,'_blank'); }catch(e){}
+    toast('서술형 종합 생성 완료!');
+  }catch(e){ ptext.textContent='❌ '+(e.message||'생성 실패'); toast('생성 실패: '+(e.message||'')); }
+  finally{ setTimeout(()=>{ progress.classList.add('hidden'); fill.style.width='0%'; ssUpdateBtns(); },2000); }
+}
+
+function toast(msg) {
+  const el = document.createElement('div'); el.className='toast'; el.textContent=msg;
+  document.body.appendChild(el); setTimeout(()=>el.remove(),3000);
+}
+
+document.getElementById('pw-input').addEventListener('keypress', e => { if(e.key==='Enter') doLogin(); });
+
+(async () => {
+  if (TOKEN) {
+    try {
+      const res = await fetch(API+'/api/passages',{headers:headers()});
+      if(res.ok){showMain();return;}
+    } catch(e){}
+  }
+  document.getElementById('login-screen').classList.remove('hidden');
+})();
+
+// ============================================================
+// ★ 비밀노트 - 추가 코드 (중복 선택 UI)
+// ============================================================
+let snSelectedPassages = new Map();
+let snExpandedBooks = new Set();
+
+function snRefreshBooks() {
+  if (!PASSAGES_DATA) return;
+  snRenderBookList();
+}
+
+function snRenderBookList() {
+  const books = {};
+  PASSAGES_DATA.forEach(p => {
+    if (!books[p.book]) books[p.book] = {};
+    if (!books[p.book][p.unit]) books[p.book][p.unit] = [];
+    books[p.book][p.unit].push(p);
+  });
+
+  const bookNames = Object.keys(books).sort();
+  const container = document.getElementById('sn-book-list');
+  
+  let html = '';
+  for (const [__cat, __catBooks] of groupBooksByCategory(bookNames)) {
+    const __catOpen = listOpenCats.sn.has(__cat);
+    html += bookCatHeader('sn', __cat, __catBooks.length, __catOpen);
+    if (!__catOpen) continue;
+  for (const book of __catBooks) {
+    const units = Object.keys(books[book]).sort((a,b) => {
+      const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
+      const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
+      return numA - numB || a.localeCompare(b);
+    });
+    const bookPassages = Object.values(books[book]).flat();
+    const selectedCount = bookPassages.filter(p => snSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+    const isExpanded = snExpandedBooks.has(book);
+    const allSelected = selectedCount === bookPassages.length && bookPassages.length > 0;
+
+    html += `<div class="ext-book-item ${isExpanded?'expanded':''}" onclick="snToggleExpand('${book}')">
+      <span style="color:#666;font-size:12px;">${isExpanded?'▼':'▶'}</span>
+      <input type="checkbox" ${allSelected?'checked':''} onclick="event.stopPropagation();snToggleBook('${book}')" style="width:15px;height:15px;">
+      <span style="flex:1;font-size:13px;font-weight:500;">${book}</span>
+      <span class="ext-count-badge">${selectedCount}/${bookPassages.length}</span>
+    </div>`;
+
+    if (isExpanded) {
+      for (const unit of units) {
+        const unitPassages = books[book][unit];
+        const unitSelectedCount = unitPassages.filter(p => snSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+        const unitAllSelected = unitSelectedCount === unitPassages.length;
+
+        html += `<div class="ext-unit-row">
+          <div class="ext-unit-header">
+            <input type="checkbox" ${unitAllSelected?'checked':''} onclick="snToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
+            <span style="font-size:13px;font-weight:600;color:#6d28d9;">${unit}</span>
+            <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
+          </div>
+          <div class="ext-pid-list">`;
+        
+        for (const p of unitPassages) {
+          const key = `${p.book}|${p.unit}|${p.id}`;
+          const isSelected = snSelectedPassages.has(key);
+          html += `<label class="ext-pid-chip ${isSelected?'selected':''}" data-book="${p.book}" data-unit="${p.unit}" data-pid="${p.id}" ondragover="chipDragOver(event)" ondrop="chipDrop(event)"><span class="chip-handle" draggable="true" ondragstart="chipDragStart(event)" ondragend="chipDragEnd(event)" title="드래그해서 순서 변경">⠿</span>
+            <input type="checkbox" ${isSelected?'checked':''} onchange="snTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
+            ${p.id}
+          </label>`;
+        }
+        html += '</div></div>';
+      }
+    }
+  }
+  }
+  container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
+  snUpdateCount();
+  snUpdateBtns();
+}
+
+function snToggleExpand(book) {
+  if (snExpandedBooks.has(book)) snExpandedBooks.delete(book);
+  else snExpandedBooks.add(book);
+  snRenderBookList();
+}
+
+function snExpandAll() {
+  BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.sn.add(x));
+  const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
+  books.forEach(b => snExpandedBooks.add(b));
+  snRenderBookList();
+}
+
+function snCollapseAll() {
+  snExpandedBooks.clear();
+  snRenderBookList();
+}
+
+function snToggleBook(book) {
+  const bookPassages = PASSAGES_DATA.filter(p => p.book === book);
+  const allSelected = bookPassages.every(p => snSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  bookPassages.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    if (allSelected) snSelectedPassages.delete(key);
+    else snSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
+  });
+  snRenderBookList();
+}
+
+function snToggleUnit(book, unit) {
+  const unitPassages = PASSAGES_DATA.filter(p => p.book === book && p.unit === unit);
+  const allSelected = unitPassages.every(p => snSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  unitPassages.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    if (allSelected) snSelectedPassages.delete(key);
+    else snSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
+  });
+  snRenderBookList();
+}
+
+function snTogglePassage(book, unit, id) {
+  const key = `${book}|${unit}|${id}`;
+  if (snSelectedPassages.has(key)) {
+    snSelectedPassages.delete(key);
+  } else {
+    snSelectedPassages.set(key, {book, unit, id});
+  }
+  snRenderBookList();
+}
+
+function snClearSelection() {
+  snSelectedPassages.clear();
+  snRenderBookList();
+}
+
+function snUpdateCount() {
+  document.getElementById('sn-sel-count').textContent = `${snSelectedPassages.size}개 선택`;
+}
+
+function snUpdateBtns() {
+  const has = snSelectedPassages.size > 0;
+  document.getElementById('sn-btn-a').disabled = !has;
+  document.getElementById('sn-btn-b').disabled = !has;
+  document.getElementById('sn-btn-c').disabled = !has;
+}
+
+async function doSecretNote(type) {
+  const passages = selectionInListOrder('sn-book-list', snSelectedPassages);
+  if (!passages.length) { toast('지문을 선택하세요'); return; }
+  const schoolName = document.getElementById('sn-school-name').value.trim() || '레벨미업학원';
+  const teacherName = document.getElementById('sn-teacher-name').value.trim() || '';
+
+  const btnA = document.getElementById('sn-btn-a');
+  const btnB = document.getElementById('sn-btn-b');
+  const btnC = document.getElementById('sn-btn-c');
+  const progress = document.getElementById('sn-progress');
+  const progressFill = document.getElementById('sn-progress-fill');
+  const progressText = document.getElementById('sn-progress-text');
+  const resultsSection = document.getElementById('sn-results-section');
+  const resultsList = document.getElementById('sn-results-list');
+
+  btnA.disabled = true; btnB.disabled = true; btnC.disabled = true;
+  progress.classList.remove('hidden');
+  resultsSection.classList.add('hidden'); resultsList.innerHTML = '';
+
+  let completed = 0; const results = [];
+  for (const p of passages) {
+    progressText.textContent = `생성 중... ${completed+1}/${passages.length} — ${p.unit} ${p.id}`;
+    progressFill.style.width = `${(completed/passages.length)*100}%`;
+    try {
+      const res = await fetch(API+'/api/secret-note', {
+        method: 'POST', headers: headers(),
+        body: JSON.stringify({type, school_name: schoolName, teacher_name: teacherName, passages:[{book:p.book,unit:p.unit,id:p.id}]})
+      });
+      const data = await res.json();
+      if (data.ok) results.push({id:`${p.unit} ${p.id}`,status:'success',html:data.html,filename:data.filename});
+      else results.push({id:`${p.unit} ${p.id}`,status:'error',error:data.detail});
+    } catch(e) { results.push({id:`${p.unit} ${p.id}`,status:'error',error:e.message}); }
+    completed++;
+    progressFill.style.width = `${(completed/passages.length)*100}%`;
+  }
+
+  progressText.textContent = `완료! ${results.filter(r=>r.status==='success').length}/${passages.length} 성공`;
+  resultsSection.classList.remove('hidden');
+  const successResults = results.filter(r=>r.status==='success');
+  window._lastSnResults = successResults;
+
+  let mergeBtn = successResults.length > 1
+    ? `<div style="margin-bottom:8px;"><button class="btn btn-purple" style="width:100%;" onclick="snDownloadMerged('${type}','${schoolName}')">📦 합본 다운로드 (${successResults.length}개)</button></div>`
+    : '';
+  resultsList.innerHTML = mergeBtn + results.map(r =>
+    `<div class="sn-result-item">
+      <span>${r.status==='success'?'✅':'❌'} ${r.id}</span>
+      ${r.status==='success'
+        ? `<button class="btn btn-sm btn-purple" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')"> 다운로드</button>`
+        : `<span style="color:#dc2626;font-size:12px;">${r.error}</span>`}
+    </div>`
+  ).join('');
+
+  btnA.disabled = false; btnB.disabled = false; btnC.disabled = false;
+}
+
+function snDownloadMerged(type, schoolName) {
+  if (!window._lastSnResults || !window._lastSnResults.length) return;
+  const css = (window._lastSnResults[0].html.match(/<style[^>]*>([\s\S]*?)<\/style>/) || ['',''])[1];
+  const bodies = window._lastSnResults.map(r => (r.html.match(/<body[^>]*>([\s\S]*?)<\/body>/) || ['',r.html])[1]);
+  const merged = `<!DOCTYPE html>\n<html lang="ko">\n<head>\n<meta charset="UTF-8">\n<title>${schoolName} 비밀노트 합본</title>\n<style>\n${css}\n</style>\n</head>\n<body>\n${bodies.join('\n')}\n</body>\n</html>`;
+  const blob = new Blob([merged], {type:'text/html; charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=`${schoolName}_비밀노트_유형${type}_합본.html`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ============================================================
+// ★ 0회독 — 수업 전 분석 (4페이지 완전 분석) - 추가 코드
+// ============================================================
+// 비밀노트(sn*) 함수 패턴을 그대로 따르되 prefix만 pc로 분리
+let pcSelectedPassages = new Map();
+let pcExpandedBooks = new Set();
+
+function pcRefreshBooks() {
+  if (!PASSAGES_DATA) return;
+  pcRenderBookList();
+}
+
+function pcRenderBookList() {
+  const books = {};
+  PASSAGES_DATA.forEach(p => {
+    if (!books[p.book]) books[p.book] = {};
+    if (!books[p.book][p.unit]) books[p.book][p.unit] = [];
+    books[p.book][p.unit].push(p);
+  });
+
+  const bookNames = Object.keys(books).sort();
+  const container = document.getElementById('pc-book-list');
+
+  let html = '';
+  for (const [__cat, __catBooks] of groupBooksByCategory(bookNames)) {
+    const __catOpen = listOpenCats.pc.has(__cat);
+    html += bookCatHeader('pc', __cat, __catBooks.length, __catOpen);
+    if (!__catOpen) continue;
+  for (const book of __catBooks) {
+    const units = Object.keys(books[book]).sort((a,b) => {
+      const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
+      const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
+      return numA - numB || a.localeCompare(b);
+    });
+    const bookPassages = Object.values(books[book]).flat();
+    const selectedCount = bookPassages.filter(p => pcSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+    const isExpanded = pcExpandedBooks.has(book);
+    const allSelected = selectedCount === bookPassages.length && bookPassages.length > 0;
+
+    html += `<div class="ext-book-item ${isExpanded?'expanded':''}" onclick="pcToggleExpand('${book}')">
+      <span style="color:#666;font-size:12px;">${isExpanded?'▼':'▶'}</span>
+      <input type="checkbox" ${allSelected?'checked':''} onclick="event.stopPropagation();pcToggleBook('${book}')" style="width:15px;height:15px;">
+      <span style="flex:1;font-size:13px;font-weight:500;">${book}</span>
+      <span class="ext-count-badge">${selectedCount}/${bookPassages.length}</span>
+    </div>`;
+
+    if (isExpanded) {
+      for (const unit of units) {
+        const unitPassages = books[book][unit];
+        const unitSelectedCount = unitPassages.filter(p => pcSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+        const unitAllSelected = unitSelectedCount === unitPassages.length;
+
+        html += `<div class="ext-unit-row">
+          <div class="ext-unit-header">
+            <input type="checkbox" ${unitAllSelected?'checked':''} onclick="pcToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
+            <span style="font-size:13px;font-weight:600;color:#2E4E8F;">${unit}</span>
+            <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
+          </div>
+          <div class="ext-pid-list">`;
+
+        for (const p of unitPassages) {
+          const key = `${p.book}|${p.unit}|${p.id}`;
+          const isSelected = pcSelectedPassages.has(key);
+          html += `<label class="ext-pid-chip ${isSelected?'selected':''}" data-book="${p.book}" data-unit="${p.unit}" data-pid="${p.id}" ondragover="chipDragOver(event)" ondrop="chipDrop(event)"><span class="chip-handle" draggable="true" ondragstart="chipDragStart(event)" ondragend="chipDragEnd(event)" title="드래그해서 순서 변경">⠿</span>
+            <input type="checkbox" ${isSelected?'checked':''} onchange="pcTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
+            ${p.id}
+          </label>`;
+        }
+        html += '</div></div>';
+      }
+    }
+  }
+  }
+  container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
+  pcUpdateCount();
+  pcUpdateBtn();
+}
+
+function pcToggleExpand(book) {
+  if (pcExpandedBooks.has(book)) pcExpandedBooks.delete(book);
+  else pcExpandedBooks.add(book);
+  pcRenderBookList();
+}
+
+function pcExpandAll() {
+  BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.pc.add(x));
+  const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
+  books.forEach(b => pcExpandedBooks.add(b));
+  pcRenderBookList();
+}
+
+function pcCollapseAll() {
+  pcExpandedBooks.clear();
+  pcRenderBookList();
+}
+
+function pcToggleBook(book) {
+  const bookPassages = PASSAGES_DATA.filter(p => p.book === book);
+  const allSelected = bookPassages.every(p => pcSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  bookPassages.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    if (allSelected) pcSelectedPassages.delete(key);
+    else pcSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
+  });
+  pcRenderBookList();
+}
+
+function pcToggleUnit(book, unit) {
+  const unitPassages = PASSAGES_DATA.filter(p => p.book === book && p.unit === unit);
+  const allSelected = unitPassages.every(p => pcSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  unitPassages.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    if (allSelected) pcSelectedPassages.delete(key);
+    else pcSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
+  });
+  pcRenderBookList();
+}
+
+function pcTogglePassage(book, unit, id) {
+  const key = `${book}|${unit}|${id}`;
+  if (pcSelectedPassages.has(key)) {
+    pcSelectedPassages.delete(key);
+  } else {
+    pcSelectedPassages.set(key, {book, unit, id});
+  }
+  pcRenderBookList();
+}
+
+function pcClearSelection() {
+  pcSelectedPassages.clear();
+  pcRenderBookList();
+}
+
+function pcUpdateCount() {
+  document.getElementById('pc-sel-count').textContent = `${pcSelectedPassages.size}개 선택`;
+}
+
+function pcUpdateBtn() {
+  document.getElementById('pc-btn-d').disabled = pcSelectedPassages.size === 0;
+}
+
+let pcMode = 'preclass';
+function pcSetMode(m, el){
+  pcMode = m;
+  document.querySelectorAll('.pc-mode-tab').forEach(b => b.classList.toggle('active', b === el));
+  pcUpdateButtonLabel();
+}
+function pcGetMode(){ return pcMode; }
+
+async function doPreclass() {
+  const passages = selectionInListOrder('pc-book-list', pcSelectedPassages);
+  if (!passages.length) { toast('지문을 선택하세요'); return; }
+  const schoolName = document.getElementById('pc-school-name').value.trim() || '레벨미업학원';
+
+  const btn = document.getElementById('pc-btn-d');
+  const progress = document.getElementById('pc-progress');
+  const progressFill = document.getElementById('pc-progress-fill');
+  const progressText = document.getElementById('pc-progress-text');
+  const resultsSection = document.getElementById('pc-results-section');
+  const resultsList = document.getElementById('pc-results-list');
+
+  btn.disabled = true;
+  progress.classList.remove('hidden');
+  resultsSection.classList.add('hidden'); resultsList.innerHTML = '';
+
+  // ★ 배경지식(수업배경자료): 선택 지문을 한 번에 묶어 요청 → iframe 미리보기
+  if (pcGetMode() === 'topic') {
+    progressText.textContent = `배경지식 조립 중... (${passages.length}개 지문)`;
+    progressFill.style.width = '40%';
+    try {
+      const res = await fetch(API + '/api/secret-note', {
+        method: 'POST', headers: headers(),
+        body: JSON.stringify({ type: 'D', mode: 'topic', school_name: schoolName,
+          passages: passages.map(p => ({ book: p.book, unit: p.unit, id: p.id })) })
+      });
+      const data = await res.json();
+      progressFill.style.width = '100%';
+      if (data.ok) {
+        progressText.textContent = '완료!';
+        resultsSection.classList.remove('hidden');
+        const enc = encodeURIComponent(data.html);
+        const srcdoc = data.html.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+        resultsList.innerHTML =
+          `<div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;">
+             <button class="btn btn-sm btn-orange" onclick="downloadHtml(\`${enc}\`,'${data.filename}')"> 다운로드</button>
+             <button class="btn btn-sm" style="background:#eee;color:#333;" onclick="const w=window.open();w.document.write(decodeURIComponent('${enc}'));w.document.close();">↗ 새 창으로</button>
+           </div>
+           <iframe title="배경지식" sandbox="allow-scripts allow-popups"
+             style="width:100%;height:75vh;border:1px solid #e5e7eb;border-radius:8px;background:#fff;"
+             srcdoc="${srcdoc}"></iframe>`;
+      } else {
+        progressText.textContent = '실패';
+        resultsSection.classList.remove('hidden');
+        resultsList.innerHTML = `<div style="color:#dc2626;font-size:13px;padding:8px;">${data.detail || '생성 실패'}</div>`;
+      }
+    } catch (e) {
+      resultsSection.classList.remove('hidden');
+      resultsList.innerHTML = `<div style="color:#dc2626;font-size:13px;padding:8px;">${e.message}</div>`;
+    }
+    btn.disabled = false;
+    return;
+  }
+
+  let completed = 0; const results = [];
+  for (const p of passages) {
+    progressText.textContent = `생성 중... ${completed+1}/${passages.length} — ${p.unit} ${p.id}  (40~60초 소요)`;
+    progressFill.style.width = `${(completed/passages.length)*100}%`;
+    try {
+      // 백엔드는 /api/secret-note 라우트에서 type=D + mode 분기 처리
+      const pcMode = pcGetMode();
+      const res = await fetch(API+'/api/secret-note', {
+        method: 'POST', headers: headers(),
+        body: JSON.stringify({type:'D', mode: pcMode, school_name: schoolName, passages:[{book:p.book,unit:p.unit,id:p.id}]})
+      });
+      const data = await res.json();
+      if (data.ok) results.push({id:`${p.unit} ${p.id}`,status:'success',html:data.html,filename:data.filename});
+      else results.push({id:`${p.unit} ${p.id}`,status:'error',error:data.detail});
+    } catch(e) { results.push({id:`${p.unit} ${p.id}`,status:'error',error:e.message}); }
+    completed++;
+    progressFill.style.width = `${(completed/passages.length)*100}%`;
+  }
+
+  progressText.textContent = `완료! ${results.filter(r=>r.status==='success').length}/${passages.length} 성공`;
+  resultsSection.classList.remove('hidden');
+  const successResults = results.filter(r=>r.status==='success');
+  window._lastPcResults = successResults;
+
+  let mergeBtn = successResults.length > 1
+    ? `<div style="margin-bottom:8px;"><button class="btn btn-orange" style="width:100%;" onclick="pcDownloadMerged('${schoolName}')">📦 합본 다운로드 (${successResults.length}개)</button></div>`
+    : '';
+  resultsList.innerHTML = mergeBtn + results.map(r =>
+    `<div class="sn-result-item">
+      <span>${r.status==='success'?'✅':'❌'} ${r.id}</span>
+      ${r.status==='success'
+        ? `<button class="btn btn-sm btn-orange" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')"> 다운로드</button>`
+        : `<span style="color:#dc2626;font-size:12px;">${r.error}</span>`}
+    </div>`
+  ).join('');
+
+  btn.disabled = false;
+}
+
+function pcUpdateButtonLabel() {
+  const mode = pcGetMode();
+  const btn = document.getElementById('pc-btn-d');
+  if (!btn) return;
+  const labels = {
+    'preclass': ' 0회독 자료 생성',
+    'sentence_order': ' 한 문장 순서배열 생성',
+    'both': ' 0회독 + 순서배열 생성',
+    'topic': ' 배경지식 보기',
+  };
+  btn.textContent = labels[mode] || labels.preclass;
+}
+
+function pcDownloadMerged(schoolName) {
+  console.log('[pcDownloadMerged v2] 페이지당 2지문 + 답지 모음 모드');
+  if (!window._lastPcResults || !window._lastPcResults.length) return;
+  const results = window._lastPcResults;
+  const css = (results[0].html.match(/<style[^>]*>([\s\S]*?)<\/style>/) || ['',''])[1];
+  
+  const mode = pcGetMode();
+  const titleMap = {
+    'preclass': '0회독 수업전분석 합본',
+    'sentence_order': '한문장 순서배열 합본',
+    'both': '0회독+순서배열 합본',
+    'topic': '배경지식 합본',
+  };
+  const fnameMap = {
+    'preclass': '0회독_수업전분석_합본',
+    'sentence_order': '한문장순서배열_합본',
+    'both': '0회독_순서배열_합본',
+    'topic': '배경지식_합본',
+  };
+  const docTitle = titleMap[mode] || titleMap.preclass;
+  const fnameBase = fnameMap[mode] || fnameMap.preclass;
+  
+  // ─────────────────────────────────────
+  // 각 결과 HTML에서 body 내용 추출
+  // ─────────────────────────────────────
+  const bodies = results.map(r => (r.html.match(/<body[^>]*>([\s\S]*?)<\/body>/) || ['',r.html])[1]);
+  
+  let mergedBody = '';
+  
+  if (mode === 'preclass') {
+    // 0회독만 — 그대로 이어붙이면 됨
+    mergedBody = bodies.join('\n');
+  } else {
+    // sentence_order 또는 both — so-block과 답지를 모아서 재구성
+    
+    // 1) 0회독 본체 (so-page와 so-answer-page 제외한 부분)만 추출 (both 모드용)
+    const preclassBodies = bodies.map(b => {
+      let cleaned = b;
+      // so-page 페이지 제거
+      cleaned = cleaned.replace(/<div class="page so-page"[^>]*>[\s\S]*?<\/div>\s*(?=<div class="page|$)/g, '');
+      // so-answer-page 페이지 제거
+      cleaned = cleaned.replace(/<div class="page so-answer-page"[^>]*>[\s\S]*?<\/div>\s*(?=<div class="page|$)/g, '');
+      return cleaned;
+    });
+    
+    // 2) 모든 본문에서 so-block만 추출 (라벨과 정답 정보 보존)
+    const allBlocks = [];  // [{label, blockHtml, answer}]
+    bodies.forEach((b, idx) => {
+      // so-block 추출
+      const blockMatches = [...b.matchAll(/<div class="so-block">([\s\S]*?)<\/div>\s*(?=<div class="so-block|<div class="so-answer-line">|<\/div>\s*<\/div>\s*<div class="page so-answer)/g)];
+      // 위 정규식이 복잡하니 더 간단하게 — so-block 단위로
+      const simpleMatches = [...b.matchAll(/<div class="so-block">[\s\S]*?<div class="so-answer-line">[\s\S]*?<\/div>\s*<\/div>/g)];
+      simpleMatches.forEach(m => allBlocks.push({html: m[0], passageLabel: results[idx].id}));
+    });
+    
+    // 3) 모든 본문의 정답 행 추출 (so-answer-table의 tr들)
+    const allAnswerRows = [];
+    bodies.forEach((b, idx) => {
+      // so-answer-table 내부 tr 추출
+      const tableMatch = b.match(/<table class="so-answer-table">([\s\S]*?)<\/table>/);
+      if (tableMatch) {
+        const trMatches = [...tableMatch[1].matchAll(/<tr>[\s\S]*?<\/tr>/g)];
+        trMatches.forEach(m => allAnswerRows.push(m[0]));
+      }
+    });
+    
+    // 4) 페이지당 2개씩 so-block 묶어서 페이지 재구성
+    let soPages = '';
+    for (let i = 0; i < allBlocks.length; i += 2) {
+      soPages += '<div class="page so-page">\n';
+      soPages += '  <div class="so-hdr">●  한 문장 순서배열</div>\n';
+      soPages += '  ' + allBlocks[i].html + '\n';
+      if (allBlocks[i+1]) {
+        soPages += '  ' + allBlocks[i+1].html + '\n';
+      }
+      soPages += '</div>\n';
+    }
+    
+    // 5) 정답 페이지 (모든 정답 한 페이지에)
+    let answerPage = '';
+    if (allAnswerRows.length) {
+      answerPage = '<div class="page so-answer-page">\n';
+      answerPage += '  <div class="so-hdr so-answer-hdr">●  한 문장 순서배열 — 정답</div>\n';
+      answerPage += '  <div class="so-answer-note">출력 후 잘라서 시험·정답 호출용으로 사용하세요.</div>\n';
+      answerPage += '  <table class="so-answer-table">\n';
+      answerPage += allAnswerRows.join('\n');
+      answerPage += '\n  </table>\n</div>\n';
+    }
+    
+    if (mode === 'sentence_order') {
+      mergedBody = soPages + answerPage;
+    } else {
+      // both: 0회독 본체 → 순서배열 페이지 → 정답 페이지
+      mergedBody = preclassBodies.join('\n') + soPages + answerPage;
+    }
+  }
+  
+  const merged = `<!DOCTYPE html>\n<html lang="ko">\n<head>\n<meta charset="UTF-8">\n<title>${schoolName} ${docTitle}</title>\n<!-- pcDownloadMerged_v2: ${mode} mode, ${results.length} passages -->\n<style>\n${css}\n</style>\n</head>\n<body>\n${mergedBody}\n</body>\n</html>`;
+  const blob = new Blob([merged], {type:'text/html; charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=`${schoolName}_${fnameBase}.html`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ============================================================
+// ★ 원문 추출 - 추가 코드
+// ============================================================
+let extSelectedPassages = new Map();
+let extExpandedBooks = new Set();
+
+function extRefreshBooks() {
+  if (!PASSAGES_DATA) return;
+  extRenderBookList();
+}
+
+function extRenderBookList() {
+  const books = {};
+  PASSAGES_DATA.forEach(p => {
+    if (!books[p.book]) books[p.book] = {};
+    if (!books[p.book][p.unit]) books[p.book][p.unit] = [];
+    books[p.book][p.unit].push(p);
+  });
+
+  const bookNames = Object.keys(books).sort();
+  const container = document.getElementById('ext-book-list');
+  
+  let html = '';
+  for (const [__cat, __catBooks] of groupBooksByCategory(bookNames)) {
+    const __catOpen = listOpenCats.ext.has(__cat);
+    html += bookCatHeader('ext', __cat, __catBooks.length, __catOpen);
+    if (!__catOpen) continue;
+  for (const book of __catBooks) {
+    const units = Object.keys(books[book]).sort((a,b) => {
+      const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
+      const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
+      return numA - numB || a.localeCompare(b);
+    });
+    const bookPassages = Object.values(books[book]).flat();
+    const selectedCount = bookPassages.filter(p => extSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+    const isExpanded = extExpandedBooks.has(book);
+    const allSelected = selectedCount === bookPassages.length && bookPassages.length > 0;
+
+    html += `<div class="ext-book-item ${isExpanded?'expanded':''}" onclick="extToggleExpand('${book}')">
+      <span style="color:#666;font-size:12px;">${isExpanded?'▼':'▶'}</span>
+      <input type="checkbox" ${allSelected?'checked':''} onclick="event.stopPropagation();extToggleBook('${book}')" style="width:15px;height:15px;">
+      <span style="flex:1;font-size:13px;font-weight:500;">${book}</span>
+      <span class="ext-count-badge">${selectedCount}/${bookPassages.length}</span>
+    </div>`;
+
+    if (isExpanded) {
+      for (const unit of units) {
+        const unitPassages = books[book][unit];
+        const unitSelectedCount = unitPassages.filter(p => extSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+        const unitAllSelected = unitSelectedCount === unitPassages.length;
+
+        html += `<div class="ext-unit-row">
+          <div class="ext-unit-header">
+            <input type="checkbox" ${unitAllSelected?'checked':''} onclick="extToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
+            <span style="font-size:13px;font-weight:600;color:#4A90D9;">${unit}</span>
+            <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
+          </div>
+          <div class="ext-pid-list">`;
+        
+        for (const p of unitPassages) {
+          const key = `${p.book}|${p.unit}|${p.id}`;
+          const isSelected = extSelectedPassages.has(key);
+          html += `<label class="ext-pid-chip ${isSelected?'selected':''}" data-book="${p.book}" data-unit="${p.unit}" data-pid="${p.id}" ondragover="chipDragOver(event)" ondrop="chipDrop(event)"><span class="chip-handle" draggable="true" ondragstart="chipDragStart(event)" ondragend="chipDragEnd(event)" title="드래그해서 순서 변경">⠿</span>
+            <input type="checkbox" ${isSelected?'checked':''} onchange="extTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
+            ${p.id}
+          </label>`;
+        }
+        html += '</div></div>';
+      }
+    }
+  }
+  }
+  container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
+  extUpdateSelCount();
+}
+
+function extToggleExpand(book) {
+  if (extExpandedBooks.has(book)) extExpandedBooks.delete(book);
+  else extExpandedBooks.add(book);
+  extRenderBookList();
+}
+
+function extExpandAll() {
+  BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.ext.add(x));
+  const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
+  books.forEach(b => extExpandedBooks.add(b));
+  extRenderBookList();
+}
+
+function extCollapseAll() {
+  extExpandedBooks.clear();
+  extRenderBookList();
+}
+
+function extToggleBook(book) {
+  const bookPassages = PASSAGES_DATA.filter(p => p.book === book);
+  const allSelected = bookPassages.every(p => extSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  bookPassages.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    if (allSelected) extSelectedPassages.delete(key);
+    else extSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id, text:p.passage_text});
+  });
+  extRenderBookList();
+}
+
+function extToggleUnit(book, unit) {
+  const unitPassages = PASSAGES_DATA.filter(p => p.book === book && p.unit === unit);
+  const allSelected = unitPassages.every(p => extSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  unitPassages.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    if (allSelected) extSelectedPassages.delete(key);
+    else extSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id, text:p.passage_text});
+  });
+  extRenderBookList();
+}
+
+function extTogglePassage(book, unit, id) {
+  const key = `${book}|${unit}|${id}`;
+  if (extSelectedPassages.has(key)) {
+    extSelectedPassages.delete(key);
+  } else {
+    const p = PASSAGES_DATA.find(x => x.book===book && x.unit===unit && x.id===id);
+    if (p) extSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id, text:p.passage_text});
+  }
+  extRenderBookList();
+}
+
+function extClearSelection() {
+  extSelectedPassages.clear();
+  extRenderBookList();
+}
+
+function extUpdateSelCount() {
+  document.getElementById('ext-sel-count').textContent = `${extSelectedPassages.size}개 선택`;
+}
+
+function extExtractHTML() {
+  if (extSelectedPassages.size === 0) {
+    toast('지문을 선택해주세요!');
+    return;
+  }
+
+  const schoolName = document.getElementById('ext-school-name').value.trim() || '학교명';
+  const includeTranslation = document.getElementById('ext-include-translation').checked;
+  const header = `${schoolName}/정독하며 모르는 단어 체크/ 기억 안나는 지문 체크/ 체크한 곳 리뷰/ 그리고는 3번 정독 (1회), (2회), (3회)`;
+
+  // 선택된 지문들을 화면 목록(드래그로 바꾼 순서)대로 정렬
+  const selectedList = selectionInListOrder('ext-book-list', extSelectedPassages);
+
+  let content = '';
+  for (const p of selectedList) {
+    const label = `${p.book} ${p.unit} ${p.id}`;
+    let rawText = p.text || '';
+    
+    // ###해석### 기준으로 영문/한글 분리
+    let englishText = rawText;
+    let koreanText = '';
+    const splitMarker = '###해석###';
+    if (rawText.includes(splitMarker)) {
+      const parts = rawText.split(splitMarker);
+      englishText = parts[0].trim();
+      koreanText = parts[1] ? parts[1].trim() : '';
+    }
+    
+    content += `<div class="passage-block">
+  <p class="passage-label">${label}</p>
+  <p class="passage-text">${englishText}</p>
+  ${includeTranslation && koreanText ? `<p class="passage-translation">${koreanText}</p>` : ''}
+</div>\n`;
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>원문 정독 - ${schoolName}</title>
+<style>
+@page { 
+  size: A4; 
+  margin: 10mm 10mm 10mm 10mm;
+}
+@media print { 
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .passage-block { page-break-inside: avoid; }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { 
+  font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif; 
+  font-size: 10pt; 
+  line-height: 1.3; 
+  color: #000; 
+}
+.header { 
+  font-size: 9pt; 
+  color: #333; 
+  font-weight: 500;
+  margin-bottom: 3mm;
+  padding-bottom: 2mm;
+  border-bottom: 1px solid #333;
+}
+.passage-block {
+  margin-bottom: 10px;
+}
+.passage-label {
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 3px;
+  font-size: 10pt;
+}
+.passage-text {
+  line-height: 1.4;
+  text-align: justify;
+  font-size: 10pt;
+}
+.passage-translation {
+  margin-top: 4px;
+  padding: 4px 5px;
+  background: #f5f5f5;
+  border-left: 2px solid #4A90D9;
+  font-size: 9pt;
+  line-height: 1.3;
+  color: #333;
+}
+</style>
+</head>
+<body>
+<div class="header">${header}</div>
+<div class="content">
+${content}
+</div>
+</body>
+</html>`;
+
+  const newWindow = window.open('', '_blank');
+  newWindow.document.write(html);
+  newWindow.document.close();
+}
+
+function refreshTemplate() {
+  if (selectedPassages.size > 0) {
+    doGenerate();
+  } else {
+    toast('선택된 지문이 없습니다');
+  }
+}
+
+if (TOKEN) showMain();
+
+// ============================================================
+// ★ 변형문제 (2회독) - 클릭 순서 유지 + 다중 유형 선택
+// ============================================================
+let vrSelectedPassages = new Map();  // Map은 삽입 순서 유지 — 클릭한 순서대로 처리됨
+let vrExpandedBooks = new Set();
+
+function vrRefreshBooks() {
+  if (!PASSAGES_DATA) return;
+  vrRenderBookList();
+}
+
+function vrRenderBookList() {
+  const books = {};
+  PASSAGES_DATA.forEach(p => {
+    if (!books[p.book]) books[p.book] = {};
+    if (!books[p.book][p.unit]) books[p.book][p.unit] = [];
+    books[p.book][p.unit].push(p);
+  });
+
+  const bookNames = Object.keys(books).sort();
+  const container = document.getElementById('vr-book-list');
+  
+  let html = '';
+  for (const [__cat, __catBooks] of groupBooksByCategory(bookNames)) {
+    const __catOpen = listOpenCats.vr.has(__cat);
+    html += bookCatHeader('vr', __cat, __catBooks.length, __catOpen);
+    if (!__catOpen) continue;
+  for (const book of __catBooks) {
+    const units = Object.keys(books[book]).sort((a,b) => {
+      const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
+      const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
+      return numA - numB || a.localeCompare(b);
+    });
+    const bookPassages = Object.values(books[book]).flat();
+    const selectedCount = bookPassages.filter(p => vrSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+    const isExpanded = vrExpandedBooks.has(book);
+    const allSelected = selectedCount === bookPassages.length && bookPassages.length > 0;
+
+    html += `<div class="ext-book-item ${isExpanded?'expanded':''}" onclick="vrToggleExpand('${book}')">
+      <span style="color:#666;font-size:12px;">${isExpanded?'▼':'▶'}</span>
+      <input type="checkbox" ${allSelected?'checked':''} onclick="event.stopPropagation();vrToggleBook('${book}')" style="width:15px;height:15px;">
+      <span style="flex:1;font-size:13px;font-weight:500;">${book}</span>
+      <span class="ext-count-badge">${selectedCount}/${bookPassages.length}</span>
+    </div>`;
+
+    if (isExpanded) {
+      for (const unit of units) {
+        const unitPassages = books[book][unit];
+        const unitSelectedCount = unitPassages.filter(p => vrSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+        const unitAllSelected = unitSelectedCount === unitPassages.length;
+
+        html += `<div class="ext-unit-row">
+          <div class="ext-unit-header">
+            <input type="checkbox" ${unitAllSelected?'checked':''} onclick="vrToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
+            <span style="font-size:13px;font-weight:600;color:#c2410c;">${unit}</span>
+            <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
+          </div>
+          <div class="ext-pid-list">`;
+        
+        for (const p of unitPassages) {
+          const key = `${p.book}|${p.unit}|${p.id}`;
+          const isSelected = vrSelectedPassages.has(key);
+          // 클릭 순서 표시 (선택된 경우 순서 번호 보이기)
+          let orderNum = '';
+          if (isSelected) {
+            const idx = [...vrSelectedPassages.keys()].indexOf(key);
+            orderNum = `<span style="background:#ea580c;color:white;font-weight:700;padding:0 4px;border-radius:8px;font-size:9px;margin-right:2px;">${idx+1}</span>`;
+          }
+          html += `<label class="ext-pid-chip ${isSelected?'selected':''}" style="${isSelected?'background:#fed7aa;border-color:#fb923c;':''}" data-book="${p.book}" data-unit="${p.unit}" data-pid="${p.id}" ondragover="chipDragOver(event)" ondrop="chipDrop(event)"><span class="chip-handle" draggable="true" ondragstart="chipDragStart(event)" ondragend="chipDragEnd(event)" title="드래그해서 순서 변경">⠿</span>
+            <input type="checkbox" ${isSelected?'checked':''} onchange="vrTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
+            ${orderNum}${p.id}
+          </label>`;
+        }
+        html += '</div></div>';
+      }
+    }
+  }
+  }
+  container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
+  vrUpdateCount();
+  vrUpdateBtns();
+}
+
+function vrToggleExpand(book) {
+  if (vrExpandedBooks.has(book)) vrExpandedBooks.delete(book);
+  else vrExpandedBooks.add(book);
+  vrRenderBookList();
+}
+
+function vrExpandAll() {
+  BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.vr.add(x));
+  const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
+  books.forEach(b => vrExpandedBooks.add(b));
+  vrRenderBookList();
+}
+
+function vrCollapseAll() {
+  vrExpandedBooks.clear();
+  vrRenderBookList();
+}
+
+function vrToggleBook(book) {
+  const bookPassages = PASSAGES_DATA.filter(p => p.book === book);
+  const allSelected = bookPassages.every(p => vrSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  bookPassages.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    if (allSelected) vrSelectedPassages.delete(key);
+    else if (!vrSelectedPassages.has(key)) vrSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
+  });
+  vrRenderBookList();
+}
+
+function vrToggleUnit(book, unit) {
+  const unitPassages = PASSAGES_DATA.filter(p => p.book === book && p.unit === unit);
+  const allSelected = unitPassages.every(p => vrSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  unitPassages.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    if (allSelected) vrSelectedPassages.delete(key);
+    else if (!vrSelectedPassages.has(key)) vrSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
+  });
+  vrRenderBookList();
+}
+
+function vrTogglePassage(book, unit, id) {
+  const key = `${book}|${unit}|${id}`;
+  if (vrSelectedPassages.has(key)) {
+    vrSelectedPassages.delete(key);
+  } else {
+    vrSelectedPassages.set(key, {book, unit, id});  // 새로 추가 = Map의 끝에 들어감 = 클릭 순서대로
+  }
+  vrRenderBookList();
+}
+
+function vrClearSelection() {
+  vrSelectedPassages.clear();
+  vrRenderBookList();
+}
+
+function vrUpdateCount() {
+  document.getElementById('vr-sel-count').textContent = `${vrSelectedPassages.size}개 선택`;
+}
+
+function vrUpdateBtns() {
+  const hasPassage = vrSelectedPassages.size > 0;
+  const typeA = document.getElementById('vr-type-a').checked;
+  const typeB = document.getElementById('vr-type-b').checked;
+  const hasType = typeA || typeB;
+  document.getElementById('vr-btn-generate').disabled = !(hasPassage && hasType);
+}
+
+async function doVariation() {
+  const passages = [...vrSelectedPassages.values()];
+  if (!passages.length) { toast('지문을 선택하세요'); return; }
+  
+  const types = [];
+  if (document.getElementById('vr-type-a').checked) types.push('A');
+  if (document.getElementById('vr-type-b').checked) types.push('B');
+  if (!types.length) { toast('유형을 1개 이상 선택하세요'); return; }
+  
+  const mode = document.querySelector('input[name="vr-mode"]:checked').value;
+  const schoolName = document.getElementById('vr-school-name').value.trim() || '레벨미업학원';
+  
+  const btn = document.getElementById('vr-btn-generate');
+  const progress = document.getElementById('vr-progress');
+  const progressFill = document.getElementById('vr-progress-fill');
+  const progressText = document.getElementById('vr-progress-text');
+  const resultsSection = document.getElementById('vr-results-section');
+  const resultsList = document.getElementById('vr-results-list');
+
+  btn.disabled = true;
+  progress.classList.remove('hidden');
+  resultsSection.classList.add('hidden');
+  resultsList.innerHTML = '';
+
+  const total = passages.length * types.length;
+  let completed = 0;
+  
+  try {
+    // 1단계: 항목을 하나씩 생성 (각 요청이 짧아 타임아웃 회피)
+    const items = [];
+    for (const p of passages) for (const t of types) items.push({ p, t });
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      progressText.textContent = `생성 중... (${i+1}/${items.length}) ${it.p.id} · 유형 ${it.t}`;
+      progressFill.style.width = `${Math.round((i / items.length) * 90)}%`;
+      try {
+        const r = await fetch(API+'/api/variation/item', {
+          method: 'POST',
+          headers: { ...headers(), 'Content-Type':'application/json' },
+          body: JSON.stringify({ book: it.p.book, unit: it.p.unit, id: it.p.id, type: it.t })
+        });
+        // 개별 실패는 여기서 중단하지 않음 — 최종 합치기 단계에서 warnings로 모임
+        if (r.ok) { await r.json().catch(()=>{}); }
+      } catch (err) {
+        // 네트워크 오류도 무시하고 계속 — 다음 항목 진행
+        console.warn('item 생성 실패', it, err);
+      }
     }
 
+    // 2단계: HTML 합치기 (위에서 캐시에 적재됨 → 캐시 히트로 즉시)
+    progressText.textContent = 'HTML 합치는 중...';
+    progressFill.style.width = '95%';
 
-# ============ 캐시 키 ============
-def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_type: str) -> str:
-    """캐시 키: {책}_{단원}_{번호}_{md5}_v{유형}"""
-    txt_hash = hashlib.md5(passage_text.encode("utf-8")).hexdigest()[:8]
-    book_safe = book[:15].replace(" ", "_").replace("/", "_")
-    unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
-    pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s47 = 빈칸 구두점 제거 + (A)(B) 등장순 재배정 + 빈칸 간격 + 한글 해석 동기화. _s46 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s47"
-
-
-# ============ Supabase 캐시 ============
-def load_cached(cache_key: str, step_name: str) -> Optional[dict]:
-    if not _supabase_enabled():
-        return None
-    try:
-        url = f"{SB_URL}/rest/v1/step_cache"
-        params = {
-            "select": "data",
-            "cache_key": f"eq.{cache_key}",
-            "step_name": f"eq.{step_name}",
-            "limit": "1",
-        }
-        with httpx.Client(timeout=10.0) as client:
-            r = client.get(url, headers=_sb_headers(), params=params)
-            r.raise_for_status()
-            rows = r.json()
-            if rows and isinstance(rows, list):
-                return rows[0].get("data")
-    except Exception as e:
-        print(f"[VAR] cache load error: {e}")
-    return None
-
-
-def save_cached(cache_key: str, step_name: str, data: dict) -> None:
-    if not _supabase_enabled():
-        return
-    try:
-        url = f"{SB_URL}/rest/v1/step_cache"
-        params = {
-            "select": "id",
-            "cache_key": f"eq.{cache_key}",
-            "step_name": f"eq.{step_name}",
-            "limit": "1",
-        }
-        with httpx.Client(timeout=10.0) as client:
-            r = client.get(url, headers=_sb_headers(), params=params)
-            r.raise_for_status()
-            existing = r.json()
-            if existing:
-                row_id = existing[0]["id"]
-                update_url = f"{SB_URL}/rest/v1/step_cache?id=eq.{row_id}"
-                client.patch(update_url, headers=_sb_headers(), json={"data": data})
-            else:
-                payload = {"cache_key": cache_key, "step_name": step_name, "data": data}
-                client.post(url, headers=_sb_headers(), json=payload)
-    except Exception as e:
-        print(f"[VAR] cache save error: {e}")
-
-
-# ============ 지문 분리 ============
-def split_passage_and_translation(passage_text: str) -> tuple:
-    if "###해석###" in passage_text:
-        en, kr = passage_text.split("###해석###", 1)
-        return en.strip(), kr.strip()
-    return passage_text.strip(), ""
-
-
-# ============ Claude API 호출 (httpx) ============
-def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000) -> str:
-    """anthropic SDK 없이 httpx 직접 호출"""
-    if not ANTHROPIC_API_KEY:
-        raise RuntimeError("ANTHROPIC_API_KEY 환경변수가 없습니다")
-
-    url = "https://api.anthropic.com/v1/messages"
-    headers = {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": ANTHROPIC_VERSION,
-        "Content-Type": "application/json",
+    const res = await fetch(API+'/api/variation', {
+      method: 'POST',
+      headers: { ...headers(), 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        passages: passages,
+        types: types,
+        mode: mode,
+        school_name: schoolName,
+      })
+    });
+    
+    if (!res.ok) {
+      const errTxt = await res.text();
+      throw new Error(errTxt || 'API 오류');
     }
-    payload = {
-        "model": CLAUDE_MODEL,
-        "max_tokens": max_tokens,
-        "system": system_prompt,
-        "messages": [{"role": "user", "content": user_message}],
+    
+    const data = await res.json();
+    progressFill.style.width = '100%';
+    progressText.textContent = `✓ 완료 (지문 ${data.passages_generated}개 · A ${data.a_count||0}개 / B ${data.b_count||0}개)`;
+    
+    resultsSection.classList.remove('hidden');
+    const htmlUrl = data.html_url || data.questions_pdf;
+    const downloadUrl = data.download_url || (htmlUrl + '?download=1');
+    let resultHtml = '';
+    if (htmlUrl) {
+      resultHtml += `<div class="sn-result-item">
+        <span> 변형문제 (문제+답지)</span>
+        <span style="display:flex;gap:6px;">
+          <a href="${downloadUrl}" download class="btn btn-sm" style="background:#6b7280;color:white;">📥 다운로드</a>
+          <a href="${htmlUrl}" target="_blank" class="btn btn-sm btn-primary">🔗 열기</a>
+        </span>
+      </div>
+      <div style="font-size:11px;color:#666;padding:8px;background:#f5f8fc;border-radius:6px;margin-top:8px;">
+        💡 '열기'로 새 창에서 본 뒤 <b>Ctrl+P</b> (Mac: Cmd+P)로 인쇄/PDF 저장 가능
+      </div>`;
+      // 자동으로 새 창 열기
+      try { window.open(htmlUrl, '_blank'); } catch(e) {}
     }
+    
+    // A/B 카운트 검증 디버그
+    const expectedA = document.getElementById('vr-type-a').checked ? passages.length : 0;
+    const expectedB = document.getElementById('vr-type-b').checked ? passages.length : 0;
+    const actualA = data.a_count || 0;
+    const actualB = data.b_count || 0;
+    if (actualA < expectedA || actualB < expectedB) {
+      resultHtml += `<div style="margin-top:10px;padding:8px;background:#f5f8fc;border:1px solid #93b4d9;border-radius:6px;font-size:11px;color:#2E4E8F;">
+        ⚠️ 일부 유형이 생성되지 않았습니다.<br>
+        A 유형: ${actualA}/${expectedA}개 · B 유형: ${actualB}/${expectedB}개<br>
+        ${(expectedA-actualA+expectedB-actualB) > 0 ? '<b>Railway 로그에서 [VAR][A] 또는 [VAR][B] 메시지로 원인 확인하세요.</b>' : ''}
+      </div>`;
+    }
+    
+    if (data.warnings && data.warnings.length) {
+      resultHtml += `<div style="margin-top:10px;padding:8px;background:#fee;border:1px solid #fca5a5;border-radius:6px;font-size:11px;color:#991b1b;">
+        ❌ 생성 실패 항목:<br>${data.warnings.map(w => '• ' + w).join('<br>')}
+      </div>`;
+    }
+    resultsList.innerHTML = resultHtml;
+    toast('변형문제 생성 완료!');
+  } catch (e) {
+    progressText.textContent = '❌ ' + (e.message || '생성 실패');
+    toast('생성 실패: ' + (e.message || ''));
+  } finally {
+    setTimeout(() => {
+      progress.classList.add('hidden');
+      progressFill.style.width = '0%';
+      vrUpdateBtns();
+    }, 2000);
+  }
+}
 
-    with httpx.Client(timeout=120.0) as client:
-        r = client.post(url, headers=headers, json=payload)
-        if r.status_code != 200:
-            raise RuntimeError(f"Claude API 오류 {r.status_code}: {r.text[:500]}")
-        data = r.json()
-        content = data.get("content", [])
-        for block in content:
-            if block.get("type") == "text":
-                return block.get("text", "")
-        raise RuntimeError(f"Claude 응답에 텍스트 없음: {data}")
+// ============================================================
+// ★ 분석지 (three_modes 저작) — pc* 패턴 재사용, prefix=as
+// ============================================================
+let asSelectedPassages = new Map();
+let asExpandedBooks = new Set();
 
+function asRefreshBooks() { if (PASSAGES_DATA) asRenderBookList(); }
 
-# ============ 유형 A 생성 ============
-def generate_variation_a(
-    passage_text: str,
-    pid: str = "?",
-    book: str = "",
-    unit: str = "",
-    force_regenerate: bool = False,
-    cache_only: bool = False,
-) -> dict:
-    en_text, _ = split_passage_and_translation(passage_text)
-    cache_key = make_cache_key(book, unit, pid, en_text, "a")
-
-    if not force_regenerate:
-        cached = load_cached(cache_key, "variation_a")
-        if cached:
-            print(f"[VAR][A][{pid}] 캐시 히트")
-            return cached
-
-    # 합치기 단계: 캐시에 없으면 생성하지 않고 None (재생성으로 인한 타임아웃 방지)
-    if cache_only:
-        print(f"[VAR][A][{pid}] 캐시 없음 — cache_only이므로 생략")
-        return None
-
-    last_errors = []
-    last_data = None
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            user_msg = (
-                f"Passage ID: {pid}\n\n"
-                f"Original English passage:\n{en_text}\n\n"
-                "Generate the variation problem (Type A). Return ONLY the JSON object."
-            )
-            if last_errors:
-                user_msg += (
-                    "\n\n# ⚠️ PREVIOUS ATTEMPT FAILED — FIX THESE ERRORS:\n"
-                    + "\n".join(f"  ✗ {e}" for e in last_errors[:5])
-                    + "\n\n# REMINDER OF CRITICAL CHECKS FOR TYPE A (sentence-order style):\n"
-                    "  1. intro = the given lead (first 1-2 sentences, with <CORE_BLANK>). It must NOT reappear in (A)/(B)/(C).\n"
-                    "  2. ★ (A)(B)(C) = exactly 3 paragraphs. Each must be a CONSECUTIVE run of whole sentences from the passage — "
-                    "NEVER merge sentences that are far apart in the original. Cut ONLY at sentence boundaries.\n"
-                    "  3. ★ RECONSTRUCTION TEST: intro + (A)(B)(C) reassembled in the order_correct sequence must EQUAL the original passage word-for-word "
-                    "(no reordering inside a paragraph, no merging distant sentences, no omission, no duplication).\n"
-                    "  4. order_correct = index 0-4 into FIXED choices (0=(A)-(C)-(B) 1=(B)-(A)-(C) 2=(B)-(C)-(A) 3=(C)-(A)-(B) 4=(C)-(B)-(A)); never (A)-(B)-(C).\n"
-                    "  5. blank_A and blank_B are natural key phrases (~4-8 words each, do not pad), taken verbatim from INSIDE (A)/(B)/(C) (not intro), in different paragraphs.\n"
-                    "  6. bogi must contain EVERY SINGLE WORD from blank_A + blank_B — count articles ('the','a','an') and prepositions carefully.\n"
-                    "  7. core_blank_target must have AT LEAST 3 words; the Q3 correct option must be a PARAPHRASE of core_blank_target "
-                    "(synonym or figurative rewording) that keeps the SAME grammatical structure as the original (clause stays a clause, noun phrase stays a noun phrase) so the sentence reads grammatically when the option fills the blank; NOT the original wording copied verbatim."
-                )
-
-            raw = call_claude(SYSTEM_PROMPT_A, user_msg)
-            data = extract_json_from_response(raw)
-
-            # ★★ 순서배열(Q2)을 코드가 원문에서 분할 — LLM 단락을 무시하고 원문 그대로 사용.
-            #    원문 무손실이라 복원검증이 깨지지 않는다. LLM은 빈칸 구절만 고른다.
-            ob = build_order_blocks_a(en_text, pid)
-            print(f"[VAR][A][{pid}] DIAG 문장수={len(split_sentences(en_text))} "
-                  f"ob={'None' if not ob else 'OK'} en_len={len(en_text)} en_head={en_text[:60]!r}")
-            if ob:
-                data["intro"] = ob["intro"]
-                data["paragraphs"] = [list(p) for p in ob["paragraphs"]]
-                data["order_correct"] = ob["order_correct"]
-
-                # ★★ Q3 핵심빈칸 단독 재생성 (첫 문장만 주고 집중 — that절↔명사구 불일치 방지)
-                #   intro(첫 문장)는 코드가 확정했으므로, 그 문장에서 핵심 구절+패러프레이즈 정답을
-                #   따로 한 번 더 만든다. "원문이 절이면 정답도 절" 규칙으로 빈칸 문법 불일치를 막는다.
-                try:
-                    # intro에서 첫 한 문장만 추출 (마침표 기준)
-                    _intro_txt = re.sub(r'\s+', ' ', str(data.get("intro", ""))).strip()
-                    _sents_i = re.split(r'(?<=[.!?])\s+', _intro_txt) if _intro_txt else []
-                    _first = ""
-                    for _s in _sents_i:
-                        if len(_s.split()) > 4:
-                            _first = _s
-                            break
-                    if not _first and _sents_i:
-                        _first = _sents_i[0]
-                    if _first and len(_first.split()) >= 4:
-                        _c_raw = call_claude(CORE_BLANK_SYS, build_core_blank_prompt(_first), max_tokens=700)
-                        _c = extract_json_from_response(_c_raw)
-                        _tg = (_c.get("core_blank_target") or "").strip()
-                        _op = _c.get("core_blank_options")
-                        _co = _c.get("core_blank_correct")
-                        # target이 첫 문장 안에 실제로 있고 선지 5개가 정상일 때만 교체
-                        if (_tg and _tg in _first and isinstance(_op, list) and len(_op) == 5
-                                and isinstance(_co, int) and 0 <= _co <= 4):
-                            data["core_blank_target"] = _tg
-                            # ★ (버 하드닝) focused 재생성 결과를 '소스에서 즉시' 셔플한다.
-                            #   바깥 루프(검증 직전)가 core_blank엔 실측상 안 먹어(같은 행 topic은 섞임)
-                            #   원인 불명이라, 값이 정해지는 이 자리에서 직접 섞고 인덱스를 재계산해
-                            #   ②쏠림을 원천 차단. 원소 추적이라 정답 의미 불변. 바깥 루프는 이걸 건너뜀.
-                            _op, _co = _shuffle_choices(_op, _co, _choice_seed(pid, "coreA", _op))
-                            data["core_blank_options"] = _op
-                            data["core_blank_correct"] = _co
-                            data["_core_shuffled"] = True
-                            print(f"[VAR][A][{pid}] SHUF coreA(src): -> {_co}")
-                            if _c.get("core_blank_explain"):
-                                data["core_blank_explain"] = _c["core_blank_explain"]
-                except Exception:
-                    pass  # 실패하면 기존(한번에 만든) Q3 유지
-
-                # ★ 따옴표·대시·구두점·하이픈·공백·대소문자 차이까지 흡수하는 마킹 함수 (core_blank / blank 공통)
-                def _mark_phrase(text, phrase, mk):
-                    if not phrase:
-                        return text, False
-                    # 1) 정확 매칭
-                    if phrase in text:
-                        return text.replace(phrase, mk, 1), True
-                    # 2) 따옴표/대시/비분리공백 통일 (1:1 치환이라 길이 보존 → 인덱스 동일)
-                    qmap = {"\u2019": "'", "\u2018": "'", "\u201c": '"', "\u201d": '"',
-                            "\u2013": "-", "\u2014": "-", "\u00a0": " "}
-                    def nq(s):
-                        for a, b in qmap.items():
-                            s = s.replace(a, b)
-                        return s
-                    nt, npr = nq(text), nq(phrase)
-                    if npr in nt:
-                        i = nt.index(npr)
-                        return text[:i] + mk + text[i + len(npr):], True
-                    # 3) 토큰(영숫자) 시퀀스 매칭 — 구두점/하이픈/공백/대소문자 차이를 전부 흡수
-                    spans = [(m.group(0).lower(), m.start(), m.end())
-                             for m in re.finditer(r"[A-Za-z0-9]+", text)]
-                    tw = [w for w, _, _ in spans]
-                    pt = re.findall(r"[A-Za-z0-9]+", phrase.lower())
-                    if pt and len(pt) <= len(tw):
-                        for i in range(len(tw) - len(pt) + 1):
-                            if tw[i:i + len(pt)] == pt:
-                                s_char = spans[i][1]
-                                e_char = spans[i + len(pt) - 1][2]
-                                return text[:s_char] + mk + text[e_char:], True
-                    return text, False
-
-                # Q3 핵심빈칸: LLM이 고른 구절을 intro(첫 문장)에서 찾아 마킹 (따옴표 흡수)
-                tgt = (data.get("core_blank_target") or "").strip()
-                if tgt:
-                    new_intro, core_ok = _mark_phrase(data["intro"], tgt, "<CORE_BLANK>")
-                    if core_ok:
-                        data["intro"] = new_intro
-                    data["_core_marked"] = core_ok
-
-                # Q5 영작빈칸: ★ 코드가 (A)(B)(C)에서 직접 골라 뚫는다 (B 빈칸뚫기와 같은 철학).
-                #   LLM 구절이 유효하면 우선 쓰고, 아니면 코드가 깨끗한 구절을 골라 verbatim 마킹.
-                #   → 빈칸 짧음/원문 미발견/경계 단어중복(예: 'questions') 원천 차단. 서로 다른 단락.
-                marked = {}
-                _picked = pick_a_q5_blanks(data["paragraphs"], data.get("blank_A", ""), data.get("blank_B", ""), pid)
-                if _picked:
-                    data["paragraphs"] = _picked["paragraphs"]
-                    data["blank_A"] = _picked["blank_A"]
-                    data["blank_B"] = _picked["blank_B"]
-                    marked = {"<BLANK_A>": True, "<BLANK_B>": True}
-                else:
-                    # fallback: 기존 방식(LLM 구절을 찾아 마킹) — 코드픽 실패 시에도 최소한 동작
-                    for mk, key in (("<BLANK_A>", "blank_A"), ("<BLANK_B>", "blank_B")):
-                        val = (data.get(key) or "").strip()
-                        if not val:
-                            marked[mk] = False
-                            continue
-                        done = False
-                        for p in data["paragraphs"]:
-                            new_txt, ok = _mark_phrase(p[1], val, mk)
-                            if ok:
-                                p[1] = new_txt
-                                done = True
-                                break
-                        marked[mk] = done
-                data["_blanks_marked"] = marked
-
-            if "mismatch_count" not in data and "statements" in data:
-                data["mismatch_count"] = sum(1 for _, _, ok in data["statements"] if not ok)
-
-            # ★★ 안전장치: intro가 (A)(B)(C)에 중복되면(order override 미적용·LLM 순서 폴백 등 어떤 경로든)
-            #     코드가 원문에서 순서를 강제 재분할해 중복을 제거한다. (16강 03번류 intro 중복 실패 차단)
-            try:
-                def _nz_dup(t):
-                    t = re.sub(r"<[^>]+>", " ", str(t or ""))
-                    t = re.sub(r"[^a-z0-9 ]", " ", t.lower())
-                    return re.sub(r"\s+", " ", t).strip()
-                _iw = _nz_dup(data.get("intro", "")).split()
-                _probe = " ".join(_iw[:8]) if len(_iw) >= 8 else " ".join(_iw)
-                _paras_now = [p for p in data.get("paragraphs", []) if isinstance(p, (list, tuple)) and len(p) >= 2]
-                _dup = bool(_probe) and any(_probe in _nz_dup(p[1]) for p in _paras_now)
-                if _dup:
-                    ob2 = build_order_blocks_a(en_text, pid)
-                    if ob2:
-                        data["intro"] = ob2["intro"]
-                        data["paragraphs"] = [list(p) for p in ob2["paragraphs"]]
-                        data["order_correct"] = ob2["order_correct"]
-                        _pk2 = pick_a_q5_blanks(data["paragraphs"], data.get("blank_A", ""), data.get("blank_B", ""), pid)
-                        if _pk2:
-                            data["paragraphs"] = _pk2["paragraphs"]
-                            data["blank_A"] = _pk2["blank_A"]
-                            data["blank_B"] = _pk2["blank_B"]
-                        _tg2 = (data.get("core_blank_target") or "").strip()
-                        if _tg2 and "<CORE_BLANK>" not in data["intro"] and _tg2 in data["intro"]:
-                            data["intro"] = data["intro"].replace(_tg2, "<CORE_BLANK>", 1)
-                        print(f"[VAR][A][{pid}] intro 중복 감지 → 코드가 순서 강제 재분할(안전장치)")
-            except Exception:
-                pass
-
-            # ★ Q5 보기(bogi) 자동 생성: blank_A + blank_B의 모든 단어를 셔플해서 사용.
-            #   모델이 만든 bogi는 무시 → 보기 누락/변형으로 인한 불일치를 원천 차단.
-            try:
-                bw = (str(data.get("blank_A", "")) + " " + str(data.get("blank_B", ""))).split()
-                if bw:
-                    seed = int(hashlib.md5((pid + str(data.get("blank_A", ""))).encode()).hexdigest()[:8], 16)
-                    shuffled = list(bw)
-                    rng = random.Random(seed)
-                    for _ in range(5):
-                        rng.shuffle(shuffled)
-                        if shuffled != bw:
-                            break
-                    data["bogi"] = shuffled
-            except Exception:
-                pass
-
-            is_last = (attempt == MAX_RETRIES)
-            # === PREVAL 진단: 검증 직전 data가 실제로 뭘 담는지 ===
-            try:
-                def _pv_norm(t):
-                    t = re.sub(r"<[^>]+>", " ", str(t or "")); t = re.sub(r"[^a-z0-9 ]", " ", t.lower()); return re.sub(r"\s+", " ", t).strip()
-                _pv_iw = _pv_norm(data.get("intro", "")).split()
-                _pv_probe = " ".join(_pv_iw[:8]) if len(_pv_iw) >= 8 else " ".join(_pv_iw)
-                _pv_paras = [p[1] for p in data.get("paragraphs", []) if isinstance(p, (list, tuple)) and len(p) >= 2]
-                _pv_hits = [i for i, t in enumerate(_pv_paras) if _pv_probe and _pv_probe in _pv_norm(t)]
-                print(f"[VAR][A][{pid}] PREVAL intro={data.get('intro','')[:45]!r} "
-                      f"npara={len(_pv_paras)} probe={_pv_probe[:40]!r} dup_hits={_pv_hits} "
-                      f"p0={_pv_paras[0][:45]!r}" if _pv_paras else f"[VAR][A][{pid}] PREVAL npara=0")
-            except Exception as _pe:
-                print(f"[VAR][A][{pid}] PREVAL 예외: {_pe}")
-
-            # ★★ (버) 객관식 정답 위치 셔플 (A: 주제 Q1 / 핵심빈칸 Q3) — 정답이 ①에 쏠리던 문제 교정.
-            #   순서(order_correct)는 위치형이라 손대지 않는다. core_blank가 소스에서 이미 셔플됐으면
-            #   건너뛴다(중복 셔플 방지). before/after를 로그로 남겨 다음 생성 때 동작을 확인.
-            for _tag, _ok, _ck in (("topicA", "topic_options", "topic_correct"),
-                                   ("coreA", "core_blank_options", "core_blank_correct")):
-                if _tag == "coreA" and data.get("_core_shuffled"):
-                    print(f"[VAR][A][{pid}] SHUF coreA(loop): 소스에서 이미 셔플 -> {data.get(_ck)}")
-                    continue
-                if isinstance(data.get(_ok), list) and isinstance(data.get(_ck), int):
-                    _before = data[_ck]
-                    data[_ok], data[_ck] = _shuffle_choices(
-                        data[_ok], data[_ck], _choice_seed(pid, _tag, data.get(_ok)))
-                    print(f"[VAR][A][{pid}] SHUF {_tag}(loop): {_before} -> {data[_ck]}")
-                else:
-                    print(f"[VAR][A][{pid}] SHUF {_tag}(loop): SKIP "
-                          f"(opt={type(data.get(_ok)).__name__}, cor={type(data.get(_ck)).__name__})")
-
-            errors = validate_a(data, en_text, pid, lenient=is_last)
-            if not errors:
-                save_cached(cache_key, "variation_a", data)
-                mode_str = "관대 모드" if is_last else "엄격 모드"
-                print(f"[VAR][A][{pid}] 생성 완료 (시도 {attempt}, {mode_str})")
-                return data
-            last_errors = errors
-            has_critical = any("[CRITICAL]" in e for e in errors)
-            if is_last and data and not has_critical:
-                last_data = data
-                print(f"[VAR][A][{pid}] 마지막 시도 실패했지만 경미한 오류뿐 → 데이터 보관: {len(errors)}건")
-            elif is_last and has_critical:
-                print(f"[VAR][A][{pid}] 마지막 시도에 치명적 오류(순서/빈칸/원문) → fallback 거부, 이 항목 생략")
-            print(f"[VAR][A][{pid}] 시도 {attempt} 실패 ({len(errors)}건):")
-            for err in errors[:5]:
-                print(f"    - {err[:200]}")
-        except Exception as e:
-            traceback.print_exc()
-            last_errors = [f"예외: {e}"]
-
-    # ★ 5회 모두 실패해도 마지막 데이터가 있으면 그거라도 사용 (불완전한 A라도 없는 것보단 나음)
-    if last_data is not None:
-        save_cached(cache_key, "variation_a", last_data)
-        print(f"[VAR][A][{pid}] 관대 fallback 사용 ({MAX_RETRIES}회 실패)")
-        return last_data
-    raise RuntimeError(f"유형 A 생성 실패 ({MAX_RETRIES}회). 마지막 오류:\n" + "\n".join(last_errors[:5]))
-
-
-# ============ 유형 B 생성 ============
-def generate_variation_b(
-    passage_text: str,
-    pid: str = "?",
-    book: str = "",
-    unit: str = "",
-    force_regenerate: bool = False,
-    cache_only: bool = False,
-) -> dict:
-    en_text, _ = split_passage_and_translation(passage_text)
-    cache_key = make_cache_key(book, unit, pid, en_text, "b")
-
-    if not force_regenerate:
-        cached = load_cached(cache_key, "variation_b")
-        if cached:
-            print(f"[VAR][B][{pid}] 캐시 히트")
-            return cached
-
-    # 합치기 단계: 캐시에 없으면 생성하지 않고 None
-    if cache_only:
-        print(f"[VAR][B][{pid}] 캐시 없음 — cache_only이므로 생략")
-        return None
-
-    last_errors = []
-    last_data = None  # 마지막 fallback용
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            user_msg = (
-                f"Passage ID: {pid}\n\n"
-                f"Original English passage:\n{en_text}\n\n"
-                "Generate the variation problem (Type B). Return ONLY the JSON object."
-            )
-            if last_errors:
-                user_msg += (
-                    "\n\n# ⚠️ PREVIOUS ATTEMPT FAILED — FIX THESE ERRORS:\n"
-                    + "\n".join(f"  ✗ {e}" for e in last_errors[:5])
-                    + "\n\n# REMINDER OF CRITICAL CHECKS FOR TYPE B:\n"
-                    "  1. <MARK1>, <MARK2>, <MARK3>, <MARK4>, <MARK5> MUST be spread across the ENTIRE passage\n"
-                    "     There MUST be AT LEAST 3 words between every adjacent pair of markers\n"
-                    "     BAD example: 'word word <MARK1> word word <MARK2><MARK3> word' — MARK2/MARK3 adjacent (0 words between)\n"
-                    "     GOOD example: 'word word word <MARK1> word word word word <MARK2> word word word <MARK3> ...'\n"
-                    "  2. blank_A and blank_B are natural key phrases (~4-8 words each, do not pad to a number)\n"
-                    "  3. topic_writing_answer: write ONE natural, fully grammatical topic sentence FIRST (don't count words or fit a word bank; the code splits it). Naturalness/grammar first, ~12-20 words. No bare-verb subject, no sentence ending in a preposition, no 'Despite + clause', no 'modal + adjective'.\n"
-                    "  4. Hyphenated words (south-facing, well-known) stay as ONE token in both blank and bogi\n"
-                    "  5. blank_summary_bogi must contain EVERY word from blank_A + blank_B (count articles/preps)\n"
-                    "  6. ★ Q3 summary_options: EACH (A) and (B) must be EXACTLY ONE WORD (no phrases!)\n"
-                    "     GOOD: [['manipulation','extension'], ['control','delay'], ...]\n"
-                    "     BAD: [['south-facing garden beds', 'flat stones from beach'], ...]\n"
-                    "  7. All five (A) values must be DIFFERENT words; all five (B) values must be DIFFERENT"
-                )
-
-            raw = call_claude(SYSTEM_PROMPT_B, user_msg)
-            data = extract_json_from_response(raw)
-
-            # ★★ Q1 삽입 정답 위치 코드 정정 (Q4 빈칸뚫기와 같은 원리)
-            #   AI가 마커는 박되 "어느 자리에서 문장이 빠졌나"(position_correct)를 자주 틀린다.
-            #   코드가 마커를 1번부터 끝까지 하나씩 넣어보고, 원문이 복원되는 자리를 정답으로 정정.
-            #   → 정답 위치 100% 보장. AI는 마커만 적당히 박으면 됨.
-            try:
-                import re as _re1
-                _pwm = str(data.get("passage_with_marks") or "")
-                _gs = str(data.get("given_sentence") or "").strip()
-                _orig = _re1.sub(r'\s+', ' ', str(en_text or "")).strip()
-                def _alnum1(t):
-                    return _re1.sub(r"[^a-z0-9]", "", str(t).lower())
-                if _pwm and _gs and _orig:
-                    _found = None
-                    for _k in range(1, 6):  # MARK1..MARK5 후보 전부 시험
-                        _mk = f"<MARK{_k}>"
-                        if _mk not in _pwm:
-                            continue
-                        _recon = _pwm.replace(_mk, " " + _gs + " ")
-                        _recon = _re1.sub(r"<MARK\d>", "", _recon)
-                        if _alnum1(_recon) == _alnum1(_orig):
-                            _found = _k - 1  # 0-based
-                            break
-                    if _found is not None and _found != data.get("position_correct"):
-                        data["position_correct"] = _found  # 코드가 찾은 정답으로 정정
-            except Exception:
-                pass  # 실패하면 AI가 찍은 값 유지 (검증에서 다시 걸러짐)
-
-            # ★★ Q1 삽입 fallback — 위 자동정정으로도 '복원되는 자리'가 하나도 없으면
-            #   (LLM이 given/본문을 변형해 어느 자리에 넣어도 원문이 안 맞는 경우),
-            #   코드가 원문에서 삽입문제를 통째로 재구성한다. 복원되는 항목은 건드리지 않음.
-            try:
-                _pwm_fb = str(data.get("passage_with_marks") or "")
-                _gs_fb = str(data.get("given_sentence") or "").strip()
-                def _alnum_fb(t):
-                    return re.sub(r"[^a-z0-9]", "", str(t).lower())
-                _ok_fb = False
-                if _pwm_fb and _gs_fb:
-                    for _k in range(1, 6):
-                        _mk = f"<MARK{_k}>"
-                        if _mk not in _pwm_fb:
-                            continue
-                        _r = _pwm_fb.replace(_mk, " " + _gs_fb + " ")
-                        _r = re.sub(r"<MARK\d>", "", _r)
-                        if _alnum_fb(_r) == _alnum_fb(en_text):
-                            _ok_fb = True
-                            break
-                if not _ok_fb:
-                    _ib = build_insert_blocks_b(en_text, pid)
-                    if _ib:
-                        data["given_sentence"] = _ib["given_sentence"]
-                        data["passage_with_marks"] = _ib["passage_with_marks"]
-                        data["position_correct"] = _ib["position_correct"]
-                        data["position_count"] = _ib["position_count"]
-                        print(f"[VAR][B][{pid}] Q1 삽입 코드 재구성 적용 (복원되는 자리 없어 fallback)")
-            except Exception:
-                pass
-
-            # ★★ Q5 주제문 단독 재생성 (1회독 step4 방식)
-            #   Q1~Q5를 한 번에 만들면 주제문에 집중이 안 돼 수일치 등 실수가 난다.
-            #   그래서 주제문만 따로 한 번 더 — 주제문 하나에만 집중 → 1회독 품질.
-            try:
-                _t_raw = call_claude(TOPIC_SENTENCE_SYS, build_topic_sentence_prompt(en_text), max_tokens=500)
-                _t = extract_json_from_response(_t_raw)
-                _ts = (_t.get("topic_sentence") or "").strip()
-                if _ts and len(_ts.split()) >= 6:
-                    data["topic_writing_answer"] = _ts  # 집중 생성한 깔끔한 주제문으로 교체
-                    # ★ 한글 해석도 같은 문장의 번역으로 함께 교체.
-                    #   영문만 바꾸고 한글은 1차 호출 결과를 남겨두면 답지에서 서로 다른 문장이 된다.
-                    _tk = (_t.get("topic_sentence_kr") or "").strip()
-                    data["topic_writing_kr"] = _tk if _tk else ""
-            except Exception:
-                pass  # 실패하면 기존(한번에 만든) 주제문 유지
-
-            # ★★ Q4 요약문 단독 재생성 (영작이라 비문 잦음 → 따로 집중 생성)
-            #   요약문(full_summary)만 따로 생성하고, 그 안의 두 구절을 코드가 빈칸으로 뚫는다.
-            try:
-                _s_raw = call_claude(SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt(en_text), max_tokens=600)
-                _s = extract_json_from_response(_s_raw)
-                _fs = (_s.get("full_summary") or "").strip()
-                _ba = (_s.get("blank_A") or "").strip()
-                _bb = (_s.get("blank_B") or "").strip()
-                # 셋 다 있고 blank_A/B가 full_summary 안에 실제로 들어있을 때만 교체
-                if _fs and _ba and _bb and _ba in _fs and _bb in _fs and _ba != _bb:
-                    data["full_summary"] = _fs
-                    data["blank_A"] = _ba
-                    data["blank_B"] = _bb
-                    # ★ 요약문 해석도 같은 문장의 번역으로 함께 교체 (topic과 동일 이유).
-                    _sk = (_s.get("full_summary_kr") or "").strip()
-                    data["blank_summary_template_kr"] = _sk if _sk else ""
-            except Exception:
-                pass  # 실패하면 기존(한번에 만든) 요약문 유지
-
-            # ★★ Q4 빈칸을 코드가 요약문에서 직접 골라 4단어+ 보장 (A Q5와 같은 철학).
-            #   LLM이 짧게/비verbatim으로 뽑아도 코드가 깨끗한 4단어 구절로 대체 → 누락 차단.
-            try:
-                _fulls = data.get("full_summary") or data.get("summary_full") or ""
-                _bp = pick_b_q4_blanks(_fulls, data.get("blank_A", ""), data.get("blank_B", ""))
-                if _bp:
-                    data["blank_A"] = _bp["blank_A"]
-                    data["blank_B"] = _bp["blank_B"]
-            except Exception:
-                pass
-
-            # ★★ 코드가 빈칸 뚫기 (우리가 정한 방식: 완성문장 먼저 → 코드가 뚫기)
-            #   LLM이 준 full_summary(빈칸 없는 완성문장)에서 blank_A/blank_B를 찾아
-            #   (A)/(B)로 코드가 직접 치환 → blank_summary_template 생성.
-            #   이렇게 하면 "되넣으면 복원"이 코드로 보장 → 빈칸범위/중복/마킹 오류 원천 차단.
-            def _punch_blanks(full, a, b):
-                """full에서 a→(A), b→(B)로 치환. 대소문자/공백 차이 흡수. 성공 시 (template, True)."""
-                import re as _re
-                if not full or not a or not b:
-                    return None, False
-                def _find(hay, needle):
-                    # 1) 그대로  2) 공백 정규화 후 토큰시퀀스 매칭
-                    i = hay.find(needle)
-                    if i >= 0:
-                        return i, i + len(needle)
-                    hn = _re.sub(r'\s+', ' ', hay)
-                    nn = _re.sub(r'\s+', ' ', needle).strip()
-                    j = hn.find(nn)
-                    if j >= 0:
-                        # 원본 인덱스 보정이 복잡하므로, 정규화 문자열에서 작업
-                        return None
-                    return None
-                # 단순/정규화 치환을 정규화 평면에서 수행
-                hn = _re.sub(r'\s+', ' ', full).strip()
-                an = _re.sub(r'\s+', ' ', a).strip()
-                bn = _re.sub(r'\s+', ' ', b).strip()
-                if an not in hn or bn not in hn:
-                    return None, False
-                # A를 먼저 치환하되, B가 A의 부분문자열이면 충돌 → 더 긴 것부터
-                first, fk, second, sk = (an, "(A)", bn, "(B)")
-                if len(bn) > len(an):
-                    first, fk, second, sk = (bn, "(B)", an, "(A)")
-                t = hn.replace(first, fk, 1)
-                if second not in t:  # 치환 후 두 번째 구절이 사라졌으면(겹침) 실패
-                    return None, False
-                t = t.replace(second, sk, 1)
-                if "(A)" not in t or "(B)" not in t:
-                    return None, False
-                return t, True
-
-            try:
-                _full = data.get("full_summary") or data.get("summary_full") or ""
-                _tmpl, _ok = _punch_blanks(_full, data.get("blank_A", ""), data.get("blank_B", ""))
-                if _ok:
-                    data["blank_summary_template"] = _tmpl  # 코드가 만든 빈칸 버전으로 덮어쓰기
-            except Exception:
-                pass
-
-            # ★ Q4/Q5 보기(bogi) 자동 생성: 답지 단어를 그대로 소문자·구두점제거하여 보기로 사용.
-            #   모델이 만든 보기는 무시 → 누락/잉여(예: 'for')/중복오류를 원천 차단.
-            def _bogi_from(text: str):
-                s = re.sub(r'(?<=\d),(?=\d)', '\u0001', str(text or ""))  # 100,000 보호
-                s = re.sub(r'\b([A-Za-z](?:\.[A-Za-z])+)\.?', lambda m: m.group(0).replace('.', '\u0002'), s)  # U.S. 보호
-                toks = re.sub(r'[.,;:!?()]', ' ', s).split()  # " 안 뗌 → 따옴표를 단어에 붙임
-                return [t.replace('\u0001', ',').replace('\u0002', '.') for t in toks if t]  # .lower() 제거 → A처럼 대소문자 유지
-            try:
-                # Q4: blank_A + blank_B
-                q4 = _bogi_from(str(data.get("blank_A", "")) + " " + str(data.get("blank_B", "")))
-                if q4:
-                    data["blank_summary_bogi"] = q4
-                # Q5: topic_writing_answer
-                q5 = _bogi_from(data.get("topic_writing_answer", ""))
-                if q5:
-                    data["topic_writing_bogi"] = q5
-            except Exception:
-                pass
-
-            # 마지막 시도면 strict=False (검증 풀어서라도 받아들임)
-            is_last = (attempt == MAX_RETRIES)
-
-            # ★★ (버) 객관식 정답 위치 셔플 (B: 주제 Q2 / 요약빈칸 Q3) — 정답이 ①에 쏠리던 문제 교정.
-            #   삽입(position_correct)은 위치형이라 손대지 않는다.
-            for _tag, _ok, _ck in (("topicB", "topic_options", "topic_correct"),
-                                   ("summaryB", "summary_options", "summary_correct")):
-                if isinstance(data.get(_ok), list) and isinstance(data.get(_ck), int):
-                    data[_ok], data[_ck] = _shuffle_choices(
-                        data[_ok], data[_ck], _choice_seed(pid, _tag, data.get(_ok)))
-
-            errors = validate_b(data, en_text, pid, strict=not is_last)
-            if not errors:
-                save_cached(cache_key, "variation_b", data)
-                mode_str = "관대 모드" if is_last else "엄격 모드"
-                print(f"[VAR][B][{pid}] 생성 완료 (시도 {attempt}, {mode_str})")
-                return data
-            last_errors = errors
-            has_critical = any("[CRITICAL]" in e for e in errors)
-            # 마지막 시도이고 경미한 오류뿐이면 fallback용으로 보관 (치명적이면 거부)
-            if is_last and data and not has_critical:
-                last_data = data
-                print(f"[VAR][B][{pid}] 마지막 시도 실패했지만 경미한 오류뿐 → 데이터 보관: {len(errors)}건")
-            elif is_last and has_critical:
-                print(f"[VAR][B][{pid}] 마지막 시도에 치명적 오류 → fallback 거부, 이 항목 생략")
-            print(f"[VAR][B][{pid}] 시도 {attempt} 실패 ({len(errors)}건):")
-            for err in errors[:5]:
-                print(f"    - {err[:200]}")
-        except Exception as e:
-            traceback.print_exc()
-            last_errors = [f"예외: {e}"]
-
-    # ★ 5회 모두 실패해도 마지막 데이터가 있으면 그거라도 사용 (불완전한 B라도 없는 것보단 나음)
-    if last_data is not None:
-        # 필수 필드만 있으면 저장하고 반환
-        required_minimum = ["given_sentence", "passage_with_marks", "blank_A", "blank_B",
-                            "topic_writing_answer", "summary_options"]
-        if all(k in last_data for k in required_minimum):
-            save_cached(cache_key, "variation_b", last_data)
-            print(f"[VAR][B][{pid}] ⚠️ 검증 실패했으나 데이터 fallback으로 저장")
-            return last_data
-
-    raise RuntimeError(f"유형 B 생성 실패 ({MAX_RETRIES}회). 마지막 오류:\n" + "\n".join(last_errors[:5]))
-
-
-# ============ Passage 조회 ============
-def fetch_passage_text(book: str, unit: str, pid: str) -> Optional[str]:
-    if not _supabase_enabled():
-        return None
-    try:
-        url = f"{SB_URL}/rest/v1/passages"
-        params = {
-            "select": "passage_text",
-            "book": f"eq.{book}",
-            "unit": f"eq.{unit}",
-            "pid": f"eq.{pid}",
-            "limit": "1",
+function asRenderBookList() {
+  const books = {};
+  PASSAGES_DATA.forEach(p => {
+    if (!books[p.book]) books[p.book] = {};
+    if (!books[p.book][p.unit]) books[p.book][p.unit] = [];
+    books[p.book][p.unit].push(p);
+  });
+  const bookNames = Object.keys(books).sort();
+  const container = document.getElementById('as-book-list');
+  let html = '';
+  for (const [__cat, __catBooks] of groupBooksByCategory(bookNames)) {
+    const __catOpen = listOpenCats.as.has(__cat);
+    html += bookCatHeader('as', __cat, __catBooks.length, __catOpen);
+    if (!__catOpen) continue;
+  for (const book of __catBooks) {
+    const units = Object.keys(books[book]).sort((a,b) => {
+      const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
+      const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
+      return numA - numB || a.localeCompare(b);
+    });
+    const bookPassages = Object.values(books[book]).flat();
+    const selectedCount = bookPassages.filter(p => asSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+    const isExpanded = asExpandedBooks.has(book);
+    const allSelected = selectedCount === bookPassages.length && bookPassages.length > 0;
+    html += `<div class="ext-book-item ${isExpanded?'expanded':''}" onclick="asToggleExpand('${book}')">
+      <span style="color:#666;font-size:12px;">${isExpanded?'▼':'▶'}</span>
+      <input type="checkbox" ${allSelected?'checked':''} onclick="event.stopPropagation();asToggleBook('${book}')" style="width:15px;height:15px;">
+      <span style="flex:1;font-size:13px;font-weight:500;">${book}</span>
+      <span class="ext-count-badge">${selectedCount}/${bookPassages.length}</span>
+    </div>`;
+    if (isExpanded) {
+      for (const unit of units) {
+        const unitPassages = books[book][unit];
+        const unitSelectedCount = unitPassages.filter(p => asSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
+        const unitAllSelected = unitSelectedCount === unitPassages.length;
+        html += `<div class="ext-unit-row">
+          <div class="ext-unit-header">
+            <input type="checkbox" ${unitAllSelected?'checked':''} onclick="asToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
+            <span style="font-size:13px;font-weight:600;color:#2E4E8F;">${unit}</span>
+            <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
+          </div>
+          <div class="ext-pid-list">`;
+        for (const p of unitPassages) {
+          const key = `${p.book}|${p.unit}|${p.id}`;
+          const isSelected = asSelectedPassages.has(key);
+          const ready = p.cache_status === 'ready';
+          const badge = ready
+            ? `<span style="color:#2E9E5A;font-size:9px;margin-left:3px;">●</span>`
+            : `<span style="color:#E8833A;font-size:9px;margin-left:3px;" title="0회독 미생성">○</span>`;
+          html += `<label class="ext-pid-chip ${isSelected?'selected':''}" title="${ready?'0회독 준비됨':'0회독 미생성 — 먼저 0회독 생성 필요'}" data-book="${p.book}" data-unit="${p.unit}" data-pid="${p.id}" ondragover="chipDragOver(event)" ondrop="chipDrop(event)"><span class="chip-handle" draggable="true" ondragstart="chipDragStart(event)" ondragend="chipDragEnd(event)" title="드래그해서 순서 변경">⠿</span>
+            <input type="checkbox" ${isSelected?'checked':''} onchange="asTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
+            ${p.id}${badge}
+          </label>`;
         }
-        with httpx.Client(timeout=10.0) as client:
-            r = client.get(url, headers=_sb_headers(), params=params)
-            r.raise_for_status()
-            rows = r.json()
-            if rows and isinstance(rows, list):
-                return rows[0].get("passage_text", "")
-    except Exception as e:
-        print(f"[VAR] fetch_passage_text error: {e}")
-    return None
+        html += '</div></div>';
+      }
+    }
+  }
+  }
+  container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
+  asUpdateCount();
+  asUpdateBtn();
+}
 
+function asToggleExpand(book) {
+  if (asExpandedBooks.has(book)) asExpandedBooks.delete(book);
+  else asExpandedBooks.add(book);
+  asRenderBookList();
+}
+function asExpandAll() {
+  BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.as.add(x));
+  [...new Set(PASSAGES_DATA.map(p => p.book))].forEach(b => asExpandedBooks.add(b));
+  asRenderBookList();
+}
+function asCollapseAll() { asExpandedBooks.clear(); asRenderBookList(); }
+function asToggleBook(book) {
+  const bp = PASSAGES_DATA.filter(p => p.book === book);
+  const allSel = bp.every(p => asSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  bp.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    if (allSel) asSelectedPassages.delete(key);
+    else asSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
+  });
+  asRenderBookList();
+}
+function asToggleUnit(book, unit) {
+  const up = PASSAGES_DATA.filter(p => p.book === book && p.unit === unit);
+  const allSel = up.every(p => asSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));
+  up.forEach(p => {
+    const key = `${p.book}|${p.unit}|${p.id}`;
+    if (allSel) asSelectedPassages.delete(key);
+    else asSelectedPassages.set(key, {book:p.book, unit:p.unit, id:p.id});
+  });
+  asRenderBookList();
+}
+function asTogglePassage(book, unit, id) {
+  const key = `${book}|${unit}|${id}`;
+  if (asSelectedPassages.has(key)) asSelectedPassages.delete(key);
+  else asSelectedPassages.set(key, {book, unit, id});
+  asRenderBookList();
+}
+function asClearSelection() { asSelectedPassages.clear(); asRenderBookList(); }
+function asUpdateCount() {
+  document.getElementById('as-sel-count').textContent = `${asSelectedPassages.size}개 선택`;
+}
+function asUpdateBtn() {
+  document.getElementById('as-btn-open').disabled = asSelectedPassages.size === 0;
+}
+function asOpenSheets() {
+  const passages = selectionInListOrder('as-book-list', asSelectedPassages);
+  if (!passages.length) { toast('지문을 선택하세요'); return; }
+  const note = document.getElementById('as-open-note');
+  let opened = 0;
+  for (const p of passages) {
+    const url = '/sheet?book=' + encodeURIComponent(p.book)
+              + '&unit=' + encodeURIComponent(p.unit)
+              + '&pid=' + encodeURIComponent(p.id);
+    const w = window.open(url, '_blank');
+    if (w) opened++;
+  }
+  if (opened < passages.length) {
+    note.innerHTML = `일부 창이 팝업 차단됨. 이 사이트의 팝업을 허용해주세요. (${opened}/${passages.length} 열림)`;
+    note.style.color = '#ec4899';
+  } else {
+    note.innerHTML = `✅ ${opened}개 분석지 열림`;
+    note.style.color = '#2E9E5A';
+  }
+}
 
-# api.py 호환용 변수
-sb_client = True if _supabase_enabled() else None
+</script>
+</body>
+</html>

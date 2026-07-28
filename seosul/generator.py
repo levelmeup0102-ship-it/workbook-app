@@ -58,7 +58,7 @@ def _sb_post(path: str, rows: list, params: dict = None) -> list:
         r.raise_for_status()
         return r.json() if r.text else []
 
-_SEOSUL_VER = "_s01"          # 로직 고칠 때마다 +1
+_SEOSUL_VER = "_s01"
 
 def _cache_key(book, unit, pid, types):
     return f"{book}|{unit}|{pid}|{','.join(sorted(types))}|{_SEOSUL_VER}"

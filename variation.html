@@ -402,9 +402,8 @@ body {
 
       <div class="ans-row-c">
         <b class="q-name">Q4.불일치</b>
-        <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.mismatch_count - 1] }}</span>
-        <span class="ans-text">{{ item.data.mismatch_count }}개 — {% for s in item.data.statements %}{% if not s[2] %}{{ s[0] }}{% if not loop.last %}, {% endif %}{% endif %}{% endfor %}</span>
-        <span class="ans-note">{% for stmt in item.data.statements %}{% set kr = item.data.statements_kr[loop.index0] if item.data.statements_kr else ['',''] %}{% set ev = item.data.statements_evidence[loop.index0] if item.data.statements_evidence and (item.data.statements_evidence|length > loop.index0) else '' %}<b>{{ stmt[0] }}</b>({{ 'O' if stmt[2] else 'X' }}){% if ev %} 근거: "{{ ev }}"{% endif %}{% if kr[1] %} — {{ kr[1] }}{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</span>
+       <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.mismatch_count - 1] if (item.data.mismatch_count is number and 1 <= item.data.mismatch_count <= 5) else '-' }}</span>
+<span class="ans-text">{{ item.data.mismatch_count }}개 — {% for s in item.data.statements if not s[2] %}{{ s[0] }}{% if not loop.last %}, {% endif %}{% endfor %}</span>        <span class="ans-note">{% for stmt in item.data.statements %}{% set kr = item.data.statements_kr[loop.index0] if item.data.statements_kr and (item.data.statements_kr|length > loop.index0) else ['',''] %}{% set ev = item.data.statements_evidence[loop.index0] if item.data.statements_evidence and (item.data.statements_evidence|length > loop.index0) else '' %}<b>{{ stmt[0] }}</b>({{ 'O' if stmt[2] else 'X' }}){% if ev %} 근거: "{{ ev }}"{% endif %}{% if kr[1] %} — {{ kr[1] }}{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</span>
       </div>
 
       <div class="ans-row-c">

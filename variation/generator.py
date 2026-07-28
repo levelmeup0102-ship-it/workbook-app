@@ -217,41 +217,6 @@ def _quote_ok(s: str) -> bool:
     return True
 
 
-def _q5_candidates(ptext: str, min_w: int = 5, max_w: int = 7) -> list:
-    """단락에서 '문장 중간 연속 구절'(verbatim) 후보 생성. 가운데 우선.
-    문장경계/따옴표 포함 제외, 조동사 시작 제외, 단락 내 유일 등장만.
-
-    (더) 2단계: 깐깐한 경계로 먼저 훑고, 후보가 하나도 없으면 완화 경계로
-    한 번 더 훑는다. 짧은 단락에서 후보가 소진돼 A가 통째로 누락되던 위험 없이
-    경계 품질만 올린다."""
-    spans = [(m.start(), m.end()) for m in re.finditer(r'\S+', ptext)]
-    toks = [ptext[s:e] for s, e in spans]
-    n = len(toks)
-
-    def _scan(strict):
-        cands = []
-        for L in range(min_w, max_w + 1):
-            for i in range(1, n - L):  # 양끝 한 토큰씩 비워 경계 확보
-                j = i + L - 1
-                sub = ptext[spans[i][0]:spans[j][1]]
-                if not _quote_ok(sub):
-                    continue
-                if not _clean_boundary_ok(sub, ptext, strict=strict):
-                    continue
-                fw = re.sub(r'[^a-z]', '', toks[i].lower())
-                if fw in _Q5_MODALS:
-                    continue
-                if ptext.count(sub) != 1:
-                    continue
-                mid = abs((i + j) / 2 - n / 2)
-                cands.append((mid, sub))
-        cands.sort(key=lambda x: x[0])
-        return [c[1] for c in cands]
-
-    out = _scan(True)
-    if not out:
-        out = _scan(False)
-    return out
 # (더) 빈칸 경계 어휘 — 시작/끝 공통 사용
 _BAD_EDGE = {"the","a","an","of","for","to","in","on","at","by","with","from","into","onto",
              "and","or","but","that","which","who","whose","whom","as","than","is","are",
@@ -293,6 +258,44 @@ def _clean_boundary_ok(phrase: str, full_text: str, strict: bool = True) -> bool
         if ws[0][:1].isupper() and before and before[-1][:1].isupper():
             return False
     return True
+
+
+def _q5_candidates(ptext: str, min_w: int = 5, max_w: int = 7) -> list:
+    """단락에서 '문장 중간 연속 구절'(verbatim) 후보 생성. 가운데 우선.
+    문장경계/따옴표 포함 제외, 조동사 시작 제외, 단락 내 유일 등장만.
+
+    (더) 2단계: 깐깐한 경계(strict)로 먼저 훑고, 후보가 하나도 없으면 완화 경계로
+    한 번 더 훑는다. 짧은 단락에서 후보가 소진돼 A가 통째로 누락되던 위험 없이
+    경계 품질만 올린다."""
+    spans = [(m.start(), m.end()) for m in re.finditer(r'\S+', ptext)]
+    toks = [ptext[s:e] for s, e in spans]
+    n = len(toks)
+
+    def _scan(strict):
+        cands = []
+        for L in range(min_w, max_w + 1):
+            for i in range(1, n - L):  # 양끝 한 토큰씩 비워 경계 확보
+                j = i + L - 1
+                sub = ptext[spans[i][0]:spans[j][1]]
+                if not _quote_ok(sub):
+                    continue
+                if not _clean_boundary_ok(sub, ptext, strict=strict):
+                    continue
+                fw = re.sub(r'[^a-z]', '', toks[i].lower())
+                if fw in _Q5_MODALS:
+                    continue
+                if ptext.count(sub) != 1:
+                    continue
+                mid = abs((i + j) / 2 - n / 2)
+                cands.append((mid, sub))
+        cands.sort(key=lambda x: x[0])
+        return [c[1] for c in cands]
+
+    out = _scan(True)
+    if not out:
+        out = _scan(False)
+    return out
+
 
 MAX_BLANK_WORDS = 9  # 영작 빈칸(A Q5 / B Q4) 최대 단어 수 — 초과 LLM 빈칸은 거부하고 코드가 5~7단어로 대체
 
@@ -502,6 +505,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # _s46 = (더) 빈칸 경계 픽커 2단계화(깐깐→소진시 완화) + Q4 개수 정합성 검사. _s45 누적분 포함.
     return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s46"
 
+
 # ============ Supabase 캐시 ============
 def load_cached(cache_key: str, step_name: str) -> Optional[dict]:
     if not _supabase_enabled():
@@ -564,7 +568,7 @@ def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000) -
     """anthropic SDK 없이 httpx 직접 호출"""
     if not ANTHROPIC_API_KEY:
         raise RuntimeError("ANTHROPIC_API_KEY 환경변수가 없습니다")
-    
+
     url = "https://api.anthropic.com/v1/messages"
     headers = {
         "x-api-key": ANTHROPIC_API_KEY,
@@ -577,7 +581,7 @@ def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000) -
         "system": system_prompt,
         "messages": [{"role": "user", "content": user_message}],
     }
-    
+
     with httpx.Client(timeout=120.0) as client:
         r = client.post(url, headers=headers, json=payload)
         if r.status_code != 200:
@@ -601,18 +605,18 @@ def generate_variation_a(
 ) -> dict:
     en_text, _ = split_passage_and_translation(passage_text)
     cache_key = make_cache_key(book, unit, pid, en_text, "a")
-    
+
     if not force_regenerate:
         cached = load_cached(cache_key, "variation_a")
         if cached:
             print(f"[VAR][A][{pid}] 캐시 히트")
             return cached
-    
+
     # 합치기 단계: 캐시에 없으면 생성하지 않고 None (재생성으로 인한 타임아웃 방지)
     if cache_only:
         print(f"[VAR][A][{pid}] 캐시 없음 — cache_only이므로 생략")
         return None
-    
+
     last_errors = []
     last_data = None
     for attempt in range(1, MAX_RETRIES + 1):
@@ -638,7 +642,7 @@ def generate_variation_a(
                     "  7. core_blank_target must have AT LEAST 3 words; the Q3 correct option must be a PARAPHRASE of core_blank_target "
                     "(synonym or figurative rewording) that keeps the SAME grammatical structure as the original (clause stays a clause, noun phrase stays a noun phrase) so the sentence reads grammatically when the option fills the blank; NOT the original wording copied verbatim."
                 )
-            
+
             raw = call_claude(SYSTEM_PROMPT_A, user_msg)
             data = extract_json_from_response(raw)
 
@@ -855,7 +859,7 @@ def generate_variation_a(
         except Exception as e:
             traceback.print_exc()
             last_errors = [f"예외: {e}"]
-    
+
     # ★ 5회 모두 실패해도 마지막 데이터가 있으면 그거라도 사용 (불완전한 A라도 없는 것보단 나음)
     if last_data is not None:
         save_cached(cache_key, "variation_a", last_data)
@@ -875,18 +879,18 @@ def generate_variation_b(
 ) -> dict:
     en_text, _ = split_passage_and_translation(passage_text)
     cache_key = make_cache_key(book, unit, pid, en_text, "b")
-    
+
     if not force_regenerate:
         cached = load_cached(cache_key, "variation_b")
         if cached:
             print(f"[VAR][B][{pid}] 캐시 히트")
             return cached
-    
+
     # 합치기 단계: 캐시에 없으면 생성하지 않고 None
     if cache_only:
         print(f"[VAR][B][{pid}] 캐시 없음 — cache_only이므로 생략")
         return None
-    
+
     last_errors = []
     last_data = None  # 마지막 fallback용
     for attempt in range(1, MAX_RETRIES + 1):
@@ -914,7 +918,7 @@ def generate_variation_b(
                     "     BAD: [['south-facing garden beds', 'flat stones from beach'], ...]\n"
                     "  7. All five (A) values must be DIFFERENT words; all five (B) values must be DIFFERENT"
                 )
-            
+
             raw = call_claude(SYSTEM_PROMPT_B, user_msg)
             data = extract_json_from_response(raw)
 
@@ -1111,7 +1115,7 @@ def generate_variation_b(
         except Exception as e:
             traceback.print_exc()
             last_errors = [f"예외: {e}"]
-    
+
     # ★ 5회 모두 실패해도 마지막 데이터가 있으면 그거라도 사용 (불완전한 B라도 없는 것보단 나음)
     if last_data is not None:
         # 필수 필드만 있으면 저장하고 반환
@@ -1121,7 +1125,7 @@ def generate_variation_b(
             save_cached(cache_key, "variation_b", last_data)
             print(f"[VAR][B][{pid}] ⚠️ 검증 실패했으나 데이터 fallback으로 저장")
             return last_data
-    
+
     raise RuntimeError(f"유형 B 생성 실패 ({MAX_RETRIES}회). 마지막 오류:\n" + "\n".join(last_errors[:5]))
 
 

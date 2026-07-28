@@ -1,15 +1,25 @@
 """
 seosul/renderer.py
-서술형 종합 세트(dict) → 2회독 동일 디자인 HTML (WeasyPrint로 PDF화).
-- 변형문제 모듈의 var_style.css / logo2.png 를 재사용
+서술형 종합 세트(dict) → 2종류 통합 디자인 HTML (WeasyPrint로 PDF화)
+- 편집본체 프론트의 var_style.css / logo2.png 를 재사용
 - 지문은 passage_sentences의 {{A}}~{{E}} 자리표시를 답 길이에 비례한 빈칸으로 치환
-- 학생용은 어법 오류를 일반체로(굵게 X), 교사용은 굵게 표시
+- 학생본은 어법 오류를 답안칸로 (굵게 X), 교사본은 굵게 표시
 """
+import hashlib, random
 import os
 import re
 import base64
 
-ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+
+def shuffle_bogi(bogi, seed_str=""):
+    seed_int = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
+    rng = random.Random(seed_int)
+    shuffled = list(bogi)
+    for _ in range(5):
+        rng.shuffle(shuffled)
+        if shuffled != list(bogi):
+            return shuffled
+    return shuffled
 
 def _style() -> str:
     with open(os.path.join(ASSET_DIR, "var_style.css"), encoding="utf-8") as f:
@@ -134,7 +144,7 @@ def _render_problem(s: dict, teacher: bool, school_name: str) -> str:
                 f'<span class="q-num {cls}">{qno}</span> {ins}</div>')
         if it["type"] == "SA":
             cond = '<div class="cond">※ 어형 변형 및 단어 중복 가능</div>' if it.get("allow_inflect") else ""
-            bogi = ' / '.join(it["bogi"])
+            bogi = ' / '.join(shuffle_bogi(it["bogi"], str(it)[:200]))
             rows = "".join(f'<div class="wr-row"><span class="wtag">({k})</span><span class="wline"></span></div>'
                            for k in it["answers"])
             body.append(head + cond +
@@ -164,7 +174,7 @@ def _render_problem(s: dict, teacher: bool, school_name: str) -> str:
                            for i in range(1, len(it["errors"]) + 1))
             body.append(head + rows + '</div>')
         elif it["type"] == "SE":
-            bogi = ' / '.join(it["bogi"])
+            bogi = ' / '.join(shuffle_bogi(it["bogi"], str(it)[:200]))
             slots = "".join(f'<span>({b["label"]}) <span class="sb"></span></span>' for b in it["blanks"])
             body.append(head + f'<div class="bogi"><span class="bogi-label">보기</span> {bogi}</div>' +
                         f'<div class="se-line">{slots}</div></div>')

@@ -9,6 +9,7 @@ seosul/validator.py
   SD 어법 틀린 곳 고치기   : 각 오류가 grammar_points 화이트리스트에 매칭 + 블랙리스트 회피
                             + 빈칸 문장 아님 + 서로 다른 문장 + 개수 범위
   SE 어휘 품사 변형 채우기 : 보기 원형 존재 + 실제 형태 변형(answer != base) + 빈칸 문장에 위치
+                            ★ base_pos가 '동사'면 굴절(-s/-ed/-ing)도 허용, 그 외 품사는 굴절 금지
 공통 : SA/SD/SE가 점유한 문장이 서로 겹치지 않음(누더기 방지)
 """
 import re
@@ -307,9 +308,16 @@ def validate_grammar_errors(errors: List[dict], gp_index: Dict[int, dict],
 # =========================================================
 #  SE : 품사 변형 채우기
 # =========================================================
-def _is_inflection_only(base: str, ans: str) -> bool:
-    """단순 굴절(복수/3인칭 -s/-es, 불규칙 복수)인지 — 품사 변형이 아님."""
+def _is_inflection_only(base: str, ans: str, base_pos: str = "") -> bool:
+    """단순 굴절(복수/3인칭 -s/-es, 불규칙 복수)인지 — 품사 변형이 아님.
+
+    ★ base가 '동사'이면 굴절도 유효한 변형으로 인정한다.
+      produce→produces(3인칭), prove→proved(과거), adhere→adhering(동명사) 모두 통과.
+      base_pos가 비어 있거나 동사가 아니면 종전대로 굴절을 금지한다
+      (photograph→photographs 같은 명사 복수 차단)."""
     b, a = base.lower(), ans.lower()
+    if base_pos and "동사" in str(base_pos):
+        return False
     if a in (b + "s", b + "es"):
         return True
     if b.endswith("y") and a == b[:-1] + "ies":      # study→studies
@@ -330,8 +338,9 @@ def validate_word_forms(blanks: List[dict], bogi: List[str],
             errs.append(f"[보기없음] ({bl.get('label')}) 원형 '{base}' 보기에 없음")
         if al == base:
             errs.append(f"[무변형] ({bl.get('label')}) '{ans}' 형태 변형 안 됨")
-        elif _is_inflection_only(base, ans):
-            errs.append(f"[단순굴절] ({bl.get('label')}) '{base}→{ans}'는 복수/3인칭 굴절일 뿐 품사 변형 아님")
+        elif _is_inflection_only(base, ans, bl.get("base_pos", "")):
+            errs.append(f"[단순굴절] ({bl.get('label')}) '{base}→{ans}'는 굴절일 뿐 품사 변형 아님 "
+                        f"(base_pos='{bl.get('base_pos','')}' — 원형이 동사면 base_pos에 '동사'라고 적어라)")
         root = base[:max(3, len(base) - 2)] if base else ""
         if root and not al.startswith(root):
             errs.append(f"[어근불일치] ({bl.get('label')}) '{ans}'가 원형 '{base}'에서 안 나옴")

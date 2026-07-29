@@ -544,8 +544,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s48 = 빈칸 대시 배제 + 한글 해석 번역 폴백 + LLM 구절도 경계 검사 통과 강제. _s47 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s48"
+    # _s49 = B Q2를 제목 유형으로 전환(A=주제/B=제목) + 평가원식 주제·제목 선지 규칙 + Q3정답↔Q4진술 베끼기 차단 + Q3 오답 교차배치. _s48 누적분 포함.
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s49"
 
 
 # ============ Supabase 캐시 ============
@@ -955,6 +955,18 @@ def generate_variation_b(
         print(f"[VAR][B][{pid}] 캐시 없음 — cache_only이므로 생략")
         return None
 
+    # ★ 같은 지문의 유형 A 결과를 캐시에서 읽어 둔다(있으면).
+    #   A Q1 주제와 B Q2 주제가 같은 명제를 쓰면 한쪽 답이 다른 쪽 힌트가 된다.
+    #   A·B는 독립 호출이라 호출부를 안 고치고 캐시로 연결한다. 없으면 그냥 건너뛴다.
+    _a_data = None
+    try:
+        _a_data = load_cached(make_cache_key(book, unit, pid, en_text, "a"), "variation_a")
+    except Exception:
+        pass
+    _a_topics = []
+    if isinstance(_a_data, dict) and isinstance(_a_data.get("topic_options"), list):
+        _a_topics = [str(t) for t in _a_data["topic_options"] if str(t).strip()]
+
     last_errors = []
     last_data = None  # 마지막 fallback용
     for attempt in range(1, MAX_RETRIES + 1):
@@ -964,6 +976,15 @@ def generate_variation_b(
                 f"Original English passage:\n{en_text}\n\n"
                 "Generate the variation problem (Type B). Return ONLY the JSON object."
             )
+            if _a_topics:
+                user_msg += (
+                    "\n\n# ★ AVOID THESE PROPOSITIONS (already used as Type A topic choices for the same passage)\n"
+                    + "\n".join(f"  - {t}" for t in _a_topics)
+                    + "\nYour Q2 topic options — the correct one AND the distractors — must express "
+                      "DIFFERENT propositions from the list above. Do not reuse their claim even in reworded form "
+                      "(e.g. if one of them is about 'balancing X with Y', do not write another 'balancing' option). "
+                      "Same passage, different angle."
+                )
             if last_errors:
                 user_msg += (
                     "\n\n# ⚠️ PREVIOUS ATTEMPT FAILED — FIX THESE ERRORS:\n"
@@ -1164,7 +1185,7 @@ def generate_variation_b(
                     data[_ok], data[_ck] = _shuffle_choices(
                         data[_ok], data[_ck], _choice_seed(pid, _tag, data.get(_ok)))
 
-            errors = validate_b(data, en_text, pid, strict=not is_last)
+            errors = validate_b(data, en_text, pid, strict=not is_last, a_data=_a_data)
             if not errors:
                 save_cached(cache_key, "variation_b", data)
                 mode_str = "관대 모드" if is_last else "엄격 모드"

@@ -381,9 +381,13 @@ def title_form_flaw(s: str) -> str:
 
 # 절대어 — 지문을 안 읽어도 소거되는 오답의 표지.
 #   평가원 선지는 이런 단어로 틀리지 않는다. 틀리려면 '주장'으로 틀려야 한다.
+# ★ eliminate/every는 뺐다. 'Why Colonial Boundaries Eliminated Conflicts'처럼
+#   평범한 동사로 쓰이고, 'every'도 일반 한정사로 흔히 나온다. 오탐이 나면
+#   멀쩡한 선지가 3회 재시도 끝에 fallback으로 떨어진다.
+#   남긴 것은 '지문 안 읽고 소거 가능'이 확실한 극단 부사·한정사뿐이다.
 _ABSOLUTE_WORDS = re.compile(
-    r"\b(all|always|never|only|entirely|completely|eliminate[sd]?|totally|"
-    r"exclusively|invariably|every|none|no\s+one|whatsoever)\b", re.I)
+    r"\b(all|always|never|only|entirely|completely|totally|"
+    r"exclusively|invariably|none|no\s+one|whatsoever)\b", re.I)
 
 
 def absolute_word_in_option(s: str) -> str:
@@ -925,11 +929,19 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
         #   정답 단어를 오답 행에도 한 번씩 흘려야 (A)(B)를 교차 확인하게 된다.
         sc = data.get("summary_correct")
         if isinstance(sc, int) and 0 <= sc < len(a_words) and len(a_words) == 5:
-            if a_words.count(a_words[sc]) == 1 and b_words.count(b_words[sc]) == 1:
+            # ★ 'or'여야 한다. 한쪽만 유일해도 그쪽만 풀면 답이 결정되므로 교차 확인이 안 된다.
+            _na, _nb = a_words.count(a_words[sc]), b_words.count(b_words[sc])
+            if _na == 1 or _nb == 1:
+                _which = []
+                if _na == 1:
+                    _which.append(f"(A)'{a_words[sc]}'")
+                if _nb == 1:
+                    _which.append(f"(B)'{b_words[sc]}'")
                 errors.append(
-                    f"[{pid}] Q3 오답 설계 약함 — 정답 (A)'{a_words[sc]}'·(B)'{b_words[sc]}'가 "
-                    f"각각 한 번씩만 나와 한쪽만 보고 답이 결정된다. 정답 단어를 오답 행에도 "
-                    f"한 번씩 배치해 교차 확인이 필요하게 만들 것")
+                    f"[{pid}] Q3 오답 설계 약함 — 정답 {'·'.join(_which)}가 선지에 한 번만 나온다. "
+                    f"그쪽만 풀면 답이 결정돼 교차 확인이 필요 없어진다. "
+                    f"정답의 (A)·(B) 단어가 각각 최소 2개 행에 등장하도록 배치할 것 "
+                    f"(단, (A,B) 조합은 정답 행에만)")
 
         # 5개 (A) 모두 다른 단어, 5개 (B) 모두 다른 단어 (strict일 때만 체크)
         #   ※ 위 교차 배치와 상충하므로, 교차 배치를 도입하면 이 검사는 완화한다.

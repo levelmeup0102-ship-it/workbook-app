@@ -58,6 +58,8 @@ def _sb_post(path: str, rows: list, params: dict = None) -> list:
         r.raise_for_status()
         return r.json() if r.text else []
 
+# ★ 로직(generator/validator/prompts/renderer)을 고칠 때마다 +1 하면 전체 캐시가 무효화된다.
+#   _s02 = SD 문장중복 금지 + SD 0개 문항 제거 + SC 보기 12~18개 + 실패결과 캐시 금지
 _SEOSUL_VER = "_s02"
 
 def _cache_key(book, unit, pid, types):
@@ -212,7 +214,8 @@ def _validate_sa(it: dict) -> List[str]:
 
 
 def _validate_sc(it: dict) -> List[str]:
-    """SC 검증: 정답에 있는데 보기에 부족한 토큰을 자동 보충(중복 단어 누락 방지) 후 다중집합 확인."""
+    """SC 검증: 정답에 있는데 보기에 부족한 토큰을 자동 보충(중복 단어 누락 방지) 후 다중집합 확인.
+    ★ 보기 개수 12~18개 강제 — 요약문이 너무 짧아 문제가 쉬워지는 것을 막는다."""
     ans_tok = V.tokenize(" ".join((it.get("answers") or {}).values()))
     bogi_tok = V.tokenize(" ".join(it.get("bogi", [])))
     need, have = {}, {}
@@ -312,8 +315,12 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
                     clean.append(e); seen.add(si)
             it["errors"] = clean
 
+    # ★ 필터 후 오류가 0개가 된 SD는 문항 자체를 제거 ("틀린 곳 0군데" 지시문 방지)
+    _before_n = len(items)
     items = [it for it in items
              if not (it.get("type") == "SD" and not it.get("errors"))]
+    if len(items) < _before_n:
+        warnings.append("SD 문항 제거(남은 오류 0개 → '0군데' 지시문 방지)")
 
     # 라벨 강제 배정 (SA=A,B / SE=C,D,E … 충돌·괄호 제거)
     _normalize_labels(items)
@@ -328,7 +335,12 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
     if not ok:
         # 개별 유형은 통과했으므로 전체는 막지 않고 경고만 남긴다
         s["_warnings"] = warnings + errs
-    if use_cache:
+
+    # ★ 실패(유형 생략/폴백)한 결과는 캐시에 저장하지 않는다.
+    #   저장해 버리면 원인을 고쳐도 낡은 실패본이 계속 나와서, 매번 _SEOSUL_VER을 올려야 한다.
+    #   저장을 건너뛰면 다음 생성 때 자동으로 재시도된다.
+    _failed = any(("생략" in w or "폴백" in w) for w in warnings)
+    if use_cache and not _failed:
         cache_set(book, unit, pid, types, s)
     return s
 

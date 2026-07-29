@@ -85,62 +85,78 @@ Everything you generate must reflect that whole-passage understanding:
    - Hyphenated words like "south-facing" stay as ONE token (don't split into "south" + "facing")
 
 3-0. **Q1 TOPIC OPTIONS — 평가원 주제 유형 (수능 23번 실전 난도)**:
-
-   ## 정답 선지
-   ★ The CORRECT option must express the passage's CONCLUSION — not its opening definition,
-     and not a concessive aside ("X has its place, ...").
-     TEST: read the LAST sentence of the passage. If it says "The problem with X is Y",
-     the correct topic must carry that problem. A topic drawn from the opening definition
-     or from the concession is a DISTRACTOR, never the answer.
-   ★ If the passage has a CONTRAST AXIS (deep work vs shallow work, individual vs collective),
-     the correct option must reflect BOTH sides or the tension between them.
-     An option naming only one side is a PARTIAL statement = distractor.
-   - FORM: a noun phrase — "the + abstract noun + of/in ...". 8-16 words. NOT a full sentence.
-   - VOCABULARY: 평가원 수준 추상명사. Use words at this level:
-     displacement, erosion, susceptibility, contingency, reciprocity, precedence,
-     subordination, latitude, threshold, aggregation, prerequisite, trade-off,
-     interplay, paradox, constraint, prevalence, attenuation, primacy.
-     Avoid flat basics (importance, benefit, way, method, difficulty) unless genuinely most precise.
-
-   ## 오답 선지 — 이게 난이도를 결정한다
-   ★★ ALL FOUR DISTRACTORS MUST BE ATTRACTIVE. A distractor that can be eliminated WITHOUT
-     reading the passage is a failed distractor. Rewrite it.
-   ★★ ABSOLUTE WORDS ARE BANNED in every option: all, always, never, only, entirely,
-     completely, eliminate, totally, exclusively, invariably. A student spots these and
-     eliminates the option without reading. If you need to overstate, do it through the
-     CLAIM, not through a giveaway adverb.
+ 
+   ## STEP 1 — 글을 먼저 읽어라. 선지는 그 다음이다.
+   Before writing any option, answer these to yourself:
+     - What does the LAST sentence claim? That is where the thesis lands.
+     - Is there a CONTRAST AXIS (deep work vs shallow work, market vs non-market value)?
+     - Where does the passage CONCEDE something ("X has its place, but...")? That concession
+       is NOT the thesis — it is distractor material.
+   ★ The correct option must carry the conclusion. An option built from the opening
+     definition, or from the concession, is a distractor. Check it against the last sentence.
+   ★ If there is a contrast axis, the correct option must reflect BOTH sides or the tension.
+     An option naming only one side is PARTIAL = distractor.
+ 
+   ## STEP 2 — 형태를 다섯 개 다르게 써라 (여기서 계속 실패하고 있다)
+   Real CSAT 주제 options do NOT share one template. Measured across 20 actual options
+   (2021·2023·2024·2025 수능 23번):
+     · Length: 7-12 words, most often 8-9. Keep them tight.
+     · NOT ONE of the 20 began with "the". Do not start all five with "the" —
+       at most one may, and even that is better avoided.
+     · The HEAD NOUN was different in all five options, every single year. No exceptions.
+     · Each year mixed 2-4 different connective structures.
+ 
+   ★★ HEAD NOUN — all five must differ. Pick from both registers and mix them:
+     Higher register (수능 상위 어휘 — keep using these, they set the difficulty):
+       displacement, erosion, susceptibility, contingency, reciprocity, precedence,
+       subordination, latitude, threshold, aggregation, attenuation, primacy,
+       prevalence, interplay, trade-off, constraint, paradox, prerequisite
+     Standard CSAT register (these actually appear in past papers):
+       necessity, necessities, significance, impact, influence, influences, effects,
+       benefits, merits, ways, steps, strategies, problems, issues, reasons, difficulties, shift
+   Use a MIX of the two registers across the five options. Do not make all five high-register
+   (it reads artificial) and do not make all five plain (it reads easy).
+ 
+   ★★ CONNECTIVE STRUCTURE — use at least THREE different shapes among the five:
+     (a) N + of + V-ing ...            "necessity of calculating the market values of ecosystem services"
+     (b) N + to + V ...                "steps to make public information accessible to customers"
+     (c) N + of ... + on/in ...        "effects of standardizing production procedures on labor markets"
+     (d) N + that/why/where + clause   "problems that excessive work hours have caused for laborers"
+     (e) N + past participle ...       "shift in the work-time paradigm brought about by industrialization"
+     (f) N + for + N + to V ...        "strategies for companies to increase profits in a free market"
+ 
+   ## STEP 3 — 오답 8유형 중 넷을 서로 다르게
+   ★★ A distractor that can be eliminated WITHOUT reading the passage has failed. Rewrite it.
+   ★★ ABSOLUTE WORDS ARE BANNED: all, always, never, only, entirely, completely, totally,
+     exclusively, invariably. Students spot these and eliminate without reading.
+     If you need to overstate, do it through the CLAIM, not a giveaway adverb.
    ★★ Every distractor must use passage vocabulary. Never invent an unrelated topic.
-
-   Choose FOUR different failure modes from this list (do not use the same mode twice):
-
-   (1) PARTIAL — accurately reflects ONE sentence of the passage. Not false; simply not the thesis.
-       → "the cognitive demands that distinguish deep work from routine execution"
-   (2) CONCESSION PROMOTED — takes what the passage granted in passing and makes it the main claim.
-       → "the indispensable place of routine tasks alongside focused effort"
-   (3) SCOPE SHIFT — says about B what the passage said about A. Vocabulary is all from the passage.
-       → "the difficulty of replicating routine tasks across organizations"
-   (4) CAUSE-EFFECT REVERSED — swaps what produces what. Every word is correct; only the arrow flips.
-       → "how deep work gradually produces distraction-free environments"
-   (5) ★ ONE-WORD FLIP — identical to the correct answer except a SINGLE word reverses the direction.
-       This is the hardest and most valuable distractor. Include at least one.
-       Correct: "the erosion of meaningful output by pervasive shallow work"
-       → "the ENHANCEMENT of meaningful output by pervasive shallow work"
-       Flip axes: increase/decrease, enable/hinder, precede/follow, active/passive
-       ("shapes" vs "is shaped by"), prerequisite/byproduct, cause/symptom.
-   (6) MODALITY SHIFT — turns a description into an obligation, or a tendency into a rule.
-       → "the obligation to reserve each workday for uninterrupted concentration"
-   (7) LEVEL SLIP — generalizes a specific claim into a broad one, or narrows a general claim.
-       → "the general inefficiency of collaborative work in modern organizations"
-   (8) TRUE-THEN-FALSE — first half is straight from the passage, second half is not stated.
-       → "the cognitive strain of deep work and its consequent decline in job satisfaction"
-
-   ## 배치
-   - Include (5) ONE-WORD FLIP once.
-   - Include one of (1)/(2) — the "it's true, just not the point" kind.
-   - Include one of (3)/(4) — requires tracing the argument's direction.
-   - Include one of (6)/(7)/(8).
-   - For EACH distractor, you must be able to name the exact sentence that refutes it.
-     If you cannot, the distractor is unfair — rewrite it.
+ 
+   Choose FOUR different failure modes (do not repeat a mode):
+   (1) PARTIAL — accurately reflects ONE sentence. Not false; simply not the thesis.
+   (2) CONCESSION PROMOTED — makes the passage's concession the main claim.
+   (3) SCOPE SHIFT — says about B what the passage said about A. All vocabulary from the passage.
+   (4) CAUSE-EFFECT REVERSED — swaps what produces what. Only the arrow flips.
+   (5) ★ ONE-WORD FLIP — identical to the correct answer except a SINGLE word reverses the
+       direction. Hardest and most valuable. Include one.
+       Flip axes: increase/decrease, enable/hinder, precede/follow, active/passive,
+       prerequisite/byproduct, cause/symptom.
+   (6) MODALITY SHIFT — turns a description into an obligation, a tendency into a rule.
+   (7) LEVEL SLIP — over-generalizes a specific claim, or narrows a general one.
+   (8) TRUE-THEN-FALSE — first half straight from the passage, second half not stated.
+ 
+   Placement: include (5) once; one of (1)/(2); one of (3)/(4); one of (6)/(7)/(8).
+   ★ Note that (5) ONE-WORD FLIP shares its structure with the correct option by design —
+     that pair may look alike, but the OTHER THREE distractors must still differ in head
+     noun and structure. Do not let the flip pair drag all five into one template.
+ 
+   ## FINAL CHECK — count these before you output
+   1. Five head nouns — all different? (write them out and compare)
+   2. How many start with "the"? Must be 0 or 1.
+   3. Word counts — all within 7-12? Any option over 12 must be trimmed.
+   4. How many distinct connective structures? Must be 3 or more.
+   5. For each of the four distractors, name the exact sentence that refutes it.
+      If you cannot name it, that distractor is unfair — rewrite it.
 
 3-1. **Q3 CORE_BLANK_TARGET MUST BE AT LEAST 3 WORDS**:
    - core_blank_target is the phrase that gets replaced by a blank in Q3

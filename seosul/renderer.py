@@ -166,7 +166,7 @@ def _render_problem(s: dict, teacher: bool, school_name: str) -> str:
         head = (f'<div class="qblock"><div class="qhead">'
                 f'<span class="q-num {cls}">{qno}</span> {ins}</div>')
         if it["type"] == "SA":
-            cond = '<div class="cond">※ 어형 변형 및 단어 중복 가능</div>' if it.get("allow_inflect") else ""
+            cond = '<div class="cond">※ 어형 변형 가능 · 보기 단어는 모두 한 번씩만 사용</div>' if it.get("allow_inflect") else ""
             bogi = ' / '.join(shuffle_bogi(it["bogi"], str(it)[:200]))
             rows = "".join(f'<div class="wr-row"><span class="wtag">({k})</span><span class="wline"></span></div>'
                            for k in it["answers"])

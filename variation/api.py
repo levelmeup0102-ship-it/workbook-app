@@ -237,5 +237,6 @@ def download_variation_html(file_id: str, download: int = 0):
     
     headers = {}
     if download:
-        headers["Content-Disposition"] = f'attachment; filename="변형문제_{file_id}.html"'
+        from urllib.parse import quote
+        headers["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(f'변형문제_{file_id}.html')}"
     return HTMLResponse(content=content, headers=headers)

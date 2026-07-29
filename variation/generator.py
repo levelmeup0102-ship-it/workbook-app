@@ -544,8 +544,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s49 = B Q2를 제목 유형으로 전환(A=주제/B=제목) + 평가원식 주제·제목 선지 규칙 + Q3정답↔Q4진술 베끼기 차단 + Q3 오답 교차배치. _s48 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s49"
+    # _s50 = 평가원 실전난도 오답 8유형(한단어반전·양보승격·인과뒤집기 등) + 절대어 금지 + B Q2 제목유형 전환. _s49 누적분 포함.
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s50"
 
 
 # ============ Supabase 캐시 ============

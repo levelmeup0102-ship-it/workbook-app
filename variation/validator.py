@@ -319,6 +319,76 @@ def blank_has_punct(s: str) -> bool:
     return bool(re.search(r'[,;:]', t)) or bool(re.search(r'[.,;:!?]\s*$', t))
 
 
+def _ngrams(s, n=4):
+    """비교용 n-gram 집합. 소문자·영문자만 남긴다."""
+    w = re.sub(r"[^a-z ]", " ", str(s or "").lower()).split()
+    return {" ".join(w[i:i + n]) for i in range(len(w) - n + 1)}
+
+
+def option_echoes_answer(answer: str, option: str, n: int = 4):
+    """선지/진술이 다른 문항의 정답을 그대로 베꼈는지 (n-gram 겹침).
+
+    같은 지문으로 여러 문항을 만들다 보면 Q3 정답 구절이 Q4 진술에 그대로 들어가,
+    한 문항이 다른 문항의 답을 알려주는 일이 생긴다. 겹친 n-gram을 반환(없으면 빈 집합)."""
+    return _ngrams(answer, n) & _ngrams(option, n)
+
+
+# ── 제목 유형(B Q2) 검사 ──────────────────────────────────────
+# 주제 상투구로 시작하면 '제목'이 아니라 '주제'를 쓴 것이다.
+_TOPIC_OPENERS = re.compile(
+    r"^\s*(the|a|an)?\s*(importance|necessity|need|role|benefit|benefits|advantage|advantages|"
+    r"significance|value|way|ways|method|methods|reason|reasons|effect|effects|impact|"
+    r"difficulty|difficulties|challenge|challenges|problem|problems|process|nature|"
+    r"characteristic|characteristics|feature|features|function|purpose|principle|"
+    r"relationship|connection|influence|consequence|consequences|limitation|limitations|"
+    r"strategy|strategies|prevalence|superiority|cognitive)\s+(of|for|in|to|why|demands?)\b",
+    re.I)
+
+# 제목에서 대문자로 안 써도 되는 기능어 (관사·전치사·접속사)
+_TITLE_LOWER_OK = {"a", "an", "the", "and", "or", "but", "nor", "for", "so", "yet",
+                   "at", "by", "in", "of", "on", "to", "up", "as", "if", "vs",
+                   "from", "into", "over", "with", "without", "than", "that"}
+
+
+def title_form_flaw(s: str) -> str:
+    """B Q2 선지가 제목 형식인지. 문제가 있으면 사유 문자열, 없으면 빈 문자열.
+
+    ★ 단어 목록만으로는 계속 샌다('difficulty'처럼 빠진 명사가 나옴).
+      그래서 대문자화(title case)를 함께 본다 — 제목은 주요 단어를 대문자로 쓰고,
+      주제 명사구는 소문자로 쓴다. 이게 형태를 가르는 가장 견고한 신호다."""
+    t = str(s or "").strip()
+    if not t:
+        return "비어 있음"
+    ws = t.split()
+    n = len(ws)
+    if n < 3:
+        return f"{n}단어 — 제목으로 너무 짧음 (4~10단어)"
+    if n > 12:
+        return f"{n}단어 — 제목으로 너무 김 (4~10단어)"
+    if _TOPIC_OPENERS.match(t):
+        return "주제 형식('the importance of ~')으로 시작 — 제목이 아님"
+    # 대문자화: 콜론 뒤·첫 단어를 뺀 '내용어' 중 대문자로 시작한 비율
+    content = [w for w in ws[1:]
+               if re.sub(r"[^A-Za-z]", "", w).lower() not in _TITLE_LOWER_OK
+               and len(re.sub(r"[^A-Za-z]", "", w)) > 1]
+    if content:
+        cap = sum(1 for w in content if w[:1].isupper())
+        if cap / len(content) < 0.5:
+            return ("주요 단어가 대문자로 시작하지 않음 — 주제 명사구 형태다 "
+                    f"(내용어 {len(content)}개 중 대문자 {cap}개)")
+    return ""
+
+
+def title_shape(s: str) -> str:
+    """제목의 형태 분류: colon / question / plain"""
+    t = str(s or "").strip()
+    if ":" in t:
+        return "colon"
+    if t.endswith("?"):
+        return "question"
+    return "plain"
+
+
 def blank_order_wrong(text: str, mk_a: str, mk_b: str) -> bool:
     """본문/요약문에서 (B) 빈칸이 (A)보다 먼저 나오면 True.
     학생은 (A)→(B) 순으로 답을 쓰는데 지문이 반대면 읽기 흐름이 어긋난다."""
@@ -531,6 +601,21 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
         if not isinstance(v, int) or not (0 <= v <= 4):
             errors.append(f"[{pid}] core_blank_correct 범위 오류")
 
+    # ★ Q3 핵심빈칸 정답이 Q4 진술에 그대로 들어갔는지 — 한 문항이 다른 문항의 답을 흘린다.
+    #   Q3 빈칸을 못 풀어도 Q4 진술만 읽으면 정답 구절을 알 수 있게 되는 구조적 결함.
+    _opts3 = data.get("core_blank_options"); _ci3 = data.get("core_blank_correct")
+    if isinstance(_opts3, list) and isinstance(_ci3, int) and 0 <= _ci3 < len(_opts3) \
+       and isinstance(data.get("statements"), list):
+        _ans3 = str(_opts3[_ci3])
+        for _s in data["statements"]:
+            if not (isinstance(_s, (list, tuple)) and len(_s) >= 2):
+                continue
+            _ov = option_echoes_answer(_ans3, str(_s[1]))
+            if _ov:
+                errors.append(
+                    f"[{pid}] [CRITICAL] Q4 진술 '{_s[0]}'이 Q3 정답 구절을 그대로 베낌 "
+                    f"({sorted(_ov)}) — Q3를 안 풀어도 답이 보인다. 진술을 빈칸 밖 문장 근거로 다시 쓸 것")
+
     # statements 5개
     if not isinstance(data.get("statements"), list) or len(data["statements"]) != 5:
         errors.append(f"[{pid}] statements는 5개 항목이어야 함")
@@ -557,9 +642,11 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
 
 
 # ====================== 유형 B 검증 (완화) ======================
-def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict: bool = True) -> list:
+def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict: bool = True,
+               a_data: dict = None) -> list:
     """유형 B 검증 - 핵심만 체크
     strict=False면 단어 수 / 중복 검증을 풀어줌 (마지막 retry용)
+    a_data: 같은 지문의 유형 A 결과(있으면). A Q1 주제와 B Q2 주제가 같은 명제를 쓰는지 본다.
     """
     errors = []
 
@@ -578,6 +665,22 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
         v = data.get(key, -1)
         if not isinstance(v, int) or not (0 <= v <= 4):
             errors.append(f"[{pid}] {key} 범위 오류: {v}")
+
+    # ★ Q2는 '제목' 문항이다 (A Q1이 '주제'를 맡으므로 형태가 달라야 한다).
+    #   같은 지문으로 A·B를 만들면 주제 명제가 겹치는데, 요구 형태를 나눠 구조적으로 해소한다.
+    _topts = data.get("topic_options")
+    if isinstance(_topts, list) and _topts:
+        for _i, _t in enumerate(_topts):
+            _flaw = title_form_flaw(_t)
+            if _flaw:
+                errors.append(
+                    f"[{pid}] Q2 제목 선지 {_i + 1}번 형식 오류 — {_flaw}: '{_t}'")
+        if strict and len(_topts) >= 5:
+            _shapes = {title_shape(_t) for _t in _topts}
+            if len(_shapes) < 2:
+                errors.append(
+                    f"[{pid}] Q2 제목 5개가 전부 같은 형태({_shapes.pop()}) — "
+                    f"콜론형·의문형·동명사형 중 최소 두 가지를 섞을 것")
 
     # position_count(3~5) + position_correct가 그 범위 안인지 (4~5 우선, 짧으면 3 허용)
     pc = data.get("position_count")
@@ -787,12 +890,42 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
             a_words.append(a_val.strip().lower())
             b_words.append(b_val.strip().lower())
 
+        # ★ Q3 오답 설계 — 정답 단어가 다른 선지에도 나타나야 '한쪽만 보고 찍기'를 막는다.
+        #   (A) 5개가 전부 다르고 (B) 5개도 전부 다르면, 정답의 (A)만 알아도 답이 결정된다.
+        #   정답 단어를 오답 행에도 한 번씩 흘려야 (A)(B)를 교차 확인하게 된다.
+        sc = data.get("summary_correct")
+        if isinstance(sc, int) and 0 <= sc < len(a_words) and len(a_words) == 5:
+            if a_words.count(a_words[sc]) == 1 and b_words.count(b_words[sc]) == 1:
+                errors.append(
+                    f"[{pid}] Q3 오답 설계 약함 — 정답 (A)'{a_words[sc]}'·(B)'{b_words[sc]}'가 "
+                    f"각각 한 번씩만 나와 한쪽만 보고 답이 결정된다. 정답 단어를 오답 행에도 "
+                    f"한 번씩 배치해 교차 확인이 필요하게 만들 것")
+
         # 5개 (A) 모두 다른 단어, 5개 (B) 모두 다른 단어 (strict일 때만 체크)
+        #   ※ 위 교차 배치와 상충하므로, 교차 배치를 도입하면 이 검사는 완화한다.
         if strict:
-            if len(set(a_words)) < len(a_words):
-                errors.append(f"[{pid}] Q3 summary_options의 (A) 값들이 중복됨: {a_words}")
-            if len(set(b_words)) < len(b_words):
-                errors.append(f"[{pid}] Q3 summary_options의 (B) 값들이 중복됨: {b_words}")
+            if len(set(a_words)) < 3:
+                errors.append(f"[{pid}] Q3 summary_options의 (A) 값이 너무 겹침: {a_words}")
+            if len(set(b_words)) < 3:
+                errors.append(f"[{pid}] Q3 summary_options의 (B) 값이 너무 겹침: {b_words}")
+
+    # ★ B Q2 주제 선지가 같은 지문 A Q1 주제 선지와 같은 명제인지 (A 결과가 있을 때만)
+    #   같은 원문으로 A·B를 각각 만들다 보면 주제 명제가 겹쳐, 한쪽 답이 다른 쪽 힌트가 된다.
+    if isinstance(a_data, dict):
+        _ao = a_data.get("topic_options"); _aci = a_data.get("topic_correct")
+        _bo = data.get("topic_options"); _bci = data.get("topic_correct")
+        if isinstance(_ao, list) and isinstance(_bo, list) \
+           and isinstance(_aci, int) and isinstance(_bci, int) \
+           and 0 <= _aci < len(_ao) and 0 <= _bci < len(_bo):
+            # B 정답 ↔ A 오답, A 정답 ↔ B 오답 양방향
+            for _lab, _ans, _opts in (("B Q2 정답 ↔ A Q1 선지", _bo[_bci], _ao),
+                                      ("A Q1 정답 ↔ B Q2 선지", _ao[_aci], _bo)):
+                for _i, _o in enumerate(_opts):
+                    _ov = option_echoes_answer(_ans, str(_o))
+                    if _ov:
+                        errors.append(
+                            f"[{pid}] {_lab} {_i + 1}번이 같은 명제 ({sorted(_ov)}) — "
+                            f"한 유형의 답이 다른 유형의 힌트가 된다. 명제를 갈 것")
 
     return errors
 

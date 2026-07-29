@@ -254,9 +254,12 @@ def _forbidden_keywords(gp_index):
 
 def error_is_forbidden(e: dict, gp_index: Dict[int, dict], sentences: List[str] = None) -> str:
     """개별 어법오류가 '출제 금지'면 사유 문자열, 아니면 ''. 검증기·합성기 공용."""
-    blob = f"{e.get('category','')} {e.get('name','')} {e.get('why','')}"
+    # ★ wrong/right 단어 자체도 검사 대상 — why를 '수동 분사'로 적어 우회하던 것 차단
+    #   (예: unaffecting→unaffected 가 affect 금지어에 걸리게 된다)
+    blob = (f"{e.get('category','')} {e.get('name','')} {e.get('why','')} "
+            f"{e.get('wrong','')} {e.get('right','')}").lower()
     for kw in _forbidden_keywords(gp_index):
-        if kw and kw in blob:
+        if kw and kw.lower() in blob:
             return f"금지유형(키워드 '{kw}')"
     gp = (gp_index or {}).get(e.get("gp_id"))
     if gp and "출제 금지" in (gp.get("prohibited_analysis") or ""):

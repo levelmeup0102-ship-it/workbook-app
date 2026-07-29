@@ -329,46 +329,62 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
    (d) ★ DISTRACTORS must be the SAME part of speech and individually plausible, but each must FAIL the passage's logic — NOT mere synonyms/antonyms of the answer. Avoid 5 near-synonyms (manage/control/handle/regulate/direct) — that makes the answer guessable. Mix in words that fit grammar but contradict or overstate the passage.
    (e) ★ WORD LEVEL = GRE/upper-CSAT abstract vocabulary (finite, fixed, controllability, manageability, intensify, diminish, constrain, reciprocal, provisional). No basic words (increase, reduce, manage, activate).
 
-2-1. **Q3 SUMMARY_OPTIONS — 평가원 40번 오답 설계**:
+2-1. **Q3 SUMMARY_OPTIONS — 한쪽은 흐리게, 다른 쪽은 선명하게**:
    - Each (A) and each (B) value MUST be exactly ONE single word — never a phrase.
    - Content words only (nouns, adjectives, verbs).
-
-   ★★ ALL FIVE (A) values must be DIFFERENT words. ALL FIVE (B) values must be DIFFERENT words.
-      Never repeat a word in the same column.
-
-   ★★ NO SYNONYMS within a column. If two (A) options mean the same thing to a student
-      (e.g. "immersion" and "absorption"), the question becomes unfair — both look correct.
-      Each of the five must be distinguishable IN MEANING, not just in spelling.
-
-   ★★★ 난이도는 오답의 매력도로 만든다 — 단어를 겹치지 말고, 오답을 그럴듯하게 써라.
-   In EACH column, build the five words like this:
-
-     - 1 = the CORRECT word
-     - 2 = PLAUSIBLE distractors — words that fit the passage's topic and could reasonably
-           belong in that slot. A student cannot rule these out from the word alone;
-           they must check the OTHER slot or re-read the passage.
-     - 2 = CLEARLY WRONG — an antonym of the correct word, or a concept the passage
-           never raises. These are eliminated once the passage is understood.
-
-   So (A) narrows the field to about three rows, and (B) settles it. Both slots get used.
-
-   Alternate which column carries the harder decision from item to item, so students
-   cannot learn a pattern (sometimes (A) is the tough call, sometimes (B)).
-
-   GOOD — correct answer is the third row:
-     ["rigidity",      "suppression"]     (A) antonym, eliminated
-     ["immersion",     "recognition"]     (A) plausible, decided by (B)
-     ["concentration", "achievement"]     CORRECT
-     ["engagement",    "repetition"]      (A) plausible, decided by (B)
-     ["supervision",   "stimulation"]     (A) unmentioned, eliminated
-   Five different (A) words, five different (B) words, no repeats, no synonym pairs.
-
+   - ALL FIVE (A) values must be DIFFERENT words. ALL FIVE (B) values must be DIFFERENT words.
+     Never repeat the same word inside a column.
+ 
+   ★★★ THE CORE DESIGN — read this carefully, it decides whether the item works.
+ 
+   Pick ONE column to be the BLURRED side and the OTHER to be the DECIDING side.
+ 
+   ## BLURRED side (say it is (A))
+   - Put the correct word here, AND put 2 NEAR-SYNONYMS of it in other rows.
+     They are different words on the page, but to a student they mean nearly the same thing.
+     → The student CANNOT eliminate those rows from this column alone.
+   - The remaining 2 rows get words that clearly do NOT fit (an antonym, or a concept the
+     passage never raises). Those two fall away.
+   - Net effect: this column narrows five rows down to about three, and then stalls.
+ 
+   ## DECIDING side (then it is (B))
+   - NO SYNONYMS HERE. Exactly one word fits the passage's logic; the other four are
+     clearly wrong (wrong direction, wrong object, or unmentioned).
+   - Crucially: the rows that survived (A) — the near-synonym rows — must have a (B) that
+     is plainly wrong. That is what kills them.
+   - Net effect: this column settles the answer.
+ 
+   ## Worked example (correct answer is the 4th row: stability / strategies)
+     ["dominance",   "priorities"]     (A) wrong direction → out
+     ["consistency", "hierarchies"]    (A) near-synonym of stability → survives (A), killed by (B)
+     ["cohesion",    "preferences"]    (A) near-synonym → survives (A), killed by (B)
+     ["stability",   "strategies"]     CORRECT
+     ["rigidity",    "pathways"]       (A) antonym → out
+   Reading (A) alone leaves rows 2, 3, 4 in play — consistency / cohesion / stability all
+   sound right. Only (B) separates them: strategies fits the passage; hierarchies and
+   preferences do not.
+ 
+   ## ALTERNATE the blurred side across items
+   Item 1: blur (A), decide with (B).  Item 2: blur (B), decide with (A).
+   If (B) is the blurred side, put the near-synonyms in (B) and make (A) the clean decider.
+   Students must not be able to learn "the answer is always settled by (B)."
+ 
+   ## CHECKLIST before you output the five pairs
+   1. Are all five (A) words different? All five (B) words different?  (no repeats)
+   2. On the BLURRED side: does the correct word have 2 near-synonyms among the others?
+   3. On the DECIDING side: is there exactly ONE word that fits, with NO synonym of it present?
+   4. Do the near-synonym rows have a clearly wrong word on the deciding side?
+   5. Can you name, for each of the four wrong rows, the reason it fails? If not, rewrite it.
+ 
+   BAD — both columns blurred (no way to decide, unfair):
+     [["consistency","stability"], ["cohesion","steadiness"], ...]
+ 
+   BAD — both columns clean (too easy, (A) alone gives it away):
+     [["dominance","priorities"], ["rigidity","hierarchies"], ["stability","strategies"], ...]
+ 
    BAD — a word repeats in a column:
-     [["narrative","validation"], ["narrative","disclosure"], ...]
-
-   BAD — synonyms in the same column (both look right):
-     [["immersion", ...], ["absorption", ...], ["engagement", ...]]
-
+     [["stability","preferences"], ["stability","strategies"], ...]
+ 
    BAD — phrases instead of single words:
      ["south-facing garden beds", "flat stones from beach"]
 
@@ -470,9 +486,9 @@ VERIFY BEFORE OUTPUT:
 - Same words (case-insensitive) appear in bogi and the answer
 - ★ Every (A) and (B) in summary_options is EXACTLY ONE WORD (no spaces, no phrases!)
 - ★ All five (A) values are different words; all five (B) values are different words.
-  No word repeats within a column, and no two words in a column are synonyms.
-- ★ In each column: 1 correct + 2 plausible distractors + 2 clearly wrong (antonym or
-  unmentioned). Check this count before you output.
+- ★ ONE column is BLURRED (correct word + 2 near-synonyms + 2 clearly wrong) and the OTHER
+  is the DECIDER (exactly one fitting word, no synonym of it present). Never blur both,
+  never make both clean. Alternate which column is blurred from item to item.
 
 Return ONLY the JSON object."""
 

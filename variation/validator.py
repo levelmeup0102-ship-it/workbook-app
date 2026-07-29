@@ -399,6 +399,42 @@ def absolute_word_in_option(s: str) -> str:
     return m.group(0) if m else ""
 
 
+def topic_form_flaws(options) -> list:
+    """A Q1 주제 선지 5개의 '형태 다양성'을 검사한다.
+
+    평가원 실측(2021·2023·2024·2025 수능 23번, 20개 선지):
+      · 'the'로 시작한 선지 0/20
+      · 문두 명사(head noun)는 매년 5개 모두 서로 다름 — 예외 없음
+      · 길이 7~12단어, 평균 8.6
+    지금까지 산출물은 5개가 전부 'the + 추상명사 + of'로 굳어 있었다.
+    어휘 난이도가 아니라 '형태가 한 틀'인 게 문제다."""
+    out = []
+    if not isinstance(options, list) or len(options) < 5:
+        return out
+    opts = [str(o).strip() for o in options[:5]]
+
+    n_the = sum(1 for o in opts if re.match(r"^\s*the\b", o, re.I))
+    if n_the >= 3:
+        out.append(f"5개 중 {n_the}개가 'the'로 시작 — 평가원 20개 선지 중 0개다. "
+                   f"관사 없이 명사로 시작할 것 (허용: 최대 1개)")
+
+    def head(o):
+        w = o.split()
+        i = 1 if re.match(r"^(the|a|an)$", w[0], re.I) and len(w) > 1 else 0
+        return re.sub(r"[^A-Za-z]", "", w[i]).lower()
+
+    heads = [head(o) for o in opts]
+    if len(set(heads)) < 4:
+        out.append(f"문두 명사가 겹침 {heads} — 5개 모두 달라야 한다 "
+                   f"(평가원은 매년 5/5 유일)")
+
+    longs = [(o, len(o.split())) for o in opts if len(o.split()) > 13]
+    if longs:
+        out.append(f"선지가 너무 김 (7~12단어 권장): " +
+                   ", ".join(f"{n}단어 '{o[:40]}...'" for o, n in longs))
+    return out
+
+
 def title_shape(s: str) -> str:
     """제목의 형태 분류: colon / question / plain"""
     t = str(s or "").strip()
@@ -611,6 +647,10 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
         errors += check_cutout_match(data["bogi"], [data["blank_A"], data["blank_B"]], pid, "Q5(빈칸영작)")
     except Exception as e:
         errors.append(f"[{pid}] Q5 보기 검증 예외: {e}")
+
+    # ★ Q1 주제 선지 형태 다양성 (평가원 실측 기반)
+    for _f in topic_form_flaws(data.get("topic_options")):
+        errors.append(f"[{pid}] Q1 주제 선지 형태 — {_f}")
 
     # ★ Q1 주제 선지에 절대어가 있으면 지문을 안 읽어도 소거된다 — 오답이 매력을 잃는다.
     _t1 = data.get("topic_options")

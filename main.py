@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Workbook webapp server v12 - stable local + supabase passages, cache status"""
-import os, json, hashlib, re, shutil
+import os, json, hashlib, re, shutil, asyncio
 from pathlib import Path
 
 from fastapi import FastAPI, Request, HTTPException
@@ -592,7 +592,10 @@ async def generate(request: Request):
             "subject": book,
         }
 
-        result_path = pl.process_passage(
+        # ★ process_passage는 동기(blocking) 함수 — 그대로 호출하면 이벤트 루프가 멈춰
+        #   다른 요청(서술형 생성 등)이 전부 대기/타임아웃된다. 별도 스레드에서 실행.
+        result_path = await asyncio.to_thread(
+            pl.process_passage,
             passage=passage_text,
             meta=meta,
             passage_id=ck,

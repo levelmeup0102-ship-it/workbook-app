@@ -746,15 +746,23 @@ async function loadPassages() {
     PASSAGES_DATA = await res.json();
     PASSAGES_DATA = sortPassagesData(PASSAGES_DATA);
     updateBookSelect();
-    if (prevBook) {
-      document.getElementById('sel-book').value = prevBook;
-      onBookChange();
+
+    // ★ 선택된 교재가 아직 존재하는지 확인 후, 목록을 '항상' 다시 그린다.
+    //   예전에는 prevBook이 비어 있으면 onBookChange()를 건너뛰어
+    //   이전 교재의 지문 목록이 화면에 그대로 남는 문제가 있었음.
+    const _sel = document.getElementById('sel-book');
+    const _stillExists = prevBook && PASSAGES_DATA.some(p => p.book === prevBook);
+    _sel.value = _stillExists ? prevBook : '';
+    onBookChange();
+
+    if (_stillExists) {
       prevSelected.forEach((val, key) => {
         const cb = document.querySelector(`input[data-key="${key}"]`);
         if (cb) { selectedPassages.set(key, val); cb.checked = true; }
       });
-      updateSelCount(); updateGenerateBtn();
     }
+    updateSelCount(); updateGenerateBtn();
+    updateBookSelect();   // 라벨/드롭다운을 현재 선택과 동기화
     updateStats();
   } catch(e) { console.error(e); }
 }
@@ -1028,8 +1036,14 @@ function pickBook(book) {
   const sel = document.getElementById('sel-book');
   sel.value = book;
   closeBookPicker();
-  onBookChange();
-  updateBookSelect();
+  updateBookSelect();   // 라벨 먼저 동기화
+  try {
+    onBookChange();
+  } catch (e) {
+    console.error('[pickBook] 목록 렌더 실패', e);
+    document.getElementById('passage-list').innerHTML =
+      '<div style="padding:20px;text-align:center;color:#dc2626;">목록을 불러오지 못했습니다. 교재를 다시 선택해주세요.</div>';
+  }
 }
 
 function toggleBookPicker() {

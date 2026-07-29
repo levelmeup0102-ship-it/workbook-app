@@ -60,7 +60,7 @@ def _sb_post(path: str, rows: list, params: dict = None) -> list:
 
 # ★ 로직(generator/validator/prompts/renderer)을 고칠 때마다 +1 하면 전체 캐시가 무효화된다.
 #   _s02 = SD 문장중복 금지 + SD 0개 문항 제거 + SC 보기 12~18개 + 실패결과 캐시 금지
-_SEOSUL_VER = "_s02"
+_SEOSUL_VER = "_s03"
 
 def _cache_key(book, unit, pid, types):
     return f"{book}|{unit}|{pid}|{','.join(sorted(types))}|{_SEOSUL_VER}"
@@ -224,11 +224,16 @@ def _validate_sc(it: dict) -> List[str]:
     for t in bogi_tok:
         have[t] = have.get(t, 0) + 1
     for t, c in need.items():
+        if not re.fullmatch(r"[A-Za-z'\-]+", t):   # ★ 한글·숫자·기호는 보기에 넣지 않음
+            continue
         miss = c - have.get(t, 0)
         if miss > 0:
             it.setdefault("bogi", []).extend([t] * miss)
-    e = V.validate_arrangement(it["bogi"], it["answers"], False, False)
-    nb = len(it.get("bogi", []))
+   e = V.validate_arrangement(it["bogi"], it["answers"], False, False)
+        for lab, v in (it.get("answers") or {}).items():
+            if re.search(r"[가-힣]", str(v)):
+                e.append(f"[한글혼입] ({lab}) 정답에 한글이 있음: '{str(v)[:40]}' → 영어만 쓸 것")
+        nb = len(it.get("bogi", []))
     if nb < 12:
         e.append(f"[보기부족] 보기 {nb}개 → (A)(B) 정답 합계가 12~18단어가 되도록 더 긴 어구로 잡아라")
     elif nb > 18:

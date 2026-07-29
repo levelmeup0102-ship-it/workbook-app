@@ -59,7 +59,7 @@ def _sb_post(path: str, rows: list, params: dict = None) -> list:
         return r.json() if r.text else []
 
 # ★ 로직(generator/validator/prompts/renderer)을 고칠 때마다 +1 하면 전체 캐시가 무효화된다.
-#   _s03 = SC 정답/보기 한글 혼입 차단. _s02(SD 문장중복 금지 + SD 0개 문항 제거
+#   _s04 = SE 라벨 점프 수정(SA 개수에 맞춰 시작). _s03 = SC 정답/보기 한글 혼입 차단. _s02(SD 문장중복 금지 + SD 0개 문항 제거
 #          + SC 보기 12~18개 + 실패결과 캐시 금지) 누적분 포함
 _SEOSUL_VER = "_s04"
 
@@ -384,6 +384,9 @@ def _assemble_passage(sents, items, roles) -> List[str]:
     SE는 폐기 후 라벨을 다시 연속(C,D,E…)으로 재배열한다."""
     out = list(sents)
     blanked_sents = set()
+    # ★ SE 라벨 시작점: SA가 실제로 몇 개 살아남았는지에 맞춘다.
+    #   (SA가 (A) 하나만 남았는데 SE가 C부터 시작해 (B)가 비는 문제 방지)
+    _sa_item = next((x for x in items if x.get("type") == "SA"), None)
 
     def _sub1(text, surface, repl):
         new, n = re.subn(rf"(?<![A-Za-z]){re.escape(surface)}(?![A-Za-z])", repl, text, count=1)
@@ -442,8 +445,9 @@ def _assemble_passage(sents, items, roles) -> List[str]:
                 it.setdefault("_dropped", []).append(("SE", bl.get("label")))
         # 라벨 재배열(C,D,E…) + 본문 placeholder 갱신
         relabeled = []
+        _sa_n = len((_sa_item or {}).get("answers") or {})   # SA 폐기 후 남은 빈칸 수
         for i, bl in enumerate(kept):
-            newL = _LETTERS[2 + i]  # SE는 C부터
+            newL = _LETTERS[_sa_n + i]  # SA 다음 글자부터 (SA 2개면 C, 1개면 B, 0개면 A)
             if bl["label"] != newL:
                 out[bl["sent"]] = out[bl["sent"]].replace("{{%s}}" % bl["label"], "{{%s}}" % newL)
                 bl["label"] = newL

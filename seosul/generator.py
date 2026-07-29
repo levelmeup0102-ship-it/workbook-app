@@ -61,7 +61,7 @@ def _sb_post(path: str, rows: list, params: dict = None) -> list:
 # ★ 로직(generator/validator/prompts/renderer)을 고칠 때마다 +1 하면 전체 캐시가 무효화된다.
 #   _s03 = SC 정답/보기 한글 혼입 차단. _s02(SD 문장중복 금지 + SD 0개 문항 제거
 #          + SC 보기 12~18개 + 실패결과 캐시 금지) 누적분 포함
-_SEOSUL_VER = "_s03"
+_SEOSUL_VER = "_s04"
 
 def _cache_key(book, unit, pid, types):
     return f"{book}|{unit}|{pid}|{','.join(sorted(types))}|{_SEOSUL_VER}"

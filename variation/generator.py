@@ -544,8 +544,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s51 = Q3 오답 교차배치 프롬프트 정합 + 절대어 오탐(eliminate·every) 제거. _s50 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s51"
+    # _s52 = Q3 오답설계 전환(교차배치 폐기 → 5개 전부 유일 + 유의어 금지 + 매력적 오답 2·명백 오답 2). _s51 누적분 포함.
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s52"
 
 
 # ============ Supabase 캐시 ============

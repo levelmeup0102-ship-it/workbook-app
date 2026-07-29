@@ -577,3 +577,27 @@ def build_core_blank_prompt(first_sentence: str) -> str:
         '"core_blank_correct": <0-4>, '
         '"core_blank_explain": "<Korean one-line explanation>"}'
     )
+
+# ════════════════════════════════════════════════════════════════
+# 한글 해석 전용 프롬프트 (폴백)
+#   Q4 요약문·Q5 주제문은 영문을 2차로 재생성해 덮어쓴다. 그때 한글도 함께 받아야
+#   답지의 해석과 정답 영문이 같은 문장이 된다. LLM이 kr 키를 누락하면 이 프롬프트로
+#   번역만 따로 한 번 더 부른다. (렌더러가 kr이 비면 해석 줄 자체를 안 찍는다)
+# ════════════════════════════════════════════════════════════════
+TRANSLATE_SYS = (
+    "You translate one English sentence into natural Korean. "
+    "Output ONLY valid JSON, no markdown, no text outside JSON."
+)
+
+
+def build_translate_prompt(en_sentence: str) -> str:
+    return (
+        "Translate the sentence below into natural Korean.\n\n"
+        "[SENTENCE]\n" + en_sentence + "\n\n"
+        "[RULES]\n"
+        "- Translate THIS sentence only — do not summarize, do not add, do not omit.\n"
+        "- PLAIN declarative style (~한다/~이다), never honorific (~합니다/~입니다).\n"
+        "- Natural Korean that a high school student reads easily.\n\n"
+        "[OUTPUT JSON]\n"
+        '{"kr": "<Korean translation>"}'
+    )

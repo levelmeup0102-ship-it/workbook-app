@@ -84,6 +84,27 @@ Everything you generate must reflect that whole-passage understanding:
      → bogi MUST include 'the' TWICE, not once!
    - Hyphenated words like "south-facing" stay as ONE token (don't split into "south" + "facing")
 
+3-0. **Q1 TOPIC OPTIONS — 평가원 주제 유형 (수능 23번 스타일)**:
+   ★ The CORRECT option must express the passage's CONCLUSION — not its opening definition,
+     and not a concessive aside ("X has its place, ...").
+     TEST: read the LAST sentence of the passage. If it says "The problem with X is Y",
+     the correct topic must carry that problem. A topic drawn from the opening definition
+     or from the concession is a DISTRACTOR, never the answer.
+   ★ If the passage has a CONTRAST AXIS (deep work vs shallow work, individual vs collective),
+     the correct option must reflect BOTH sides or the tension between them.
+     An option naming only one side is a PARTIAL statement = distractor.
+   - FORM: a noun phrase — "the + abstract noun + of/in ...". 8-16 words. NOT a full sentence.
+   - VOCABULARY: 평가원 수준 추상명사 — necessity, limitation, trade-off, prerequisite,
+     consequence, interplay, paradox, constraint, prevalence, displacement.
+     Avoid flat basics (importance, benefit, way, method) unless genuinely the most precise word.
+   - THE 4 DISTRACTORS must each fail for a DIFFERENT, checkable reason. Do NOT write 5 near-synonyms:
+     (a) PARTIAL     — true, but covers only part of the passage (e.g. only the opening definition)
+     (b) REVERSED    — states the opposite of what the passage claims
+     (c) UNMENTIONED — plausible in general, but the passage never claims it
+     (d) OVERSTATED  — pushes a passage claim to an absolute ("all", "always", "entirely", "eliminate")
+   - Each distractor must reuse passage vocabulary so it stays attractive, but must be refutable by a
+     SPECIFIC sentence. If you cannot name the sentence that refutes it, rewrite it.
+
 3-1. **Q3 CORE_BLANK_TARGET MUST BE AT LEAST 3 WORDS**:
    - core_blank_target is the phrase that gets replaced by a blank in Q3
    - It MUST be at least 3 words (a meaningful phrase, not a single word)
@@ -213,6 +234,25 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
 2. **GIVEN SENTENCE**: Pick a key transition/summary sentence FROM the passage. Remove it. The sentence-gap where it was removed must be marked by <MARK(position_correct+1)>. So if position_correct=2, then MARK3 marks the gap where given_sentence belongs. position_correct MUST be a valid index: 0..(position_count-1).
    - ★★ VERIFICATION: putting given_sentence back at the position_correct gap MUST reproduce the ORIGINAL passage word-for-word. Count the gaps carefully — position_correct is 0-based, and MARK(position_correct+1) is the EXACT gap the sentence was removed from. A wrong index here makes the answer wrong, so double-check by mentally reinserting it.
 
+1-9. **★ Q2 IS A TITLE QUESTION, NOT A TOPIC QUESTION — 평가원 제목 유형 (수능 24번 스타일)**:
+   ★ Type A (same passage) already asks for the 주제 as a descriptive noun phrase.
+     Type B asks for the 제목. Same argument, different demand — so the options must LOOK different.
+     If your Q2 options read like "the importance of ...", you have written topic options. Rewrite them.
+   - FORM: a real title. 4-10 words. Capitalize the major words.
+     Use these three shapes and MIX AT LEAST TWO of them across the five options:
+       (a) COLON     — "Deep Work: The Engine of Genuine Value"
+       (b) QUESTION  — "Why Does Constant Busyness Yield So Little?"
+       (c) GERUND / IMPERATIVE — "Escaping the Trap of Shallow Work"
+   - A title may be FIGURATIVE or COMPRESSED where a topic must be literal
+     (trap, engine, price, cost, myth, illusion, treadmill). That is what makes it a title.
+   - ★ NEVER begin an option with "The importance of" / "The necessity of" / "The role of" /
+     "The benefits of" / "The need for" / "The difficulty of" — those are topic forms, not titles.
+   - The CORRECT title must still carry the passage's CONCLUSION and its contrast axis —
+     the same standard as the topic question. A catchy title that misses the argument is WRONG.
+     Read the last sentence of the passage; the title must be consistent with it.
+   - THE 4 DISTRACTORS use the same four failure modes (PARTIAL / REVERSED / UNMENTIONED / OVERSTATED)
+     and must ALL be written as titles too — never mix a topic-form option in among titles.
+
 2-0. **★★★ CSAT Q40-STYLE SUMMARY DESIGN (applies to Q3 options AND Q4 blanks) ★★★**
    The summary sentence and its blanks must follow the Korean CSAT (수능) #40 summary-question style. Study these authentic patterns:
    - Passage "all other animals use one call for one message" → (A)=represents/(B)=fixed ("each call REPRESENTS a different message ... a FIXED set of sounds")
@@ -325,7 +365,7 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
   "position_count": <4 or 5 — how many markers/choices this question has; 5 normally, 4 only if passage too short>,
   "position_correct": <0-based index into the markers (0..position_count-1) — which gap the given_sentence belongs at>,
   "position_explain": "<Korean explanation>",
-  "topic_options": ["<5 topic options in English>"],
+  "topic_options": ["<5 TITLE options in English — 4-10 words each, capitalized, mix colon/question/gerund forms>"],
   "topic_correct": <0-4>,
   "summary_template": "<English summary with (A) and (B) placeholders>",
   "summary_template_kr": "<Korean translation of the summary sentence with correct (A)/(B) filled in — use PLAIN declarative style ~한다/~이다, NEVER honorific ~합니다/~입니다>",

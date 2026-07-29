@@ -329,32 +329,33 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
    (d) ★ DISTRACTORS must be the SAME part of speech and individually plausible, but each must FAIL the passage's logic — NOT mere synonyms/antonyms of the answer. Avoid 5 near-synonyms (manage/control/handle/regulate/direct) — that makes the answer guessable. Mix in words that fit grammar but contradict or overstate the passage.
    (e) ★ WORD LEVEL = GRE/upper-CSAT abstract vocabulary (finite, fixed, controllability, manageability, intensify, diminish, constrain, reciprocal, provisional). No basic words (increase, reduce, manage, activate).
 
-2-1. **Q3 SUMMARY_OPTIONS — EACH SLOT MUST BE A SINGLE WORD ONLY**:
-   - Q3 = Korean college entrance exam style summary blank question (객관식)
-   - **summary_template** is a one-sentence ABSTRACT summary of the passage with (A) and (B) placeholders on the LOGICAL CORE (see 2-0)
-   - **Each (A) and each (B) in summary_options MUST be exactly ONE single word** — NOT a phrase
-   - All 5 (A) values must be DIFFERENT single words (one correct + 4 distractors); the correct one is a PARAPHRASE, not a passage word
-   - All 5 (B) values must be DIFFERENT single words (one correct + 4 distractors)
-   - Content words only (nouns, adjectives, verbs) — never articles or prepositions alone
-   
-   ⚠️ Example GOOD (CSAT Q40 style — abstract, paraphrased, logic-core blanks):
-   ```
-   "summary_template": "The (A) of synthetic ingredients may (B) the common assumption that natural ingredients are safer.",
-   "summary_options": [
-     ["controllability", "challenge"],   ← CORRECT: paraphrase of 'precisely controlled' + logic verb
-     ["affordability",   "support"],
-     ["accessibility",   "question"],
-     ["predictability",  "intensify"],
-     ["manageability",   "reverse"]
-   ]
-   ```
-   (Note: 'controllability' does NOT appear in the passage — it's an abstraction of "precisely controlled". 'challenge' = the logical function, not a copied word.)
-   
-   ⚠️ Example BAD (phrases instead of single words):
-   ```
-   ["south-facing garden beds", "flat stones from beach"]
-   ← WRONG! Each must be 1 word only.
-   ```
+2-1. **Q3 SUMMARY_OPTIONS — SINGLE WORDS + 교차 배치**:
+   - Each (A) and each (B) value MUST be exactly ONE single word — never a phrase.
+   - Content words only (nouns, adjectives, verbs).
+
+   ★★★ 교차 배치 — MANDATORY.
+   If all five (A) values are different AND all five (B) values are different, knowing
+   just (A) determines the answer. The student never checks (B). That is a broken question.
+
+   - The CORRECT (A) word MUST appear in at least 2 of the five rows.
+   - The CORRECT (B) word MUST appear in at least 2 of the five rows.
+   - But the COMBINATION (A,B) must be unique to the correct row.
+   - Aim for 3-4 distinct (A) words and 3-4 distinct (B) words (NOT 5 and 5).
+
+   GOOD — correct answer is the third row:
+     ["discipline", "achievement"]
+     ["immersion", "repetition"]
+     ["immersion", "achievement"]
+     ["supervision", "productivity"]
+     ["repetition", "recognition"]
+   (A)=immersion appears twice, (B)=achievement appears twice. Both slots must be reasoned.
+
+   BAD — every word unique, so (A) alone gives it away:
+     ["dedication","progress"] ["focus","efficiency"] ["immersion","achievement"]
+     ["attention","productivity"] ["engagement","outcome"]
+
+   BAD — phrases instead of single words:
+     ["south-facing garden beds", "flat stones from beach"]
 
 2-2. **★ CRITICAL: Q3 (summary_options) AND Q4 (blank_A/blank_B) ARE COMPLETELY SEPARATE QUESTIONS!**
    - Q3 = OBJECTIVE choice question with SHORT single-word options for (A)(B)

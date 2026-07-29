@@ -10,6 +10,8 @@ import os
 import re
 import base64
 
+ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+
 
 def shuffle_bogi(bogi, seed_str=""):
     seed_int = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)

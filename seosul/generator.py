@@ -15,7 +15,7 @@ from . import validator as V
 from . import prompts as P
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
+CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5")
 ANTHROPIC_VERSION = "2023-06-01"
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY", "")
@@ -87,7 +87,7 @@ def cache_set(book: str, unit: str, pid: str, types: List[str], data: dict) -> N
 
 
 # ---------- Claude ----------
-def _call_claude(prompt: str, max_tokens: int = 1500, _tries: int = 4) -> str:
+def _call_claude(prompt: str, max_tokens: int = 8000, _tries: int = 4) -> str:
     """Anthropic 호출. 일시적 오류(429/5xx, 또는 overloaded 류 400)는 지수 백오프로 재시도.
     이걸로 07번처럼 '일시 400 → 유형 통째 드롭'이 사라진다."""
     if not ANTHROPIC_API_KEY:
@@ -108,7 +108,7 @@ def _call_claude(prompt: str, max_tokens: int = 1500, _tries: int = 4) -> str:
                                  or "overloaded" in body.lower() or "rate_limit" in body.lower())
                     if transient and attempt < _tries - 1:
                         time.sleep(min(2 ** attempt * 1.5, 12)); last = body; continue
-                    r.raise_for_status()
+                    raise RuntimeError(f"Anthropic {r.status_code}: {body[:400]}")
                 return "".join(b.get("text", "") for b in r.json().get("content", []))
         except (httpx.TransportError, httpx.TimeoutException) as e:
             last = str(e)

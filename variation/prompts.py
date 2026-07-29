@@ -329,30 +329,45 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
    (d) ★ DISTRACTORS must be the SAME part of speech and individually plausible, but each must FAIL the passage's logic — NOT mere synonyms/antonyms of the answer. Avoid 5 near-synonyms (manage/control/handle/regulate/direct) — that makes the answer guessable. Mix in words that fit grammar but contradict or overstate the passage.
    (e) ★ WORD LEVEL = GRE/upper-CSAT abstract vocabulary (finite, fixed, controllability, manageability, intensify, diminish, constrain, reciprocal, provisional). No basic words (increase, reduce, manage, activate).
 
-2-1. **Q3 SUMMARY_OPTIONS — SINGLE WORDS + 교차 배치**:
+2-1. **Q3 SUMMARY_OPTIONS — 평가원 40번 오답 설계**:
    - Each (A) and each (B) value MUST be exactly ONE single word — never a phrase.
    - Content words only (nouns, adjectives, verbs).
 
-   ★★★ 교차 배치 — MANDATORY.
-   If all five (A) values are different AND all five (B) values are different, knowing
-   just (A) determines the answer. The student never checks (B). That is a broken question.
+   ★★ ALL FIVE (A) values must be DIFFERENT words. ALL FIVE (B) values must be DIFFERENT words.
+      Never repeat a word in the same column.
 
-   - The CORRECT (A) word MUST appear in at least 2 of the five rows.
-   - The CORRECT (B) word MUST appear in at least 2 of the five rows.
-   - But the COMBINATION (A,B) must be unique to the correct row.
-   - Aim for 3-4 distinct (A) words and 3-4 distinct (B) words (NOT 5 and 5).
+   ★★ NO SYNONYMS within a column. If two (A) options mean the same thing to a student
+      (e.g. "immersion" and "absorption"), the question becomes unfair — both look correct.
+      Each of the five must be distinguishable IN MEANING, not just in spelling.
+
+   ★★★ 난이도는 오답의 매력도로 만든다 — 단어를 겹치지 말고, 오답을 그럴듯하게 써라.
+   In EACH column, build the five words like this:
+
+     - 1 = the CORRECT word
+     - 2 = PLAUSIBLE distractors — words that fit the passage's topic and could reasonably
+           belong in that slot. A student cannot rule these out from the word alone;
+           they must check the OTHER slot or re-read the passage.
+     - 2 = CLEARLY WRONG — an antonym of the correct word, or a concept the passage
+           never raises. These are eliminated once the passage is understood.
+
+   So (A) narrows the field to about three rows, and (B) settles it. Both slots get used.
+
+   Alternate which column carries the harder decision from item to item, so students
+   cannot learn a pattern (sometimes (A) is the tough call, sometimes (B)).
 
    GOOD — correct answer is the third row:
-     ["discipline", "achievement"]
-     ["immersion", "repetition"]
-     ["immersion", "achievement"]
-     ["supervision", "productivity"]
-     ["repetition", "recognition"]
-   (A)=immersion appears twice, (B)=achievement appears twice. Both slots must be reasoned.
+     ["rigidity",      "suppression"]     (A) antonym, eliminated
+     ["immersion",     "recognition"]     (A) plausible, decided by (B)
+     ["concentration", "achievement"]     CORRECT
+     ["engagement",    "repetition"]      (A) plausible, decided by (B)
+     ["supervision",   "stimulation"]     (A) unmentioned, eliminated
+   Five different (A) words, five different (B) words, no repeats, no synonym pairs.
 
-   BAD — every word unique, so (A) alone gives it away:
-     ["dedication","progress"] ["focus","efficiency"] ["immersion","achievement"]
-     ["attention","productivity"] ["engagement","outcome"]
+   BAD — a word repeats in a column:
+     [["narrative","validation"], ["narrative","disclosure"], ...]
+
+   BAD — synonyms in the same column (both look right):
+     [["immersion", ...], ["absorption", ...], ["engagement", ...]]
 
    BAD — phrases instead of single words:
      ["south-facing garden beds", "flat stones from beach"]
@@ -454,7 +469,10 @@ VERIFY BEFORE OUTPUT:
 - topic_writing_bogi has same word count as topic_writing_answer (excluding punctuation)
 - Same words (case-insensitive) appear in bogi and the answer
 - ★ Every (A) and (B) in summary_options is EXACTLY ONE WORD (no spaces, no phrases!)
-- ★ All five (A) values are different from each other; all five (B) values are different
+- ★ All five (A) values are different words; all five (B) values are different words.
+  No word repeats within a column, and no two words in a column are synonyms.
+- ★ In each column: 1 correct + 2 plausible distractors + 2 clearly wrong (antonym or
+  unmentioned). Check this count before you output.
 
 Return ONLY the JSON object."""
 

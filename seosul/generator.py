@@ -224,7 +224,13 @@ def _validate_sc(it: dict) -> List[str]:
         miss = c - have.get(t, 0)
         if miss > 0:
             it.setdefault("bogi", []).extend([t] * miss)
-    return V.validate_arrangement(it["bogi"], it["answers"], False, False)
+        e = V.validate_arrangement(it["bogi"], it["answers"], False, False)
+    nb = len(it.get("bogi", []))
+    if nb < 12:
+        e.append(f"[보기부족] 보기 {nb}개 → (A)(B) 정답 합계가 12~18단어가 되도록 더 긴 어구로 잡아라")
+    elif nb > 18:
+        e.append(f"[보기과다] 보기 {nb}개 → 18개 이하가 되도록 어구를 줄여라")
+    return e
 
 
 def generate_set(book: str, unit: str, pid: str, types: List[str],

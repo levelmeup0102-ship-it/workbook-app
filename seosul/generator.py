@@ -58,7 +58,7 @@ def _sb_post(path: str, rows: list, params: dict = None) -> list:
         r.raise_for_status()
         return r.json() if r.text else []
 
-_SEOSUL_VER = "_s01"
+_SEOSUL_VER = "_s02"
 
 def _cache_key(book, unit, pid, types):
     return f"{book}|{unit}|{pid}|{','.join(sorted(types))}|{_SEOSUL_VER}"
@@ -224,7 +224,7 @@ def _validate_sc(it: dict) -> List[str]:
         miss = c - have.get(t, 0)
         if miss > 0:
             it.setdefault("bogi", []).extend([t] * miss)
-        e = V.validate_arrangement(it["bogi"], it["answers"], False, False)
+    e = V.validate_arrangement(it["bogi"], it["answers"], False, False)
     nb = len(it.get("bogi", []))
     if nb < 12:
         e.append(f"[보기부족] 보기 {nb}개 → (A)(B) 정답 합계가 12~18단어가 되도록 더 긴 어구로 잡아라")
@@ -311,6 +311,9 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
                 else:
                     clean.append(e); seen.add(si)
             it["errors"] = clean
+
+    items = [it for it in items
+             if not (it.get("type") == "SD" and not it.get("errors"))]
 
     # 라벨 강제 배정 (SA=A,B / SE=C,D,E … 충돌·괄호 제거)
     _normalize_labels(items)

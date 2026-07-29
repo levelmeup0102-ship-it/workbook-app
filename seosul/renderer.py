@@ -23,6 +23,27 @@ def shuffle_bogi(bogi, seed_str=""):
             return shuffled
     return shuffled
 
+
+# ★ SD 해설 백스톱 — 출제자 시점 표현이 학생 답지에 나가는 것을 코드가 막는다.
+#   프롬프트에서 이미 금지했지만, 모델이 어기면 여기서 걸러 category로 대체한다.
+_WHY_BAN = ("오류", "삽입", "출제", "일부러", "의도적", "정답은", "만들었", "바꿔", "넣었")
+
+
+def _clean_why(e: dict) -> str:
+    """'{wrong} → {right} (문법 규칙명)' 형식을 코드가 강제한다.
+    1회독 pipeline.py의 'error->original(reason)' 형식과 같은 원리."""
+    why = str(e.get("why", "") or "").strip()
+    # 모델이 why 안에 화살표·단어 대조를 넣었으면 규칙명만 남기도록 잘라낸다
+    why = re.split(r"[→>]|->", why)[0].strip() if ("→" in why or "->" in why) else why
+    if (not why) or any(w in why for w in _WHY_BAN) or len(why) > 30:
+        why = str(e.get("category", "") or "어법").strip()
+    wrong = e.get("wrong", "")
+    right = e.get("right", "")
+    if wrong and right:
+        return f'{wrong} → {right} ({why})'
+    return why
+
+
 def _style() -> str:
     with open(os.path.join(ASSET_DIR, "var_style.css"), encoding="utf-8") as f:
         return f.read()
@@ -204,9 +225,8 @@ def _render_answer(s: dict) -> str:
                 blk.append(f'<div class="grammar-note"><b>구조</b> {it["structure"]}</div>')
         elif it["type"] == "SD":
             for i, e in enumerate(it["errors"], 1):
-                why = e.get("why", "") or f'{e.get("wrong","")} → {e.get("right","")}'
                 blk.append(f'<div class="sd-ans"><span class="sd-n">{chr(9311+i)}</span>'
-                           f'<span class="sd-why">{why}</span></div>')
+                           f'<span class="sd-why">{_clean_why(e)}</span></div>')
         elif it["type"] == "SE":
             cells = "".join(f'<span class="lab">({b["label"]})</span>'
                             f'<span class="av">{b["answer"]}</span>'

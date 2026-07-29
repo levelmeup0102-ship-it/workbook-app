@@ -84,7 +84,9 @@ Everything you generate must reflect that whole-passage understanding:
      → bogi MUST include 'the' TWICE, not once!
    - Hyphenated words like "south-facing" stay as ONE token (don't split into "south" + "facing")
 
-3-0. **Q1 TOPIC OPTIONS — 평가원 주제 유형 (수능 23번 스타일)**:
+3-0. **Q1 TOPIC OPTIONS — 평가원 주제 유형 (수능 23번 실전 난도)**:
+
+   ## 정답 선지
    ★ The CORRECT option must express the passage's CONCLUSION — not its opening definition,
      and not a concessive aside ("X has its place, ...").
      TEST: read the LAST sentence of the passage. If it says "The problem with X is Y",
@@ -94,16 +96,51 @@ Everything you generate must reflect that whole-passage understanding:
      the correct option must reflect BOTH sides or the tension between them.
      An option naming only one side is a PARTIAL statement = distractor.
    - FORM: a noun phrase — "the + abstract noun + of/in ...". 8-16 words. NOT a full sentence.
-   - VOCABULARY: 평가원 수준 추상명사 — necessity, limitation, trade-off, prerequisite,
-     consequence, interplay, paradox, constraint, prevalence, displacement.
-     Avoid flat basics (importance, benefit, way, method) unless genuinely the most precise word.
-   - THE 4 DISTRACTORS must each fail for a DIFFERENT, checkable reason. Do NOT write 5 near-synonyms:
-     (a) PARTIAL     — true, but covers only part of the passage (e.g. only the opening definition)
-     (b) REVERSED    — states the opposite of what the passage claims
-     (c) UNMENTIONED — plausible in general, but the passage never claims it
-     (d) OVERSTATED  — pushes a passage claim to an absolute ("all", "always", "entirely", "eliminate")
-   - Each distractor must reuse passage vocabulary so it stays attractive, but must be refutable by a
-     SPECIFIC sentence. If you cannot name the sentence that refutes it, rewrite it.
+   - VOCABULARY: 평가원 수준 추상명사. Use words at this level:
+     displacement, erosion, susceptibility, contingency, reciprocity, precedence,
+     subordination, latitude, threshold, aggregation, prerequisite, trade-off,
+     interplay, paradox, constraint, prevalence, attenuation, primacy.
+     Avoid flat basics (importance, benefit, way, method, difficulty) unless genuinely most precise.
+
+   ## 오답 선지 — 이게 난이도를 결정한다
+   ★★ ALL FOUR DISTRACTORS MUST BE ATTRACTIVE. A distractor that can be eliminated WITHOUT
+     reading the passage is a failed distractor. Rewrite it.
+   ★★ ABSOLUTE WORDS ARE BANNED in every option: all, always, never, only, entirely,
+     completely, eliminate, totally, exclusively, invariably. A student spots these and
+     eliminates the option without reading. If you need to overstate, do it through the
+     CLAIM, not through a giveaway adverb.
+   ★★ Every distractor must use passage vocabulary. Never invent an unrelated topic.
+
+   Choose FOUR different failure modes from this list (do not use the same mode twice):
+
+   (1) PARTIAL — accurately reflects ONE sentence of the passage. Not false; simply not the thesis.
+       → "the cognitive demands that distinguish deep work from routine execution"
+   (2) CONCESSION PROMOTED — takes what the passage granted in passing and makes it the main claim.
+       → "the indispensable place of routine tasks alongside focused effort"
+   (3) SCOPE SHIFT — says about B what the passage said about A. Vocabulary is all from the passage.
+       → "the difficulty of replicating routine tasks across organizations"
+   (4) CAUSE-EFFECT REVERSED — swaps what produces what. Every word is correct; only the arrow flips.
+       → "how deep work gradually produces distraction-free environments"
+   (5) ★ ONE-WORD FLIP — identical to the correct answer except a SINGLE word reverses the direction.
+       This is the hardest and most valuable distractor. Include at least one.
+       Correct: "the erosion of meaningful output by pervasive shallow work"
+       → "the ENHANCEMENT of meaningful output by pervasive shallow work"
+       Flip axes: increase/decrease, enable/hinder, precede/follow, active/passive
+       ("shapes" vs "is shaped by"), prerequisite/byproduct, cause/symptom.
+   (6) MODALITY SHIFT — turns a description into an obligation, or a tendency into a rule.
+       → "the obligation to reserve each workday for uninterrupted concentration"
+   (7) LEVEL SLIP — generalizes a specific claim into a broad one, or narrows a general claim.
+       → "the general inefficiency of collaborative work in modern organizations"
+   (8) TRUE-THEN-FALSE — first half is straight from the passage, second half is not stated.
+       → "the cognitive strain of deep work and its consequent decline in job satisfaction"
+
+   ## 배치
+   - Include (5) ONE-WORD FLIP once.
+   - Include one of (1)/(2) — the "it's true, just not the point" kind.
+   - Include one of (3)/(4) — requires tracing the argument's direction.
+   - Include one of (6)/(7)/(8).
+   - For EACH distractor, you must be able to name the exact sentence that refutes it.
+     If you cannot, the distractor is unfair — rewrite it.
 
 3-1. **Q3 CORE_BLANK_TARGET MUST BE AT LEAST 3 WORDS**:
    - core_blank_target is the phrase that gets replaced by a blank in Q3
@@ -234,24 +271,49 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
 2. **GIVEN SENTENCE**: Pick a key transition/summary sentence FROM the passage. Remove it. The sentence-gap where it was removed must be marked by <MARK(position_correct+1)>. So if position_correct=2, then MARK3 marks the gap where given_sentence belongs. position_correct MUST be a valid index: 0..(position_count-1).
    - ★★ VERIFICATION: putting given_sentence back at the position_correct gap MUST reproduce the ORIGINAL passage word-for-word. Count the gaps carefully — position_correct is 0-based, and MARK(position_correct+1) is the EXACT gap the sentence was removed from. A wrong index here makes the answer wrong, so double-check by mentally reinserting it.
 
-1-9. **★ Q2 IS A TITLE QUESTION, NOT A TOPIC QUESTION — 평가원 제목 유형 (수능 24번 스타일)**:
+1-9. **★ Q2 IS A TITLE QUESTION — 평가원 제목 유형 (수능 24번 실전 난도)**:
+
+   ## 형태
    ★ Type A (same passage) already asks for the 주제 as a descriptive noun phrase.
-     Type B asks for the 제목. Same argument, different demand — so the options must LOOK different.
-     If your Q2 options read like "the importance of ...", you have written topic options. Rewrite them.
+     Type B asks for the 제목. Same argument, different demand — the options must LOOK different.
+     If your Q2 options read like "the importance of ...", you wrote topic options. Rewrite them.
    - FORM: a real title. 4-10 words. Capitalize the major words.
-     Use these three shapes and MIX AT LEAST TWO of them across the five options:
+     Use these three shapes and MIX AT LEAST TWO across the five options:
        (a) COLON     — "Deep Work: The Engine of Genuine Value"
        (b) QUESTION  — "Why Does Constant Busyness Yield So Little?"
        (c) GERUND / IMPERATIVE — "Escaping the Trap of Shallow Work"
    - A title may be FIGURATIVE or COMPRESSED where a topic must be literal
-     (trap, engine, price, cost, myth, illusion, treadmill). That is what makes it a title.
+     (trap, engine, price, myth, illusion, treadmill, mirage, tax). That is what makes it a title.
    - ★ NEVER begin an option with "The importance of" / "The necessity of" / "The role of" /
-     "The benefits of" / "The need for" / "The difficulty of" — those are topic forms, not titles.
-   - The CORRECT title must still carry the passage's CONCLUSION and its contrast axis —
-     the same standard as the topic question. A catchy title that misses the argument is WRONG.
-     Read the last sentence of the passage; the title must be consistent with it.
-   - THE 4 DISTRACTORS use the same four failure modes (PARTIAL / REVERSED / UNMENTIONED / OVERSTATED)
-     and must ALL be written as titles too — never mix a topic-form option in among titles.
+     "The benefits of" / "The need for" / "The difficulty of" — topic forms, not titles.
+
+   ## 정답 제목
+   - Must carry the passage's CONCLUSION and its contrast axis — same standard as the topic question.
+     A catchy title that misses the argument is WRONG. Check it against the last sentence.
+
+   ## 오답 제목 — 형태만 제목이고 실패 방식은 주제와 같다
+   ★★ ALL FOUR DISTRACTORS MUST BE ATTRACTIVE. If a title can be eliminated without reading
+     the passage, it failed. Rewrite it.
+   ★★ ABSOLUTE WORDS ARE BANNED: all, always, never, only, entirely, completely, eliminate,
+     totally, exclusively, invariably.
+   ★★ Every distractor must be written AS A TITLE (capitalized, 4-10 words) — never slip a
+     topic-form noun phrase in among them.
+
+   Use FOUR different failure modes, written as titles:
+   (1) PARTIAL          — "What Makes Deep Work Cognitively Costly"
+   (2) CONCESSION PROMOTED — "Why Routine Tasks Deserve Their Place"
+   (3) SCOPE SHIFT      — "Routine Work: The Skill Nobody Can Copy"
+   (4) CAUSE-EFFECT REVERSED — "How Focused Work Clears Away Distraction"
+   (5) ★ ONE-WORD FLIP  — correct: "Shallow Work: The Quiet Enemy of Real Output"
+                          → "Shallow Work: The Quiet ENGINE of Real Output"
+   (6) MODALITY SHIFT   — "Reserve Every Workday for Undivided Focus"
+   (7) LEVEL SLIP       — "The Modern Office and Its Vanishing Efficiency"
+   (8) TRUE-THEN-FALSE  — "Deep Work: Demanding, Rewarding, and Widely Attainable"
+
+   ## 배치
+   - Include (5) ONE-WORD FLIP once — the strongest distractor.
+   - Include one of (1)/(2), one of (3)/(4), and one of (6)/(7)/(8).
+   - For EACH distractor, name the sentence that refutes it. If you cannot, rewrite it.
 
 2-0. **★★★ CSAT Q40-STYLE SUMMARY DESIGN (applies to Q3 options AND Q4 blanks) ★★★**
    The summary sentence and its blanks must follow the Korean CSAT (수능) #40 summary-question style. Study these authentic patterns:

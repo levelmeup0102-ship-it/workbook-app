@@ -15,7 +15,7 @@ from . import validator as V
 from . import prompts as P
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5")
+CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
 ANTHROPIC_VERSION = "2023-06-01"
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY", "")

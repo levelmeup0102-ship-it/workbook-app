@@ -197,6 +197,11 @@ def _validate_sa(it: dict) -> List[str]:
             bset.add(t)
     e = V.validate_arrangement(it["bogi"], it["answers"], True, True)
     nb = len(it.get("bogi", []))
+    # ★ 단어 중복 불가 — 보기 개수와 정답 단어 개수가 1:1이어야 한다.
+    n_ans = len(ans_tok)
+    if nb != n_ans:
+        e.append(f"[개수불일치] 보기 {nb}개 ≠ 정답 단어 {n_ans}개 → 보기를 모두 한 번씩만 쓰도록 "
+                 f"(A)(B)를 다시 잡아라. 같은 단어가 두 번 필요한 어구는 빈칸으로 고르지 마라")
     if nb < 10:
         e.append(f"[보기부족] 보기 단어 {nb}개 → 10~20개가 되도록 더 긴 어구를 (A)(B)로 골라라")
     elif nb > 20:
@@ -331,6 +336,13 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
     # 라벨 강제 배정 (SA=A,B / SE=C,D,E … 충돌·괄호 제거)
     _normalize_labels(items)
 
+    # ★ SD는 '정확히 2곳'으로 확정한다. 3곳 이상 남았으면 앞의 2개만 쓴다.
+    #   (합성 전에 잘라야 본문에 주입되는 오류 수와 답지 개수가 어긋나지 않는다)
+    for it in items:
+        if it.get("type") == "SD" and len(it.get("errors") or []) > 2:
+            warnings.append(f"SD 오류 {len(it['errors'])}개 → 2개로 확정(나머지 미사용)")
+            it["errors"] = it["errors"][:2]
+
     # 지문 자리표시 합성 (빈칸/오류 주입)
     passage_sentences = _assemble_passage(sents, items, roles)
 
@@ -339,9 +351,9 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
     #    "틀린 곳 0군데" 지시문이 나가지 않는다.
     _before_n2 = len(items)
     items = [it for it in items
-             if not (it.get("type") == "SD" and not it.get("errors"))]
+             if not (it.get("type") == "SD" and len(it.get("errors") or []) < 2)]
     if len(items) < _before_n2:
-        warnings.append("SD 문항 제거(본문 합성 중 오류가 모두 폐기됨 → '0군데' 방지)")
+        warnings.append("SD 문항 제거(살아남은 오류가 2곳 미만 → 1군데/0군데 출제 방지)")
 
     s = {"passage_ref": {"book": book, "unit": unit, "pid": pid},
          "passage_sentences": passage_sentences, "roles": roles,
@@ -575,6 +587,7 @@ def _attach_meta(items, stypes) -> list:
         it["points"] = pts.get(t, "")
         if t == "SA":
             it["allow_inflect"] = True
+            it["allow_dup"] = False      # ★ 단어 중복 사용 금지
             labs = ", ".join(f"({k})" for k in (it.get("answers") or {}))
             it["instruction"] = (f"윗글의 빈칸 {labs}에 들어갈 적절한 말을 "
                                  f"&lt;보기&gt;의 단어를 사용하여 작성하시오.")

@@ -89,30 +89,98 @@ def prompt_SD(sentences, target_idx, allowed_gp: List[dict]) -> str:
 대상 문장(여기에만 오류 삽입, 빈칸 문장 제외): {target_idx}
 ★ '깨끗한' 어법 오류만 2곳 또는 3곳 만들어라(각각 다른 문장·다른 category).
    3개째가 억지스럽거나 금지 유형밖에 안 남으면 '2개만' 만들어라(억지로 3개 채우지 마라).
-아래 '권장 유형'에서만 골라 출제하고, 각 오류에 그 category를 반드시 적어라.
-서로 다른 category로 출제할 것(연속 동일 category 금지).
 
-★★ 절대 금지(출제하면 검증기가 자동 폐기한다 — 처음부터 만들지 마라):
-1) 관사(a/an/the) 오류.
-2) 어휘·철자 혼동: affect/effect, affecting/unaffected, rise/raise, lie/lay 등 '뜻이 다른 단어 바꿔치기'(어법 아님, 어휘라서 금지).
-3) 둘 다 맞는 문법: 지각/사역동사·help 뒤 원형 vs to V, 자·타동사 양용(increase/change/move) 등.
+═══════════════════════════════════════════════════════════
+★★★ 대원칙 — "거리 벌리기" (이것 하나가 난이도를 결정한다)
+═══════════════════════════════════════════════════════════
+수능·평가원 29번(어법)의 오답 선지는 '형태만 봐서는 못 고르고 문장 구조를 따져야'
+만들어진다. 그 비결은 판단 근거와 오류 지점 사이에 '거리'를 두는 것이다.
+
+  ✗ the problem are            (주어 바로 뒤 → 누가 봐도 보임)
+  ✓ sites devoted to sales often posts   (주어와 동사 사이에 수식어구 → 헷갈림)
+
+  ✗ can tapping               (조동사 바로 뒤 → 당연)
+  ✓ Hardly did soft drinks seemed to fit (도치 + 거리)
+
+  ✗ differently way           (부사가 바로 뒤 명사 수식 → 눈에 띔)
+  ✓ made possibly by 를 피하고, 수식 대상과 떨어진 자리를 골라라
+
+판단 근거(주어·선행사·수식 대상·병렬 짝)와 오류 지점이 '바로 붙어 있으면'
+그 오류는 절대 출제하지 마라. 사이에 전치사구·관계절·삽입구를 끼워 넣어라.
+
+═══════════════════════════════════════════════════════════
+★★★ 좋은 오류 실제 예시 — 이 수준으로 만들어라
+═══════════════════════════════════════════════════════════
+[수일치 — 거리 벌리기]
+  ✓ sites devoted to sales often posts   (주어 sites ↔ 동사 사이 수식어구)
+  ✓ designs that ... often lacks         (선행사와 동사를 멀리)
+  ✓ Age, experience, and environment all plays  (복합주어인데 단수동사)
+  ✓ energy ... each year have remained   (주어와 동사가 멀어 헷갈림)
+  ✓ only half uses                       (of consumers 생략 → 복수인데 단수동사)
+
+[준동사 — 본동사가 필요한 자리]
+  ✓ ideology stressing the importance    (stressed 필요 — 정동사 자리)
+  ✓ animation creating an image          (creates 필요 — 정동사 자리)
+
+[태/분사 — 능동 vs 수동]
+  ✓ found throwing away                  (thrown 필요 — 수동)
+  ✓ me cover in flour                    (covered 필요 — 지각동사+분사)
+  ✓ Internet sites which maintained by   (are 누락)
+
+[관계사 — 삽입구·전치사로 착각 유도]
+  ✓ said, quite dramatically, which the rule  (삽입구 뒤라 명사절 that을 which로 착각)
+  ✓ a saying which                       (동격 that vs which)
+  ✓ the main reason which people show up (1형식에 관계대명사 삽입)
+  ✓ it's not the work we do what inspires (강조구문 what→that)
+  ✓ dictator of that we will pass        (전치사 뒤 that vs what)
+
+[지칭]
+  ✓ wedded to them                       (the hypothesis → it인데 them으로)
+
+[도치]
+  ✓ never it is the ultimate             (부정어구 도치 → never is it)
+
+[관용·구문]
+  ✓ the world where we live in           (관계부사 + 전치사 중복)
+  ✓ It takes 시간 becoming                (to become이 맞음)
+  ✓ devoted to produce                   (전치사 to → producing)
+  ✓ encourage O indulging                (encourage + O + to V)
+
+═══════════════════════════════════════════════════════════
+★★★ 절대 금지 (출제하면 검증기가 자동 폐기한다 — 처음부터 만들지 마라)
+═══════════════════════════════════════════════════════════
+1) 관사(a/an/the) 오류.  ✗ for athlete to learn / a informations
+2) 어휘·철자 혼동(어법이 아니라 어휘).
+   ✗ affect↔effect / avoid↔above / principal↔principle / rise↔raise / lie↔lay
+   ★ affect / effect / affecting / unaffected 는 어떤 형태로도 출제 금지.
+3) 둘 다 맞는 문법.
+   ✗ 지각동사 + O + V / V-ing (see him run / see him running 둘 다 맞음)
+   ✗ help + O + V / to V     ✗ 사역동사 수동태 + V / to V
+   ✗ 자·타동사 양용 (shift / increase / decrease / change / move / open / close)
+   → 틀린 출제포인트여도 어색하지 않으면 출제 금지.
 4) 병렬 구조에서 '바로 옆' 항목을 바꾸는 오류.
-5) 조동사/to 바로 뒤를 원형이 아닌 형태로 바꾸는 너무 쉬운 오류.
-6) ★ '근접 수일치': 주어 명사 '바로 뒤'에 붙은 동사를 수일치 틀리게 하는 것(예: 'larger males is', 'their actions affects'). → 주어와 동사 사이에 수식어구(전치사구·관계절 등)로 '거리를 벌린' 수일치만 출제하라.
-★★ 오류는 반드시 '서로 다른 문장'에 하나씩 배치하라. 같은 sent 번호를 두 번 쓰면 뒤엣것은 자동 폐기되어 문제가 성립하지 않는다. errors 배열의 sent 값은 전부 달라야 한다.
-★★ 목록 2)의 어휘 혼동을 특히 주의하라. affect / effect / affecting / unaffected 는 어떤 형태로도 출제하지 마라.
+   ✗ mildly and wet / blended and accumulating / grow and scaling
+5) 조동사·동사·to 바로 뒤를 원형이 아닌 형태로 바꾸는 오류.
+   ✗ can tapping / may planting / continue work / to being able
+6) 근접 수일치 — 주어 명사 '바로 뒤' 동사.
+   ✗ the rate increase / the problem are / larger males is
+7) 동사 바로 뒤 which로 명사절 that 묻기.
+   ✗ heard which it takes / indicate which the majority / find which the computer
+8) 선행사 바로 앞 + what.
+   ✗ factors what get us / farm what would grow / styles what are
+9) 바로 뒤 수식.  ✗ differently way / True listen
+10) 전치사 관용 쓰임.  ✗ interested at / information in foods / protection from↔against
+    (단, 전치사+관계대명사 in which / to which 는 좋은 출제 포인트)
+11) 복합관계대명사 뒤 that 중복.  ✗ whatever that he was selling
+12) 문법 패턴이 공식처럼 뻔한 것.  ✗ for anyone trusting / the only reason for + to V
 
-★ 권장(좋은) 유형 — 이런 걸 우선 출제하라:
-- [수일치] 주어와 동사 사이에 수식어가 끼어 거리가 있는 수일치 (The number of X ... are→is).
-- [준동사] 본동사가 필요한 자리에 분사가 온 오류 (stressing→stressed 처럼 정동사 필요).
-- [태/분사] 능동/수동 분사 (throwing→thrown).
-- [관계사] that/which/what 구분, 관계대명사 vs 관계부사.
-- [도치] 부정어·보어 도치 구문의 어순/수일치.
-- [지칭] 대명사 수·격 일치.
+★★ 오류는 반드시 '서로 다른 문장'에 하나씩 배치하라. 같은 sent 번호를 두 번 쓰면
+   뒤엣것은 자동 폐기되어 문제가 성립하지 않는다. errors 배열의 sent 값은 전부 달라야 한다.
+★★ 같은 category를 두 번 쓰지 마라(수일치 2개, 관계사 2개 연속 금지).
+★ 고친형(right)은 '해당 대상 문장 원문에 글자 그대로 존재하는 단어'여야 한다
+  (검증기가 본문에서 그 단어를 찾아 오답으로 바꿔치기하므로, 원문에 없으면 통째로 폐기된다).
 
-★ 고친형(right)은 '해당 대상 문장 원문에 글자 그대로 존재하는 단어'여야 한다(검증기가 본문에서 그 단어를 찾아 오답으로 바꿔치기하므로, 원문에 없으면 그 오류는 통째로 폐기된다).
-
-권장 유형:
+DB 권장 유형:
 {wl}
 
 지문:
@@ -120,11 +188,11 @@ def prompt_SD(sentences, target_idx, allowed_gp: List[dict]) -> str:
 
 출력 JSON (gp_id는 쓰지 말 것, category로 표기):
 {{"type":"SD","errors":[
-  {{"sent":<번호>,"wrong":"<바뀌는 한 단어만(문장 전체 금지)>","right":"<원문에 그대로 있는 고친 한 단어>","category":"<권장유형 category>","why":"<문법 규칙 이름만. 15자 이내>"}}
+  {{"sent":<번호>,"wrong":"<바뀌는 한 단어만(문장 전체 금지)>","right":"<원문에 그대로 있는 고친 한 단어>","category":"<category>","why":"<문법 규칙 이름만. 15자 이내>"}}
 ]}}
-주의: wrong/right에는 '실제로 바뀌는 그 단어'만 넣어라(문장이나 긴 어구를 통째로 넣지 마라). 같은 문장에 오류 2개 금지.
+주의: wrong/right에는 '실제로 바뀌는 그 단어'만 넣어라(문장이나 긴 어구를 통째로 넣지 마라).
 ★★ why 작성 규칙 — 학생이 읽는 답지에 그대로 나가는 문장이다.
-- '문법 규칙 이름'만 짧게 적어라. 예: '주어-동사 수일치', '전치사 + 동명사', 'tend to + 동사원형', '지각동사 + 목적격보어'.
+- '문법 규칙 이름'만 짧게 적어라. 예: '주어-동사 수일치', '전치사 + 동명사', '정동사 자리', '수동 분사'.
 - 문장으로 쓰지 마라. 화살표(→)나 단어 대조를 why 안에 넣지 마라(코드가 따로 붙인다).
 - '오류', '삽입', '출제', '일부러', '의도적', '정답은', '만들었' 같은 출제자 시점 표현을 절대 쓰지 마라."""
 

@@ -58,7 +58,10 @@ def prompt_SC(sentences, spec) -> str:
 
 - 같은 단어를 정답에서 두 번 쓰면, 보기에도 그 단어를 '그 횟수만큼' 똑같이 넣어라
   (because/and/the 등 중복 주의).
-  
+
+★★ answers 와 bogi 에는 '영어만' 넣어라. 한글 설명·라벨·괄호주석을 정답이나 보기에
+   절대 섞지 마라(구조 설명은 오직 structure 필드에만 적는다).
+
 지문:
 {_numbered(sentences)}
 
@@ -117,9 +120,13 @@ def prompt_SD(sentences, target_idx, allowed_gp: List[dict]) -> str:
 
 출력 JSON (gp_id는 쓰지 말 것, category로 표기):
 {{"type":"SD","errors":[
-  {{"sent":<번호>,"wrong":"<바뀌는 한 단어만(문장 전체 금지)>","right":"<원문에 그대로 있는 고친 한 단어>","category":"<권장유형 category>","why":"<무엇을 무엇으로 고치는지 포함한 한 줄 설명. 예: 'after 뒤이므로 engage→engaging'>"}}
+  {{"sent":<번호>,"wrong":"<바뀌는 한 단어만(문장 전체 금지)>","right":"<원문에 그대로 있는 고친 한 단어>","category":"<권장유형 category>","why":"<문법 규칙 이름만. 15자 이내>"}}
 ]}}
-주의: wrong/right에는 '실제로 바뀌는 그 단어'만 넣어라(문장이나 긴 어구를 통째로 넣지 마라). 같은 문장에 오류 2개 금지. 설명(why)에 교정 근거와 '원형→고친형'을 간단히 적어라."""
+주의: wrong/right에는 '실제로 바뀌는 그 단어'만 넣어라(문장이나 긴 어구를 통째로 넣지 마라). 같은 문장에 오류 2개 금지.
+★★ why 작성 규칙 — 학생이 읽는 답지에 그대로 나가는 문장이다.
+- '문법 규칙 이름'만 짧게 적어라. 예: '주어-동사 수일치', '전치사 + 동명사', 'tend to + 동사원형', '지각동사 + 목적격보어'.
+- 문장으로 쓰지 마라. 화살표(→)나 단어 대조를 why 안에 넣지 마라(코드가 따로 붙인다).
+- '오류', '삽입', '출제', '일부러', '의도적', '정답은', '만들었' 같은 출제자 시점 표현을 절대 쓰지 마라."""
 
 
 def prompt_SE(sentences, target_idx, spec) -> str:
@@ -134,10 +141,14 @@ def prompt_SE(sentences, target_idx, spec) -> str:
 
 출력 JSON:
 {{"type":"SE","bogi":["<원형들 + 오답용 원형들(섞어서)>"],
- "blanks":[{{"label":"C","sent":<번호>,"base":"<원형>","answer":"<변형형>","note":"<품사 변화>"}}]}}
+ "blanks":[{{"label":"C","sent":<번호>,"base":"<원형>","base_pos":"<동사/명사/형용사/부사 중 하나>","answer":"<변형형>","note":"<품사 변화>"}}]}}
 규칙(어기면 검증기가 그 빈칸을 통째로 폐기한다 — 처음부터 지켜라):
 - ★ answer는 '대상 문장 원문에 글자 그대로 등장하는 그 단어'여야 한다. 본문에 없는 형태를 지어내지 마라(없으면 빈칸이 안 뚫려 폐기됨). 즉 '본문에 이미 파생형으로 쓰인 단어'를 골라 그 원형을 base로 제시하는 방식이다.
-- ★ base→answer는 '품사가 바뀌는' 진짜 파생이어야 한다. 단순 복수/3인칭 -s, -es, y→ies 같은 '굴절'은 금지(예: reduce→reduces, photograph→photographs 금지). 좋은 예: educate→education(동→명), simple→simply(형→부), adhere→adhering(동→동명사), evolutionary→evolutionarily(형→부).
+- ★ base_pos 에는 원형(base)의 품사를 반드시 적어라: 동사 / 명사 / 형용사 / 부사 중 하나. 이 값으로 굴절 허용 여부가 갈리므로 정확히 적어라.
+- ★ base가 '동사'이면 굴절도 허용한다. produce→produces(3인칭), adhere→adhering(동명사), prove→proved(과거/과거분사) 모두 정답으로 인정된다.
+- ★ base가 동사가 아니면 굴절은 금지다. photograph→photographs(명사 복수), strong→stronger(비교급)는 출제하지 마라.
+- ★ 어느 경우든 base와 answer의 품사가 '완전히 같은 파생'은 금지다(예: race→racialization 은 명사→명사라 불가).
+- 좋은 예: educate→education(동→명), simple→simply(형→부), nation→national(명→형), create→creative(동→형).
 - answer는 base와 반드시 달라야 한다(무변형 금지).
 - base는 사전 원형으로 적어라(answer의 어근과 일치해야 함).
 - ★ 오답(distractor): bogi에는 정답 원형들 외에 '지문에 실제로 등장하는 다른 내용어'(정답과 무관)를 원형으로 추가해, 보기 총 개수가 빈칸 개수의 약 1.5배가 되게 하라(예: 빈칸 4개 → 보기 6개). 오답도 '원형'으로 적어 섞어라(정답 티 안 나게)."""

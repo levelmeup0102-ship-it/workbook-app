@@ -333,6 +333,16 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
 
     # 지문 자리표시 합성 (빈칸/오류 주입)
     passage_sentences = _assemble_passage(sents, items, roles)
+
+    # ★★ _assemble_passage가 SD 오류를 '한 번 더' 폐기한다(빈칸문장/원문부재).
+    #    그래서 위쪽 0개 검사만으로는 부족하고, 합성 '이후'에 다시 걸러야
+    #    "틀린 곳 0군데" 지시문이 나가지 않는다.
+    _before_n2 = len(items)
+    items = [it for it in items
+             if not (it.get("type") == "SD" and not it.get("errors"))]
+    if len(items) < _before_n2:
+        warnings.append("SD 문항 제거(본문 합성 중 오류가 모두 폐기됨 → '0군데' 방지)")
+
     s = {"passage_ref": {"book": book, "unit": unit, "pid": pid},
          "passage_sentences": passage_sentences, "roles": roles,
          "single_passage": True, "items": _attach_meta(items, stypes),

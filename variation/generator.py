@@ -544,8 +544,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s53 = Q3 한쪽 흐림·한쪽 선명 구조(흐린 쪽에 유의어 2개 배치, 선명한 쪽이 결정). _s52 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s53"
+    # _s54 = A Q1 주제선지 형태 다양화(평가원 20선지 실측: the 0개·문두명사 5개 유일·7~12단어·구조 3종). _s53 누적분 포함.
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s54"
 
 
 # ============ Supabase 캐시 ============

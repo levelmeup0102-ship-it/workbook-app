@@ -927,29 +927,19 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
         # ★ Q3 오답 설계 — 정답 단어가 다른 선지에도 나타나야 '한쪽만 보고 찍기'를 막는다.
         #   (A) 5개가 전부 다르고 (B) 5개도 전부 다르면, 정답의 (A)만 알아도 답이 결정된다.
         #   정답 단어를 오답 행에도 한 번씩 흘려야 (A)(B)를 교차 확인하게 된다.
-        sc = data.get("summary_correct")
-        if isinstance(sc, int) and 0 <= sc < len(a_words) and len(a_words) == 5:
-            # ★ 'or'여야 한다. 한쪽만 유일해도 그쪽만 풀면 답이 결정되므로 교차 확인이 안 된다.
-            _na, _nb = a_words.count(a_words[sc]), b_words.count(b_words[sc])
-            if _na == 1 or _nb == 1:
-                _which = []
-                if _na == 1:
-                    _which.append(f"(A)'{a_words[sc]}'")
-                if _nb == 1:
-                    _which.append(f"(B)'{b_words[sc]}'")
-                errors.append(
-                    f"[{pid}] Q3 오답 설계 약함 — 정답 {'·'.join(_which)}가 선지에 한 번만 나온다. "
-                    f"그쪽만 풀면 답이 결정돼 교차 확인이 필요 없어진다. "
-                    f"정답의 (A)·(B) 단어가 각각 최소 2개 행에 등장하도록 배치할 것 "
-                    f"(단, (A,B) 조합은 정답 행에만)")
-
-        # 5개 (A) 모두 다른 단어, 5개 (B) 모두 다른 단어 (strict일 때만 체크)
-        #   ※ 위 교차 배치와 상충하므로, 교차 배치를 도입하면 이 검사는 완화한다.
+        # ★ (A)(B) 각각 5개 전부 다른 단어. 같은 단어 반복은 화면에서 눈에 띄고,
+        #   유의어를 섞으면 "이것도 맞잖아요" 하는 정답 시비가 생긴다.
+        #   난이도는 '단어를 겹치게' 만드는 게 아니라 '오답을 그럴듯하게' 만들어 확보한다.
+        #   → 각 자리마다 명백한 오답 2개 + 그럴듯한 것 3개 (프롬프트에서 강제).
         if strict:
-            if len(set(a_words)) < 3:
-                errors.append(f"[{pid}] Q3 summary_options의 (A) 값이 너무 겹침: {a_words}")
-            if len(set(b_words)) < 3:
-                errors.append(f"[{pid}] Q3 summary_options의 (B) 값이 너무 겹침: {b_words}")
+            if len(set(a_words)) < 5:
+                _dup = [w for w in set(a_words) if a_words.count(w) > 1]
+                errors.append(
+                    f"[{pid}] Q3 (A) 값이 중복됨 {_dup} — 5개 모두 서로 다른 단어여야 함: {a_words}")
+            if len(set(b_words)) < 5:
+                _dup = [w for w in set(b_words) if b_words.count(w) > 1]
+                errors.append(
+                    f"[{pid}] Q3 (B) 값이 중복됨 {_dup} — 5개 모두 서로 다른 단어여야 함: {b_words}")
 
     # ★ B Q2 주제 선지가 같은 지문 A Q1 주제 선지와 같은 명제인지 (A 결과가 있을 때만)
     #   같은 원문으로 A·B를 각각 만들다 보면 주제 명제가 겹쳐, 한쪽 답이 다른 쪽 힌트가 된다.

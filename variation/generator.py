@@ -15,7 +15,7 @@ from typing import Optional
 
 import httpx
 
-from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt, CORE_BLANK_SYS, build_core_blank_prompt
+from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt, CORE_BLANK_SYS, build_core_blank_prompt, TRANSLATE_SYS, build_translate_prompt
 from variation.validator import validate_a, validate_b, check_marker_positions, fill_boundary_dup, modal_no_verb
 
 
@@ -216,6 +216,9 @@ def _quote_ok(s: str) -> bool:
         return False
     if re.search(r'[,;:]', s):
         return False
+    # 대시(─ — –)도 배제. 하이픈(-)은 south-facing 같은 복합어라 허용한다.
+    if re.search(r'[\u2500\u2014\u2013]', s):
+        return False
     if s.count('"') % 2 != 0:
         return False
     if s.count('\u201c') != s.count('\u201d'):
@@ -339,6 +342,11 @@ def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?
             return None
         if modal_no_verb(v):
             return None
+        # ★ LLM 구절도 경계 검사를 거친다. 이게 없으면 LLM 픽이 우선 채택되면서
+        #   _clean_boundary_ok가 통째로 우회돼, 코드 픽에만 걸린 경계 규칙이 무의미해진다.
+        #   (거부되면 아래에서 코드 픽 후보가 대신 쓰이므로 항목 누락은 안 생긴다)
+        if not _clean_boundary_ok(v, texts[idx], strict=True):
+            return None
         return v
 
     order = sorted(range(len(texts)), key=lambda k: -len(texts[k].split()))
@@ -434,6 +442,8 @@ def pick_b_q4_blanks(full_summary, llm_a: str = "", llm_b: str = "", min_w: int 
         if not _quote_ok(v):
             return None
         if modal_no_verb(v):
+            return None
+        if not _clean_boundary_ok(v, hn, strict=True):   # ★ LLM 구절도 경계 검사 (A Q5와 동일)
             return None
         toks = hn.split(); pw = v.split()
         for i in range(len(toks) - len(pw) + 1):
@@ -534,8 +544,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s47 = 빈칸 구두점 제거 + (A)(B) 등장순 재배정 + 빈칸 간격 + 한글 해석 동기화. _s46 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s47"
+    # _s48 = 빈칸 대시 배제 + 한글 해석 번역 폴백 + LLM 구절도 경계 검사 통과 강제. _s47 누적분 포함.
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s48"
 
 
 # ============ Supabase 캐시 ============
@@ -624,6 +634,28 @@ def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000) -
             if block.get("type") == "text":
                 return block.get("text", "")
         raise RuntimeError(f"Claude 응답에 텍스트 없음: {data}")
+
+
+def _ensure_kr(en_sentence: str, kr_from_llm: str = "") -> str:
+    """영문 문장의 한글 해석을 확보한다.
+
+    2차 재생성이 kr을 함께 주면 그대로 쓰고, 누락했으면 번역 전용으로 한 번 더 부른다.
+    (렌더러가 `{% if ..._kr %}`로 조건부 출력하므로 빈 문자열이면 해석 자체가 사라진다.
+     '틀린 해석'도 안 되지만 '해석 없음'도 답지 구실을 못 한다.)"""
+    kr = str(kr_from_llm or "").strip()
+    if kr:
+        return kr
+    en = str(en_sentence or "").strip()
+    if not en:
+        return ""
+    try:
+        raw = call_claude(TRANSLATE_SYS, build_translate_prompt(en), max_tokens=400)
+        got = (extract_json_from_response(raw).get("kr") or "").strip()
+        if got:
+            return got
+    except Exception:
+        pass
+    return ""
 
 
 # ============ 유형 A 생성 ============
@@ -1022,8 +1054,7 @@ def generate_variation_b(
                     data["topic_writing_answer"] = _ts  # 집중 생성한 깔끔한 주제문으로 교체
                     # ★ 한글 해석도 같은 문장의 번역으로 함께 교체.
                     #   영문만 바꾸고 한글은 1차 호출 결과를 남겨두면 답지에서 서로 다른 문장이 된다.
-                    _tk = (_t.get("topic_sentence_kr") or "").strip()
-                    data["topic_writing_kr"] = _tk if _tk else ""
+                    data["topic_writing_kr"] = _ensure_kr(_ts, _t.get("topic_sentence_kr"))
             except Exception:
                 pass  # 실패하면 기존(한번에 만든) 주제문 유지
 
@@ -1041,8 +1072,7 @@ def generate_variation_b(
                     data["blank_A"] = _ba
                     data["blank_B"] = _bb
                     # ★ 요약문 해석도 같은 문장의 번역으로 함께 교체 (topic과 동일 이유).
-                    _sk = (_s.get("full_summary_kr") or "").strip()
-                    data["blank_summary_template_kr"] = _sk if _sk else ""
+                    data["blank_summary_template_kr"] = _ensure_kr(_fs, _s.get("full_summary_kr"))
             except Exception:
                 pass  # 실패하면 기존(한번에 만든) 요약문 유지
 

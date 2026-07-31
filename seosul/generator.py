@@ -262,7 +262,7 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
     sents = V.split_sentences(text)
     roles = allocate_roles(len(sents))
     roles = {t: roles[t] for t in roles if t in types}  # 선택 유형만
-    blank_sents = set(roles.get("SA", [])) | set(roles.get("SE", []))
+    blank_sents = set()   # 실제 생성 결과로 아래에서 채운다
 
     # 어법 화이트리스트: 블랙리스트(출제 금지) 제거
     allowed_gp = [g for g in gp_index.values()
@@ -270,41 +270,82 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
 
     items = []
     warnings = []
+    used_sents = set()          # ★ 앞 단계가 점유한 문장 (뒤 단계 프롬프트로 전달)
+
+    def _mark_used(it):
+        """생성된 문항이 실제로 점유한 문장 번호를 등록."""
+        t = it.get("type")
+        if t == "SA":
+            for _lab, m in (it.get("blanks") or {}).items():
+                if isinstance(m, dict) and isinstance(m.get("sent"), int):
+                    used_sents.add(m["sent"])
+        elif t == "SE":
+            for bl in (it.get("blanks") or []):
+                if isinstance(bl.get("sent"), int):
+                    used_sents.add(bl["sent"])
+        elif t == "SD":
+            for e in (it.get("errors") or []):
+                if isinstance(e.get("sent"), int):
+                    used_sents.add(e["sent"])
 
     def _try(typ, prompt_fn, validate_fn, *args):
         try:
-            items.append(_gen_with_repair(prompt_fn, validate_fn, *args))
+            it = _gen_with_repair(prompt_fn, validate_fn, *args)
+            items.append(it)
+            _mark_used(it)
         except Exception as e:
             warnings.append(f"{typ} 생략(자동 검증 미통과): {e}")
 
+    # ══════════════════════════════════════════════════════
+    #  생성 순서: 1) SA 본문빈칸 → 2) SE 어휘변형 → 3) SD 어법 → 4) SC 요약
+    #  앞 단계가 문장을 점유하면 뒤 단계는 그 문장을 피한다(겹침 폐기 원천 차단).
+    # ══════════════════════════════════════════════════════
+
+    # ---- 1) SA : 본문 빈칸 영작 (A)(B) ----
     if "SA" in types:
         _try("SA", P.prompt_SA, _validate_sa,
              sents, roles["SA"], stypes.get("SA", {}))
-    if "SC" in types:
-        _try("SC", P.prompt_SC, _validate_sc, sents, stypes.get("SC", {}))
-    if "SD" in types:
-        _try("SD", P.prompt_SD,
-             lambda it: V.validate_grammar_errors(it["errors"], gp_index, blank_sents,
-                                                  single_passage=True, sentences=sents),
-             sents, roles["SD"], allowed_gp)
+
+    # ---- 2) SE : 어휘 품사 변형 (C)(D)(E) ----
     if "SE" in types:
         try:
-            items.append(_gen_with_repair(
+            it = _gen_with_repair(
                 P.prompt_SE,
                 lambda it: V.validate_word_forms(it["blanks"], it["bogi"], set(roles["SE"]), sents),
-                sents, roles["SE"], stypes.get("SE", {})))
+                sents, roles["SE"], stypes.get("SE", {}), sorted(used_sents))
+            items.append(it); _mark_used(it)
         except Exception as e:
-            # ★ 유형 드롭 금지: 코드 기반 결정형 SE로 채운다(07번류 통째 누락 방지)
-            avoid = set(roles.get("SA", [])) | set(roles.get("SD", []))
-            fb = _fallback_se(sents, roles["SE"], avoid=avoid)
+            # ★ 유형 드롭 금지: 코드 기반 결정형 SE로 채운다
+            fb = _fallback_se(sents, roles["SE"], avoid=set(used_sents) | set(roles.get("SD", [])))
             if fb:
-                items.append(fb)
-                # 폴백이 빌린 문장을 SE 역할로 등록(위치/겹침 검증 일관성)
+                items.append(fb); _mark_used(fb)
                 roles["SE"] = sorted(set(roles.get("SE", [])) | {b["sent"] for b in fb["blanks"]})
-                blank_sents = set(roles.get("SA", [])) | set(roles.get("SE", []))
                 warnings.append(f"SE 폴백(결정형 생성 사용): {e}")
             else:
                 warnings.append(f"SE 생략(폴백도 불가): {e}")
+
+    # 여기까지가 '빈칸이 뚫린 문장'. SD는 이 문장들을 피해야 한다.
+    blank_sents = set(used_sents)
+
+    # ---- 3) SD : 어법 틀린 곳 (구문 재작성) ----
+    if "SD" in types:
+        _sd_targets = [i for i in roles.get("SD", []) if i not in blank_sents] or roles.get("SD", [])
+        _try("SD", P.prompt_SD,
+             lambda it: V.validate_grammar_errors(it["errors"], gp_index, blank_sents,
+                                                  single_passage=True, sentences=sents),
+             sents, _sd_targets, allowed_gp, sorted(blank_sents))
+
+    # ---- 4) SC : 요약문 빈칸 (본문 점유 없음, 맨 마지막) ----
+    if "SC" in types:
+        _prior = []
+        for it in items:
+            if it.get("type") == "SA":
+                _prior.append("- 본문 빈칸 영작: " + " / ".join((it.get("answers") or {}).values()))
+            elif it.get("type") == "SE":
+                _prior.append("- 어휘 품사 변형: " + ", ".join(
+                    str(b.get("answer", "")) for b in (it.get("blanks") or [])))
+        _try("SC", P.prompt_SC, _validate_sc,
+             sents, stypes.get("SC", {}), "\n".join(_prior))
 
     if not items:
         raise RuntimeError("모든 유형 생성 실패: " + "; ".join(warnings))
@@ -476,7 +517,8 @@ def _assemble_passage(sents, items, roles) -> List[str]:
             relabeled.append(bl)
         it["blanks"] = relabeled
 
-    # 3) SD — right가 대상 문장에 있고 그 문장이 빈칸 문장이 아닐 때만 주입. 아니면 폐기.
+    # 3) SD — ★ 구문 재작성 문장으로 통째 교체(rewritten). 없으면 기존 단어치환 방식.
+    #    한 문장에 하나씩만 들어가므로 sent 중복은 위쪽 필터가 이미 제거했다.
     for it in items:
         if it.get("type") != "SD":
             continue
@@ -485,7 +527,15 @@ def _assemble_passage(sents, items, roles) -> List[str]:
             sent = e.get("sent")
             if not isinstance(sent, int) or sent >= len(out) or sent in blanked_sents:
                 it.setdefault("_dropped", []).append(("SD", "빈칸문장/범위")); continue
-            new, ok = _sub1(out[sent], e.get("right", ""), e.get("wrong", ""))
+            rw = str(e.get("rewritten") or "").strip()
+            wrong = str(e.get("wrong") or "").strip()
+            # (a) 재작성 문장 방식 — wrong이 실제로 들어 있어야 채택
+            if rw and wrong and re.search(rf"(?<![A-Za-z]){re.escape(wrong)}(?![A-Za-z])", rw):
+                out[sent] = rw
+                kept.append(e)
+                continue
+            # (b) 폴백 — 원문에서 right를 찾아 wrong으로 치환(구버전 방식)
+            new, ok = _sub1(out[sent], e.get("right", ""), wrong)
             if ok:
                 out[sent] = new; kept.append(e)
             else:

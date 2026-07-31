@@ -497,8 +497,17 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
         if "<BLANK_B>" not in joined:
             errors.append(f"[{pid}] [CRITICAL] Q5 (B) 빈칸이 본문에 표시되지 않음 — blank_B 구절을 원문에서 찾지 못함 (구절을 원문 그대로 고를 것)")
 
+    # ★ Q3가 어휘 유형이면 그쪽을 검사하고, 핵심빈칸 검사는 건너뛴다.
+    if data.get("vocab_items"):
+        try:
+            from variation.vocab_q3 import validate_vocab as _vv
+            errors += _vv(data["vocab_items"], data.get("paragraphs", []), pid)
+        except Exception as _e:
+            errors.append(f"[{pid}] Q3 어휘 검증 예외: {_e}")
+
     # Q3 core_blank: 단어 수 최소 3 + <CORE_BLANK> 마커가 intro에 존재
-    if data.get("core_blank_target"):
+    #   ※ 어휘 유형으로 대체됐으면 core_blank는 없으므로 이 블록을 타지 않는다.
+    if data.get("core_blank_target") and not data.get("vocab_items"):
         try:
             cwc = len(data["core_blank_target"].split())
             min_cw = 2 if lenient else 3
@@ -506,7 +515,7 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
                 errors.append(f"[{pid}] Q3 core_blank_target 단어 수 부족 ({cwc}개 < {min_cw}개)")
         except (KeyError, AttributeError):
             pass
-        if "<CORE_BLANK>" not in data.get("intro", ""):
+        if "<CORE_BLANK>" not in data.get("intro", "") and not data.get("vocab_items"):
             errors.append(f"[{pid}] [CRITICAL] Q3 핵심빈칸이 지문에 표시되지 않음 — core_blank_target 구절을 intro(첫 문장)에서 찾지 못함 (구절을 첫 문장 원문 그대로 고를 것)")
         # ★ Q3 정답은 빈칸 원문(core_blank_target)의 패러프레이즈여야 함 — 글자 그대로 베끼면 거부 (strict만)
         opts = data.get("core_blank_options"); ci = data.get("core_blank_correct"); tgt = data.get("core_blank_target")

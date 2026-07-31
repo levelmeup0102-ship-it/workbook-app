@@ -297,6 +297,21 @@ def validate_grammar_errors(errors: List[dict], gp_index: Dict[int, dict],
         if e.get("sent") in seen_sent:
             errs.append(f"[중복문장] 문장{e.get('sent')}에 오류 2개")
         seen_sent.add(e.get("sent"))
+        # ★ 구문 재작성(rewritten) 검증 — 있으면 형식을 확인한다.
+        rw = str(e.get("rewritten") or "").strip()
+        wrong = str(e.get("wrong") or "").strip()
+        if rw:
+            if wrong and not re.search(rf"(?<![A-Za-z]){re.escape(wrong)}(?![A-Za-z])", rw):
+                errs.append(f"[재작성불일치] '{wrong}'가 rewritten 문장에 없음 → rewritten 안의 단어를 wrong으로 적어라")
+            si = e.get("sent")
+            if sentences is not None and isinstance(si, int) and 0 <= si < len(sentences):
+                ow = set(re.findall(r"[A-Za-z']+", sentences[si].lower()))
+                rwset = set(re.findall(r"[A-Za-z']+", rw.lower()))
+                if ow and len(ow & rwset) / len(ow) < 0.6:
+                    errs.append(f"[재작성과다] 문장{si} 재작성이 원문과 너무 다름 "
+                                f"(단어 공유 {len(ow & rwset)}/{len(ow)}) → 구조만 바꾸고 내용은 유지하라")
+            if len(wrong.split()) > 1:
+                errs.append(f"[wrong다중어] '{wrong}' → 바뀌는 단어 '하나'만 적어라")
         gp = (gp_index or {}).get(e.get("gp_id"))
         seen_cat.append(e.get("category") or (gp.get("category") if gp else None))
         if e.get("wrong") == e.get("right"):

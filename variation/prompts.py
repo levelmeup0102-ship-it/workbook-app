@@ -332,7 +332,7 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
    - ★★ VERIFICATION: putting given_sentence back at the position_correct gap MUST reproduce the ORIGINAL passage word-for-word. Count the gaps carefully — position_correct is 0-based, and MARK(position_correct+1) is the EXACT gap the sentence was removed from. A wrong index here makes the answer wrong, so double-check by mentally reinserting it.
 
 1-9. **★ Q2 IS A TITLE QUESTION — 평가원 제목 유형 (수능 24번)**:
- 
+
    ## 형태
    ★ Type A (same passage) asks for the 주제 as a noun phrase; Type B asks for the 제목.
      Same argument, different demand — the options must LOOK different.
@@ -346,11 +346,11 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
      (trap, engine, price, myth, illusion, treadmill, mirage, tax, signal).
    - ★ NEVER begin with "The importance of" / "The necessity of" / "The role of" /
      "The benefits of" / "The need for" / "The difficulty of".
- 
+
    ## 정답 제목
    - Carries the THESIS (check the last sentence) and the contrast axis.
      A vivid title that misses the argument is WRONG.
- 
+
    ## 오답 산입 — 주제와 동일한 유형·동일한 비율. 문체만 제목으로.
    ★★★ (1) UNMENTIONED [최우선, 1~2개] — 지문 어휘로 쓰되 지문이 주장한 적 없는 명제
        "Balancing Market and Ecological Value in Forestry"   (지문이 '균형'을 말한 적 없을 때)
@@ -366,13 +366,27 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
    ★ (6) ONE-WORD FLIP [3%] — 한 단어만 뒤집기 (최대 1개)
        correct "Shallow Work: The Quiet Enemy of Real Output"
        wrong   "Shallow Work: The Quiet Engine of Real Output"
- 
+
    ## 배치 규칙
    - At least ONE (1) UNMENTIONED. The other three: different types, no repeats.
    - ★ ABSOLUTE WORDS BANNED (기출 28개 오답 중 사용 0개).
    - ★ ALL FOUR distractors written AS TITLES — never slip a topic-form noun phrase in.
    - ★ Justify each: refuting sentence, or (for UNMENTIONED) what the passage says instead.
- 
+
+   ## 지문의 말을 제목의 말로 바꾸는 법
+   ★ Same five transformations as the topic question, but a title compresses harder.
+   (i)  HEAD WORD IS NEW — name the passage's result with a word not in the passage,
+        then let a colon or a metaphor carry it:
+          "Thus cutting trees is economically inefficient" → "The Hidden Ledger of a Standing Forest"
+   (ii) SUBSUME EXAMPLES — three listed items become one category noun.
+   (iii) KEEP THE AXIS TERM — the word that decides the argument stays verbatim
+         (frequency, non-market, personal memories). A title may drop everything else.
+   (iv) SHIFT WORD CLASS — verbs and adjectives become nouns; a clause becomes a noun phrase.
+   (v)  NEGATIVE → POSITIVE — "speed is worthless without frequency"
+          → "Frequency First: What Makes Transit Usable"
+   ★ 오답, 특히 UNMENTIONED는 반대로 — 지문 어휘를 거의 그대로 쓰고 새 단어 하나만 끼워
+     지문이 하지 않은 주장을 만든다.
+
    ## 어휘 수준
    Same standard as the topic question — CSAT level or half a step above.
    A title compresses, so one vivid noun replaces a clause. Precise, not merely dramatic.

@@ -815,3 +815,127 @@ def build_translate_prompt(en_sentence: str) -> str:
         "[OUTPUT JSON]\n"
         '{"kr": "<Korean translation>"}'
     )
+=====================================================================
+prompts.py — Q3 어휘 유형 프롬프트 신설 (파일 맨 끝에 추가)
+=====================================================================
+
+★ 기존 CORE_BLANK_SYS / build_core_blank_prompt 는 그대로 둔다(폴백용).
+  아래를 파일 맨 끝에 덧붙인다.
+
+
+# ════════════════════════════════════════════════════════════════
+# A Q3 — 어휘 유형 (수능 30번)
+#   기출 7세트 35개 밑줄 실측:
+#     · 첫 문장에 밑줄 0/7  · 밑줄 위치 평균 61% 지점
+#     · 정답 위치 ③2 ④3 ⑤2 — ①②는 한 번도 정답이 아니다
+#     · 밑줄 품사 형용사37% 동사37% 명사17% 부사5%
+#     · 정답 품사 형용사4 동사3 — 명사·부사가 정답인 적 없음
+# ════════════════════════════════════════════════════════════════
+VOCAB_SYS = (
+    "You write CSAT-style vocabulary-in-context questions (수능 30번). "
+    "Output ONLY valid JSON, no markdown, no text outside JSON."
+)
+
+
+def build_vocab_prompt(paragraphs, blank_phrases=None) -> str:
+    """paragraphs: [[label, text], ...] 원문 그대로
+       blank_phrases: Q5 빈칸으로 이미 쓰인 구절들 (겹치면 안 됨)"""
+    body = "\n\n".join(f"({lab}) {txt}" for lab, txt in paragraphs)
+    avoid = ""
+    if blank_phrases:
+        avoid = ("\n\n[ALREADY USED AS FILL-IN BLANKS — do not underline any word inside these]\n"
+                 + "\n".join(f"  - {p}" for p in blank_phrases if p))
+    return (
+        "Read the passage and design a 수능 30번 vocabulary question.\n\n"
+        "[PASSAGE]\n" + body + avoid + "\n\n"
+
+        "## 무엇을 만드는가\n"
+        "Choose FIVE words in the passage to underline. Four of them keep the meaning the\n"
+        "passage intends; ONE is replaced by a word that CONTRADICTS the passage's logic.\n"
+        "The student must find the contradictory one.\n\n"
+
+        "## STEP 1 — 논지를 먼저 잡아라\n"
+        "State to yourself: what does this passage argue, and which sentence carries it?\n"
+        "Every underlined slot must be a word whose direction the argument decides.\n\n"
+
+        "## STEP 2 — 밑줄 자리 고르기 (기출 실측을 따르라)\n"
+        "  · NEVER underline a word in the passage's FIRST sentence. 기출 0/7.\n"
+        "    That sentence sets the premise; if it wavers, nothing else can be judged.\n"
+        "  · Spread the five across the passage, weighted toward the second half\n"
+        "    (기출 평균 61% 지점). One per sentence at most — never two in one sentence.\n"
+        "  · Underline only words whose OPPOSITE would change the argument:\n"
+        "      GOOD  significant / diminished / undermines / drives / absolute / insignificant\n"
+        "            justifies / abandon / permanently / modesty / careful / least\n"
+        "      BAD   tasks / time / people / products / efforts / doing / extent\n"
+        "            (concrete nouns and vague words have no meaningful opposite)\n"
+        "  · Grammatical make-up should follow 기출: about two adjectives, two verbs,\n"
+        "    one noun. Avoid adverbs.\n"
+        "  · Never underline the same word twice.\n"
+        "  · A sentence-final word is fine — 기출에도 흔하다 (2025 수능 ③ 'uncomfortable.').\n"
+        "    Give 'original' exactly as it appears in the passage, punctuation included.\n\n"
+
+        "## STEP 3 — 정답 자리와 반의어\n"
+        "  · The answer MUST be number 3, 4, or 5. 기출 정답 위치는 ③2회 ④3회 ⑤2회이고\n"
+        "    ①②가 정답인 적은 없다. 앞쪽 밑줄이 논지를 확인시키고 뒤에서 뒤집는 구조다.\n"
+        "  · The answer word must be an ADJECTIVE or a VERB (기출 정답 형용사4·동사3).\n"
+        "  · Replace it with a word of OPPOSITE direction — not a random word, not a\n"
+        "    near-synonym. The sentence must still read grammatically.\n"
+        "  · ★ The contradiction must be provable from ONE of these three, exactly as 기출:\n"
+        "      (a) THE NEXT SENTENCE — 3/7 세트\n"
+        "          'lead to ④ stronger motivation' → next sentence says 'lower task motivation'\n"
+        "          'accepts variability as ⑤ insignificant' → next says 'presumed important'\n"
+        "      (b) PARALLEL OR CAUSAL LINK INSIDE THE SAME SENTENCE — 2/7\n"
+        "          'diminished emphasis on dialogue AND a ③ significant emphasis on song'\n"
+        "            → 'and' binds the direction; it must be 'reduced'\n"
+        "          'not to ask for very ④ low prices BECAUSE not an absolute necessity'\n"
+        "            → 'because' supplies the reason; it must be 'high'\n"
+        "      (c) THE PASSAGE'S OVERALL THESIS — 2/7\n"
+        "          thesis: external control harms autonomy\n"
+        "            → '④ drives the acquisition of self-responsibility' reverses it\n"
+        "    Name which of (a)(b)(c) you used, and quote the exact evidence.\n\n"
+
+        "## STEP 4 — 나머지 네 자리도 패러프레이즈하라\n"
+        "  ★ Do NOT leave the four correct slots as the passage's own words. Replace each\n"
+        "    with a SYNONYM that keeps the meaning. Otherwise a student can skip them as\n"
+        "    'words that were already there' and only weigh the odd one out.\n"
+        "      passage 'salient'    → shown 'conspicuous'\n"
+        "      passage 'assess'     → shown 'gauge'\n"
+        "      passage 'careful'    → shown 'circumspect'\n"
+        "  ★ The synonym must fit the sentence grammatically and keep the same part of speech.\n"
+        "  ★ If the original carries punctuation ('uncomfortable.'), keep it on the synonym\n"
+        "    ('disconcerted.') so the sentence still reads correctly.\n"
+        "  ★ YOU choose every word here — both the four synonyms and the one antonym.\n"
+        "    Pick words that a CSAT student would plausibly accept in that slot; the point is\n"
+        "    that only the argument, not the word's surface, reveals which one is wrong.\n\n"
+
+        "## STEP 5 — 어휘 난이도: 수능 수준과 반 단계 위를 섞어라\n"
+        "  수능 수준      significant, absolute, internal, permanent, similar, necessary,\n"
+        "                 assess, justify, abandon, restore, undermine, diminish\n"
+        "  반 단계 위      discernible, contingent, provisional, marginal, redundant,\n"
+        "                 tenable, latent, incremental, adverse, salient, tacit,\n"
+        "                 conspicuous, circumspect, gauge, forfeit, curtail\n"
+        "  Use two or three from each register across the five slots. Do not make all five\n"
+        "  hard (it reads artificial) or all five plain (it reads easy).\n\n"
+
+        "## OUTPUT — 자리는 '몇 번째 단락, 몇 번째 단어'로 정확히 지목하라\n"
+        "  Count words by splitting on spaces, starting at 0, within that paragraph only.\n"
+        "  'original' must be the passage's word at that exact index, punctuation included\n"
+        "  as it appears.\n\n"
+
+        '{"vocab_items": [\n'
+        '   {"n": 1, "para": 0, "idx": 12, "original": "<exact word in passage>",\n'
+        '    "shown": "<synonym>", "is_answer": false, "why": "<why this slot matters>"},\n'
+        '   {"n": 2, "para": 1, "idx": 5,  "original": "...", "shown": "...",\n'
+        '    "is_answer": false, "why": "..."},\n'
+        '   {"n": 3, "para": 1, "idx": 22, "original": "...", "shown": "<ANTONYM>",\n'
+        '    "is_answer": true,\n'
+        '    "evidence_type": "next_sentence | same_sentence | thesis",\n'
+        '    "evidence": "<quote the exact words that prove the contradiction>",\n'
+        '    "why": "<what the word should have been and why>"},\n'
+        '   {"n": 4, "para": 2, "idx": 8,  "original": "...", "shown": "...",\n'
+        '    "is_answer": false, "why": "..."},\n'
+        '   {"n": 5, "para": 2, "idx": 30, "original": "...", "shown": "...",\n'
+        '    "is_answer": false, "why": "..."}\n'
+        '],\n'
+        ' "vocab_explain": "<한국어 해설 — 정답 자리가 왜 틀렸고 무엇이어야 하는지, 근거 문장과 함께>"}'
+    )

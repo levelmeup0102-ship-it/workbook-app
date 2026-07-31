@@ -2523,6 +2523,9 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
 
 def _split_sentences_chunks(sentences: list, max_per_page: int = 8) -> list:
     """문장 리스트를 균등 분배하여 페이지별 청크로 나눈다."""
+    # ★ 스텝 스킵(levels 선택 생성) 시 None/빈 리스트가 넘어올 수 있음 → 방어
+    if not sentences:
+        return []
     total = len(sentences)
     logger.debug(f"[Lv3 chunk] 총 문장 수: {total}, max_per_page: {max_per_page}")
     if total <= max_per_page:
@@ -2573,7 +2576,7 @@ def merge_to_template_data(passage: str, meta: dict, all_steps: dict) -> dict:
         "test_c": s1.get("test_c", []),
         # Lv.3 문장분석 (전체 문장) + 핵심문장
         "sentences": s1.get("sentences", []),
-        "sentence_chunks": _split_sentences_chunks(s1.get("sentences", [])),
+        "sentence_chunks": _split_sentences_chunks(s1.get("sentences") or []),
         "key_sentences": s1.get("key_sentences", []),
         # Lv.5 순서/삽입
         "order_intro": s2.get("order_intro", ""),
@@ -2601,7 +2604,7 @@ def merge_to_template_data(passage: str, meta: dict, all_steps: dict) -> dict:
         "content_match_en": s6.get("content_match_en", []),
         # Stage 10 영작
         "writing_items": s7.get("writing_items", []),
-        "writing_chunks": _split_sentences_chunks(s7.get("writing_items", []), max_per_page=8),
+        "writing_chunks": _split_sentences_chunks(s7.get("writing_items") or [], max_per_page=8),
         # 정답
         "answers_html": s8.get("answers_html", ""),
     }

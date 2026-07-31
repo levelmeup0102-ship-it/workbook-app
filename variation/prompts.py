@@ -84,80 +84,124 @@ Everything you generate must reflect that whole-passage understanding:
      → bogi MUST include 'the' TWICE, not once!
    - Hyphenated words like "south-facing" stay as ONE token (don't split into "south" + "facing")
 
-3-0. **Q1 TOPIC OPTIONS — 평가원 주제 유형 (수능 23번 실전 난도)**:
+3-0. **Q1 TOPIC OPTIONS — 평가원 주제 유형 (수능 23번)**:
+   ※ 아래 수치는 실제 기출 7세트·35개 선지를 분해해 얻은 것이다. 추측이 아니다.
  
-   ## STEP 1 — 글을 먼저 읽어라. 선지는 그 다음이다.
-   Before writing any option, answer these to yourself:
-     - What does the LAST sentence claim? That is where the thesis lands.
-     - Is there a CONTRAST AXIS (deep work vs shallow work, market vs non-market value)?
-     - Where does the passage CONCEDE something ("X has its place, but...")? That concession
-       is NOT the thesis — it is distractor material.
-   ★ The correct option must carry the conclusion. An option built from the opening
-     definition, or from the concession, is a distractor. Check it against the last sentence.
-   ★ If there is a contrast axis, the correct option must reflect BOTH sides or the tension.
-     An option naming only one side is PARTIAL = distractor.
+   ## STEP 1 — 지문을 먼저 장악하라. 선지는 그 다음이다.
+   Write these down for yourself before drafting any option:
+     (a) THESIS — what the LAST sentence asserts. That is where the argument lands.
+     (b) CONTRAST AXIS — market vs non-market, small vs large animals, speed vs frequency.
+     (c) WHAT THE PASSAGE NEVER CLAIMS — list 2-3 propositions that sound reasonable in this
+         topic area but the passage does not assert. These become your best distractors.
+   ★ The correct option carries (a). An option built from the opening definition, from a
+     single example, or from a concession is a DISTRACTOR.
+   ★ With a contrast axis, the correct option must hold BOTH sides or the tension between
+     them. Naming one side only = PARTIAL = distractor.
  
-   ## STEP 2 — 형태를 다섯 개 다르게 써라 (여기서 계속 실패하고 있다)
-   Real CSAT 주제 options do NOT share one template. Measured across 20 actual options
-   (2021·2023·2024·2025 수능 23번):
-     · Length: 7-12 words, most often 8-9. Keep them tight.
-     · NOT ONE of the 20 began with "the". Do not start all five with "the" —
-       at most one may, and even that is better avoided.
-     · The HEAD NOUN was different in all five options, every single year. No exceptions.
-     · Each year mixed 2-4 different connective structures.
+   ## STEP 2 — 오답 산입 (기출 28개 오답의 실측 분포. 이 비율을 따라라.)
  
-   ★★ HEAD NOUN — all five must differ. Pick from both registers and mix them:
-     Higher register (수능 상위 어휘 — keep using these, they set the difficulty):
+   ★★★ (1) UNMENTIONED — 지문이 주장한 적 없는 명제  [9/28 = 32%, 최다·최고난도]
+     Every word comes from the passage's own field. It reads sensible, even wise. But the
+     passage never asserts it. There is no absolute word to catch, no opposite to notice —
+     only knowing what the passage actually said rules it out.
+     기출:
+       "merits of balancing forests' market and non-market values"
+         → 지문은 비시장 가치가 '더 크다'고 했지 '균형'을 말한 적 없다
+       "features of music playlists appealing to international audiences"
+         → 플레이리스트는 나오지만 'international'은 어디에도 없다
+       "advantages of documenting evidence-based family histories"
+         → family archives는 나오지만 '가족사 기록의 이점'은 주장한 적 없다
+       "various ways to attract customers in the food industry"
+         → 광고는 나오지만 '고객 유인 방법'을 논한 적 없다
+     ★ Include ONE or TWO. This is what makes the item hard. Use the list you wrote in STEP 1(c).
+ 
+   ★★ (2) REVERSED FOCUS — 초점을 반대편으로  [6/28 = 21%]
+     ★ 절대어로 티내지 마라. 기출 28개 오답 중 all/always/never/only를 쓴 것은 0개다.
+     The passage argues a result; the option frames a difficulty. The passage warns against
+     something; the option makes it the theme. Quiet flip of stance, not of vocabulary.
+     기출:
+       "impact of using forest resources to maximize financial benefits"  (지문이 비판하는 쪽)
+       "difficulties of increasing audience size in radio music programmes"  (지문은 '결과'를 말함)
+       "necessity of satisfying listeners' diverse needs"  (지문은 다양성이 축소된다고 함)
+ 
+   ★★ (3) SCOPE SHIFT — 대상을 옮김  [6/28 = 21%]
+     Both nouns appear in the passage, but the passage never links THEM. Say about B what
+     the passage said about A.
+     ★ 기출의 정형 틀: "influence of A on B". 7세트 중 5세트에서 이 틀이 오답으로 쓰였고,
+       모두 A와 B가 지문에 나오지만 그 둘의 관계는 다루지 않은 경우였다. 적극 활용하라.
+     기출:
+       "influence of advertisers on radio audiences' musical preferences"
+       "influence of capitalism on the industrial food system"
+       "influence of the source types on the quality of life narratives"
+       "influence of industrialization on the machine-human relationship"
+ 
+   ★★ (4) PARTIAL — 일부만 반영  [4/28 = 14%]
+     True of one sentence or one example, but not the thesis. Often drawn from a single
+     illustration late in the passage, or from one side of a contrast.
+     기출:
+       "significance of designing an accurate transit map"  (노선도는 마지막 예시일 뿐)
+       "benefits of energy reserves in animals' environmental adaptation"  (한 문장에만 등장)
+       "influences of predetermined behavior patterns on animal survival"  (소형 동물 쪽만)
+ 
+   ★ (5) MODALITY SHIFT — 서술을 방법론·당위로  [2/28 = 7%]
+     The passage describes what happened or what matters; the option asks how to do it.
+     기출:
+       "efficient ways to increase the value of time in the Industrial Age"
+       "methods to improve speed and frequency of commute services"
+ 
+   ★ (6) ONE-WORD FLIP — 한 단어만 뒤집기  [1/28 = 3%, 드물다]
+     기출: correct "significance of weighing forest resources' non-market values"
+           wrong   "necessity of calculating the market values of ecosystem services"
+     Use at most one, and only when the axis is genuinely binary.
+ 
+   ## 배치 규칙
+   - MUST include at least ONE (1) UNMENTIONED. Two is better than none.
+   - The other three: pick from (2)(3)(4)(5)(6), each a DIFFERENT type. Never repeat a type.
+   - ★ ABSOLUTE WORDS BANNED: all, always, never, only, entirely, completely, totally,
+     exclusively, invariably. 기출 오답 28개 중 사용 0개.
+   - ★ Every distractor uses the passage's vocabulary field. Never introduce an alien topic.
+   - ★ Justification test: for (2)(3)(4)(5)(6), name the sentence that refutes it.
+     For (1) UNMENTIONED, state what the passage says INSTEAD. If you can do neither,
+     the option is unfair — rewrite it.
+ 
+   ## STEP 3 — 어휘 수준: 수능과 동급이거나 반 단계 위
+   Mix the two registers across the five options; never make all five one kind.
+     기출 실측 문두 명사 (23개):
+       significance, necessity, importance, role, outcome, changes, shift, impact,
+       influence, influences, effects, benefits, merits, advantages, features, ways,
+       methods, steps, strategies, problems, issues, reasons, difficulties,
+       limits, chances, consequences, decline, similarity
+     한 단계 위 (변별용, 남용 금지):
        displacement, erosion, susceptibility, contingency, reciprocity, precedence,
        subordination, latitude, threshold, aggregation, attenuation, primacy,
        prevalence, interplay, trade-off, constraint, paradox, prerequisite
-     Standard CSAT register (these actually appear in past papers):
-       necessity, necessities, significance, impact, influence, influences, effects,
-       benefits, merits, ways, steps, strategies, problems, issues, reasons, difficulties, shift
-   Use a MIX of the two registers across the five options. Do not make all five high-register
-   (it reads artificial) and do not make all five plain (it reads easy).
+   ★ 정답 선지의 문두 명사는 기출에서 significance·outcome·changes·role·shift·importance처럼
+     '결과·변화·역할'을 가리키는 말이 많다. 참고하되 고정하지는 마라.
+   Body vocabulary at CSAT level: standardize, allocate, publicize, diversify, aggregate,
+   substantiate, reconcile, compound, retention, aversion.
  
-   ★★ CONNECTIVE STRUCTURE — use at least THREE different shapes among the five:
-     (a) N + of + V-ing ...            "necessity of calculating the market values of ecosystem services"
-     (b) N + to + V ...                "steps to make public information accessible to customers"
-     (c) N + of ... + on/in ...        "effects of standardizing production procedures on labor markets"
-     (d) N + that/why/where + clause   "problems that excessive work hours have caused for laborers"
-     (e) N + past participle ...       "shift in the work-time paradigm brought about by industrialization"
-     (f) N + for + N + to V ...        "strategies for companies to increase profits in a free market"
+   ## STEP 4 — 문체 (기출 35개 선지 실측)
+     · Length 6-12 words, average 8.5. Nine words is the single most common length.
+     · 'the'로 시작한 선지: 0/35. Your five may include AT MOST ONE, and better none.
+     · HEAD NOUN differed in all five options in every one of the 7 sets. No exceptions.
+     · Connective shapes actually used (frequency): 
+         of ... on/in (15) > of (10) > to-infinitive (8) > participle (1) > that/why clause (1)
+       Mix at least THREE:
+       (a) N + of + V-ing        "necessity of calculating the market values of ecosystem services"
+       (b) N + of ... + on/in    "influence of capitalism on the industrial food system"
+       (c) N + to + V            "methods to improve speed and frequency of commute services"
+       (d) N + in + N            "changes in the senses of words linked to food ads"
+       (e) N + past participle   "shift in the work-time paradigm brought about by industrialization"
+       (f) N + that/why + clause "problems that excessive work hours have caused for laborers"
  
-   ## STEP 3 — 오답 8유형 중 넷을 서로 다르게
-   ★★ A distractor that can be eliminated WITHOUT reading the passage has failed. Rewrite it.
-   ★★ ABSOLUTE WORDS ARE BANNED: all, always, never, only, entirely, completely, totally,
-     exclusively, invariably. Students spot these and eliminate without reading.
-     If you need to overstate, do it through the CLAIM, not a giveaway adverb.
-   ★★ Every distractor must use passage vocabulary. Never invent an unrelated topic.
- 
-   Choose FOUR different failure modes (do not repeat a mode):
-   (1) PARTIAL — accurately reflects ONE sentence. Not false; simply not the thesis.
-   (2) CONCESSION PROMOTED — makes the passage's concession the main claim.
-   (3) SCOPE SHIFT — says about B what the passage said about A. All vocabulary from the passage.
-   (4) CAUSE-EFFECT REVERSED — swaps what produces what. Only the arrow flips.
-   (5) ★ ONE-WORD FLIP — identical to the correct answer except a SINGLE word reverses the
-       direction. Hardest and most valuable. Include one.
-       Flip axes: increase/decrease, enable/hinder, precede/follow, active/passive,
-       prerequisite/byproduct, cause/symptom.
-   (6) MODALITY SHIFT — turns a description into an obligation, a tendency into a rule.
-   (7) LEVEL SLIP — over-generalizes a specific claim, or narrows a general one.
-   (8) TRUE-THEN-FALSE — first half straight from the passage, second half not stated.
- 
-   Placement: include (5) once; one of (1)/(2); one of (3)/(4); one of (6)/(7)/(8).
-   ★ Note that (5) ONE-WORD FLIP shares its structure with the correct option by design —
-     that pair may look alike, but the OTHER THREE distractors must still differ in head
-     noun and structure. Do not let the flip pair drag all five into one template.
- 
-   ## FINAL CHECK — count these before you output
-   1. Five head nouns — all different? (write them out and compare)
-   2. How many start with "the"? Must be 0 or 1.
-   3. Word counts — all within 7-12? Any option over 12 must be trimmed.
-   4. How many distinct connective structures? Must be 3 or more.
-   5. For each of the four distractors, name the exact sentence that refutes it.
-      If you cannot name it, that distractor is unfair — rewrite it.
-
+   ## FINAL CHECK — 출력 전에 세어라
+   1. Five head nouns all different?
+   2. How many begin with "the"? 0 or 1 only.
+   3. All five within 6-12 words?
+   4. Three or more distinct connective shapes?
+   5. At least one UNMENTIONED? Four distinct failure types?
+   6. Any absolute word? Delete it.
+   7. Can you justify each distractor (refuting sentence, or what the passage says instead)?
 3-1. **Q3 CORE_BLANK_TARGET MUST BE AT LEAST 3 WORDS**:
    - core_blank_target is the phrase that gets replaced by a blank in Q3
    - It MUST be at least 3 words (a meaningful phrase, not a single word)
@@ -287,49 +331,52 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
 2. **GIVEN SENTENCE**: Pick a key transition/summary sentence FROM the passage. Remove it. The sentence-gap where it was removed must be marked by <MARK(position_correct+1)>. So if position_correct=2, then MARK3 marks the gap where given_sentence belongs. position_correct MUST be a valid index: 0..(position_count-1).
    - ★★ VERIFICATION: putting given_sentence back at the position_correct gap MUST reproduce the ORIGINAL passage word-for-word. Count the gaps carefully — position_correct is 0-based, and MARK(position_correct+1) is the EXACT gap the sentence was removed from. A wrong index here makes the answer wrong, so double-check by mentally reinserting it.
 
-1-9. **★ Q2 IS A TITLE QUESTION — 평가원 제목 유형 (수능 24번 실전 난도)**:
-
+1-9. **★ Q2 IS A TITLE QUESTION — 평가원 제목 유형 (수능 24번)**:
+ 
    ## 형태
-   ★ Type A (same passage) already asks for the 주제 as a descriptive noun phrase.
-     Type B asks for the 제목. Same argument, different demand — the options must LOOK different.
-     If your Q2 options read like "the importance of ...", you wrote topic options. Rewrite them.
-   - FORM: a real title. 4-10 words. Capitalize the major words.
-     Use these three shapes and MIX AT LEAST TWO across the five options:
+   ★ Type A (same passage) asks for the 주제 as a noun phrase; Type B asks for the 제목.
+     Same argument, different demand — the options must LOOK different.
+     If your Q2 options read like "the importance of ...", you wrote topic options. Rewrite.
+   - A real title. 4-10 words. Capitalize the major words.
+     Mix AT LEAST TWO shapes across the five:
        (a) COLON     — "Deep Work: The Engine of Genuine Value"
        (b) QUESTION  — "Why Does Constant Busyness Yield So Little?"
        (c) GERUND / IMPERATIVE — "Escaping the Trap of Shallow Work"
    - A title may be FIGURATIVE or COMPRESSED where a topic must be literal
-     (trap, engine, price, myth, illusion, treadmill, mirage, tax). That is what makes it a title.
-   - ★ NEVER begin an option with "The importance of" / "The necessity of" / "The role of" /
-     "The benefits of" / "The need for" / "The difficulty of" — topic forms, not titles.
-
+     (trap, engine, price, myth, illusion, treadmill, mirage, tax, signal).
+   - ★ NEVER begin with "The importance of" / "The necessity of" / "The role of" /
+     "The benefits of" / "The need for" / "The difficulty of".
+ 
    ## 정답 제목
-   - Must carry the passage's CONCLUSION and its contrast axis — same standard as the topic question.
-     A catchy title that misses the argument is WRONG. Check it against the last sentence.
-
-   ## 오답 제목 — 형태만 제목이고 실패 방식은 주제와 같다
-   ★★ ALL FOUR DISTRACTORS MUST BE ATTRACTIVE. If a title can be eliminated without reading
-     the passage, it failed. Rewrite it.
-   ★★ ABSOLUTE WORDS ARE BANNED: all, always, never, only, entirely, completely, eliminate,
-     totally, exclusively, invariably.
-   ★★ Every distractor must be written AS A TITLE (capitalized, 4-10 words) — never slip a
-     topic-form noun phrase in among them.
-
-   Use FOUR different failure modes, written as titles:
-   (1) PARTIAL          — "What Makes Deep Work Cognitively Costly"
-   (2) CONCESSION PROMOTED — "Why Routine Tasks Deserve Their Place"
-   (3) SCOPE SHIFT      — "Routine Work: The Skill Nobody Can Copy"
-   (4) CAUSE-EFFECT REVERSED — "How Focused Work Clears Away Distraction"
-   (5) ★ ONE-WORD FLIP  — correct: "Shallow Work: The Quiet Enemy of Real Output"
-                          → "Shallow Work: The Quiet ENGINE of Real Output"
-   (6) MODALITY SHIFT   — "Reserve Every Workday for Undivided Focus"
-   (7) LEVEL SLIP       — "The Modern Office and Its Vanishing Efficiency"
-   (8) TRUE-THEN-FALSE  — "Deep Work: Demanding, Rewarding, and Widely Attainable"
-
-   ## 배치
-   - Include (5) ONE-WORD FLIP once — the strongest distractor.
-   - Include one of (1)/(2), one of (3)/(4), and one of (6)/(7)/(8).
-   - For EACH distractor, name the sentence that refutes it. If you cannot, rewrite it.
+   - Carries the THESIS (check the last sentence) and the contrast axis.
+     A vivid title that misses the argument is WRONG.
+ 
+   ## 오답 산입 — 주제와 동일한 유형·동일한 비율. 문체만 제목으로.
+   ★★★ (1) UNMENTIONED [최우선, 1~2개] — 지문 어휘로 쓰되 지문이 주장한 적 없는 명제
+       "Balancing Market and Ecological Value in Forestry"   (지문이 '균형'을 말한 적 없을 때)
+       "Playlists That Travel: Music Radio Goes Global"      ('international'이 지문에 없을 때)
+   ★★ (2) REVERSED FOCUS [21%] — 초점을 조용히 반대편으로. 절대어 금지.
+       "Why Bigger Audiences Are Harder to Win"              (지문은 '결과'를 말할 때)
+   ★★ (3) SCOPE SHIFT [21%] — 지문에 둘 다 나오지만 그 관계는 안 다룬 조합
+       "Capitalism and the Rise of Industrial Food"
+   ★★ (4) PARTIAL [14%] — 한 문장·한 예시만 반영
+       "Reading the Transit Map: Design That Misleads"       (노선도는 마지막 예시일 뿐)
+   ★ (5) MODALITY SHIFT [7%] — 서술을 방법론으로
+       "How to Speed Up Your Daily Commute"
+   ★ (6) ONE-WORD FLIP [3%] — 한 단어만 뒤집기 (최대 1개)
+       correct "Shallow Work: The Quiet Enemy of Real Output"
+       wrong   "Shallow Work: The Quiet Engine of Real Output"
+ 
+   ## 배치 규칙
+   - At least ONE (1) UNMENTIONED. The other three: different types, no repeats.
+   - ★ ABSOLUTE WORDS BANNED (기출 28개 오답 중 사용 0개).
+   - ★ ALL FOUR distractors written AS TITLES — never slip a topic-form noun phrase in.
+   - ★ Justify each: refuting sentence, or (for UNMENTIONED) what the passage says instead.
+ 
+   ## 어휘 수준
+   Same standard as the topic question — CSAT level or half a step above.
+   A title compresses, so one vivid noun replaces a clause. Precise, not merely dramatic.
+ 
 
 2-0. **★★★ CSAT Q40-STYLE SUMMARY DESIGN (applies to Q3 options AND Q4 blanks) ★★★**
    The summary sentence and its blanks must follow the Korean CSAT (수능) #40 summary-question style. Study these authentic patterns:

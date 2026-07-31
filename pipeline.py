@@ -2652,8 +2652,58 @@ def render_pdf(template_data: dict, output_path: Path, levels=None):
 # ============================================================
 # 메인: 단일 지문 처리
 # ============================================================
+# ============================================================
+# pipeline.py 교체용 — process_passage 함수를 통째로 이걸로 교체하세요.
+#   (def process_passage 부터 "return pdf_path" 까지)
+#
+# 무엇이 바뀌나
+#   기존: levels 를 골라도 step1~step8 을 '전부' 생성한 뒤, PDF 인쇄 때만
+#         levels 로 걸러냄. → Stage 3만 눌러도 무거운 step5(어법)가 돌고,
+#         긴 지문(33번)에서 거기서 upstream error 로 죽었음.
+#   변경: levels 에 해당하는 스텝만 API 호출. 나머지는
+#         (a) 캐시가 있으면 캐시 사용 (b) 없으면 빈 스텁 → 호출 스킵.
+#         어법(step5)을 선택 안 하면 아예 안 부르므로 33번도 통과.
+#
+# 레벨 ↔ 스텝 매핑
+#   Lv.1~3 → step1(항상 필요: 다른 스텝 입력)   Lv.5 → step2   Lv.6 → step3
+#   Lv.7 → step4   Lv.8(어법) → step5   Lv.9 → step6   Lv.10 → step7
+#   step8(정답)은 생성된 스텝 정답만 모음 → 항상 실행(가벼움)
+# ============================================================
+
+# 어떤 레벨이 어떤 스텝을 요구하는지
+_LEVEL_TO_STEP = {
+    5: "step2", 6: "step3", 7: "step4", 8: "step5", 9: "step6", 10: "step7",
+}
+
+
+def _need_step(step_name: str, levels) -> bool:
+    """levels(선택된 레벨 리스트)가 이 스텝을 필요로 하는가.
+    levels=None 이면 전체 생성(기존 동작).
+    """
+    if not levels:            # None 또는 빈 리스트 → 전체
+        return True
+    wanted = {_LEVEL_TO_STEP[l] for l in levels if l in _LEVEL_TO_STEP}
+    return step_name in wanted
+
+
+def _step_or_skip(step_name, gen_fn, passage_dir, levels, cache_stub):
+    """스텝 실행 헬퍼.
+      1) levels 가 이 스텝을 요구하면 → 정상 생성(gen_fn 호출)
+      2) 요구 안 하지만 캐시가 있으면 → 캐시 사용(API 호출 없음)
+      3) 요구도 안 하고 캐시도 없으면 → 빈 스텁 리턴(API 호출 스킵)
+    """
+    if _need_step(step_name, levels):
+        return gen_fn()
+    cached = load_step(passage_dir, step_name)
+    if cached is not None:
+        _safe_print(f"  {step_name}: 선택 안 됨 → 캐시 사용")
+        return cached
+    _safe_print(f"  {step_name}: 선택 안 됨 & 캐시 없음 → 생성 건너뜀")
+    return cache_stub
+
+
 def process_passage(passage: str, meta: dict, passage_id: str, force=False, levels=None):
-    """지문 1개 → 전체 워크북 생성"""
+    """지문 1개 → 워크북 생성 (levels 지정 시 해당 스텝만 생성)"""
     passage_dir = DATA_DIR / passage_id
     if force:
         import shutil
@@ -2661,6 +2711,8 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
             shutil.rmtree(passage_dir)
 
     # ★ passage_text 안에 ###해석### 이 포함되어 있으면 분리
+    kr_text = ""
+    kr_lines = []
     if '###해석###' in passage:
         parts = passage.split('###해석###', 1)
         passage = parts[0].strip()
@@ -2670,68 +2722,78 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
             meta['user_translations'] = kr_lines
             _safe_print(f"  passage_text에서 해석 {len(kr_lines)}줄 추출")
 
-    logger.debug(f"DEBUG | process_passage | 한국어 해석 후처리 CHECK\n1. 문장분리 풀번역\n> {kr_lines}\n2. meta data check\n> {meta['user_translations']}")
+    logger.debug(f"DEBUG | process_passage | 한국어 해석 후처리 CHECK\n1. 문장분리 풀번역\n> {kr_lines}\n2. meta data check\n> {meta.get('user_translations')}")
 
     _safe_print(f"\n{'='*50}")
     _safe_print(f"Processing: {passage_id} ({meta.get('challenge_title','')})")
+    if levels:
+        _safe_print(f"  선택 레벨: Lv.{','.join(str(l) for l in levels)} → 해당 스텝만 생성")
     _safe_print(f"{'='*50}")
 
     sentences = split_sentences(passage)
-    # 대화문이면 짧은 문장 병합 (6단어 이하, 같은 화자만)
     sentences = _merge_short_dialogue(sentences)
     all_steps = {}
 
-    # Step 1: 기본 분석xx
-    user_tr = meta.get("user_translations")
-    all_steps["step1"] = step1_basic_analysis(passage, passage_dir, full_translation=kr_text, user_translations=kr_lines)
-
-    # 지문을 한문장씩 나눈 list -> sentences_from_api
+    # Step 1: 기본 분석 — 항상 필요(다른 스텝의 입력이자 Lv.1~3)
+    all_steps["step1"] = step1_basic_analysis(
+        passage, passage_dir, full_translation=kr_text, user_translations=kr_lines)
     sentences_from_api = all_steps["step1"].get("sentences", sentences)
 
     # Step 2: Lv.5 순서/삽입
-    all_steps["step2"] = step2_order(passage, sentences_from_api, passage_dir)
+    all_steps["step2"] = _step_or_skip(
+        "step2", lambda: step2_order(passage, sentences_from_api, passage_dir),
+        passage_dir, levels, {})
 
     # Step 3: Lv.6 빈칸
-    all_steps["step3"] = step3_blank(passage, passage_dir)
+    all_steps["step3"] = _step_or_skip(
+        "step3", lambda: step3_blank(passage, passage_dir),
+        passage_dir, levels, {})
 
     # Step 4: Lv.7 주제
-    all_steps["step4"] = step4_topic(passage, passage_dir)
+    all_steps["step4"] = _step_or_skip(
+        "step4", lambda: step4_topic(passage, passage_dir),
+        passage_dir, levels, {})
 
-    # Step 5: Lv.8 어법
-    all_steps["step5"] = step5_grammar(passage, passage_dir)
+    # Step 5: Lv.8 어법 — ★ 가장 무거운 스텝. 선택 안 하면 여기서 건너뜀.
+    all_steps["step5"] = _step_or_skip(
+        "step5", lambda: step5_grammar(passage, passage_dir),
+        passage_dir, levels, {})
 
     # Step 6: Lv.9 어휘+내용일치
-    all_steps["step6"] = step6_vocab_content(passage, passage_dir)
+    all_steps["step6"] = _step_or_skip(
+        "step6", lambda: step6_vocab_content(passage, passage_dir),
+        passage_dir, levels, {})
 
-    # Step 7: Stage 10 영작 (로컬)
-    # ★ 사용자 해석이 있으면 step7 캐시 무효화 (한국어 문장이 바뀌므로)
-    if user_tr:
+    # Step 7: Stage 10 영작 (로컬 — API 호출 아님, 가벼움)
+    user_tr = meta.get("user_translations")
+    if user_tr and _need_step("step7", levels):
         step7_cache = passage_dir / "step7_writing.json"
         if step7_cache.exists():
             step7_cache.unlink()
             _safe_print("  step7: 사용자 해석 변경 → 로컬 캐시 삭제")
-        # Supabase 캐시도 삭제
         try:
             import supa
             if supa._enabled():
                 _run_async(supa.delete_step(passage_dir.name, "step7_writing"))
                 _safe_print("  step7: Supabase 캐시도 삭제")
-        except:
+        except Exception:
             pass
+
     translation = all_steps["step1"].get("translation", "")
     sentence_translations = all_steps["step1"].get("sentence_translations", [])
-    
-    logger.debug(f"DEBUG | translation와 sentence_translations 비교\ntranslation> {translation}\nsentence_translations> {sentence_translations}")
+    all_steps["step7"] = _step_or_skip(
+        "step7",
+        lambda: step7_writing(sentences=sentences_from_api, passage_dir=passage_dir,
+                              sentence_translations=sentence_translations),
+        passage_dir, levels, {})
 
-    all_steps["step7"] = step7_writing(sentences=sentences_from_api, passage_dir=passage_dir, sentence_translations=sentence_translations)
-
-    # Step 8: 정답
+    # Step 8: 정답 — 생성된 스텝의 정답만 모음(가벼움). 항상 실행.
     all_steps["step8"] = step8_answers(all_steps, passage_dir)
 
     # 병합 + PDF
     template_data = merge_to_template_data(passage, meta, all_steps)
 
-    # 🔒 콘텐츠 길이 검증 (페이지 밀림 방지)
+    # 🔒 콘텐츠 길이 검증
     warnings = []
     bp = template_data.get("blank_passage", "")
     if len(bp) > 1200:
@@ -2752,15 +2814,14 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
     pdf_path = _unique_path(OUTPUT_DIR, base_name, ".pdf")
     qa_issues = render_pdf(template_data, pdf_path, levels=levels)
 
-    # QA 재생성: 괄호 누락 등 심각한 이슈 감지 시 step5 캐시 삭제 후 재생성
-    if qa_issues and "bracket_missing" in qa_issues:
+    # QA 재생성: 어법 괄호 누락 감지 시 step5 재생성
+    #   ★ 단, 어법(Lv.8)을 이번에 생성한 경우에만. 선택 안 했으면 재생성도 스킵.
+    if qa_issues and "bracket_missing" in qa_issues and _need_step("step5", levels):
         _safe_print("  QA: 8-1 bracket missing → step5+step8 cache delete (local+Supabase)...")
-        # 로컬 삭제
         cache5 = passage_dir / "step5_grammar.json"
         cache8 = passage_dir / "step8_answers.json"
         if cache5.exists(): cache5.unlink()
         if cache8.exists(): cache8.unlink()
-        # Supabase도 삭제
         try:
             import supa
             if supa._enabled():
@@ -2770,7 +2831,6 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
                 _safe_print(f"  Supabase cache deleted: {cache_key}/step5_grammar, step8_answers")
         except Exception as e:
             _safe_print(f"  [supa] delete error: {str(e)[:80]}")
-        # 재생성
         all_steps["step5"] = step5_grammar(passage, passage_dir)
         all_steps["step8"] = step8_answers(all_steps, passage_dir)
         template_data = merge_to_template_data(passage, meta, all_steps)

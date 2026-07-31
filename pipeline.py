@@ -2446,9 +2446,9 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
                   )
     
     # Stage 8 어휘 (Part A / Part B 정답만: 3단/2단 구성의 정답지)
-    stage8_data = all_data.get("step6")
-    stage8_partA_list = stage8_data.get("vocab_parta_answers")
-    stage8_partB_list = stage8_data.get("vocab_partb_answers")
+    stage8_data = all_data.get("step6") or {}
+    stage8_partA_list = stage8_data.get("vocab_parta_answers") or []
+    stage8_partB_list = stage8_data.get("vocab_partb_answers") or []
 
     partA_items = []
     for i in range(0, len(stage8_partA_list), 3):

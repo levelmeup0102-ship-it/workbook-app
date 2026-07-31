@@ -99,15 +99,55 @@ def _slot_score(bare: str, toks: list, i: int) -> int:
 
 
 def _sentences(text: str) -> list:
-    """문장 분리 — (시작 토큰 인덱스, 끝 토큰 인덱스, 문장) 리스트"""
+    """문장 분리 — (시작 토큰 인덱스, 끝 토큰 인덱스, 문장) 리스트
+
+    ★ generator.split_sentences()를 그대로 쓴다. 약어(Dr. e.g. U.S.), 1글자 이니셜,
+      인용문 내부 문장까지 처리하는 검증된 분리기이고, Q2 순서 문제도 이걸로 원문을
+      나눈다. 같은 지문을 Q2와 Q3가 같은 기준으로 나누게 되어 일관성이 생긴다.
+      (직접 만든 규칙은 '3.5%'나 'e.g.,'를 문장 끝으로 오인해 문장 수를 틀리게 셌다.)
+
+    반환은 토큰 인덱스라, 분리된 문장을 토큰 수로 되짚어 위치를 매긴다."""
+    try:
+        from variation.generator import split_sentences as _ss
+        sents = _ss(text)
+        # ★ split_sentences는 인용문 안 문장을 통째로 묶는다(원문 무손실이 목적이라 옳다).
+        #   밑줄은 그 안에도 들어가야 하므로, 여기서만 한 겹 더 쪼갠다.
+        #   따옴표가 든 문장만 한 겹 더 쪼갠다. 약어(Dr. U.S.)는 split_sentences가 이미
+        #   보호했으므로, 전체를 다시 쪼개면 그 보호가 무력화된다.
+        _ABBR = re.compile(r"\b(?:Dr|Mr|Mrs|Ms|Prof|Sr|Jr|St|vs|etc|Inc|Ltd|Co|No|Vol|Fig)\.$|"
+                           r"\b(?:[A-Za-z]\.){2,}$|\b[A-Z]\.$")
+        deeper = []
+        for sn in sents:
+            if '"' in sn or "\u201c" in sn:
+                parts, buf = [], ""
+                for chunk in re.split(r'(?<=[.!?])\s+', sn):
+                    buf = (buf + " " + chunk).strip() if buf else chunk
+                    if _ABBR.search(buf):      # 약어로 끝나면 아직 문장이 안 끝났다
+                        continue
+                    parts.append(buf); buf = ""
+                if buf:
+                    parts.append(buf)
+                deeper += [x for x in parts if x.strip()]
+            else:
+                deeper.append(sn)
+        sents = deeper or sents
+    except Exception:
+        # generator를 못 불러오는 환경(단위 테스트 등) — 최소 규칙으로 대체
+        sents = [x for x in re.split(r'(?<=[.!?])\s+(?=[A-Z"\u201c])', text) if x.strip()]
+
+    out, cur = [], 0
     toks = text.split()
-    out, start = [], 0
-    for i, w in enumerate(toks):
-        if re.search(r"[.!?][\"')\]]?$", w):
-            out.append((start, i, " ".join(toks[start:i + 1])))
-            start = i + 1
-    if start < len(toks):
-        out.append((start, len(toks) - 1, " ".join(toks[start:])))
+    for sent in sents:
+        n = len(sent.split())
+        if n == 0:
+            continue
+        lo, hi = cur, min(cur + n - 1, len(toks) - 1)
+        if lo > hi or lo >= len(toks):
+            break
+        out.append((lo, hi, sent))
+        cur = hi + 1
+    if not out and toks:
+        out = [(0, len(toks) - 1, text)]
     return out
 
 
@@ -169,8 +209,26 @@ def pick_vocab_slots(paragraphs, blank_spans=None, n=5) -> Optional[list]:
     for c in cands:
         by_sent.setdefault(c["sent"], []).append(c)
     sents = sorted(by_sent)
+
+    # ★ 후보가 있는 문장이 5개 미만이면, 문장당 1개 원칙을 완화해 5자리를 채운다.
+    #   여기서 None을 반환하면 폴백이 통째로 실패해 항목이 어휘 없이 나간다.
     if len(sents) < n:
-        return None
+        picked, used = [], set()
+        for s_no in sents:                       # 먼저 문장마다 하나씩
+            pool = [c for c in by_sent[s_no] if c["bare"] not in used]
+            if pool:
+                best = max(pool, key=lambda c: c.get("score", 0))
+                used.add(best["bare"]); picked.append(best)
+        for c in sorted(cands, key=lambda x: -x.get("score", 0)):   # 모자란 만큼 더
+            if len(picked) >= n:
+                break
+            if c["bare"] not in used:
+                used.add(c["bare"]); picked.append(c)
+        if len(picked) < n:
+            return None
+        picked.sort(key=lambda c: (c["para"], c["idx"]))
+        return [{"n": i + 1, "para": c["para"], "idx": c["idx"], "original": c["word"]}
+                for i, c in enumerate(picked[:n])]
 
     # 문장을 고르게 뽑되 뒤쪽에 무게 — 기출은 밑줄이 61% 지점에 몰린다
     chosen_sents = []
@@ -268,9 +326,21 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
                 key = (p, s_lo)
                 sents.setdefault(key, []).append(it["n"])
                 break
-    for key, ns in sents.items():
-        if len(ns) > 1:
-            errors.append(f"[{pid}] Q3 어휘 밑줄 {ns}가 같은 문장에 몰림 — 문장당 1개")
+    #   ★ '문장당 1개'는 권장 사항이라 오류로 올리지 않는다. generator는 오류가 하나라도
+    #     있으면 재시도하므로, 경고만으로도 3회 재시도 끝에 관대 fallback으로 떨어진다.
+    #     짧은 지문은 문장 수가 모자라 어쩔 수 없이 몰리기도 한다.
+    crowded = [ns for ns in sents.values() if len(ns) > 1]
+    if len(crowded) >= 3:      # 세 문장 이상에서 몰리면 설계가 잘못된 것
+        errors.append(f"[{pid}] Q3 어휘 밑줄이 여러 문장에 몰림 {crowded} — 지문 전체에 흩을 것")
+
+    # 철자만 비슷한 단어로 바꿔치기 — 독해가 아니라 철자 암기를 묻게 된다
+    for it in vocab_items:
+        o, sh = str(it.get("original", "")), str(it.get("shown", ""))
+        if o and sh and _looks_alike(o, sh):
+            kind = "정답" if it.get("is_answer") else "오답"
+            errors.append(
+                f"[{pid}] Q3 어휘 {it.get('n')}번({kind}) '{o}'→'{sh}'는 철자만 비슷함 — "
+                f"발음·철자 유사어 금지. 뜻이 반대(정답)이거나 같은(오답) 단어로 쓸 것")
 
     # 같은 단어가 두 번 밑줄 — 기출은 5개가 전부 다른 단어다
     bares = [re.sub(r"[^A-Za-z-]", "", str(it.get("original", ""))).lower()
@@ -280,11 +350,14 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
         errors.append(f"[{pid}] Q3 어휘 밑줄에 같은 단어 반복 {dup} — 5개는 서로 다른 단어여야 함")
 
     # shown이 original과 같으면 패러프레이즈가 안 된 것
-    same = [it["n"] for it in vocab_items
-            if str(it.get("shown", "")).strip().lower() == str(it.get("original", "")).strip().lower()]
-    if same:
-        errors.append(f"[{pid}] Q3 어휘 {same}번이 원문 단어 그대로 — "
-                      f"오답 자리도 동의어로 바꿔야 학생이 '원문에 있던 말'로 넘기지 못한다")
+    #   ★ 폴백(코드가 자리만 잡은 것)은 shown=original이 정상이다. 면제하지 않으면
+    #     폴백이 절대 통과할 수 없어 3회 재시도 끝에 항목이 통째로 fallback으로 떨어진다.
+    if not any(it.get("_fallback") for it in vocab_items):
+        same = [it["n"] for it in vocab_items
+                if str(it.get("shown", "")).strip().lower() == str(it.get("original", "")).strip().lower()]
+        if same:
+            errors.append(f"[{pid}] Q3 어휘 {same}번이 원문 단어 그대로 — "
+                          f"오답 자리도 동의어로 바꿔야 학생이 '원문에 있던 말'로 넘기지 못한다")
 
     return errors
 
@@ -302,6 +375,25 @@ def blank_token_spans(paragraphs) -> dict:
         if hits:
             spans[p_i] = (min(hits) - 1, max(hits) + 1)
     return spans
+
+
+def _looks_alike(a: str, b: str) -> bool:
+    """두 단어가 '철자만 비슷한' 관계인가.
+
+    1회독 교재도 '발음 유사 단어 절대 금지, 반드시 반의어로'를 규칙으로 둔다.
+    affect/effect, adapt/adopt 같은 쌍은 독해가 아니라 철자 암기를 묻는다.
+    어간이 같은 굴절형(increase/increases)은 정상이므로 제외한다."""
+    import difflib
+    x = re.sub(r"[^a-z]", "", str(a or "").lower())
+    y = re.sub(r"[^a-z]", "", str(b or "").lower())
+    if not x or not y or x == y:
+        return False
+    # 굴절형은 오탐 — 한쪽이 다른쪽으로 시작하면 같은 어간으로 본다
+    if x.startswith(y) or y.startswith(x):
+        return False
+    if abs(len(x) - len(y)) > 3:
+        return False
+    return difflib.SequenceMatcher(None, x, y).ratio() >= 0.75
 
 
 def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None) -> Optional[list]:
@@ -369,6 +461,7 @@ def build_vocab_fallback(paragraphs, blank_spans=None) -> Optional[list]:
     for it in slots:
         it["shown"] = it["original"]
         it["is_answer"] = (it["n"] == 4)          # 기출 최빈 위치
+        it["_fallback"] = True                    # 패러프레이즈 검사 면제
         it["evidence_type"] = ""
         it["evidence"] = ""
         it["why"] = ""

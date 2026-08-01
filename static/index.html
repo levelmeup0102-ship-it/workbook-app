@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- deploy: 전체접기=카테고리+책 모두 접힘 2026-08-01b -->
+<!-- deploy: 저작권 2줄 푸터 추가 + 전체접기 수정 2026-08-01c -->
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
@@ -34,6 +34,8 @@ body { font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f0f
 .header-tabs { display: flex; padding: 0 20px; }
 .header-tab { padding: 8px 20px; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.7); cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; }
 .header-tab.active { color: white; border-bottom-color: white; }
+.header-copyright { text-align: center; padding: 6px 12px 8px; font-size: 11px; line-height: 1.5; color: rgba(255,255,255,0.72); background: rgba(0,0,0,0.08); }
+.header-copyright div:first-child { letter-spacing: 0.3px; }
 
 /* 로그인 */
 #login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #2E4E8F 0%, #1f3766 100%); }
@@ -187,6 +189,10 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       <div class="header-tab" onclick="switchTab('secret', this)"> 비밀노트</div>
       <div class="header-tab" onclick="switchTab('extract', this)"> 원문 추출</div>
       <div class="header-tab" onclick="switchTab('upload', this)"> 지문 관리</div>
+    </div>
+    <div class="header-copyright">
+      <div>© LEVEL ME UP · All rights reserved</div>
+      <div>본 자료는 레벨미업 자체제작 콘텐츠입니다</div>
     </div>
   </div>
 

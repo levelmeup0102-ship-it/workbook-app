@@ -304,7 +304,9 @@ body {
 
   {# 지문: (a)(b)(c)(d) 줄바꿈 + Q5 빈칸 ⑤가 지문 안에 삽입 #}
   <div class="psg-box">
+    {% if item.data.intro and item.data.intro|trim %}
     <div class="psg-lead">{{ item.data.intro | safe }}</div>
+    {% endif %}
     {% set _paras = item.data.paragraphs_render or item.data.paragraphs %}
     {% for para in _paras %}
       <div class="psg-chunk">

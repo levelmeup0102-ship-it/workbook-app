@@ -348,6 +348,62 @@ def _q5_candidates(ptext: str, min_w: int = 4, max_w: int = 8) -> list:
 MAX_BLANK_WORDS = 9  # 영작 빈칸(A Q5 / B Q4) 최대 단어 수 — 초과 LLM 빈칸은 거부하고 코드가 5~7단어로 대체
 
 
+def _span_from_marks(paragraphs, mark, pid="?", lab="?") -> Optional[str]:
+    """LLM이 지목한 {para, starts_with, ends_with}로 원문에서 구절을 잘라낸다.
+
+    ★ 문자열을 통째로 받으면 LLM이 논지를 자기 말로 요약해 원문에 없는 구절을 만든다
+      (실측: 'The territory known as Bir Tawil'). 시작·끝 단어만 받고 그 사이는
+      코드가 원문에서 그대로 떼어내면 창작이 원천 차단된다.
+    Q3 어휘가 para/idx 를 받아 코드가 그 자리 단어를 쓰는 것과 같은 방식."""
+    if not isinstance(mark, dict):
+        return None
+    try:
+        pi = int(mark.get("para", -1))
+    except Exception:
+        return None
+    if pi < 0 or pi >= len(paragraphs):
+        print(f"[VAR][A][{pid}] Q5 지목({lab}) para={pi} 범위 밖")
+        return None
+    text = paragraphs[pi][1]
+    st = re.sub(r"\s+", " ", str(mark.get("starts_with", "")).strip())
+    en = re.sub(r"\s+", " ", str(mark.get("ends_with", "")).strip())
+    if not st or not en:
+        print(f"[VAR][A][{pid}] Q5 지목({lab}) starts_with/ends_with 비어 있음")
+        return None
+
+    # 단어 경계로 시작 위치 찾기 (여러 번 나오면 첫 번째)
+    ms = re.search(r"(?<!\w)" + re.escape(st), text)
+    if not ms:
+        # 다른 단락에 있으면 para 를 잘못 적은 것 — 어느 단락인지 알려준다
+        _elsewhere = [k for k, (_l, _t) in enumerate(paragraphs)
+                      if k != pi and re.search(r"(?<!\w)" + re.escape(st), _t)]
+        _hint = f" (실제로는 para={_elsewhere[0]}에 있음)" if _elsewhere else ""
+        print(f"[VAR][A][{pid}] Q5 지목({lab}) 시작어 '{st}' 가 para={pi}"
+              f"({paragraphs[pi][0]}) 안에 없음{_hint}")
+        return None
+    me = re.search(r"(?<!\w)" + re.escape(en) + r"(?!\w)", text[ms.start():])
+    if not me:
+        print(f"[VAR][A][{pid}] Q5 지목({lab}) 끝어 '{en}' 시작어 뒤에 없음")
+        return None
+    span = text[ms.start():ms.start() + me.end()].strip()
+
+    # ★ 코드는 자르지 않는다 — 조건을 지켜서 지목하는 것이 LLM의 일이다.
+    #   뒤에서 잘라 맞추면 'very few of your readers would make it to your dramatic'처럼
+    #   목적어(conclusion)가 빠진 어정쩡한 구절이 나온다. 조건 위반은 거부하고
+    #   폴백(코드 픽)으로 넘긴다. 프롬프트가 STEP 4에서 같은 조건을 명시한다.
+    ws = span.split()
+    if len(ws) > 11:
+        print(f"[VAR][A][{pid}] Q5 지목({lab}) {len(ws)}단어 — 11단어 초과, ends_with를 앞으로 당겨야 함")
+        return None
+    if len(ws) < 4:
+        print(f"[VAR][A][{pid}] Q5 지목({lab}) {len(ws)}단어 — 4단어 미만")
+        return None
+    if re.search(r"[.!?,;:]", span):
+        print(f"[VAR][A][{pid}] Q5 지목({lab}) 구두점 포함 — 구두점 앞에서 끊어야 함: '{span[:50]}'")
+        return None
+    return span
+
+
 def validate_llm_q5_spans(paragraphs, span_a: str, span_b: str, pid: str = "?") -> Optional[dict]:
     """LLM이 고른 Q5 빈칸 두 구절을 검증한다. 통과하면 마킹된 paragraphs를 반환.
 
@@ -420,9 +476,13 @@ def validate_llm_q5_spans(paragraphs, span_a: str, span_b: str, pid: str = "?") 
         return _fail(f"(A) 전체에서 {na}회 등장 — 유일해야 복원이 확정된다: '{a[:50]}'")
     if ib is None:
         return _fail(f"(B) 전체에서 {nb}회 등장: '{b[:50]}'")
+    # ★ (A)(B)는 서로 다른 단락에서 하나씩. intro 포함 네 곳(intro/A/B/C) 중 두 곳.
+    #   같은 단락에 몰면 지문 한쪽만 비고 나머지는 온전해 읽기 균형이 깨진다.
     if ia == ib:
-        return _fail(f"(A)(B)가 같은 단락({ia}) — 서로 다른 단락이어야 함")
-    if ia > ib:
+        _lab = paragraphs[ia][0] if ia < len(paragraphs) else ia
+        return _fail(f"(A)(B)가 같은 단락({_lab}) — intro/A/B/C 중 서로 다른 두 곳에서 골라야 함")
+    _joined_all = " ".join(texts)
+    if _joined_all.find(a) > _joined_all.find(b):     # (A)가 지문에서 먼저 나오게
         a, b, ia, ib = b, a, ib, ia
 
     new_paras = [list(p) for p in paragraphs]
@@ -435,10 +495,10 @@ def validate_llm_q5_spans(paragraphs, span_a: str, span_b: str, pid: str = "?") 
     dup = fill_boundary_dup(joined, [("<BLANK_A>", a), ("<BLANK_B>", b)])
     if dup:
         return _fail(f"빈칸 경계에서 '{dup}' 중복")
-    if new_paras[ia][1].replace("<BLANK_A>", a) != texts[ia]:
-        return _fail("(A) 되넣어도 원문 복원 안 됨")
-    if new_paras[ib][1].replace("<BLANK_B>", b) != texts[ib]:
-        return _fail("(B) 되넣어도 원문 복원 안 됨")
+    for _i in {ia, ib}:
+        _rec = new_paras[_i][1].replace("<BLANK_A>", a).replace("<BLANK_B>", b)
+        if _rec != texts[_i]:
+            return _fail(f"단락{_i} 되넣어도 원문 복원 안 됨")
     return {"paragraphs": new_paras, "blank_A": a, "blank_B": b}
 
 
@@ -672,7 +732,13 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s69 = Q5 LLM픽 거부 사유를 로그에 남김(8단계 중 어디서 걸리는지 알아야 프롬프트를 고친다). _s68 누적분 포함.
+    # _s75 = intro <CORE_BLANK> 복원을 try 밖으로(예외 시 빈칸 잔존 방지) + 남으면 validator가 CRITICAL. _s74 누적분 포함.
+    # (구) _s74 = Q5 프롬프트에 단락 경계를 명시(=== 구분선·para 번호·단어수) — LLM이 코드가 나눈 단락을 정확히 인식해야 겹치지 않게 고른다. _s73 누적분 포함.
+    # (구) _s73 = Q5 (A)(B)를 intro·A·B·C 중 서로 다른 두 단락에서 선정(LLM 판단). _s72 누적분 포함.
+    # (구) _s72 = Q5 후보에 intro 포함 + 같은 단락 허용(단락 선택은 LLM 판단) + 안 쓰이는 CORE_BLANK 복원. _s71 누적분 포함.
+    # (구) _s71 = Q5 길이·구두점 조건을 프롬프트에 명시하고 코드는 뒤에서 자르지 않고 거부(어정쩡한 절단 방지). _s70 누적분 포함.
+    # (구) _s70 = Q5 빈칸을 LLM이 문자열이 아닌 위치로 지목(para+starts_with+ends_with), 코드가 원문에서 잘라냄 — 창작 원천 차단. _s69 누적분 포함.
+    # (구) _s69 = Q5 LLM픽 거부 사유를 로그에 남김(8단계 중 어디서 걸리는지 알아야 프롬프트를 고친다). _s68 누적분 포함.
     # (구) _s68 = 어휘 정답위치 셔플 폐기(자리 불일치로 A 누락 유발) + Q5 LLM픽 경계 완화(6/7 폴백 해소) + 단어 중간 잘림 거부. _s67 누적분 포함.
     # (구) _s67 = B Q1 삽입문을 LLM이 선정(지시어·대명사·연결어 단서로 자리가 확정되는 문장), 코드는 복원·간격만 검증. _s66 누적분 포함.
     # (구) _s66 = B 요약·주제영작 보기에 중간 구두점을 단어에 붙여 제시(signals, first,) — 학생이 쉼표 위치를 알 수 있게. _s65 누적분 포함.
@@ -685,7 +751,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s69"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s75"
 
 
 # ============ Supabase 캐시 ============
@@ -937,6 +1003,25 @@ def generate_variation_a(
                         data["intro"] = new_intro
                     data["_core_marked"] = core_ok
 
+                # ★★ Q3가 어휘 유형으로 대체되면 intro 의 <CORE_BLANK> 는 아무 문항도
+                #   참조하지 않는다. 그대로 두면 지문에 쓰이지 않는 빈칸이 남는다(실측:
+                #   'you are taught to write up your results thus: "____, and so on until').
+                #   원문 구절로 되돌려 intro 를 온전한 문장으로 만든다.
+                #   ※ Q5 LLM 픽 try 블록 밖에서 처리한다 — 안에 두면 호출이 예외로 죽을 때
+                #     빈칸이 그대로 남는다.
+                if data.get("vocab_items") and "<CORE_BLANK>" in str(data.get("intro", "")):
+                    _tgt_r = str(data.get("core_blank_target", "") or "").strip()
+                    if _tgt_r:
+                        data["intro"] = data["intro"].replace("<CORE_BLANK>", _tgt_r)
+                        print(f"[VAR][A][{pid}] intro <CORE_BLANK> → 원문 복원")
+                    else:
+                        _ob_r = build_order_blocks_a(en_text, pid)
+                        if _ob_r and _ob_r.get("intro"):
+                            data["intro"] = _ob_r["intro"]
+                            print(f"[VAR][A][{pid}] intro <CORE_BLANK> → 원문에서 재구성")
+                        else:
+                            print(f"[VAR][A][{pid}] ⚠ intro <CORE_BLANK> 복원 실패 (target 없음)")
+
                 # Q5 영작빈칸: ★ 코드가 (A)(B)(C)에서 직접 골라 뚫는다 (B 빈칸뚫기와 같은 철학).
                 #   LLM 구절이 유효하면 우선 쓰고, 아니면 코드가 깨끗한 구절을 골라 verbatim 마킹.
                 #   → 빈칸 짧음/원문 미발견/경계 단어중복(예: 'questions') 원천 차단. 서로 다른 단락.
@@ -947,13 +1032,27 @@ def generate_variation_a(
                 #   판단은 LLM, 검증은 코드로 나눈다. 실패하면 기존 코드 픽으로 폴백.
                 _picked = None
                 try:
+                    # ★ intro 를 0번 단락으로 함께 넘긴다. 어느 단락에서 고를지는 LLM 판단이고,
+                    #   intro(주어진 글)도 빈칸 대상이다. Q3가 어휘로 바뀌어 intro의
+                    #   핵심빈칸이 더 이상 쓰이지 않으므로 자리가 비어 있다.
+                    _q5paras = [["intro", data.get("intro", "")]] + [list(x) for x in data["paragraphs"]]
                     _q5raw = call_claude(Q5_BLANK_SYS,
-                                         build_q5_blank_prompt(data["paragraphs"]),
+                                         build_q5_blank_prompt(_q5paras),
                                          max_tokens=1200)
                     _q5 = extract_json_from_response(_q5raw)
-                    _picked = validate_llm_q5_spans(data["paragraphs"],
-                                                    _q5.get("blank_A", ""),
-                                                    _q5.get("blank_B", ""), pid)
+                    _ra, _rb = _q5.get("blank_A"), _q5.get("blank_B")
+                    # 새 형식: {para, starts_with, ends_with} 지목 → 코드가 원문에서 잘라냄
+                    if isinstance(_ra, dict) or isinstance(_rb, dict):
+                        _sa = _span_from_marks(_q5paras, _ra, pid, "A")
+                        _sb = _span_from_marks(_q5paras, _rb, pid, "B")
+                    else:                                   # 구 형식(문자열) 하위호환
+                        _sa, _sb = str(_ra or ""), str(_rb or "")
+                    _picked = validate_llm_q5_spans(_q5paras, _sa, _sb, pid) \
+                        if (_sa and _sb) else None
+                    if _picked:
+                        # intro 를 다시 떼어내 원래 구조로 복원
+                        data["intro"] = _picked["paragraphs"][0][1]
+                        _picked["paragraphs"] = _picked["paragraphs"][1:]
                     if _picked:
                         print(f"[VAR][A][{pid}] Q5 LLM 픽 — (A)'{_picked['blank_A'][:40]}' "
                               f"(B)'{_picked['blank_B'][:40]}'")
@@ -985,6 +1084,25 @@ def generate_variation_a(
                                 break
                         marked[mk] = done
                 data["_blanks_marked"] = marked
+
+                # ★★ Q3가 어휘 유형으로 대체되면 intro 의 <CORE_BLANK> 는 아무 문항도
+                #   참조하지 않는다. 그대로 두면 지문에 쓰이지 않는 빈칸이 남는다(실측).
+                #   원문 구절로 되돌려 intro 를 온전한 문장으로 만든다.
+                #   ※ Q5 LLM 픽 try 블록 밖에서 처리한다 — 그 안에 두면 호출이 예외로
+                #     죽었을 때 빈칸이 그대로 남는다.
+                if "<CORE_BLANK>" in str(data.get("intro", "")):
+                    _tgt = str(data.get("core_blank_target", "") or "").strip()
+                    if _tgt:
+                        data["intro"] = data["intro"].replace("<CORE_BLANK>", _tgt)
+                        print(f"[VAR][A][{pid}] intro <CORE_BLANK> → 원문 복원")
+                    else:
+                        # target 이 없으면 되돌릴 말이 없다 — 원문 첫 문장으로 intro 를 재구성
+                        _ob2 = build_order_blocks_a(en_text, pid)
+                        if _ob2 and _ob2.get("intro"):
+                            data["intro"] = _ob2["intro"]
+                            print(f"[VAR][A][{pid}] intro <CORE_BLANK> → 원문에서 재구성")
+                        else:
+                            print(f"[VAR][A][{pid}] ⚠ intro <CORE_BLANK> 복원 실패 — target 없음")
 
                 # ★★ Q3 어휘 유형 (수능 30번) — Q5 빈칸이 확정된 뒤에 호출한다.
                 #   원문(paragraphs)은 안 건드리고 '자리(인덱스)'만 기록하므로

@@ -943,3 +943,97 @@ def build_vocab_prompt(paragraphs, blank_phrases=None) -> str:
         '],\n'
         ' "vocab_explain": "<한국어 해설 — 정답 자리가 왜 틀렸고 무엇이어야 하는지, 근거 문장과 함께>"}'
     )
+
+
+# ════════════════════════════════════════════════════════════════
+# A Q5 — 빈칸영작 자리 선정 (수능 32~34번 빈칸 논리를 영작에 적용)
+#   기출 23문항 실측:
+#     · 빈칸 위치: 결론 39% / 논지핵심 17% / 두괄식 주제문 17% / 전환점 12%
+#     · 평균 위치 0.66 (지문 2/3 지점) — 첫 문장 17%, 마지막 문장 30%
+#     · 단어 수 4~11, 평균 6.9
+#     · 근거 위치: 뒤 문장 14회 / 앞 문장 10회 / 글 전체·예시 9회
+#   → 평가원은 '단어 수'가 아니라 '논지가 착지하는 자리'를 먼저 고른다.
+# ════════════════════════════════════════════════════════════════
+Q5_BLANK_SYS = (
+    "You select fill-in-the-blank spans for a Korean CSAT-style writing task. "
+    "Output ONLY valid JSON, no markdown, no text outside JSON."
+)
+
+
+def build_q5_blank_prompt(paragraphs) -> str:
+    """paragraphs: [[label, text], ...] 원문 그대로 (마커 없음)"""
+    body = "\n\n".join(f"({lab}) {txt}" for lab, txt in paragraphs)
+    return (
+        "Choose TWO spans in this passage to blank out for a word-order writing task.\n\n"
+        "[PASSAGE]\n" + body + "\n\n"
+
+        "## 이 문제가 무엇인가\n"
+        "Students receive the blanked passage plus a shuffled word bank, and must rebuild\n"
+        "the exact original wording. So each span must be copied VERBATIM — every letter,\n"
+        "every inflection. A paraphrase makes the task unsolvable.\n\n"
+
+        "## STEP 1 — 논지를 먼저 잡아라 (자리는 그 다음이다)\n"
+        "Write down for yourself:\n"
+        "  · What does this passage argue? Which sentence carries that claim?\n"
+        "  · Is it 두괄식 (thesis first, then examples) or 미괄식 (build-up, then conclusion)?\n"
+        "  · Where is the CONTRAST AXIS or the turning point (But / However / in fact / Thus)?\n"
+        "★ 평가원은 단어 수를 먼저 세지 않는다. 논지가 착지하는 문장을 먼저 고르고, 그 안에서\n"
+        "  절·구 단위로 끊는다. 같은 방식으로 하라.\n\n"
+
+        "## STEP 2 — 빈칸 자리 (기출 23문항 실측 분포를 따르라)\n"
+        "  ★★ CONCLUSION — 39%, 최다. 논지가 착지하는 마지막 문장.\n"
+        "     기출: 'the truth of the matter is revealed [not in the perception of the figure\n"
+        "            but in its rational representation]'\n"
+        "  ★★ THESIS CORE — 17%. 글의 주장이 한 구절로 응축된 곳.\n"
+        "     기출: 'if you can't see who is paying, then [the real product being sold is you]'\n"
+        "  ★★ OPENING THESIS — 17%. 두괄식 첫 문장. 뒤 예시 전체를 읽어야 답이 나온다.\n"
+        "     기출: 'Centralized, formal rules can [facilitate productive activity by\n"
+        "            establishing roles and practices]' — 뒤에 야구·악보·법인 예시가 이어짐\n"
+        "  ★ TURNING POINT — 12%. But / in fact / Thus 직후.\n"
+        "     기출: 'While this may interfere with creativity, it in fact [aids in viewer\n"
+        "            access to the film]'\n"
+        "  · 평균 위치는 지문의 0.66 지점. 도입부 배경 설명이나 단순 예시 나열 구간은 피하라.\n\n"
+
+        "## STEP 3 — ★ 근거가 옆에 있어야 한다 (이게 채점 가능성을 만든다)\n"
+        "기출 23문항 전부, 빈칸 옆에 정답을 확정하는 단서가 있다. 셋 중 하나여야 한다:\n"
+        "  (a) 뒤 문장이 빈칸을 패러프레이즈한다 — 14회, 최다\n"
+        "      빈칸 'anticipate the absent reader's response'\n"
+        "      뒤   'in effect, we have to imagine both halves of a virtual conversation'\n"
+        "  (b) 앞 문장·구문이 방향을 지정한다 — 10회\n"
+        "      앞   'The more affected one is,'\n"
+        "      빈칸 'the less similarity is required for the thing to appear'\n"
+        "      → the비교급 구문이 자리와 형태를 강제한다\n"
+        "  (c) 글 전체 또는 뒤따르는 예시가 근거다 — 9회\n"
+        "      빈칸(첫 문장) 'facilitate productive activity by establishing roles'\n"
+        "      → 뒤의 야구·악보·법인·판사 예시를 일반화해야 나온다\n"
+        "★ 근거를 지목할 수 없는 자리는 고르지 마라. 학생이 추측밖에 할 수 없다.\n\n"
+
+        "## STEP 4 — 끊는 단위\n"
+        "  · 4~11 words (기출 평균 6.9). 단어 수는 결과이지 목표가 아니다.\n"
+        "  · 절이나 구로 완결되게 끊어라. 기출 형태:\n"
+        "      V + O           'conceal what they mean and feel'\n"
+        "      V + by V-ing    'facilitate productive activity by establishing roles and practices'\n"
+        "      S + be + 보어    'the real product being sold is you'\n"
+        "      not A but B     'not in the perception of the figure but in its rational representation'\n"
+        "      과거분사 + 전치사구 'understood as a restraint on their freedom'\n"
+        "  · 관사·전치사·접속사·조동사로 시작하거나 끝나지 마라. 구가 어정쩡하게 잘린다.\n"
+        "  · 문장부호(. ! ? , ; :)를 span 안에 넣지 마라. 보기에는 구두점이 없어 복원이 깨진다.\n\n"
+
+        "## STEP 5 — (A)와 (B)\n"
+        "  · 서로 다른 단락에서 하나씩. (A)가 (B)보다 지문에서 먼저 나와야 한다.\n"
+        "  · 둘 사이에 최소 몇 문장 간격을 두어라.\n"
+        "  · 두 개가 같은 논리 단계를 반복하지 않게 — 예컨대 (A)는 전제·전환, (B)는 결론.\n"
+        "  · ★ 각 span은 그 단락 안에서 딱 한 번만 등장해야 한다. 두 번 나오면 복원이 모호해진다.\n\n"
+
+        "## STEP 6 — VERBATIM 확인 (가장 흔한 실패)\n"
+        "  Copy each span character-by-character from the passage above. Do not fix grammar,\n"
+        "  do not change tense, do not drop a word. Then read the sentence back with the span\n"
+        "  restored — it must be identical to the original.\n\n"
+
+        "## OUTPUT\n"
+        '{"blank_A": "<verbatim span from an earlier paragraph>",\n'
+        ' "blank_B": "<verbatim span from a later paragraph>",\n'
+        ' "why_A": "<which position type (conclusion/thesis core/opening/turning point) and\n'
+        '           which evidence type (a/b/c) — quote the neighboring words that prove it>",\n'
+        ' "why_B": "<same for B>"}'
+    )

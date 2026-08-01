@@ -27,6 +27,7 @@ A Q3 어휘 유형 (수능 30번) — 밑줄 자리 선정 코드
   · 정답 품사: 형용사 4 / 동사 3 — 명사·부사가 정답인 경우 없음
 """
 import re
+import hashlib
 from typing import Optional
 
 # 밑줄 후보에서 제외할 기능어 — 문맥 판단 대상이 아니다
@@ -492,6 +493,44 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None) -> Optional[lis
     return out
 
 
+def shuffle_answer_position(vocab_items, pid: str = "") -> list:
+    """정답 위치를 ③④⑤ 사이에 분산시킨다.
+
+    프롬프트에 "③④⑤ 중 하나"라고만 쓰면 LLM이 매번 ③을 고른다(실측 3/3).
+    기출은 ③2회 ④3회 ⑤2회로 흩어지므로, 코드가 pid 기준 결정적 시드로
+    목표 위치를 정하고 정답 항목과 그 자리 항목의 '내용'을 맞바꾼다.
+
+    자리(para·idx)는 그대로 두고 original/shown/is_answer 등 내용만 교환하므로,
+    본문 밑줄 위치는 변하지 않고 정답 번호만 바뀐다."""
+    if not isinstance(vocab_items, list) or len(vocab_items) != 5:
+        return vocab_items
+    cur = next((i for i, it in enumerate(vocab_items) if it.get("is_answer")), None)
+    if cur is None:
+        return vocab_items
+
+    # 기출 분포(③2 ④3 ⑤2)를 따라 가중 선택
+    pool = [2, 3, 3, 3, 4, 4]          # 0-based: ③③ ④④④ ⑤⑤
+    seed = int(hashlib.md5(str(pid).encode()).hexdigest()[:8], 16)
+    target = pool[seed % len(pool)]
+    if target == cur:
+        return vocab_items
+
+    # 내용만 교환 — 자리(para/idx/n)는 유지
+    KEEP = {"n", "para", "idx"}
+    a, b = vocab_items[cur], vocab_items[target]
+    a_rest = {k: v for k, v in a.items() if k not in KEEP}
+    b_rest = {k: v for k, v in b.items() if k not in KEEP}
+    for k in list(a.keys()):
+        if k not in KEEP:
+            del a[k]
+    for k in list(b.keys()):
+        if k not in KEEP:
+            del b[k]
+    a.update(b_rest)
+    b.update(a_rest)
+    return vocab_items
+
+
 def build_vocab_fallback(paragraphs, blank_spans=None) -> Optional[list]:
     """LLM 실패 시 — 코드가 자리만 잡아 최소한의 문항을 만든다.
     shown은 original 그대로라 패러프레이즈 검증에 걸린다(경고). 누락보다는 낫다."""
@@ -502,7 +541,7 @@ def build_vocab_fallback(paragraphs, blank_spans=None) -> Optional[list]:
         it["shown"] = it["original"]
         it["shown_clean"] = strip_edge_punct(it["original"])
         it["original_clean"] = strip_edge_punct(it["original"])
-        it["is_answer"] = (it["n"] == 4)          # 기출 최빈 위치
+        it["is_answer"] = (it["n"] == 4)          # 기출 최빈 위치 (뒤에서 분산됨)
         it["_fallback"] = True                    # 패러프레이즈 검사 면제
         it["evidence_type"] = ""
         it["evidence"] = ""

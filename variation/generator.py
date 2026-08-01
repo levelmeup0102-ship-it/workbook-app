@@ -348,33 +348,33 @@ def _q5_candidates(ptext: str, min_w: int = 4, max_w: int = 8) -> list:
 MAX_BLANK_WORDS = 9  # 영작 빈칸(A Q5 / B Q4) 최대 단어 수 — 초과 LLM 빈칸은 거부하고 코드가 5~7단어로 대체
 
 
-def validate_llm_q5_spans(paragraphs, span_a: str, span_b: str) -> Optional[dict]:
+def validate_llm_q5_spans(paragraphs, span_a: str, span_b: str, pid: str = "?") -> Optional[dict]:
     """LLM이 고른 Q5 빈칸 두 구절을 검증한다. 통과하면 마킹된 paragraphs를 반환.
 
-    LLM은 '논지가 착지하는 자리'를 판단하고(코드로는 불가), 코드는 복원 가능성만 본다:
-      · 원문에 verbatim 으로 존재하는가 (보기 단어로 되맞춰야 하므로 필수)
-      · 전체에서 유일한가 (두 번 나오면 어느 자리인지 모호)
-      · 서로 다른 단락인가 / (A)가 (B)보다 앞인가
-      · 구두점을 물고 있지 않은가 (보기엔 구두점이 없다)
-      · 4~11 단어인가 (기출 실측 범위, 평균 6.9)
-      · 되넣으면 원문이 정확히 복원되는가
-      · 빈칸 경계에서 단어가 중복되지 않는가
-    하나라도 어긋나면 None → 호출부가 코드 픽으로 폴백한다."""
+    LLM은 '논지가 착지하는 자리'를 판단하고(코드로는 불가), 코드는 복원 가능성만 본다.
+    ★ 실패하면 어느 조건에서 걸렸는지 로그로 남긴다 — 로그에 '검증 실패'만 찍히면
+      8단계 중 어디가 문제인지 알 수 없어 프롬프트를 고칠 수 없다.
+    """
+    def _fail(why):
+        print(f"[VAR][A][{pid}] Q5 LLM 픽 거부: {why}")
+        return None
+
     try:
         texts = [p[1] for p in paragraphs]
     except Exception:
-        return None
+        return _fail("paragraphs 형식 오류")
     a = re.sub(r"\s+", " ", str(span_a or "")).strip()
     b = re.sub(r"\s+", " ", str(span_b or "")).strip()
-    if not a or not b or a == b:
-        return None
+    if not a or not b:
+        return _fail("빈 값")
+    if a == b:
+        return _fail("(A)(B) 동일")
 
     # 구두점이 붙어 오면 그 직전까지 잘라 쓴다 (구두점은 빈칸 밖)
     a = _cut_before_punct(a, 4) or a
     b = _cut_before_punct(b, 4) or b
-    # ★ 단어 중간에서 잘린 구절 거부. LLM이 문자 단위로 자르는 일이 있다
-    #   (실측: 'arbitrarily tore through' → 'arily tore through' 로 잘려 나옴).
-    #   원문에서 그 구절 앞뒤가 공백·문장경계여야 진짜 단어 경계다.
+
+    # 단어 중간에서 잘린 구절 거부 ('arbitrarily' → 'arily')
     def _word_bounded(v, whole):
         k = whole.find(v)
         if k < 0:
@@ -383,37 +383,45 @@ def validate_llm_q5_spans(paragraphs, span_a: str, span_b: str) -> Optional[dict
         e = k + len(v)
         after_ok = (e >= len(whole)) or (not whole[e].isalnum())
         return before_ok and after_ok
+
     _whole = " ".join(texts)
-    if not _word_bounded(a, _whole) or not _word_bounded(b, _whole):
-        return None
-    for v in (a, b):
+    for v, lab in ((a, "A"), (b, "B")):
+        if v not in _whole:
+            return _fail(f"({lab}) 원문에 없음 — verbatim 아님: '{v[:50]}'")
+        if not _word_bounded(v, _whole):
+            return _fail(f"({lab}) 단어 중간에서 잘림: '{v[:50]}'")
         n = len(v.split())
-        if n < 4 or n > 11:
-            return None
+        if n < 4:
+            return _fail(f"({lab}) {n}단어 — 4단어 미만: '{v[:50]}'")
+        if n > 11:
+            return _fail(f"({lab}) {n}단어 — 11단어 초과: '{v[:50]}'")
         if re.search(r"[.!?,;:]", v):
-            return None
+            return _fail(f"({lab}) 구두점 포함: '{v[:50]}'")
         if not _quote_ok(v):
-            return None
-        # ★ LLM 픽에는 완화 경계(strict=False)를 쓴다.
-        #   strict 는 코드가 단어 수만 보고 아무 데나 자를 때 쓰는 안전장치다.
-        #   LLM은 논지 기준으로 고르므로 관사·전치사로 시작하는 자리가 정상이다.
-        #   기출도 그렇다: 'the commonalities between us far outweigh the differences',
-        #   'not in the perception of the figure but in its rational representation'.
-        #   strict 로 걸면 LLM 픽이 거의 전부 거부돼 코드 픽으로 폴백한다(실측 6/7 폴백).
-        if not _clean_boundary_ok(v, " ".join(texts), strict=False):
-            return None
+            return _fail(f"({lab}) 따옴표/문장부호 문제: '{v[:50]}'")
+        # ★ LLM 픽에는 완화 경계(strict=False). strict 는 코드가 단어 수만 보고
+        #   아무 데나 자를 때 쓰는 안전장치다. 기출도 관사·전치사로 시작한다.
+        if not _clean_boundary_ok(v, _whole, strict=False):
+            ws = v.split()
+            return _fail(f"({lab}) 경계 어정쩡 (시작 '{ws[0]}' / 끝 '{ws[-1]}'): '{v[:50]}'")
 
     def _locate(v):
-        if sum(t.count(v) for t in texts) != 1:
-            return None
+        tot = sum(t.count(v) for t in texts)
+        if tot != 1:
+            return None, tot
         for i, t in enumerate(texts):
             if t.count(v) == 1:
-                return i
-        return None
+                return i, 1
+        return None, tot
 
-    ia, ib = _locate(a), _locate(b)
-    if ia is None or ib is None or ia == ib:
-        return None
+    ia, na = _locate(a)
+    ib, nb = _locate(b)
+    if ia is None:
+        return _fail(f"(A) 전체에서 {na}회 등장 — 유일해야 복원이 확정된다: '{a[:50]}'")
+    if ib is None:
+        return _fail(f"(B) 전체에서 {nb}회 등장: '{b[:50]}'")
+    if ia == ib:
+        return _fail(f"(A)(B)가 같은 단락({ia}) — 서로 다른 단락이어야 함")
     if ia > ib:
         a, b, ia, ib = b, a, ib, ia
 
@@ -423,13 +431,14 @@ def validate_llm_q5_spans(paragraphs, span_a: str, span_b: str) -> Optional[dict
 
     joined = " ".join(p[1] for p in new_paras)
     if "<BLANK_A>" not in joined or "<BLANK_B>" not in joined:
-        return None
-    if fill_boundary_dup(joined, [("<BLANK_A>", a), ("<BLANK_B>", b)]):
-        return None
+        return _fail("마커 삽입 실패")
+    dup = fill_boundary_dup(joined, [("<BLANK_A>", a), ("<BLANK_B>", b)])
+    if dup:
+        return _fail(f"빈칸 경계에서 '{dup}' 중복")
     if new_paras[ia][1].replace("<BLANK_A>", a) != texts[ia]:
-        return None
+        return _fail("(A) 되넣어도 원문 복원 안 됨")
     if new_paras[ib][1].replace("<BLANK_B>", b) != texts[ib]:
-        return None
+        return _fail("(B) 되넣어도 원문 복원 안 됨")
     return {"paragraphs": new_paras, "blank_A": a, "blank_B": b}
 
 
@@ -663,7 +672,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s68 = 어휘 정답위치 셔플 폐기(자리 불일치로 A 누락 유발) + Q5 LLM픽 경계 완화(6/7 폴백 해소) + 단어 중간 잘림 거부. _s67 누적분 포함.
+    # _s69 = Q5 LLM픽 거부 사유를 로그에 남김(8단계 중 어디서 걸리는지 알아야 프롬프트를 고친다). _s68 누적분 포함.
+    # (구) _s68 = 어휘 정답위치 셔플 폐기(자리 불일치로 A 누락 유발) + Q5 LLM픽 경계 완화(6/7 폴백 해소) + 단어 중간 잘림 거부. _s67 누적분 포함.
     # (구) _s67 = B Q1 삽입문을 LLM이 선정(지시어·대명사·연결어 단서로 자리가 확정되는 문장), 코드는 복원·간격만 검증. _s66 누적분 포함.
     # (구) _s66 = B 요약·주제영작 보기에 중간 구두점을 단어에 붙여 제시(signals, first,) — 학생이 쉼표 위치를 알 수 있게. _s65 누적분 포함.
     # (구) _s65 = Q5 후보를 구두점 직전까지 잘라 생성(구두점은 빈칸 밖에 남김) + 최소 4단어. _s64 누적분 포함.
@@ -675,7 +685,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s68"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s69"
 
 
 # ============ Supabase 캐시 ============
@@ -943,7 +953,7 @@ def generate_variation_a(
                     _q5 = extract_json_from_response(_q5raw)
                     _picked = validate_llm_q5_spans(data["paragraphs"],
                                                     _q5.get("blank_A", ""),
-                                                    _q5.get("blank_B", ""))
+                                                    _q5.get("blank_B", ""), pid)
                     if _picked:
                         print(f"[VAR][A][{pid}] Q5 LLM 픽 — (A)'{_picked['blank_A'][:40]}' "
                               f"(B)'{_picked['blank_B'][:40]}'")

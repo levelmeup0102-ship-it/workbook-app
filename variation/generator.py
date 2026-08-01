@@ -278,7 +278,24 @@ def _clean_boundary_ok(phrase: str, full_text: str, strict: bool = True) -> bool
     return True
 
 
-def _q5_candidates(ptext: str, min_w: int = 5, max_w: int = 7) -> list:
+def _cut_before_punct(sub: str, min_w: int = 4) -> str:
+    """구절 안·끝의 구두점 직전까지 자른다. 남은 단어가 min_w 미만이면 빈 문자열.
+
+    구두점은 빈칸 밖에 남는다 — 지문에 그대로 인쇄되고 학생은 그 앞부분만 배열한다.
+      'dwindle and trail off, over the course'  →  'dwindle and trail off'
+      'convince more readers for the whole story.' → 'convince more readers for the whole story'
+    쉼표 위치를 학생이 알 수 없으므로 구두점을 정답에 포함시키면 채점이 갈린다."""
+    t = str(sub or "").strip()
+    if not t:
+        return ""
+    m = re.search(r'[.!?,;:]', t)
+    if m:
+        t = t[:m.start()].strip()
+    t = t.rstrip('.,;:!?').strip()
+    return t if len(t.split()) >= min_w else ""
+
+
+def _q5_candidates(ptext: str, min_w: int = 4, max_w: int = 8) -> list:
     """단락에서 '문장 중간 연속 구절'(verbatim) 후보 생성. 가운데 우선.
     문장경계/따옴표 포함 제외, 조동사 시작 제외, 단락 내 유일 등장만.
 
@@ -295,6 +312,13 @@ def _q5_candidates(ptext: str, min_w: int = 5, max_w: int = 7) -> list:
             for i in range(1, n - L):  # 양끝 한 토큰씩 비워 경계 확보
                 j = i + L - 1
                 sub = ptext[spans[i][0]:spans[j][1]]
+                # ★ 구두점은 빈칸 밖에 남긴다. 'dwindle and trail off, over the course'에서
+                #   쉼표 든 구절을 통째로 버리면 'trail off over'(쉼표 건너뛴 자리)가 뽑힌다.
+                #   대신 구두점 직전까지 잘라 'dwindle and trail off'를 후보로 만든다.
+                #   지문에는 쉼표가 그대로 인쇄되고 학생은 그 앞부분만 배열한다.
+                sub = _cut_before_punct(sub, min_w)
+                if not sub:
+                    continue
                 if not _quote_ok(sub):
                     continue
                 if not _clean_boundary_ok(sub, ptext, strict=strict):
@@ -339,6 +363,9 @@ def validate_llm_q5_spans(paragraphs, span_a: str, span_b: str) -> Optional[dict
     if not a or not b or a == b:
         return None
 
+    # 구두점이 붙어 오면 그 직전까지 잘라 쓴다 (구두점은 빈칸 밖)
+    a = _cut_before_punct(a, 4) or a
+    b = _cut_before_punct(b, 4) or b
     for v in (a, b):
         n = len(v.split())
         if n < 4 or n > 11:
@@ -397,6 +424,7 @@ def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?
         if not val:
             return None
         v = str(val).strip()
+        v = _cut_before_punct(v, 4) or v      # 구두점은 빈칸 밖에 남긴다
         if len(v.split()) < 4:
             return None
         if len(v.split()) > MAX_BLANK_WORDS:   # 너무 길면(예: 27단어) 거부 → 코드가 깔끔한 5~7단어로 대체
@@ -609,7 +637,9 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s64 = Q5 빈칸 자리를 LLM이 논지 기준으로 선정(기출23문항: 결론39%·논지핵심17%·두괄식17%·전환점12%), 코드는 verbatim·복원만 검증. _s63 누적분 포함.
+    # _s66 = B 요약·주제영작 보기에 중간 구두점을 단어에 붙여 제시(signals, first,) — 학생이 쉼표 위치를 알 수 있게. _s65 누적분 포함.
+    # (구) _s65 = Q5 후보를 구두점 직전까지 잘라 생성(구두점은 빈칸 밖에 남김) + 최소 4단어. _s64 누적분 포함.
+    # (구) _s64 = Q5 빈칸 자리를 LLM이 논지 기준으로 선정(기출23문항: 결론39%·논지핵심17%·두괄식17%·전환점12%), 코드는 verbatim·복원만 검증. _s63 누적분 포함.
     # (구) _s63 = 어휘 정답 위치 ③④⑤ 분산(프롬프트만으론 매번 ③에 몰림, 실측 3/3). _s62 누적분 포함.
     # (구) _s62 = 어휘 선지 구두점 제거(본문은 유지) + 문두 접속부사·담화표지 출제 금지. _s61 누적분 포함.
     # (구) _s61 = 어휘 발음·철자 유사어 금지(1회독 Part A 규칙 적용) + 프롬프트 명시. _s60 누적분 포함.
@@ -617,7 +647,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s64"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s66"
 
 
 # ============ Supabase 캐시 ============
@@ -1294,10 +1324,27 @@ def generate_variation_b(
             # ★ Q4/Q5 보기(bogi) 자동 생성: 답지 단어를 그대로 소문자·구두점제거하여 보기로 사용.
             #   모델이 만든 보기는 무시 → 누락/잉여(예: 'for')/중복오류를 원천 차단.
             def _bogi_from(text: str):
-                s = re.sub(r'(?<=\d),(?=\d)', '\u0001', str(text or ""))  # 100,000 보호
-                s = re.sub(r'\b([A-Za-z](?:\.[A-Za-z])+)\.?', lambda m: m.group(0).replace('.', '\u0002'), s)  # U.S. 보호
-                toks = re.sub(r'[.,;:!?()]', ' ', s).split()  # " 안 뗌 → 따옴표를 단어에 붙임
-                return [t.replace('\u0001', ',').replace('\u0002', '.') for t in toks if t]  # .lower() 제거 → A처럼 대소문자 유지
+                """정답 문장을 보기 단어로 쪼갠다.
+
+                ★ 문장 중간 구두점(쉼표·세미콜론·콜론)은 앞 단어에 붙여서 제시한다.
+                  'When markets send signals, prices rise' → [..., 'signals,', 'prices', ...]
+                  구두점을 떼버리면 학생이 어디에 찍어야 할지 알 수 없어 채점이 갈린다.
+                  붙여주면 그 자리가 곧 단서가 되고, 배열 결과가 원문과 글자까지 일치한다.
+                  단, 문장 끝 마침표·물음표는 뗀다 — 끝은 자명하고, 붙이면 마지막 단어가
+                  어느 것인지 미리 알려주는 꼴이 된다."""
+                t = str(text or "").strip()
+                t = re.sub(r'[.!?]+\s*$', '', t)              # 문장 끝 종결부호만 제거
+                t = re.sub(r'(?<=\d),(?=\d)', '\u0001', t)   # 100,000 보호
+                t = re.sub(r'\b([A-Za-z](?:\.[A-Za-z])+)\.?',
+                           lambda m: m.group(0).replace('.', '\u0002'), t)  # U.S. 보호
+                toks = t.split()                              # 중간 구두점은 단어에 붙은 채로
+                out = []
+                for w in toks:
+                    w = w.replace('\u0001', ',').replace('\u0002', '.')
+                    w = w.strip('()')                         # 괄호만 떼어냄
+                    if w:
+                        out.append(w)
+                return out
             try:
                 # Q4: blank_A + blank_B
                 q4 = _bogi_from(str(data.get("blank_A", "")) + " " + str(data.get("blank_B", "")))

@@ -18,7 +18,8 @@ import httpx
 from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt, CORE_BLANK_SYS, build_core_blank_prompt, TRANSLATE_SYS, build_translate_prompt, VOCAB_SYS, build_vocab_prompt
 from variation.validator import validate_a, validate_b, check_marker_positions, fill_boundary_dup, modal_no_verb
 from variation.vocab_q3 import (normalize_llm_vocab, build_vocab_fallback,
-                                validate_vocab, blank_token_spans)
+                                validate_vocab, blank_token_spans,
+                                shuffle_answer_position)
 
 
 # ============================================================
@@ -546,13 +547,14 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s62 = 어휘 선지 구두점 제거(본문은 유지) + 문두 접속부사·담화표지 출제 금지. _s61 누적분 포함.
+    # _s63 = 어휘 정답 위치 ③④⑤ 분산(프롬프트만으론 매번 ③에 몰림, 실측 3/3). _s62 누적분 포함.
+    # (구) _s62 = 어휘 선지 구두점 제거(본문은 유지) + 문두 접속부사·담화표지 출제 금지. _s61 누적분 포함.
     # (구) _s61 = 어휘 발음·철자 유사어 금지(1회독 Part A 규칙 적용) + 프롬프트 명시. _s60 누적분 포함.
     # (구) _s60 = 어휘 문장분리를 generator.split_sentences 재사용으로 교체(약어·소수점 오인 제거, 인용문만 추가 분리). _s59 누적분 포함.
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s62"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s63"
 
 
 # ============ Supabase 캐시 ============
@@ -845,6 +847,8 @@ def generate_variation_a(
                     _v = extract_json_from_response(_vraw)
                     _items = normalize_llm_vocab(_v.get("vocab_items"), data["paragraphs"], _spans)
                     if _items:
+                        # ★ 정답 위치 분산 — 프롬프트만으론 매번 ③에 몰린다(실측 3/3)
+                        _items = shuffle_answer_position(_items, pid)
                         data["vocab_items"] = _items
                         if _v.get("vocab_explain"):
                             data["vocab_explain"] = _v["vocab_explain"]
@@ -856,7 +860,7 @@ def generate_variation_a(
                 except Exception as _ve:
                     _fb = build_vocab_fallback(data["paragraphs"], blank_token_spans(data["paragraphs"]))
                     if _fb:
-                        data["vocab_items"] = _fb
+                        data["vocab_items"] = shuffle_answer_position(_fb, pid)
                         print(f"[VAR][A][{pid}] VOCAB 폴백 사용 ({_ve})")
                     else:
                         print(f"[VAR][A][{pid}] VOCAB 생성 실패 ({_ve}) — Q3는 핵심빈칸으로 유지")

@@ -86,8 +86,8 @@ def build_order_blocks_a(en_text: str, pid: str = "?", seed_extra: str = "") -> 
     반환: {"intro", "paragraphs":[["A",t],["B",t],["C",t]], "order_correct"} 또는 None(분할 불가).
     """
     sents = split_sentences(en_text)
-    if len(sents) < 4:
-        print(f"[VAR][A][{pid}] 문장 {len(sents)}개 — 순서배열(intro+3단락) 불가")
+    if len(sents) < 3:
+        print(f"[VAR][A][{pid}] 문장 {len(sents)}개 — 순서배열 불가 (최소 3문장 필요)")
         return None
 
     # ★ 제목 분리: 첫 문장이 짧은 라벨(≤4단어)이면 제목으로 보고 떼어 둠.
@@ -97,11 +97,19 @@ def build_order_blocks_a(en_text: str, pid: str = "?", seed_extra: str = "") -> 
         title = (title + " " + sents[0]).strip()
         sents = sents[1:]
 
-    # intro = (제목 +) 첫 진짜 문장. 제목은 intro 앞에 붙여 원문 무손실 유지.
-    if len(sents) < 4:
-        return None
-    intro_text = (title + " " + sents[0]).strip() if title else sents[0].strip()
-    rest = sents[1:]
+    # ★ 문장이 3개뿐이면 intro 를 두지 않고 3문장을 그대로 (A)(B)(C)로 쓴다.
+    #   intro 를 떼면 남는 게 2문장이라 3단락을 못 만들고, 그러면 순서 문제가
+    #   통째로 빠져 A 유형이 4문항으로 줄어든다. 짧은 지문에서 자주 생긴다.
+    if len(sents) == 3:
+        intro_text = title.strip()          # 제목이 있으면 그것만, 없으면 빈 문자열
+        rest = sents
+        print(f"[VAR][A][{pid}] 문장 3개 — intro 없이 (A)(B)(C) 구성")
+    else:
+        # intro = (제목 +) 첫 진짜 문장. 제목은 intro 앞에 붙여 원문 무손실 유지.
+        if len(sents) < 4:
+            return None
+        intro_text = (title + " " + sents[0]).strip() if title else sents[0].strip()
+        rest = sents[1:]
     if len(rest) < 3:
         return None
 
@@ -732,7 +740,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s75 = intro <CORE_BLANK> 복원을 try 밖으로(예외 시 빈칸 잔존 방지) + 남으면 validator가 CRITICAL. _s74 누적분 포함.
+    # _s76 = 문장 3개뿐인 지문은 intro 없이 (A)(B)(C) 구성(기존엔 순서 문제가 통째로 빠졌다). _s75 누적분 포함.
+    # (구) _s75 = intro <CORE_BLANK> 복원을 try 밖으로(예외 시 빈칸 잔존 방지) + 남으면 validator가 CRITICAL. _s74 누적분 포함.
     # (구) _s74 = Q5 프롬프트에 단락 경계를 명시(=== 구분선·para 번호·단어수) — LLM이 코드가 나눈 단락을 정확히 인식해야 겹치지 않게 고른다. _s73 누적분 포함.
     # (구) _s73 = Q5 (A)(B)를 intro·A·B·C 중 서로 다른 두 단락에서 선정(LLM 판단). _s72 누적분 포함.
     # (구) _s72 = Q5 후보에 intro 포함 + 같은 단락 허용(단락 선택은 LLM 판단) + 안 쓰이는 CORE_BLANK 복원. _s71 누적분 포함.
@@ -751,7 +760,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s75"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s76"
 
 
 # ============ Supabase 캐시 ============

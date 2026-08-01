@@ -841,7 +841,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s82 = B Q4 프롬프트를 지문 논리축 기반으로 재작성(By contrast/Yet/This is because를 찾아 요약문 뼈대로 옮기고 양쪽을 뚫는다). _s81 누적분 포함.
+    # _s83 = A Q3 어휘 답지 구조화(정답·근거·오답이유 한줄·나머지 선지 원문단어) + 해설 40자 제한. _s82 누적분 포함.
+    # (구) _s82 = B Q4 프롬프트를 지문 논리축 기반으로 재작성(By contrast/Yet/This is because를 찾아 요약문 뼈대로 옮기고 양쪽을 뚫는다). _s81 누적분 포함.
     # (구) _s81 = B Q4 요약문 25~32단어(기출 실측 18~31) + 빈칸 위치 지침 5단계·기출 정답 예시 명시. 빈칸 3~9단어. _s80 누적분 포함.
     # (구) _s80 = B Q4에 학교 기출 뼈대 4종 반영(원인→귀결·기원→결과·대비·양보→조건), 연결어는 빈칸 밖. 3~9단어. _s79 누적분 포함.
     # (구) _s79 = B Q4 빈칸 하한을 3단어로(논리 축이 3단어로 끊기는 경우 허용). _s78 누적분 포함.
@@ -867,7 +868,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s82"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s83"
 
 
 # ============ Supabase 캐시 ============

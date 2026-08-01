@@ -258,6 +258,11 @@ body {
    기출 지면에서 '① revealing' 처럼 원숫자와 단어가 같은 줄에 붙어 나온다. */
 .vmark { font-size: inherit; vertical-align: baseline; margin-right: 1.5px; color: inherit; font-weight: normal; }
 .vword { text-decoration: underline; text-underline-offset: 2.5px; text-decoration-thickness: 0.7px; }
+.vocab-detail { color: #555; font-size: 7.4pt; line-height: 1.55; }
+.vocab-detail .vd-line { margin-top: 2px; }
+.vocab-detail .vd-line b { color: #333; margin-right: 3px; }
+.vocab-detail .vd-item { display: inline-block; margin-right: 11px; white-space: nowrap; }
+.vocab-detail .vd-arrow { color: #999; margin: 0 1px; }
 .opts-inline { display: flex; flex-wrap: wrap; gap: 3px 14px; }
 .opts-inline .opt { flex: 0 0 auto; }
 
@@ -413,10 +418,12 @@ body {
         <b class="q-name">Q3.어휘</b>
         <span class="ans-val" style="color:var(--purple); background:var(--bg-purple);">{{ ['①','②','③','④','⑤'][(_va.n - 1) if _va else 0] }}</span>
         <span class="ans-text">{{ (_va.shown_clean or _va.shown) if _va else '' }} &nbsp;→&nbsp; <b style="color:var(--purple);">{{ (_va.original_clean or _va.original) if _va else '' }}</b></span>
-        <span class="ans-text" style="grid-column:3; grid-row:2; color:#777; font-size:7.2pt;">
-          {% if _va and _va.evidence %}근거: “{{ _va.evidence }}”<br>{% endif %}
-          {% if item.data.vocab_explain %}{{ item.data.vocab_explain }}<br>{% endif %}
-          나머지 밑줄(원문 → 제시): {% for v in item.data.vocab_items %}{% if not v.is_answer %}{{ ['①','②','③','④','⑤'][v.n - 1] }} {{ v.original_clean or v.original }} → {{ v.shown_clean or v.shown }}{% if not loop.last %} / {% endif %}{% endif %}{% endfor %}
+        <span class="ans-text vocab-detail" style="grid-column:3; grid-row:2;">
+          {% if _va and _va.evidence %}<div class="vd-line"><b>근거</b> “{{ _va.evidence }}”</div>{% endif %}
+          {% if _va and _va.why %}<div class="vd-line"><b>오답 이유</b> {{ _va.why }}</div>{% endif %}
+          <div class="vd-line"><b>나머지 선지</b>
+            {% for v in item.data.vocab_items %}{% if not v.is_answer %}<span class="vd-item">{{ ['①','②','③','④','⑤'][v.n - 1] }} {{ v.shown_clean or v.shown }} <span class="vd-arrow">→</span> <b>{{ v.original_clean or v.original }}</b></span>{% endif %}{% endfor %}
+          </div>
         </span>
       </div>
       {% elif item.data.core_blank_correct is defined and item.data.core_blank_correct is not none %}

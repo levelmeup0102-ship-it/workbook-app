@@ -497,6 +497,12 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
         if "<BLANK_B>" not in joined:
             errors.append(f"[{pid}] [CRITICAL] Q5 (B) 빈칸이 본문에 표시되지 않음 — blank_B 구절을 원문에서 찾지 못함 (구절을 원문 그대로 고를 것)")
 
+    # ★ Q3가 어휘 유형이면 intro 에 <CORE_BLANK> 가 남아 있으면 안 된다.
+    #   아무 문항도 참조하지 않는 빈칸이 지문에 떠 있게 된다(실측).
+    if data.get("vocab_items") and "<CORE_BLANK>" in str(data.get("intro", "")):
+        errors.append(f"[{pid}] [CRITICAL] Q3가 어휘 유형인데 intro에 <CORE_BLANK>가 남음 — "
+                      f"어느 문항도 쓰지 않는 빈칸이다. 원문 구절로 되돌릴 것")
+
     # ★ Q3가 어휘 유형이면 그쪽을 검사하고, 핵심빈칸 검사는 건너뛴다.
     if data.get("vocab_items"):
         try:

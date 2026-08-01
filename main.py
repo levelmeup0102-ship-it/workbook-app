@@ -239,6 +239,29 @@ async def auth(request: Request):
 async def list_passages(request: Request):
     _verify(request)
     db = await _load_db()
+
+    # ★ 로딩 최적화: 캐시 상태를 지문마다 Supabase에 묻지 않고,
+    #   step_cache 전체를 '한 번에' 받아 메모리에서 대조한다.
+    #   (기존엔 지문 수만큼 count_steps() 왕복 → 수백 번 네트워크 호출로 로딩이 느렸음)
+    supa_counts: dict = {}
+    try:
+        import supa
+        if supa._enabled():
+            supa_counts = await supa.get_step_counts_all()
+    except Exception as e:
+        print(f"[list_passages] step_cache 일괄 조회 실패(폴백 진행): {e}")
+
+    def _cached_fast(ck: str) -> bool:
+        # 로컬 볼륨 우선 (있으면 네트워크 불필요)
+        d = DATA_DIR / ck
+        try:
+            if d.exists() and sum(1 for _ in d.glob("step*.json")) >= 8:
+                return True
+        except Exception:
+            pass
+        # 메모리 대조 (왕복 0회)
+        return supa_counts.get(ck, 0) >= 8
+
     result = []
     for bk, bd in db.get("books", {}).items():
         for unit, ud in bd.get("units", {}).items():
@@ -251,7 +274,7 @@ async def list_passages(request: Request):
                     "title": pi.get("title", pid),
                     "passage_text": pi.get("text", ""),  # ★ 원문 추출용 추가
                     "order": pi.get("order"),  # ★ 수동 지정 순서 (없으면 None)
-                    "cache_status": "ready" if await _is_cached(ck) else "not_ready",
+                    "cache_status": "ready" if _cached_fast(ck) else "not_ready",
                 })
     # unit(숫자 기준) 정렬 후, 같은 단원 안에서는 수동 order가 있으면 그것을 우선,
     # 없으면 pid(숫자 기준)로 정렬

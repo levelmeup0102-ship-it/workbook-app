@@ -647,65 +647,139 @@ def _b_candidates(hn: str, min_w: int = 4, max_w: int = 7) -> list:
     return res
 
 
-def pick_b_q4_blanks(full_summary, llm_a: str = "", llm_b: str = "", min_w: int = 4, max_w: int = 7) -> Optional[dict]:
-    """B Q4 빈칸을 코드가 요약문에서 직접 골라줌 (A Q5와 같은 철학).
-    각 4단어 이상, 서로 안 겹침, 경계중복 None. LLM 구절이 유효하면 우선 사용. 실패 시 None.
-    요약문은 우리가 만든 한 문장이라, 짧거나 비verbatim인 LLM 빈칸을 코드가 대체해 누락을 막는다."""
+def _span_from_marks_summary(summary: str, mark, pid="?", lab="?") -> Optional[str]:
+    """LLM이 지목한 {starts_with, ends_with}로 요약문에서 구절을 잘라낸다.
+
+    ★ A Q5와 같은 이유 — 문자열로 받으면 LLM이 방금 쓴 문장을 다시 타이핑하면서
+      단어를 바꾼다. 시작·끝만 받고 그 사이는 코드가 떼어내면 창작이 차단된다.
+    요약문은 우리가 만든 한 문장이라 단락 개념이 없고, 조건도 A Q5보다 좁다(4~8단어)."""
+    if not isinstance(mark, dict):
+        return None
+    text = re.sub(r"\s+", " ", str(summary or "")).strip()
+    st = re.sub(r"\s+", " ", str(mark.get("starts_with", "")).strip())
+    en = re.sub(r"\s+", " ", str(mark.get("ends_with", "")).strip())
+    if not text or not st or not en:
+        return None
+
+    ms = re.search(r"(?<!\w)" + re.escape(st), text)
+    if not ms:
+        print(f"[VAR][B][{pid}] Q4 지목({lab}) 시작어 '{st}' 요약문에 없음")
+        return None
+    me = re.search(r"(?<!\w)" + re.escape(en) + r"(?!\w)", text[ms.start():])
+    if not me:
+        print(f"[VAR][B][{pid}] Q4 지목({lab}) 끝어 '{en}' 시작어 뒤에 없음")
+        return None
+    span = text[ms.start():ms.start() + me.end()].strip()
+    span = span.strip(".,;:!?").strip()          # 양끝 구두점만 제거(안쪽 쉼표는 허용)
+    n = len(span.split())
+    if n < 3:
+        print(f"[VAR][B][{pid}] Q4 지목({lab}) {n}단어 — 3단어 미만")
+        return None
+    if n > 9:
+        print(f"[VAR][B][{pid}] Q4 지목({lab}) {n}단어 — 9단어 초과, ends_with를 앞으로 당길 것")
+        return None
+    return span
+
+
+def pick_b_q4_blanks(full_summary, llm_a: str = "", llm_b: str = "", min_w: int = 3, max_w: int = 7) -> Optional[dict]:
+    """B Q4 빈칸 — LLM이 지목한 자리를 최대한 그대로 쓴다.
+
+    ★ 자리 판단은 LLM 몫이다. 코드는 '학생이 복원할 수 있는가'만 본다:
+        · 요약문에 verbatim 으로 있는가 (보기 단어로 되맞춰야 하므로 필수)
+        · 4단어 이상인가
+        · 두 빈칸이 겹치지 않는가
+        · 되넣으면 요약문이 정확히 복원되는가
+      경계 어휘·간격·비율 같은 '품질' 조건은 프롬프트가 진다. 코드가 그걸 검사하면
+      LLM 지목이 거의 전부 거부돼 코드픽으로 대체된다(실측 1/3만 사용).
+    LLM 지목이 없거나 위 최소 조건도 못 맞추면 코드가 요약문에서 직접 고른다."""
     hn = re.sub(r'\s+', ' ', str(full_summary or "")).strip()
     if len(hn.split()) < (2 * min_w + 1):
         return None
-    cands = _b_candidates(hn, min_w, max_w)
-    if not cands:
-        return None
 
-    def span_of(v):
+    def _locate(v):
+        """요약문에서 구절 위치(토큰 인덱스)를 찾는다. 없으면 None."""
         v = re.sub(r'\s+', ' ', str(v or "")).strip()
-        if len(v.split()) < min_w or len(v.split()) > MAX_BLANK_WORDS or hn.count(v) != 1:
+        if len(v.split()) < min_w:
             return None
-        if not _quote_ok(v):
+        if len(v.split()) > MAX_BLANK_WORDS:
             return None
-        if modal_no_verb(v):
-            return None
-        if not _clean_boundary_ok(v, hn, strict=True):   # ★ LLM 구절도 경계 검사 (A Q5와 동일)
-            return None
+        _bare = lambda w: w.strip('.,;:!?"\'\u201c\u201d()')
         toks = hn.split(); pw = v.split()
-        for i in range(len(toks) - len(pw) + 1):
-            if toks[i:i + len(pw)] == pw:
-                return (i, i + len(pw) - 1, v)
-        return None
+        btoks = [_bare(t) for t in toks]; bpw = [_bare(t) for t in pw]
+        hits = [i for i in range(len(toks) - len(pw) + 1)
+                if toks[i:i + len(pw)] == pw or btoks[i:i + len(pw)] == bpw]
+        if len(hits) != 1:                      # 두 번 나오면 복원이 모호
+            return None
+        i = hits[0]
+        span = " ".join(toks[i:i + len(pw)])
+        # ★ 끝 구두점은 빈칸 밖에 남긴다 — 'symptoms,' 의 쉼표까지 물면
+        #   연결어(so/whereas) 앞 구두점이 정답에 들어가 배열이 어색해진다.
+        #   지문에는 쉼표가 그대로 인쇄되고 학생은 그 앞부분만 배열한다.
+        span = span.rstrip(".,;:!?")
+        if len(span.split()) < min_w:
+            return None
+        return (i, i + len(pw) - 1, span)
 
-    la = [span_of(llm_a)] if span_of(llm_a) else []
-    lb = [span_of(llm_b)] if span_of(llm_b) else []
-    poolA = la + cands
-    poolB = lb + cands
-    for ca in poolA:
-        for cb in poolB:
-            lo, hi = (ca, cb) if ca[1] < cb[0] else (cb, ca)
-            if not (lo[1] < hi[0]):  # 겹치거나 인접(사이 0단어) 제외
+    def _try(ca, cb):
+        """두 자리 조합이 성립하면 결과 dict, 아니면 None."""
+        if not ca or not cb:
+            return None
+        lo, hi = (ca, cb) if ca[0] < cb[0] else (cb, ca)
+        if lo[1] >= hi[0]:                      # 겹치면 불가
+            return None
+        # ★ 두 빈칸이 딱 붙으면 사실상 빈칸 하나다 — 사이에 최소 1단어.
+        #   'Online writing must (A) (B) by revealing...' 같은 꼴을 막는다.
+        #   이것만 코드가 막고, 나머지 품질 조건은 프롬프트가 진다.
+        if hi[0] - lo[1] < 2:
+            return None
+        va, vb = lo[2], hi[2]                   # (A)가 앞, (B)가 뒤
+        if va == vb:
+            return None
+        tmpl = hn.replace(va, "(A)", 1)
+        if "(A)" not in tmpl:
+            return None
+        tmpl = tmpl.replace(vb, "(B)", 1)
+        if "(B)" not in tmpl:
+            return None
+        if tmpl.replace("(A)", va).replace("(B)", vb) != hn:   # 복원 확인
+            return None
+        if fill_boundary_dup(tmpl, [("(A)", va), ("(B)", vb)]):
+            return None
+        return {"blank_A": va, "blank_B": vb}
+
+    # 1순위 — LLM 지목 그대로
+    la, lb = _locate(llm_a), _locate(llm_b)
+    r = _try(la, lb)
+    if r:
+        return r
+
+    # 2순위 — 한쪽만 살리고 나머지는 코드가 채움
+    #   ★ _b_candidates 는 이미 (start, end, text) 튜플을 준다. _locate 로 다시 감싸면
+    #     문자열이 아니라 튜플이 들어가 전부 None 이 되어 폴백이 통째로 죽는다.
+    cands = [c for c in _b_candidates(hn, min_w, max_w)
+             if isinstance(c, (list, tuple)) and len(c) >= 3]
+    if la:
+        for cb in cands:
+            r = _try(la, cb)
+            if r:
+                return r
+    if lb:
+        for ca in cands:
+            r = _try(ca, lb)
+            if r:
+                return r
+
+    # 3순위 — 코드가 둘 다 고름
+    for ca in cands:
+        for cb in cands:
+            if ca[0] >= cb[0]:
                 continue
-            va, vb = ca[2], cb[2]
-            if va == vb:
-                continue
-            tmpl = hn.replace(va, "(A)", 1)
-            if "(A)" not in tmpl:
-                continue
-            tmpl = tmpl.replace(vb, "(B)", 1)
-            if "(B)" not in tmpl:
-                continue
-            if fill_boundary_dup(tmpl, [("(A)", va), ("(B)", vb)]):
-                continue
-            # ★ 두 빈칸 사이 최소 3단어 확보 — 붙어 있으면 사실상 빈칸 하나가 된다.
-            #   (16강 04번 'Reference groups (A) (B) against peers' 사례)
-            if hi[0] - lo[1] < 4:      # lo 끝 인덱스와 hi 시작 인덱스 사이 단어 수
-                continue
-            # ★ (A)가 (B)보다 앞에 오도록 라벨 재배정
-            if ca[0] > cb[0]:
-                va, vb = vb, va
-                tmpl = hn.replace(va, "(A)", 1).replace(vb, "(B)", 1)
-                if "(A)" not in tmpl or "(B)" not in tmpl:
-                    continue
-            return {"blank_A": va, "blank_B": vb}
+            r = _try(ca, cb)
+            if r:
+                return r
     return None
+
+
 
 
 # ============================================================
@@ -767,7 +841,12 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s77 = B Q1 삽입 마커를 1회독 방식(균등 5분할 + 정답자리 끼워넣기)으로 이식. 남은 문장 4개면 4선지, 3개면 3선지. _s76 누적분 포함.
+    # _s82 = B Q4 프롬프트를 지문 논리축 기반으로 재작성(By contrast/Yet/This is because를 찾아 요약문 뼈대로 옮기고 양쪽을 뚫는다). _s81 누적분 포함.
+    # (구) _s81 = B Q4 요약문 25~32단어(기출 실측 18~31) + 빈칸 위치 지침 5단계·기출 정답 예시 명시. 빈칸 3~9단어. _s80 누적분 포함.
+    # (구) _s80 = B Q4에 학교 기출 뼈대 4종 반영(원인→귀결·기원→결과·대비·양보→조건), 연결어는 빈칸 밖. 3~9단어. _s79 누적분 포함.
+    # (구) _s79 = B Q4 빈칸 하한을 3단어로(논리 축이 3단어로 끊기는 경우 허용). _s78 누적분 포함.
+    # (구) _s78 = B Q4 빈칸을 LLM이 위치로 지목(starts_with/ends_with), 코드는 verbatim·겹침·복원만 검증. 품질 조건은 프롬프트가 진다. _s77 누적분 포함.
+    # (구) _s77 = B Q1 삽입 마커를 1회독 방식(균등 5분할 + 정답자리 끼워넣기)으로 이식. 남은 문장 4개면 4선지, 3개면 3선지. _s76 누적분 포함.
     # (구) _s76 = 문장 3개뿐인 지문은 intro 없이 (A)(B)(C) 구성(기존엔 순서 문제가 통째로 빠졌다). _s75 누적분 포함.
     # (구) _s75 = intro <CORE_BLANK> 복원을 try 밖으로(예외 시 빈칸 잔존 방지) + 남으면 validator가 CRITICAL. _s74 누적분 포함.
     # (구) _s74 = Q5 프롬프트에 단락 경계를 명시(=== 구분선·para 번호·단어수) — LLM이 코드가 나눈 단락을 정확히 인식해야 겹치지 않게 고른다. _s73 누적분 포함.
@@ -788,7 +867,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s77"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s82"
 
 
 # ============ Supabase 캐시 ============
@@ -1486,12 +1565,24 @@ def generate_variation_b(
             #   LLM이 짧게/비verbatim으로 뽑아도 코드가 깨끗한 4단어 구절로 대체 → 누락 차단.
             try:
                 _fulls = data.get("full_summary") or data.get("summary_full") or ""
-                _bp = pick_b_q4_blanks(_fulls, data.get("blank_A", ""), data.get("blank_B", ""))
+                _ra4, _rb4 = data.get("blank_A"), data.get("blank_B")
+                # 새 형식: {starts_with, ends_with} 지목 → 코드가 요약문에서 잘라냄
+                if isinstance(_ra4, dict) or isinstance(_rb4, dict):
+                    _sa4 = _span_from_marks_summary(_fulls, _ra4, pid, "A")
+                    _sb4 = _span_from_marks_summary(_fulls, _rb4, pid, "B")
+                    if _sa4 and _sb4:
+                        print(f"[VAR][B][{pid}] Q4 LLM 지목 — (A)'{_sa4}' (B)'{_sb4}'")
+                    else:
+                        print(f"[VAR][B][{pid}] Q4 지목 실패 → 코드 픽으로 폴백")
+                    _sa4, _sb4 = _sa4 or "", _sb4 or ""
+                else:                                    # 구 형식(문자열) 하위호환
+                    _sa4, _sb4 = str(_ra4 or ""), str(_rb4 or "")
+                _bp = pick_b_q4_blanks(_fulls, _sa4, _sb4)
                 if _bp:
                     data["blank_A"] = _bp["blank_A"]
                     data["blank_B"] = _bp["blank_B"]
-            except Exception:
-                pass
+            except Exception as _q4e:
+                print(f"[VAR][B][{pid}] Q4 빈칸 처리 예외({_q4e})")
 
             # ★★ 코드가 빈칸 뚫기 (우리가 정한 방식: 완성문장 먼저 → 코드가 뚫기)
             #   LLM이 준 full_summary(빈칸 없는 완성문장)에서 blank_A/blank_B를 찾아

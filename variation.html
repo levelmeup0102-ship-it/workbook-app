@@ -338,7 +338,7 @@ body {
       <div class="q-title"><span class="q-num core">3</span> 다음 글의 밑줄 친 부분 중, 문맥상 낱말의 쓰임이 적절하지 <span style="color:var(--red); text-decoration:underline; font-weight:bold;">않은</span> 것은?</div>
       <div class="opts-inline">
         {% for v in item.data.vocab_items %}
-        <div class="opt"><span class="opt-num purple">{{ ['①','②','③','④','⑤'][loop.index0] }}</span> {{ v.shown }}</div>
+        <div class="opt"><span class="opt-num purple">{{ ['①','②','③','④','⑤'][loop.index0] }}</span> {{ v.shown_clean or v.shown }}</div>
         {% endfor %}
       </div>
       {% elif item.data.core_blank_options %}
@@ -408,11 +408,11 @@ body {
       <div class="ans-row-c">
         <b class="q-name">Q3.어휘</b>
         <span class="ans-val" style="color:var(--purple); background:var(--bg-purple);">{{ ['①','②','③','④','⑤'][(_va.n - 1) if _va else 0] }}</span>
-        <span class="ans-text">{{ _va.shown if _va else '' }} &nbsp;→&nbsp; <b style="color:var(--purple);">{{ _va.original if _va else '' }}</b></span>
+        <span class="ans-text">{{ (_va.shown_clean or _va.shown) if _va else '' }} &nbsp;→&nbsp; <b style="color:var(--purple);">{{ (_va.original_clean or _va.original) if _va else '' }}</b></span>
         <span class="ans-text" style="grid-column:3; grid-row:2; color:#777; font-size:7.2pt;">
           {% if _va and _va.evidence %}근거: “{{ _va.evidence }}”<br>{% endif %}
           {% if item.data.vocab_explain %}{{ item.data.vocab_explain }}<br>{% endif %}
-          나머지 밑줄(원문 → 제시): {% for v in item.data.vocab_items %}{% if not v.is_answer %}{{ ['①','②','③','④','⑤'][v.n - 1] }} {{ v.original }} → {{ v.shown }}{% if not loop.last %} / {% endif %}{% endif %}{% endfor %}
+          나머지 밑줄(원문 → 제시): {% for v in item.data.vocab_items %}{% if not v.is_answer %}{{ ['①','②','③','④','⑤'][v.n - 1] }} {{ v.original_clean or v.original }} → {{ v.shown_clean or v.shown }}{% if not loop.last %} / {% endif %}{% endif %}{% endfor %}
         </span>
       </div>
       {% elif item.data.core_blank_correct is defined and item.data.core_blank_correct is not none %}

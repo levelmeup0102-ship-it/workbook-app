@@ -123,6 +123,9 @@ def prepare_a_passage(data: dict, label: str) -> dict:
             "core_blank_options": data.get("core_blank_options"),
             "core_blank_correct": data.get("core_blank_correct"),
             "core_blank_explain": data.get("core_blank_explain", ""),
+            "vocab_items": data.get("vocab_items") or [],
+            "vocab_explain": data.get("vocab_explain", ""),
+            "paragraphs_render": data.get("paragraphs_render") or [],
         },
     }
 

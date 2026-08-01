@@ -254,8 +254,10 @@ body {
 .grammar-note b { color: var(--accent); }
 
 /* Q3 어휘 유형 — 지문 내 밑줄 */
-.vmark { font-size: 6.5pt; vertical-align: top; margin-right: 0.5px; color: var(--purple); font-weight: 700; }
-.vword { text-decoration: underline; text-underline-offset: 2px; }
+/* 수능 30번 스타일 — 번호는 본문과 같은 크기로 나란히, 위첨자가 아니다.
+   기출 지면에서 '① revealing' 처럼 원숫자와 단어가 같은 줄에 붙어 나온다. */
+.vmark { font-size: inherit; vertical-align: baseline; margin-right: 1.5px; color: inherit; font-weight: normal; }
+.vword { text-decoration: underline; text-underline-offset: 2.5px; text-decoration-thickness: 0.7px; }
 .opts-inline { display: flex; flex-wrap: wrap; gap: 3px 14px; }
 .opts-inline .opt { flex: 0 0 auto; }
 

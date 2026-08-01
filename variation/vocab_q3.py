@@ -176,7 +176,7 @@ def vocab_candidates(paragraphs, blank_spans=None, min_sent_gap=1) -> list:
                 bare = re.sub(r"[^A-Za-z-]", "", toks[i]).lower()
                 if not bare or len(bare) < 5:
                     continue
-                if bare in _VOCAB_STOP:
+                if bare in _VOCAB_STOP or bare in _DISCOURSE_MARKER:
                     continue
                 if toks[i][:1].isupper() and i != s_lo:   # 고유명사 회피
                     continue
@@ -333,6 +333,15 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
     if len(crowded) >= 3:      # 세 문장 이상에서 몰리면 설계가 잘못된 것
         errors.append(f"[{pid}] Q3 어휘 밑줄이 여러 문장에 몰림 {crowded} — 지문 전체에 흩을 것")
 
+    # 문두 접속부사·담화표지는 어휘 문제로 부적절 (기출 정답 품사: 형용사4·동사3, 부사 0)
+    for it in vocab_items:
+        o = str(it.get("original", ""))
+        if o and is_discourse_marker(o):
+            kind = "정답" if it.get("is_answer") else "오답"
+            errors.append(
+                f"[{pid}] Q3 어휘 {it.get('n')}번({kind}) '{o}'는 접속부사·담화표지 — "
+                f"논리 흐름 표지라 문맥 판단 대상이 아니다. 형용사·동사로 고를 것")
+
     # 철자만 비슷한 단어로 바꿔치기 — 독해가 아니라 철자 암기를 묻게 된다
     for it in vocab_items:
         o, sh = str(it.get("original", "")), str(it.get("shown", ""))
@@ -375,6 +384,33 @@ def blank_token_spans(paragraphs) -> dict:
         if hits:
             spans[p_i] = (min(hits) - 1, max(hits) + 1)
     return spans
+
+
+# 문두 접속부사·담화표지 — 기출 정답 품사는 형용사4·동사3, 부사 0.
+#   'Similarly,' 'Conversely,' 같은 연결어는 문맥 판단이 아니라 논리 흐름 표지라
+#   어휘 문제로 부적절하다.
+_DISCOURSE_MARKER = {
+    "however", "moreover", "furthermore", "therefore", "thus", "hence",
+    "similarly", "conversely", "likewise", "nevertheless", "nonetheless",
+    "instead", "meanwhile", "consequently", "accordingly", "besides",
+    "otherwise", "indeed", "namely", "specifically", "additionally",
+    "alternatively", "subsequently", "finally", "firstly", "secondly",
+    "also", "then", "still", "yet", "so", "though", "although",
+    "perhaps", "maybe", "probably", "certainly", "obviously", "clearly",
+}
+
+
+def strip_edge_punct(w: str) -> str:
+    """단어 양끝 구두점 제거. 선지에 'outset:' 'discernible.' 처럼 찍히는 것을 막는다.
+
+    본문에서는 구두점이 붙은 채로 밑줄을 쳐야 문장이 온전하지만(기출도 그렇다),
+    선지 목록에는 단어만 나와야 한다."""
+    return str(w or "").strip().strip('.,;:!?"\'“”‘’()[]')
+
+
+def is_discourse_marker(w: str) -> bool:
+    """문두 접속부사·담화표지인가."""
+    return strip_edge_punct(w).lower() in _DISCOURSE_MARKER
 
 
 def _looks_alike(a: str, b: str) -> bool:
@@ -438,9 +474,13 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None) -> Optional[lis
         # 마커 자체를 밑줄로 잡은 경우
         if "<BLANK" in orig:
             return None
+        _shown = str(it.get("shown", "")).strip() or orig
         out.append({
             "n": it.get("n"), "para": p, "idx": i, "original": orig,
-            "shown": str(it.get("shown", "")).strip() or orig,
+            "shown": _shown,
+            # 선지 표시용 — 구두점 뗀 형태 (본문에는 구두점 붙은 shown 을 쓴다)
+            "shown_clean": strip_edge_punct(_shown),
+            "original_clean": strip_edge_punct(orig),
             "is_answer": bool(it.get("is_answer")),
             "evidence_type": it.get("evidence_type", ""),
             "evidence": it.get("evidence", ""),
@@ -460,6 +500,8 @@ def build_vocab_fallback(paragraphs, blank_spans=None) -> Optional[list]:
         return None
     for it in slots:
         it["shown"] = it["original"]
+        it["shown_clean"] = strip_edge_punct(it["original"])
+        it["original_clean"] = strip_edge_punct(it["original"])
         it["is_answer"] = (it["n"] == 4)          # 기출 최빈 위치
         it["_fallback"] = True                    # 패러프레이즈 검사 면제
         it["evidence_type"] = ""

@@ -15,7 +15,7 @@ from typing import Optional
 
 import httpx
 
-from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt, CORE_BLANK_SYS, build_core_blank_prompt, TRANSLATE_SYS, build_translate_prompt, VOCAB_SYS, build_vocab_prompt, Q5_BLANK_SYS, build_q5_blank_prompt
+from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt, CORE_BLANK_SYS, build_core_blank_prompt, TRANSLATE_SYS, build_translate_prompt, VOCAB_SYS, build_vocab_prompt, Q5_BLANK_SYS, build_q5_blank_prompt, INSERT_SYS, build_insert_prompt
 from variation.validator import validate_a, validate_b, check_marker_positions, fill_boundary_dup, modal_no_verb
 from variation.vocab_q3 import (normalize_llm_vocab, build_vocab_fallback,
                                 validate_vocab, blank_token_spans,
@@ -141,7 +141,7 @@ def build_order_blocks_a(en_text: str, pid: str = "?", seed_extra: str = "") -> 
     order_correct = FIXED_ORDER.index(restore)
     return {"intro": intro_text, "paragraphs": paragraphs, "order_correct": order_correct}
 
-def build_insert_blocks_b(en_text: str, pid: str = "?") -> Optional[dict]:
+def build_insert_blocks_b(en_text: str, pid: str = "?", preferred: int = None) -> Optional[dict]:
     """원문에서 문장 하나를 떼어 given_sentence로, 나머지에 코드가 마커를 박아
     삽입문제(Q1)를 무손실로 재구성한다. (순서배열 build_order_blocks_a와 같은 철학)
     validator.check_marker_positions를 통과하고 '정답 자리에 도로 넣으면 원문 복원'이
@@ -154,7 +154,13 @@ def build_insert_blocks_b(en_text: str, pid: str = "?") -> Optional[dict]:
     if m < 4:
         return None
     mid = m // 2
-    order = sorted(range(1, m), key=lambda g: abs(g - mid))  # 가운데 문장부터 시도(첫 문장 제외)
+    # ★ LLM이 고른 문장을 최우선으로 시도한다.
+    #   코드는 '가운데부터'라는 위치만 봤다. 삽입 문제의 본질은 위치가 아니라
+    #   뺀 문장에 그 자리를 지목하는 단서(지시어·대명사·연결어·정관사)가 있는가다.
+    #   그건 의미 판단이라 코드로 못 한다. LLM이 고르고 코드는 복원·간격만 검증.
+    order = sorted(range(1, m), key=lambda g: abs(g - mid))
+    if isinstance(preferred, int) and 1 <= preferred < m:
+        order = [preferred] + [g for g in order if g != preferred]
     for g in order:
         given = sents[g]
         remaining = sents[:g] + sents[g + 1:]
@@ -366,6 +372,20 @@ def validate_llm_q5_spans(paragraphs, span_a: str, span_b: str) -> Optional[dict
     # 구두점이 붙어 오면 그 직전까지 잘라 쓴다 (구두점은 빈칸 밖)
     a = _cut_before_punct(a, 4) or a
     b = _cut_before_punct(b, 4) or b
+    # ★ 단어 중간에서 잘린 구절 거부. LLM이 문자 단위로 자르는 일이 있다
+    #   (실측: 'arbitrarily tore through' → 'arily tore through' 로 잘려 나옴).
+    #   원문에서 그 구절 앞뒤가 공백·문장경계여야 진짜 단어 경계다.
+    def _word_bounded(v, whole):
+        k = whole.find(v)
+        if k < 0:
+            return False
+        before_ok = (k == 0) or whole[k - 1].isspace()
+        e = k + len(v)
+        after_ok = (e >= len(whole)) or (not whole[e].isalnum())
+        return before_ok and after_ok
+    _whole = " ".join(texts)
+    if not _word_bounded(a, _whole) or not _word_bounded(b, _whole):
+        return None
     for v in (a, b):
         n = len(v.split())
         if n < 4 or n > 11:
@@ -374,7 +394,13 @@ def validate_llm_q5_spans(paragraphs, span_a: str, span_b: str) -> Optional[dict
             return None
         if not _quote_ok(v):
             return None
-        if not _clean_boundary_ok(v, " ".join(texts), strict=True):
+        # ★ LLM 픽에는 완화 경계(strict=False)를 쓴다.
+        #   strict 는 코드가 단어 수만 보고 아무 데나 자를 때 쓰는 안전장치다.
+        #   LLM은 논지 기준으로 고르므로 관사·전치사로 시작하는 자리가 정상이다.
+        #   기출도 그렇다: 'the commonalities between us far outweigh the differences',
+        #   'not in the perception of the figure but in its rational representation'.
+        #   strict 로 걸면 LLM 픽이 거의 전부 거부돼 코드 픽으로 폴백한다(실측 6/7 폴백).
+        if not _clean_boundary_ok(v, " ".join(texts), strict=False):
             return None
 
     def _locate(v):
@@ -637,7 +663,9 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s66 = B 요약·주제영작 보기에 중간 구두점을 단어에 붙여 제시(signals, first,) — 학생이 쉼표 위치를 알 수 있게. _s65 누적분 포함.
+    # _s68 = 어휘 정답위치 셔플 폐기(자리 불일치로 A 누락 유발) + Q5 LLM픽 경계 완화(6/7 폴백 해소) + 단어 중간 잘림 거부. _s67 누적분 포함.
+    # (구) _s67 = B Q1 삽입문을 LLM이 선정(지시어·대명사·연결어 단서로 자리가 확정되는 문장), 코드는 복원·간격만 검증. _s66 누적분 포함.
+    # (구) _s66 = B 요약·주제영작 보기에 중간 구두점을 단어에 붙여 제시(signals, first,) — 학생이 쉼표 위치를 알 수 있게. _s65 누적분 포함.
     # (구) _s65 = Q5 후보를 구두점 직전까지 잘라 생성(구두점은 빈칸 밖에 남김) + 최소 4단어. _s64 누적분 포함.
     # (구) _s64 = Q5 빈칸 자리를 LLM이 논지 기준으로 선정(기출23문항: 결론39%·논지핵심17%·두괄식17%·전환점12%), 코드는 verbatim·복원만 검증. _s63 누적분 포함.
     # (구) _s63 = 어휘 정답 위치 ③④⑤ 분산(프롬프트만으론 매번 ③에 몰림, 실측 3/3). _s62 누적분 포함.
@@ -647,7 +675,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s66"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s68"
 
 
 # ============ Supabase 캐시 ============
@@ -1199,6 +1227,32 @@ def generate_variation_b(
                         data["position_correct"] = _found  # 코드가 찾은 정답으로 정정
             except Exception:
                 pass  # 실패하면 AI가 찍은 값 유지 (검증에서 다시 걸러짐)
+
+            # ★★ Q1 삽입 — LLM이 '자리를 확정하는 단서가 있는 문장'을 고르고 코드가 재구성.
+            #   기존엔 코드가 '가운데 문장부터' 떼어봤다. 위치만 본 것이다.
+            #   삽입 문제의 본질은 뺀 문장에 지시어·대명사·연결어·정관사 같은 단서가 있어
+            #   자리가 하나로 확정되는가다. 그건 의미 판단이라 코드로 못 한다.
+            #   LLM 선택이 복원 검증을 통과하면 그걸 쓰고, 실패하면 아래 fallback이 받는다.
+            try:
+                _sents_ins = split_sentences(en_text)
+                if len(_sents_ins) >= 4:
+                    _insraw = call_claude(INSERT_SYS, build_insert_prompt(_sents_ins),
+                                          max_tokens=800)
+                    _ins = extract_json_from_response(_insraw)
+                    _idx = _ins.get("index")
+                    if isinstance(_idx, int) and 1 <= _idx < len(_sents_ins):
+                        _ib0 = build_insert_blocks_b(en_text, pid, preferred=_idx)
+                        if _ib0 and _ib0.get("given_sentence") == _sents_ins[_idx]:
+                            data["given_sentence"] = _ib0["given_sentence"]
+                            data["passage_with_marks"] = _ib0["passage_with_marks"]
+                            data["position_correct"] = _ib0["position_correct"]
+                            data["position_count"] = _ib0["position_count"]
+                            print(f"[VAR][B][{pid}] Q1 삽입 LLM 픽 — [{_idx}] "
+                                  f"단서({_ins.get('anchor_type','?')}) '{_ins.get('anchor','')}'")
+                        else:
+                            print(f"[VAR][B][{pid}] Q1 삽입 LLM 픽[{_idx}] 복원 실패 → 코드 픽")
+            except Exception as _ie:
+                print(f"[VAR][B][{pid}] Q1 삽입 LLM 픽 예외({_ie}) → 코드 픽")
 
             # ★★ Q1 삽입 fallback — 위 자동정정으로도 '복원되는 자리'가 하나도 없으면
             #   (LLM이 given/본문을 변형해 어느 자리에 넣어도 원문이 안 맞는 경우),

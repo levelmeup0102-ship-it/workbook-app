@@ -1037,3 +1037,72 @@ def build_q5_blank_prompt(paragraphs) -> str:
         '           which evidence type (a/b/c) — quote the neighboring words that prove it>",\n'
         ' "why_B": "<same for B>"}'
     )
+
+
+# ════════════════════════════════════════════════════════════════
+# B Q1 — 문장 삽입 자리 선정 (수능 38·39번)
+#   기존: 코드가 '가운데 문장부터' 하나씩 떼어보고 복원되면 채택 — 위치만 봤다.
+#   변경: LLM이 '자리를 확정하는 단서가 있는 문장'을 고르고, 코드는 복원·간격만 검증.
+#   삽입 문제의 본질은 위치가 아니라, 뺀 문장에 그 자리를 지목하는 단서가 있는가다.
+# ════════════════════════════════════════════════════════════════
+INSERT_SYS = (
+    "You select the sentence to remove for a Korean CSAT sentence-insertion question. "
+    "Output ONLY valid JSON, no markdown, no text outside JSON."
+)
+
+
+def build_insert_prompt(sentences) -> str:
+    """sentences: 원문 문장 리스트 (분리된 상태)"""
+    numbered = "\n".join(f"[{i}] {s}" for i, s in enumerate(sentences))
+    return (
+        "Choose ONE sentence to lift out of this passage for a sentence-insertion question.\n\n"
+        "[PASSAGE — numbered by sentence]\n" + numbered + "\n\n"
+
+        "## 이 문제가 무엇인가\n"
+        "The chosen sentence is shown in a box above the passage. The passage is printed with\n"
+        "five numbered gaps. Students must decide which gap the sentence came from.\n"
+        "★ It only works if the sentence CARRIES ITS OWN ADDRESS — something inside it that\n"
+        "  points back to one specific preceding sentence, and forward to what follows.\n\n"
+
+        "## STEP 1 — 자리를 확정하는 단서를 찾아라 (이것이 선정 기준의 전부다)\n"
+        "Scan every sentence and ask: if I lifted this out, what inside it tells a reader\n"
+        "exactly where it belongs? A good candidate has at least ONE strong anchor:\n\n"
+        "  (a) DEMONSTRATIVE — this / these / such / that + 명사\n"
+        "      'This shift forced designers to rethink materials.'\n"
+        "      → 'this shift'가 앞 문장의 무엇을 받는지 명확해야 한다.\n"
+        "  (b) PRONOUN — it / they / he / she, 지시 대상이 앞 문장에 하나뿐일 때\n"
+        "      'They rarely produce anything of lasting value.'\n"
+        "  (c) CONNECTIVE — However / Instead / Therefore / In contrast / For example / Yet\n"
+        "      역접·인과·예시 신호어가 앞 문장과의 관계를 지정한다.\n"
+        "  (d) DEFINITE ARTICLE — the + 앞에서 처음 소개된 명사\n"
+        "      'The problem with this approach is cost.' → 앞에서 approach가 소개돼야 한다.\n"
+        "  (e) TIME / SEQUENCE — Later / Then / Afterward / Once this happens\n\n"
+        "★ 단서가 하나도 없는 문장은 고르지 마라. 어느 자리에 넣어도 말이 되어 정답이 성립하지 않는다.\n"
+        "★ 단서가 앞을 가리키기만 하고 뒤와 안 이어지면 약하다. 앞뒤 양쪽에 걸리는 문장이 가장 좋다.\n\n"
+
+        "## STEP 2 — 자리가 하나로 확정되는지 검증하라\n"
+        "Take your chosen sentence out, then try inserting it at EVERY other gap.\n"
+        "  · If it reads acceptably at two or more gaps, the item is broken — pick another sentence.\n"
+        "  · If it reads correctly at exactly one gap, that is your answer.\n"
+        "★ 특히 확인할 것: 그 문장을 뺀 뒤 앞뒤 문장이 바로 이어져도 자연스러운가?\n"
+        "  자연스럽다면 그 문장은 '없어도 되는' 문장이라 삽입 문제가 안 된다.\n"
+        "  뺐을 때 논리에 구멍이 생겨야 한다 — 지시어가 받을 대상이 사라지거나, 논리가 건너뛰거나.\n\n"
+
+        "## STEP 3 — 피해야 할 문장\n"
+        "  · 지문 첫 문장 — 도입이라 앞을 가리킬 대상이 없다.\n"
+        "  · 독립적인 일반 진술 — 어디 놓아도 말이 되는 문장.\n"
+        "  · 단순 예시 나열의 중간 항목 — 순서가 자유로워 자리가 확정되지 않는다.\n"
+        "  · 너무 짧은 문장(5단어 미만) — 단서를 담을 여유가 없다.\n\n"
+
+        "## OUTPUT\n"
+        "  index: 뺄 문장의 번호 (위 목록의 [n])\n"
+        "  anchor_type: a/b/c/d/e 중 어느 단서를 썼는지\n"
+        "  anchor: 그 단서에 해당하는 표현 (문장 안의 실제 어구)\n"
+        "  refers_to: 그 단서가 가리키는 앞 문장의 내용 (몇 번 문장의 무엇인지)\n"
+        "  why_unique: 다른 자리에 넣으면 왜 어색한지 한 문장\n\n"
+        '{"index": <number>,\n'
+        ' "anchor_type": "<a|b|c|d|e>",\n'
+        ' "anchor": "<the exact phrase that anchors it>",\n'
+        ' "refers_to": "<what in the preceding sentence it points to>",\n'
+        ' "why_unique": "<why no other gap works>"}'
+    )

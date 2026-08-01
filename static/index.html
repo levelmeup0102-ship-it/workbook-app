@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- deploy: 카테고리 접힘 기본(교과서/수능특강/모의고사 헤더만 노출) 2026-08-01 -->
+<!-- deploy: 전체접기=카테고리+책 모두 접힘 2026-08-01b -->
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
@@ -1467,7 +1467,7 @@ function ssTogglePassage(book,unit,id){ const k=`${book}|${unit}|${id}`; ssSelec
 function ssToggleUnit(book,unit){ const ups=PASSAGES_DATA.filter(p=>p.book===book&&p.unit===unit); const allSel=ups.every(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)); ups.forEach(p=>{const k=`${p.book}|${p.unit}|${p.id}`; allSel?ssSelectedPassages.delete(k):ssSelectedPassages.set(k,{book:p.book,unit:p.unit,id:p.id});}); ssRenderBookList(); }
 function ssToggleBook(book){ const bp=PASSAGES_DATA.filter(p=>p.book===book); const allSel=bp.every(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)); bp.forEach(p=>{const k=`${p.book}|${p.unit}|${p.id}`; allSel?ssSelectedPassages.delete(k):ssSelectedPassages.set(k,{book:p.book,unit:p.unit,id:p.id});}); ssRenderBookList(); }
 function ssExpandAll(){ BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.ss.add(x)); PASSAGES_DATA.forEach(p=>ssExpandedBooks.add(p.book)); ssRenderBookList(); }
-function ssCollapseAll(){ ssExpandedBooks.clear(); ssRenderBookList(); }
+function ssCollapseAll(){ listOpenCats.ss.clear(); ssExpandedBooks.clear(); ssRenderBookList(); }
 function ssClearSelection(){ ssSelectedPassages.clear(); ssRenderBookList(); }
 function ssUpdateCount(){ document.getElementById('ss-sel-count').textContent = `${ssSelectedPassages.size}개 선택`; }
 function ssUpdateBtns(){
@@ -1627,6 +1627,7 @@ function snExpandAll() {
 }
 
 function snCollapseAll() {
+  listOpenCats.sn.clear();
   snExpandedBooks.clear();
   snRenderBookList();
 }
@@ -1838,6 +1839,7 @@ function pcExpandAll() {
 }
 
 function pcCollapseAll() {
+  listOpenCats.pc.clear();
   pcExpandedBooks.clear();
   pcRenderBookList();
 }
@@ -2195,6 +2197,7 @@ function extExpandAll() {
 }
 
 function extCollapseAll() {
+  listOpenCats.ext.clear();
   extExpandedBooks.clear();
   extRenderBookList();
 }
@@ -2450,6 +2453,7 @@ function vrExpandAll() {
 }
 
 function vrCollapseAll() {
+  listOpenCats.vr.clear();
   vrExpandedBooks.clear();
   vrRenderBookList();
 }
@@ -2709,7 +2713,7 @@ function asExpandAll() {
   [...new Set(PASSAGES_DATA.map(p => p.book))].forEach(b => asExpandedBooks.add(b));
   asRenderBookList();
 }
-function asCollapseAll() { asExpandedBooks.clear(); asRenderBookList(); }
+function asCollapseAll() { listOpenCats.as.clear(); asExpandedBooks.clear(); asRenderBookList(); }
 function asToggleBook(book) {
   const bp = PASSAGES_DATA.filter(p => p.book === book);
   const allSel = bp.every(p => asSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));

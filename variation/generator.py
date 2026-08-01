@@ -15,7 +15,7 @@ from typing import Optional
 
 import httpx
 
-from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt, CORE_BLANK_SYS, build_core_blank_prompt, TRANSLATE_SYS, build_translate_prompt, VOCAB_SYS, build_vocab_prompt
+from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt, CORE_BLANK_SYS, build_core_blank_prompt, TRANSLATE_SYS, build_translate_prompt, VOCAB_SYS, build_vocab_prompt, Q5_BLANK_SYS, build_q5_blank_prompt
 from variation.validator import validate_a, validate_b, check_marker_positions, fill_boundary_dup, modal_no_verb
 from variation.vocab_q3 import (normalize_llm_vocab, build_vocab_fallback,
                                 validate_vocab, blank_token_spans,
@@ -318,6 +318,68 @@ def _q5_candidates(ptext: str, min_w: int = 5, max_w: int = 7) -> list:
 MAX_BLANK_WORDS = 9  # 영작 빈칸(A Q5 / B Q4) 최대 단어 수 — 초과 LLM 빈칸은 거부하고 코드가 5~7단어로 대체
 
 
+def validate_llm_q5_spans(paragraphs, span_a: str, span_b: str) -> Optional[dict]:
+    """LLM이 고른 Q5 빈칸 두 구절을 검증한다. 통과하면 마킹된 paragraphs를 반환.
+
+    LLM은 '논지가 착지하는 자리'를 판단하고(코드로는 불가), 코드는 복원 가능성만 본다:
+      · 원문에 verbatim 으로 존재하는가 (보기 단어로 되맞춰야 하므로 필수)
+      · 전체에서 유일한가 (두 번 나오면 어느 자리인지 모호)
+      · 서로 다른 단락인가 / (A)가 (B)보다 앞인가
+      · 구두점을 물고 있지 않은가 (보기엔 구두점이 없다)
+      · 4~11 단어인가 (기출 실측 범위, 평균 6.9)
+      · 되넣으면 원문이 정확히 복원되는가
+      · 빈칸 경계에서 단어가 중복되지 않는가
+    하나라도 어긋나면 None → 호출부가 코드 픽으로 폴백한다."""
+    try:
+        texts = [p[1] for p in paragraphs]
+    except Exception:
+        return None
+    a = re.sub(r"\s+", " ", str(span_a or "")).strip()
+    b = re.sub(r"\s+", " ", str(span_b or "")).strip()
+    if not a or not b or a == b:
+        return None
+
+    for v in (a, b):
+        n = len(v.split())
+        if n < 4 or n > 11:
+            return None
+        if re.search(r"[.!?,;:]", v):
+            return None
+        if not _quote_ok(v):
+            return None
+        if not _clean_boundary_ok(v, " ".join(texts), strict=True):
+            return None
+
+    def _locate(v):
+        if sum(t.count(v) for t in texts) != 1:
+            return None
+        for i, t in enumerate(texts):
+            if t.count(v) == 1:
+                return i
+        return None
+
+    ia, ib = _locate(a), _locate(b)
+    if ia is None or ib is None or ia == ib:
+        return None
+    if ia > ib:
+        a, b, ia, ib = b, a, ib, ia
+
+    new_paras = [list(p) for p in paragraphs]
+    new_paras[ia][1] = texts[ia].replace(a, "<BLANK_A>", 1)
+    new_paras[ib][1] = texts[ib].replace(b, "<BLANK_B>", 1)
+
+    joined = " ".join(p[1] for p in new_paras)
+    if "<BLANK_A>" not in joined or "<BLANK_B>" not in joined:
+        return None
+    if fill_boundary_dup(joined, [("<BLANK_A>", a), ("<BLANK_B>", b)]):
+        return None
+    if new_paras[ia][1].replace("<BLANK_A>", a) != texts[ia]:
+        return None
+    if new_paras[ib][1].replace("<BLANK_B>", b) != texts[ib]:
+        return None
+    return {"paragraphs": new_paras, "blank_A": a, "blank_B": b}
+
+
 def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?") -> Optional[dict]:
     """A Q5 빈칸을 코드가 (A)(B)(C)에서 직접 골라 마킹 (B 빈칸뚫기와 같은 철학).
     LLM이 고른 구절(blank_A/B)이 유효하면 우선 사용, 아니면 코드가 깨끗한 구절 선택.
@@ -547,14 +609,15 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s63 = 어휘 정답 위치 ③④⑤ 분산(프롬프트만으론 매번 ③에 몰림, 실측 3/3). _s62 누적분 포함.
+    # _s64 = Q5 빈칸 자리를 LLM이 논지 기준으로 선정(기출23문항: 결론39%·논지핵심17%·두괄식17%·전환점12%), 코드는 verbatim·복원만 검증. _s63 누적분 포함.
+    # (구) _s63 = 어휘 정답 위치 ③④⑤ 분산(프롬프트만으론 매번 ③에 몰림, 실측 3/3). _s62 누적분 포함.
     # (구) _s62 = 어휘 선지 구두점 제거(본문은 유지) + 문두 접속부사·담화표지 출제 금지. _s61 누적분 포함.
     # (구) _s61 = 어휘 발음·철자 유사어 금지(1회독 Part A 규칙 적용) + 프롬프트 명시. _s60 누적분 포함.
     # (구) _s60 = 어휘 문장분리를 generator.split_sentences 재사용으로 교체(약어·소수점 오인 제거, 인용문만 추가 분리). _s59 누적분 포함.
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s63"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s64"
 
 
 # ============ Supabase 캐시 ============
@@ -810,7 +873,29 @@ def generate_variation_a(
                 #   LLM 구절이 유효하면 우선 쓰고, 아니면 코드가 깨끗한 구절을 골라 verbatim 마킹.
                 #   → 빈칸 짧음/원문 미발견/경계 단어중복(예: 'questions') 원천 차단. 서로 다른 단락.
                 marked = {}
-                _picked = pick_a_q5_blanks(data["paragraphs"], data.get("blank_A", ""), data.get("blank_B", ""), pid)
+                # ★★ Q5 빈칸 자리 — LLM이 '논지가 착지하는 자리'를 고르고 코드가 복원 가능성만 검증.
+                #   기출 23문항 실측: 결론 39% / 논지핵심 17% / 두괄식 첫문장 17% / 전환점 12%.
+                #   코드 픽은 단어 수와 위치만 보므로 'dwindle and trail off over' 같은 자리가 나온다.
+                #   판단은 LLM, 검증은 코드로 나눈다. 실패하면 기존 코드 픽으로 폴백.
+                _picked = None
+                try:
+                    _q5raw = call_claude(Q5_BLANK_SYS,
+                                         build_q5_blank_prompt(data["paragraphs"]),
+                                         max_tokens=1200)
+                    _q5 = extract_json_from_response(_q5raw)
+                    _picked = validate_llm_q5_spans(data["paragraphs"],
+                                                    _q5.get("blank_A", ""),
+                                                    _q5.get("blank_B", ""))
+                    if _picked:
+                        print(f"[VAR][A][{pid}] Q5 LLM 픽 — (A)'{_picked['blank_A'][:40]}' "
+                              f"(B)'{_picked['blank_B'][:40]}'")
+                    else:
+                        print(f"[VAR][A][{pid}] Q5 LLM 픽 검증 실패 → 코드 픽으로 폴백")
+                except Exception as _qe:
+                    print(f"[VAR][A][{pid}] Q5 LLM 픽 예외({_qe}) → 코드 픽으로 폴백")
+
+                if not _picked:
+                    _picked = pick_a_q5_blanks(data["paragraphs"], data.get("blank_A", ""), data.get("blank_B", ""), pid)
                 if _picked:
                     data["paragraphs"] = _picked["paragraphs"]
                     data["blank_A"] = _picked["blank_A"]

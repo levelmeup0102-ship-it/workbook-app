@@ -961,81 +961,115 @@ Q5_BLANK_SYS = (
 
 
 def build_q5_blank_prompt(paragraphs) -> str:
-    """paragraphs: [[label, text], ...] 원문 그대로 (마커 없음)"""
-    body = "\n\n".join(f"({lab}) {txt}" for lab, txt in paragraphs)
+    """paragraphs: [[label, text], ...] 원문 그대로 (마커 없음)
+
+    ★ 구절을 '타이핑'시키지 않고 '지목'하게 한다.
+      문자열로 받으면 LLM이 논지를 자기 말로 요약해 원문에 없는 구절을 만든다
+      (실측: 'The territory known as Bir Tawil' — 원문에 없음).
+      단락 번호 + 시작 단어 + 끝 단어만 받고 그 사이는 코드가 원문에서 잘라낸다.
+      Q3 어휘가 para/idx 를 받아 코드가 그 자리 단어를 쓰는 것과 같은 방식."""
+    lines = []
+    n_para = len(paragraphs)
+    for pi, (lab, txt) in enumerate(paragraphs):
+        body_txt = re.sub(r"\s+", " ", str(txt or "")).strip()
+        nw = len(body_txt.split())
+        lines.append("=" * 62)
+        lines.append(f"### para = {pi}   (label: {lab})   [{nw} words]")
+        lines.append("=" * 62)
+        lines.append(body_txt)
+        lines.append("")
+    lines.append("=" * 62)
+    lines.append(f"※ 이 지문은 위 {n_para}개 단락으로 나뉜다 (para = 0 ~ {n_para - 1}).")
+    lines.append("   각 '### para = N' 줄 아래 한 덩어리가 그 단락의 전부다.")
+    lines.append(f"   blank_A 와 blank_B 는 이 {n_para}개 중 서로 다른 두 개에서 골라야 한다.")
+    lines.append("=" * 62)
+    body = "\n".join(lines)
     return (
-        "Choose TWO spans in this passage to blank out for a word-order writing task.\n\n"
-        "[PASSAGE]\n" + body + "\n\n"
+        "Mark TWO spans in this passage to blank out for a word-order writing task.\n\n"
+        "[PASSAGE]\n" + body + "\n"
 
         "## 이 문제가 무엇인가\n"
-        "Students receive the blanked passage plus a shuffled word bank, and must rebuild\n"
-        "the exact original wording. So each span must be copied VERBATIM — every letter,\n"
-        "every inflection. A paraphrase makes the task unsolvable.\n\n"
+        "Students get the blanked passage plus a shuffled word bank and must rebuild the\n"
+        "ORIGINAL wording exactly. So a span must be a stretch of text that is already in\n"
+        "the passage — not a summary of it.\n\n"
 
-        "## STEP 1 — 논지를 먼저 잡아라 (자리는 그 다음이다)\n"
-        "Write down for yourself:\n"
+        "## ★★ 절대 규칙 — 문장을 쓰지 말고 위치를 지목하라\n"
+        "You do NOT type out the span. You give:\n"
+        "  · para        : which paragraph (0, 1, 2 ...)\n"
+        "  · starts_with : the FIRST TWO OR THREE WORDS of the span, copied exactly\n"
+        "  · ends_with   : the LAST TWO OR THREE WORDS of the span, copied exactly\n"
+        "The code will cut everything between them from the original text.\n"
+        "★ If you paraphrase even one word, the cut fails and the item is discarded.\n"
+        "  실측 실패 사례: 'The territory known as Bir Tawil' — 지문에 그런 표현이 없었다.\n"
+        "  논지를 요약하지 마라. 지문에 인쇄된 글자를 그대로 옮겨라.\n\n"
+
+        "## STEP 1 — 논지를 먼저 잡아라\n"
         "  · What does this passage argue? Which sentence carries that claim?\n"
-        "  · Is it 두괄식 (thesis first, then examples) or 미괄식 (build-up, then conclusion)?\n"
-        "  · Where is the CONTRAST AXIS or the turning point (But / However / in fact / Thus)?\n"
-        "★ 평가원은 단어 수를 먼저 세지 않는다. 논지가 착지하는 문장을 먼저 고르고, 그 안에서\n"
-        "  절·구 단위로 끊는다. 같은 방식으로 하라.\n\n"
+        "  · 두괄식인가 미괄식인가? 전환점(But / However / in fact / Thus)은 어디인가?\n\n"
 
-        "## STEP 2 — 빈칸 자리 (기출 23문항 실측 분포를 따르라)\n"
-        "  ★★ CONCLUSION — 39%, 최다. 논지가 착지하는 마지막 문장.\n"
-        "     기출: 'the truth of the matter is revealed [not in the perception of the figure\n"
-        "            but in its rational representation]'\n"
-        "  ★★ THESIS CORE — 17%. 글의 주장이 한 구절로 응축된 곳.\n"
-        "     기출: 'if you can't see who is paying, then [the real product being sold is you]'\n"
+        "## STEP 2 — 빈칸 자리 (기출 23문항 실측)\n"
+        "  ★★ CONCLUSION — 39%. 논지가 착지하는 마지막 문장.\n"
+        "  ★★ THESIS CORE — 17%. 주장이 한 구절로 응축된 곳.\n"
         "  ★★ OPENING THESIS — 17%. 두괄식 첫 문장. 뒤 예시 전체를 읽어야 답이 나온다.\n"
-        "     기출: 'Centralized, formal rules can [facilitate productive activity by\n"
-        "            establishing roles and practices]' — 뒤에 야구·악보·법인 예시가 이어짐\n"
         "  ★ TURNING POINT — 12%. But / in fact / Thus 직후.\n"
-        "     기출: 'While this may interfere with creativity, it in fact [aids in viewer\n"
-        "            access to the film]'\n"
-        "  · 평균 위치는 지문의 0.66 지점. 도입부 배경 설명이나 단순 예시 나열 구간은 피하라.\n\n"
+        "  평균 위치는 지문의 0.66 지점. 도입부 배경이나 단순 예시 나열은 피하라.\n\n"
 
-        "## STEP 3 — ★ 근거가 옆에 있어야 한다 (이게 채점 가능성을 만든다)\n"
-        "기출 23문항 전부, 빈칸 옆에 정답을 확정하는 단서가 있다. 셋 중 하나여야 한다:\n"
-        "  (a) 뒤 문장이 빈칸을 패러프레이즈한다 — 14회, 최다\n"
-        "      빈칸 'anticipate the absent reader's response'\n"
-        "      뒤   'in effect, we have to imagine both halves of a virtual conversation'\n"
-        "  (b) 앞 문장·구문이 방향을 지정한다 — 10회\n"
-        "      앞   'The more affected one is,'\n"
-        "      빈칸 'the less similarity is required for the thing to appear'\n"
-        "      → the비교급 구문이 자리와 형태를 강제한다\n"
-        "  (c) 글 전체 또는 뒤따르는 예시가 근거다 — 9회\n"
-        "      빈칸(첫 문장) 'facilitate productive activity by establishing roles'\n"
-        "      → 뒤의 야구·악보·법인·판사 예시를 일반화해야 나온다\n"
-        "★ 근거를 지목할 수 없는 자리는 고르지 마라. 학생이 추측밖에 할 수 없다.\n\n"
+        "## STEP 3 — 근거가 옆에 있어야 한다\n"
+        "기출 23문항 전부, 빈칸 옆에 정답을 확정하는 단서가 있다:\n"
+        "  (a) 뒤 문장이 빈칸을 패러프레이즈한다 (14회, 최다)\n"
+        "  (b) 앞 문장·구문이 방향을 지정한다 (10회) — the비교급, not A but B 등\n"
+        "  (c) 뒤따르는 예시 전체가 근거다 (9회)\n"
+        "★ 근거를 지목할 수 없는 자리는 고르지 마라.\n\n"
 
-        "## STEP 4 — 끊는 단위\n"
-        "  · 4~11 words (기출 평균 6.9). 단어 수는 결과이지 목표가 아니다.\n"
-        "  · 절이나 구로 완결되게 끊어라. 기출 형태:\n"
-        "      V + O           'conceal what they mean and feel'\n"
-        "      V + by V-ing    'facilitate productive activity by establishing roles and practices'\n"
-        "      S + be + 보어    'the real product being sold is you'\n"
-        "      not A but B     'not in the perception of the figure but in its rational representation'\n"
-        "      과거분사 + 전치사구 'understood as a restraint on their freedom'\n"
-        "  · 관사·전치사·접속사·조동사로 시작하거나 끝나지 마라. 구가 어정쩡하게 잘린다.\n"
-        "  · 문장부호(. ! ? , ; :)를 span 안에 넣지 마라. 보기에는 구두점이 없어 복원이 깨진다.\n\n"
+        "## STEP 4 — 끊는 단위 ★ 이 조건을 어기면 항목이 버려진다\n"
+        "  · ★ 4~11 words. 기출 최대가 정확히 11이고 평균 6.9다(23문항 실측).\n"
+        "    ★★ 12단어 이상이면 REJECTED — 코드가 뒤에서 잘라내지 않는다.\n"
+        "    starts_with 와 ends_with 사이의 단어를 직접 세어라. 12개를 넘으면\n"
+        "    ends_with 를 더 앞으로 당겨 다시 잡아라. 구가 완결되는 지점에서 끊어야 한다.\n"
+        "      [X] 'very few of your readers would make it to your dramatic conclusion' (12)\n"
+        "      [O] 'make it to your dramatic conclusion' (6) — 핵심만\n"
+        "      [O] 'very few of your readers would make it' (8) — 앞부분만\n"
+        "  · ★ 구두점(. ! ? , ; :)이 span 안에 들어가면 REJECTED.\n"
+        "    보기에는 구두점이 없어 학생이 쉼표 위치를 복원할 수 없다.\n"
+        "    쉼표 앞에서 끊어라 — 쉼표는 지문에 그대로 인쇄된다.\n"
+        "      원문 'dwindle and trail off, over the course of your writing'\n"
+        "      [X] ends_with 'over the course'  → 쉼표를 물어 REJECTED\n"
+        "      [O] ends_with 'trail off'        → 'dwindle and trail off' (쉼표 밖)\n"
+        "  · 절이나 구로 완결되게. 관사·전치사·접속사·조동사로 시작하거나 끝나지 마라.\n"
+        "      [X] ends_with 'to your'   (전치사로 끝남)\n"
+        "      [X] starts_with 'the very' (관사로 시작)\n"
+        "  · 고유명사나 하이픈 복합어를 중간에서 쪼개지 마라.\n"
+        "      [X] 'straight line of the twenty-second'  → twenty-second parallel 을 쪼갬\n"
+        "  · 관용구를 중간에서 끊지 마라.\n"
+        "      [X] 'trail off over the course'  → over the course of 를 쪼갬\n\n"
+
+        "## STEP 4-b — 출력 전 자가 점검 (반드시)\n"
+        "  1. starts_with 부터 ends_with 까지 단어를 세어라. 4~11 인가?\n"
+        "  2. 그 범위 안에 마침표·쉼표·세미콜론·콜론이 있는가? 있으면 다시 잡아라.\n"
+        "  3. 첫 단어가 관사·전치사·접속사인가? 마지막 단어는? 그렇다면 다시 잡아라.\n"
+        "  4. 그 범위를 지문에서 도려내고 읽어보라. 남은 문장이 자연스럽게 이어지는가?\n"
+        "  5. starts_with 가 그 단락에서 한 번만 나오는가? 여러 번이면 더 긴 표현으로 바꿔라.\n\n"
 
         "## STEP 5 — (A)와 (B)\n"
-        "  · 서로 다른 단락에서 하나씩. (A)가 (B)보다 지문에서 먼저 나와야 한다.\n"
-        "  · 둘 사이에 최소 몇 문장 간격을 두어라.\n"
-        "  · 두 개가 같은 논리 단계를 반복하지 않게 — 예컨대 (A)는 전제·전환, (B)는 결론.\n"
-        "  · ★ 각 span은 그 단락 안에서 딱 한 번만 등장해야 한다. 두 번 나오면 복원이 모호해진다.\n\n"
+        "  · ★★ blank_A 의 para 와 blank_B 의 para 는 반드시 다른 숫자여야 한다.\n"
+        "    같은 숫자면 REJECTED — 지문 한쪽만 비고 나머지가 온전해 읽기 균형이 깨진다.\n"
+        "    지문 맨 위에 '### para = N' 으로 단락이 표시돼 있다. 그 숫자를 그대로 쓰라.\n"
+        "  · 후보는 para = 0 (intro, 주어진 글) 부터 마지막 단락까지 전부다.\n"
+        "    intro 에서 blank_A 를, 뒤 단락에서 blank_B 를 고르는 것도 좋다.\n"
+        "    어느 두 단락을 쓸지는 논지가 어디에 있느냐로 네가 판단한다.\n"
+        "  · ★ starts_with / ends_with 가 네가 지정한 그 para 안에 실제로 있는지 확인하라.\n"
+        "    다른 단락의 표현을 적으면 코드가 잘라내지 못해 REJECTED 된다.\n"
+        "  · (A)가 (B)보다 지문에서 먼저 나와야 한다.\n"
+        "  · 두 개가 같은 논리 단계를 반복하지 않게 — (A)는 전제·전환, (B)는 결론.\n"
+        "  · ★ starts_with / ends_with 는 그 단락 안에서 딱 한 번만 나오는 표현이어야 한다.\n"
+        "    'the' 'of course' 같이 여러 번 나오는 말로 시작하지 마라 — 자를 위치가 모호해진다.\n\n"
 
-        "## STEP 6 — VERBATIM 확인 (가장 흔한 실패)\n"
-        "  Copy each span character-by-character from the passage above. Do not fix grammar,\n"
-        "  do not change tense, do not drop a word. Then read the sentence back with the span\n"
-        "  restored — it must be identical to the original.\n\n"
-
-        "## OUTPUT\n"
-        '{"blank_A": "<verbatim span from an earlier paragraph>",\n'
-        ' "blank_B": "<verbatim span from a later paragraph>",\n'
-        ' "why_A": "<which position type (conclusion/thesis core/opening/turning point) and\n'
-        '           which evidence type (a/b/c) — quote the neighboring words that prove it>",\n'
-        ' "why_B": "<same for B>"}'
+        "## OUTPUT — 지목만 하라. 문장을 쓰지 마라.\n"
+        "  ★ 출력 직전 마지막 확인: blank_A.para != blank_B.para 인가?\n"
+        '{"blank_A": {"para": <n>, "starts_with": "<exact first 2-3 words>",\n'
+        '             "ends_with": "<exact last 2-3 words>",\n'
+        '             "why": "<position type + evidence type, quote the neighboring words>"},\n'
+        ' "blank_B": {"para": <n>, "starts_with": "...", "ends_with": "...", "why": "..."}}'
     )
 
 

@@ -150,70 +150,97 @@ def build_order_blocks_a(en_text: str, pid: str = "?", seed_extra: str = "") -> 
     return {"intro": intro_text, "paragraphs": paragraphs, "order_correct": order_correct}
 
 def build_insert_blocks_b(en_text: str, pid: str = "?", preferred: int = None) -> Optional[dict]:
-    """원문에서 문장 하나를 떼어 given_sentence로, 나머지에 코드가 마커를 박아
-    삽입문제(Q1)를 무손실로 재구성한다. (순서배열 build_order_blocks_a와 같은 철학)
-    validator.check_marker_positions를 통과하고 '정답 자리에 도로 넣으면 원문 복원'이
-    성립하는 구성만 반환. 재구성 불가하면 None(→ 기존 LLM 결과 유지).
-    LLM이 given/본문을 변형해 '어느 자리도 복원 안 되는' 항목을 코드가 살린다."""
+    """원문에서 문장 하나를 떼어 given_sentence로, 나머지에 마커를 균등 배치해
+    삽입문제(Q1)를 무손실로 재구성한다. (1회독 pipeline.step2_order 방식 이식)
+
+    마커 배치 원칙 — 1회독과 동일:
+      · 남은 문장이 5개 이상이면 마커 5개를 균등 5분할로 배치한다.
+        _interval = n/5, 위치 = int(_interval * (i + 0.5))
+      · 정답 자리(삽입문이 원래 있던 곳)가 그 5개에 없으면, 가장 가까운 마커를
+        정답 자리로 옮긴다. 정답은 반드시 선지 안에 있어야 하므로.
+      · 남은 문장이 4개면 마커 4개, 3개면 3개 — 자리 수가 모자라 5개를 못 만든다.
+        (삽입문을 빼고 4문장만 남는 지문이 실제로 있다)
+
+    LLM이 preferred 로 문장을 지목하면 그것부터 시도하고, 복원·마커 검증을 통과하는
+    첫 구성을 반환한다. 재구성 불가하면 None(→ 기존 LLM 결과 유지).
+    """
     def _alnum_ib(t):
         return re.sub(r"[^a-z0-9]", "", str(t).lower())
+
     sents = split_sentences(en_text)
     m = len(sents)
     if m < 4:
         return None
+
     mid = m // 2
-    # ★ LLM이 고른 문장을 최우선으로 시도한다.
-    #   코드는 '가운데부터'라는 위치만 봤다. 삽입 문제의 본질은 위치가 아니라
-    #   뺀 문장에 그 자리를 지목하는 단서(지시어·대명사·연결어·정관사)가 있는가다.
-    #   그건 의미 판단이라 코드로 못 한다. LLM이 고르고 코드는 복원·간격만 검증.
+    # LLM 픽을 최우선, 없으면 가운데 문장부터 (첫 문장은 제외 — 앞을 가리킬 대상이 없다)
     order = sorted(range(1, m), key=lambda g: abs(g - mid))
     if isinstance(preferred, int) and 1 <= preferred < m:
         order = [preferred] + [g for g in order if g != preferred]
+
     for g in order:
         given = sents[g]
         remaining = sents[:g] + sents[g + 1:]
-        L = len(remaining)
-        real_gap = g
-        pool = list(range(1, L + 1))  # 각 갭은 앞에 최소 한 문장 → 문장경계 보장
-        if real_gap not in pool or len(pool) < 3:
+        n = len(remaining)
+        if n < 3:
             continue
-        target = 5 if len(pool) >= 5 else (4 if len(pool) >= 4 else 3)
-        picks = {pool[0], pool[-1], real_gap}
-        if target > len(picks):
-            for i in range(target):
-                ix = round(i * (len(pool) - 1) / (target - 1))
-                picks.add(pool[ix])
-        chosen = sorted(picks)
-        protected = {pool[0], pool[-1], real_gap}
-        while len(chosen) > 5:
-            for c in chosen:
-                if c not in protected:
-                    chosen.remove(c)
+        real_gap = g                      # 삽입문이 원래 있던 자리(= 갭 인덱스)
+
+        # ── 1회독 방식: 균등 분할 ──────────────────────────────
+        #   갭은 0..n 까지 n+1 곳이지만, 맨 앞(0)은 문장 앞이라 쓰지 않는다.
+        #   1회독은 int(interval*(i+0.5)) 로 각 구간의 중앙을 집는다.
+        target = 5 if n >= 5 else n       # 4문장이면 4개, 3문장이면 3개
+        if n >= 5:
+            interval = n / 5
+            positions = [int(interval * (i + 0.5)) for i in range(5)]
+        else:
+            positions = list(range(1, n + 1))[:target]
+
+        positions = sorted(set(x for x in positions if 1 <= x <= n))
+        # 정답 자리를 반드시 포함 — 없으면 가장 가까운 마커를 옮긴다
+        if 1 <= real_gap <= n and real_gap not in positions and positions:
+            closest = min(range(len(positions)),
+                          key=lambda x: abs(positions[x] - real_gap))
+            positions[closest] = real_gap
+            positions = sorted(set(positions))
+        # 개수가 모자라면 빈 자리로 채운다
+        if len(positions) < target:
+            for cand in range(1, n + 1):
+                if cand not in positions:
+                    positions.append(cand)
+                if len(positions) >= target:
                     break
-            else:
-                break
-        chosen = sorted(chosen)
-        rank = {gap: i + 1 for i, gap in enumerate(chosen)}  # gap → MARK번호(위치순)
-        out = []
-        for j in range(L + 1):
-            if j in rank:
-                out.append(f"<MARK{rank[j]}>")
-            if j < L:
-                out.append(remaining[j])
-        pwm = " ".join(out)
-        pos_correct = chosen.index(real_gap)
-        pos_count = len(chosen)
-        # 1) 정답 자리에 given 도로 넣으면 원문 복원?
+            positions = sorted(set(positions))[:target]
+
+        if real_gap not in positions or len(positions) < 3:
+            continue
+
+        pos_correct = positions.index(real_gap)
+        pos_count = len(positions)
+
+        # ── 지문 재구성 ────────────────────────────────────────
+        parts, mi = [], 0
+        pset = set(positions)
+        for si in range(n + 1):
+            if si in pset and mi < pos_count:
+                parts.append(f"<MARK{mi + 1}>")
+                mi += 1
+            if si < n:
+                parts.append(remaining[si])
+        pwm = " ".join(parts).strip()
+
+        # ── 검증: 정답 자리에 도로 넣으면 원문이 복원되는가 ─────
         recon = pwm.replace(f"<MARK{pos_correct + 1}>", " " + given + " ")
         recon = re.sub(r"<MARK\d>", "", recon)
         if _alnum_ib(recon) != _alnum_ib(en_text):
             continue
-        # 2) 배포 validator 마커 검사 통과?
         errs = check_marker_positions(pwm, pid, min_between=3,
                                       position_correct=pos_correct,
                                       position_count=pos_count, strict=True)
         if errs:
             continue
+        if pos_count < 5:
+            print(f"[VAR][B][{pid}] Q1 삽입 — 남은 문장 {n}개라 선지 {pos_count}개")
         return {"given_sentence": given, "passage_with_marks": pwm,
                 "position_correct": pos_correct, "position_count": pos_count}
     return None
@@ -740,7 +767,8 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s76 = 문장 3개뿐인 지문은 intro 없이 (A)(B)(C) 구성(기존엔 순서 문제가 통째로 빠졌다). _s75 누적분 포함.
+    # _s77 = B Q1 삽입 마커를 1회독 방식(균등 5분할 + 정답자리 끼워넣기)으로 이식. 남은 문장 4개면 4선지, 3개면 3선지. _s76 누적분 포함.
+    # (구) _s76 = 문장 3개뿐인 지문은 intro 없이 (A)(B)(C) 구성(기존엔 순서 문제가 통째로 빠졌다). _s75 누적분 포함.
     # (구) _s75 = intro <CORE_BLANK> 복원을 try 밖으로(예외 시 빈칸 잔존 방지) + 남으면 validator가 CRITICAL. _s74 누적분 포함.
     # (구) _s74 = Q5 프롬프트에 단락 경계를 명시(=== 구분선·para 번호·단어수) — LLM이 코드가 나눈 단락을 정확히 인식해야 겹치지 않게 고른다. _s73 누적분 포함.
     # (구) _s73 = Q5 (A)(B)를 intro·A·B·C 중 서로 다른 두 단락에서 선정(LLM 판단). _s72 누적분 포함.
@@ -760,7 +788,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s76"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s77"
 
 
 # ============ Supabase 캐시 ============

@@ -494,40 +494,15 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None) -> Optional[lis
 
 
 def shuffle_answer_position(vocab_items, pid: str = "") -> list:
-    """정답 위치를 ③④⑤ 사이에 분산시킨다.
+    """★ 폐기됨 — 아무것도 하지 않는다. 호출부 호환을 위해 남겨둔다.
 
-    프롬프트에 "③④⑤ 중 하나"라고만 쓰면 LLM이 매번 ③을 고른다(실측 3/3).
-    기출은 ③2회 ④3회 ⑤2회로 흩어지므로, 코드가 pid 기준 결정적 시드로
-    목표 위치를 정하고 정답 항목과 그 자리 항목의 '내용'을 맞바꾼다.
-
-    자리(para·idx)는 그대로 두고 original/shown/is_answer 등 내용만 교환하므로,
-    본문 밑줄 위치는 변하지 않고 정답 번호만 바뀐다."""
-    if not isinstance(vocab_items, list) or len(vocab_items) != 5:
-        return vocab_items
-    cur = next((i for i, it in enumerate(vocab_items) if it.get("is_answer")), None)
-    if cur is None:
-        return vocab_items
-
-    # 기출 분포(③2 ④3 ⑤2)를 따라 가중 선택
-    pool = [2, 3, 3, 3, 4, 4]          # 0-based: ③③ ④④④ ⑤⑤
-    seed = int(hashlib.md5(str(pid).encode()).hexdigest()[:8], 16)
-    target = pool[seed % len(pool)]
-    if target == cur:
-        return vocab_items
-
-    # 내용만 교환 — 자리(para/idx/n)는 유지
-    KEEP = {"n", "para", "idx"}
-    a, b = vocab_items[cur], vocab_items[target]
-    a_rest = {k: v for k, v in a.items() if k not in KEEP}
-    b_rest = {k: v for k, v in b.items() if k not in KEEP}
-    for k in list(a.keys()):
-        if k not in KEEP:
-            del a[k]
-    for k in list(b.keys()):
-        if k not in KEEP:
-            del b[k]
-    a.update(b_rest)
-    b.update(a_rest)
+    정답 위치를 코드로 옮기려 했으나 불가능하다:
+      · original/shown 을 통째로 교환 → 원문[para][idx]와 original 이 어긋나
+        validate_vocab 이 '자리 불일치'로 거부한다 (실측 CRITICAL 2건, 02번 A 누락 원인).
+      · is_answer 만 옮기면 → 반의어가 박힌 자리가 오답이 되고 동의어 자리가 정답이 되어
+        문항이 통째로 깨진다.
+      · 제대로 옮기려면 새 반의어·동의어를 만들어야 하는데 그건 의미 판단이라 코드 밖이다.
+    → 정답 위치 분산은 프롬프트로 유도한다 (build_vocab_prompt STEP 3)."""
     return vocab_items
 
 

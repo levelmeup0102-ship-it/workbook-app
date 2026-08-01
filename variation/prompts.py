@@ -995,6 +995,9 @@ def build_vocab_prompt(paragraphs, blank_phrases=None) -> str:
         "  hard (it reads artificial) or all five plain (it reads easy).\n\n"
 
         "## OUTPUT — 자리는 '몇 번째 단락, 몇 번째 단어'로 정확히 지목하라\n"
+        "  ★ why 는 정답 항목에만, 40자 이내 한 줄로 쓴다. 답지에 한 줄로 들어가므로\n"
+        "    문단으로 늘어놓지 마라. 오답 4개의 why 는 비워도 된다.\n"
+        "  ★ vocab_explain 은 빈 문자열로 둔다 — 답지에 이미 근거·이유·나머지 선지가 나온다.\n"
         "  Count words by splitting on spaces, starting at 0, within that paragraph only.\n"
         "  'original' must be the passage's word at that exact index, punctuation included\n"
         "  as it appears.\n\n"
@@ -1008,13 +1011,13 @@ def build_vocab_prompt(paragraphs, blank_phrases=None) -> str:
         '    "is_answer": true,\n'
         '    "evidence_type": "next_sentence | same_sentence | thesis",\n'
         '    "evidence": "<quote the exact words that prove the contradiction>",\n'
-        '    "why": "<what the word should have been and why>"},\n'
+        '    "why": "<왜 틀렸는지 한 줄. 40자 이내. 예: \'초반에 주의를 끌면 독자를 설득한다는 인과와 정반대\'>"},\n'
         '   {"n": 4, "para": 2, "idx": 8,  "original": "...", "shown": "...",\n'
         '    "is_answer": false, "why": "..."},\n'
         '   {"n": 5, "para": 2, "idx": 30, "original": "...", "shown": "...",\n'
         '    "is_answer": false, "why": "..."}\n'
         '],\n'
-        ' "vocab_explain": "<한국어 해설 — 정답 자리가 왜 틀렸고 무엇이어야 하는지, 근거 문장과 함께>"}'
+        ' "vocab_explain": ""}'
     )
 
 

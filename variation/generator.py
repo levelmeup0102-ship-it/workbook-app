@@ -841,7 +841,9 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s85 = validator를 generator와 일치(B Q4 하한 4→3, 간격 3→1). 어긋나서 정상 문항이 3회 재시도 후 관대 모드로 떨어졌다. _s84 누적분 포함.
+    # _s87 = 부정 접두사 반의어(inhabitable/uninhabitable)를 철자유사 오탐에서 제외. 3회 재시도 후 관대 fallback 원인이었다. _s86 누적분 포함.
+    # (구) _s86 = 오류 메시지에 유형(A/B) 표시 — Q4만 보면 A(불일치)인지 B(요약빈칸)인지 알 수 없다. _s85 누적분 포함.
+    # (구) _s85 = validator를 generator와 일치(B Q4 하한 4→3, 간격 3→1). 어긋나서 정상 문항이 3회 재시도 후 관대 모드로 떨어졌다. _s84 누적분 포함.
     # (구) _s84 = 어휘 폴백 폐기(shown=original은 문항 성립 불가) + 원문단어 그대로면 CRITICAL. LLM 실패 시 핵심빈칸으로 남긴다. _s83 누적분 포함.
     # (구) _s83 = A Q3 어휘 답지 구조화(정답·근거·오답이유 한줄·나머지 선지 원문단어) + 해설 40자 제한. _s82 누적분 포함.
     # (구) _s82 = B Q4 프롬프트를 지문 논리축 기반으로 재작성(By contrast/Yet/This is because를 찾아 요약문 뼈대로 옮기고 양쪽을 뚫는다). _s81 누적분 포함.
@@ -870,7 +872,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s85"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s87"
 
 
 # ============ Supabase 캐시 ============

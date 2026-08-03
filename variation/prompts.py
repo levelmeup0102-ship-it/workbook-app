@@ -903,10 +903,27 @@ VOCAB_SYS = (
 )
 
 
-def build_vocab_prompt(paragraphs, blank_phrases=None) -> str:
+def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
     """paragraphs: [[label, text], ...] 원문 그대로
-       blank_phrases: Q5 빈칸으로 이미 쓰인 구절들 (겹치면 안 됨)"""
+       blank_phrases: Q5 빈칸으로 이미 쓰인 구절들 (겹치면 안 됨)
+       want_n: 정답을 놓을 자리(3/4/5). 0이면 기존처럼 LLM에게 맡긴다.
+
+    ★ want_n 이 왜 필요한가 — '3, 4, 5 중에서 골라라'라고만 하면 LLM은 매번 3을
+      고른다(실측 3/3 전부 ③, _s63에서도 같은 관측). 나열의 첫 항목이고 출력 예시
+      JSON도 n:3 을 정답으로 보여주기 때문이다. 코드로 뒤에서 옮기는 것은 불가능하다:
+      original/shown 을 교환하면 원문 인덱스와 어긋나 validate_vocab 이 거부하고,
+      is_answer 만 옮기면 반의어가 박힌 자리가 오답이 되어 문항이 깨진다(_s68).
+      → 자리를 코드가 정해서 내려보내고, 그 자리의 반의어는 LLM이 만든다."""
     body = "\n\n".join(f"({lab}) {txt}" for lab, txt in paragraphs)
+    if want_n in (3, 4, 5):
+        _want_txt = (
+            f"  · ★★ 정답은 반드시 {want_n}번 자리다. 다른 번호에 두면 그 항목은 버려진다.\n"
+            f"    {want_n}번 자리의 단어를 반의어로 바꾸고, 나머지 네 자리는 동의어로 바꿔라.\n"
+            f"    자리를 먼저 정해 놓고 고르는 것이다 — {want_n}번에 놓을 만한 단어를 찾아\n"
+            f"    그 문장을 밑줄 자리로 잡아라. 반대말을 못 대는 단어면 다른 문장을 쓴다.\n")
+    else:
+        _want_txt = (
+            "  · The answer MUST be number 3, 4, or 5. 기출 정답 위치는 ③2회 ④3회 ⑤2회이고\n")
     avoid = ""
     if blank_phrases:
         avoid = ("\n\n[ALREADY USED AS FILL-IN BLANKS — do not underline any word inside these]\n"
@@ -946,7 +963,7 @@ def build_vocab_prompt(paragraphs, blank_phrases=None) -> str:
         "    Give 'original' exactly as it appears in the passage, punctuation included.\n\n"
 
         "## STEP 3 — 정답 자리와 반의어\n"
-        "  · The answer MUST be number 3, 4, or 5. 기출 정답 위치는 ③2회 ④3회 ⑤2회이고\n"
+        + _want_txt +
         "    ①②가 정답인 적은 없다. 앞쪽 밑줄이 논지를 확인시키고 뒤에서 뒤집는 구조다.\n"
         "  · ★★ 정답 자리의 기준은 품사가 아니라 '반대말이 있는가' 다.\n"
         "    고르기 전에 스스로 물어라 — 이 단어의 반대말을 댈 수 있는가?\n"
@@ -1017,7 +1034,11 @@ def build_vocab_prompt(paragraphs, blank_phrases=None) -> str:
         "  ★ vocab_explain 은 빈 문자열로 둔다 — 답지에 이미 근거·이유·나머지 선지가 나온다.\n"
         "  Count words by splitting on spaces, starting at 0, within that paragraph only.\n"
         "  'original' must be the passage's word at that exact index, punctuation included\n"
-        "  as it appears.\n\n"
+        "  as it appears.\n"
+        + (f"  ★ 출력 직전 확인: is_answer 가 true 인 항목의 n 이 {want_n} 인가?\n"
+           f"    아래 예시 JSON 은 n:3 을 정답으로 보여주지만 그건 형식 예시일 뿐이다.\n"
+           if want_n in (3, 4, 5) else "")
+        + "\n"
 
         '{"vocab_items": [\n'
         '   {"n": 1, "para": 0, "idx": 12, "original": "<exact word in passage>",\n'
@@ -1056,11 +1077,23 @@ Q5_BLANK_SYS = (
 def build_q5_blank_prompt(paragraphs) -> str:
     """paragraphs: [[label, text], ...] 원문 그대로 (마커 없음)
 
-    ★ 구절을 '타이핑'시키지 않고 '지목'하게 한다.
-      문자열로 받으면 LLM이 논지를 자기 말로 요약해 원문에 없는 구절을 만든다
-      (실측: 'The territory known as Bir Tawil' — 원문에 없음).
-      단락 번호 + 시작 단어 + 끝 단어만 받고 그 사이는 코드가 원문에서 잘라낸다.
-      Q3 어휘가 para/idx 를 받아 코드가 그 자리 단어를 쓰는 것과 같은 방식."""
+    ★ _s93에서 '위치 지목(starts_with/ends_with)'을 폐기하고 구절을 통째로 받는다.
+
+    _s70에서 지목 방식으로 바꾼 이유는 창작이었다 — LLM이 논지를 자기 말로 요약해
+    원문에 없는 구절('The territory known as Bir Tawil')을 만들었다. 그런데 그건
+    '원문에 없으면 버린다' 검사 하나로 막을 일이었고, validate_llm_q5_spans 에
+    이미 그 검사가 있다. 구조를 바꿀 필요가 없었다.
+
+    대신 지목 방식은 길이 통제를 잃었다. 시작 두 단어와 끝 두 단어만 짚으면 그 사이가
+    몇 단어인지 LLM 눈에 안 보인다. 실측: 5시도 전부 폴백, 반려 24건 중 17건이
+    길이·구두점. word_count 자기신고를 넣어도 11건 전부 실제와 어긋났다
+    (6단어라 적고 19단어를 잡음). LLM은 단어를 못 센다.
+
+    구절을 직접 쓰게 하면 길이가 눈에 보인다. 세는 게 아니라 보는 것이라 된다.
+    그리고 '몇 단어'가 아니라 '한 문법 단위'를 기준으로 주면 저절로 그 길이가 된다.
+    (수능 32~34번 23문항 115선지 실측: 3~12단어, 평균 7.4, 중앙값 7, 6~8단어가 62%,
+     12단어 초과 0개)
+    """
     lines = []
     n_para = len(paragraphs)
     for pi, (lab, txt) in enumerate(paragraphs):
@@ -1072,115 +1105,138 @@ def build_q5_blank_prompt(paragraphs) -> str:
         lines.append(body_txt)
         lines.append("")
     lines.append("=" * 62)
-    lines.append(f"※ 이 지문은 위 {n_para}개 단락으로 나뉜다 (para = 0 ~ {n_para - 1}).")
-    lines.append("   각 '### para = N' 줄 아래 한 덩어리가 그 단락의 전부다.")
-    lines.append(f"   blank_A 와 blank_B 는 이 {n_para}개 중 서로 다른 두 개에서 골라야 한다.")
+    lines.append(f"\u203b \uc774 \uc9c0\ubb38\uc740 \uc704 {n_para}\uac1c \ub2e8\ub77d\uc73c\ub85c \ub098\ub284\ub2e4 (para = 0 ~ {n_para - 1}).")
+    lines.append("   blank_A \uc640 blank_B \ub294 \uc11c\ub85c \ub2e4\ub978 \ub450 \ub2e8\ub77d\uc5d0\uc11c \uace8\ub77c\uc57c \ud55c\ub2e4.")
     lines.append("=" * 62)
     body = "\n".join(lines)
     return (
-        "Mark TWO spans in this passage to blank out for a word-order writing task.\n\n"
+        "Pick TWO phrases from this passage to blank out for a word-order writing task.\n\n"
         "[PASSAGE]\n" + body + "\n"
 
         "## 이 문제가 무엇인가\n"
-        "Students get the blanked passage plus a shuffled word bank and must rebuild the\n"
-        "ORIGINAL wording exactly. So a span must be a stretch of text that is already in\n"
-        "the passage — not a summary of it.\n\n"
-
-        "## ★★ 절대 규칙 — 문장을 쓰지 말고 위치를 지목하라\n"
-        "You do NOT type out the span. You give:\n"
-        "  · para        : which paragraph (0, 1, 2 ...)\n"
-        "  · starts_with : the FIRST TWO OR THREE WORDS of the span, copied exactly\n"
-        "  · ends_with   : the LAST TWO OR THREE WORDS of the span, copied exactly\n"
-        "The code will cut everything between them from the original text.\n"
-        "★ If you paraphrase even one word, the cut fails and the item is discarded.\n"
-        "  실측 실패 사례: 'The territory known as Bir Tawil' — 지문에 그런 표현이 없었다.\n"
-        "  논지를 요약하지 마라. 지문에 인쇄된 글자를 그대로 옮겨라.\n\n"
+        "학생은 빈칸 뚫린 지문과 뒤섞인 단어 보기를 받고, 원문 표현을 그대로 되맞춘다.\n"
+        "그러니 네가 고르는 구절은 지문에 인쇄된 글자 그대로여야 한다.\n"
+        "요약하거나 다듬으면 학생이 맞출 방법이 없어 그 문항은 버려진다.\n"
+        "  [X] 'The territory known as Bir Tawil'  — 지문에 없는 표현을 지어낸 실제 사례\n"
+        "  [O] 지문을 눈으로 훑어 그 자리 글자를 그대로 옮겨 적는다\n\n"
 
         "## STEP 1 — 논지를 먼저 잡아라\n"
-        "  · What does this passage argue? Which sentence carries that claim?\n"
-        "  · 두괄식인가 미괄식인가? 전환점(But / However / in fact / Thus)은 어디인가?\n\n"
+        "이 지문은 무엇을 주장하는가. 그 주장이 어느 문장에 실려 있는가.\n"
+        "두괄식인가 미괄식인가. 전환점(But / However / in fact / Thus)은 어디인가.\n\n"
 
-        "## STEP 2 — 빈칸 자리 (기출 23문항 실측)\n"
-        "  ★★ CONCLUSION — 39%. 논지가 착지하는 마지막 문장.\n"
-        "  ★★ THESIS CORE — 17%. 주장이 한 구절로 응축된 곳.\n"
-        "  ★★ OPENING THESIS — 17%. 두괄식 첫 문장. 뒤 예시 전체를 읽어야 답이 나온다.\n"
-        "  ★ TURNING POINT — 12%. But / in fact / Thus 직후.\n"
-        "  평균 위치는 지문의 0.66 지점. 도입부 배경이나 단순 예시 나열은 피하라.\n\n"
+        "## STEP 2 — 어느 자리를 뚫는가\n"
+        "\n"
+        "### 원칙 하나\n"
+        "기출 23문항을 뜯어보면 공통점이 하나다.\n"
+        "**빈칸을 지우고 읽었을 때, 남은 뼈대만으로 '여기에 무엇이 와야 하는지'가 결정된다.**\n"
+        "네 가지 방식으로 그렇게 만든다. 이 중 하나에 해당하는 자리만 골라라.\n"
+        "\n"
+        "### (A) 구문이 틀을 만든다 — 빈칸 밖에 뼈대가 남는다\n"
+        "  If such laws forbid them to do something..., then the law cannot be ______.\n"
+        "      If~then 의 then절. 조건은 지문에 남고 귀결만 뚫는다.\n"
+        "  he affirms not only his aesthetic judgment, ... but the conviction that ______.\n"
+        "      not only A but B 의 B. A가 지문에 남아 대비 축이 된다.\n"
+        "  The more affected one is, ______.\n"
+        "      the비교급~the비교급의 뒷절. 앞절이 방향을 지정한다.\n"
+        "  But even imperfect possession of it ______ of being 'stimulus-driven'\n"
+        "      뒤에 of구가 남아 '무엇으로부터'가 확정된다.\n"
+        "  ★ 문장을 통째로 뚫으면 이 뼈대가 사라진다. 성분 하나만 뚫어야 뼈대가 남는다.\n"
+        "\n"
+        "### (B) 옆 문장이 같은 말을 다시 한다\n"
+        "  As writers, we have to ______; in effect, we have to imagine both halves\n"
+        "  of a virtual conversation.        ← 세미콜론 뒤가 빈칸의 패러프레이즈\n"
+        "  But tags aren't ______. It matters who is doing what, and tags don't capture this.\n"
+        "                                    ← 뒤 문장이 빈칸을 풀어 설명한다\n"
+        "  Thus, being creative ______. In fact, the ability to generate creative ideas\n"
+        "  is essentially useless if these ideas die a silent death.   ← In fact 로 재진술\n"
+        "\n"
+        "### (C) 인과 연결어가 방향을 지정한다\n"
+        "  No wonder it is difficult for most people to ______ in a group discussion.\n"
+        "      앞의 인용(입술이 침묵해도 손끝이 지껄인다)의 귀결. No wonder 가 인과를 건다.\n"
+        "  And how she views the street ______. That's why we find so many citizens\n"
+        "  arguing past one another.        ← That's why 앞이 원인. 빈칸이 그 원인이다.\n"
+        "\n"
+        "### (D) 두괄식 — 첫 문장을 뚫고 뒤 전체가 근거가 된다\n"
+        "  Centralized, formal rules can ______.\n"
+        "      뒤에 야구 규칙·악보·법인 설립 예시가 줄줄이 나온다. 그 전부가 근거.\n"
+        "  Prior to photography, ______.\n"
+        "      뒤에 '그림은 제작이 오래 걸리고 운반이 어렵고 유일본이었다'가 이유로 붙는다.\n"
+        "\n"
+        "### 뚫으면 안 되는 자리\n"
+        "  · 도입부 배경 설명 — 근거가 될 옆 문장이 없다\n"
+        "  · 예시 나열 중 한 항목 — 그 항목만의 근거가 없다\n"
+        "  · 앞뒤 어디에도 같은 말을 다시 하는 문장이 없는 자리\n"
+        "★ why 에 네 자리가 (A)(B)(C)(D) 중 무엇인지, 그리고 근거가 되는 옆 문장을\n"
+        "  그대로 옮겨 적어라. 못 옮기면 그 자리는 쓰면 안 된다.\n\n"
 
-        "## STEP 3 — 근거가 옆에 있어야 한다\n"
-        "기출 23문항 전부, 빈칸 옆에 정답을 확정하는 단서가 있다:\n"
-        "  (a) 뒤 문장이 빈칸을 패러프레이즈한다 (14회, 최다)\n"
-        "  (b) 앞 문장·구문이 방향을 지정한다 (10회) — the비교급, not A but B 등\n"
-        "  (c) 뒤따르는 예시 전체가 근거다 (9회)\n"
-        "★ 근거를 지목할 수 없는 자리는 고르지 마라.\n\n"
+        "## STEP 3 — 얼마나 뚫는가 ★★ 여기서 가장 많이 틀린다\n"
+        "\n"
+        "### 단어를 세지 마라. '한 문법 단위'인지를 봐라.\n"
+        "기출 빈칸을 뜯어보면 전부 문장 성분 하나다. 두 절에 걸친 것이 하나도 없다.\n"
+        "  · 술부 하나        — 'Centralized, formal rules can ______.'\n"
+        "  · 보어 하나        — 'then the law cannot be ______.'\n"
+        "  · to부정사구 하나  — 'it is difficult for most people to ______ in a discussion.'\n"
+        "  · that절 내용 하나 — 'the conviction that ______.'\n"
+        "  · 주절 하나        — 'Prior to photography, ______.'\n"
+        "★ 이렇게 끊으면 길이는 저절로 맞는다. 실측 3~12단어, 평균 7.4, 중앙값 7,\n"
+        "  6~8단어가 62%. 12단어를 넘는 기출 빈칸은 115개 중 0개다.\n"
+        "\n"
+        "### 길어지는 이유는 딱 하나 — 성분을 두 개 이상 물었을 때다\n"
+        "  원문: But if it's a cloudy day, they may instead rely on landmarks\n"
+        "  [X] if it's a cloudy day, they may instead rely on landmarks   (11)\n"
+        "      조건절 + 주절. 성분 두 개를 물었다.\n"
+        "  [O] may instead rely on landmarks   (5)\n"
+        "      주절의 술부 하나. 조건절은 지문에 남아 문맥 단서가 된다.\n"
+        "\n"
+        "  원문: very few of your readers would make it to your dramatic conclusion\n"
+        "  [X] very few of your readers would make it to your dramatic conclusion   (12)\n"
+        "      주어부 + 술부.\n"
+        "  [O] make it to your dramatic conclusion   (6)\n"
+        "      술부 하나. 주어는 지문에 남는다.\n"
+        "\n"
+        "### 4단어 미만도 안 된다\n"
+        "보기 단어가 서너 개뿐이면 배열이랄 게 없다. 성분 하나가 4단어도 안 되면\n"
+        "그 자리는 쓰지 말고 다른 곳을 골라라.\n\n"
 
-        "## STEP 4 — 끊는 단위 ★ 이 조건을 어기면 항목이 버려진다\n"
-        "  · ★ 4~11 words. 기출 최대가 정확히 11이고 평균 6.9다(23문항 실측).\n"
-        "    ★★ 12단어 이상이면 REJECTED — 코드가 뒤에서 잘라내지 않는다.\n"
-        "    starts_with 와 ends_with 사이의 단어를 직접 세어라. 12개를 넘으면\n"
-        "    ends_with 를 더 앞으로 당겨 다시 잡아라. 구가 완결되는 지점에서 끊어야 한다.\n"
-        "      [X] 'very few of your readers would make it to your dramatic conclusion' (12)\n"
-        "      [O] 'make it to your dramatic conclusion' (6) — 핵심만\n"
-        "      [O] 'very few of your readers would make it' (8) — 앞부분만\n"
-        "  · ★ 구두점(. ! ? , ; :)이 span 안에 들어가면 REJECTED.\n"
-        "    보기에는 구두점이 없어 학생이 쉼표 위치를 복원할 수 없다.\n"
-        "    쉼표 앞에서 끊어라 — 쉼표는 지문에 그대로 인쇄된다.\n"
-        "      원문 'dwindle and trail off, over the course of your writing'\n"
-        "      [X] ends_with 'over the course'  → 쉼표를 물어 REJECTED\n"
-        "      [O] ends_with 'trail off'        → 'dwindle and trail off' (쉼표 밖)\n"
-        "  · 절이나 구로 완결되게. 관사·전치사·접속사·조동사로 시작하거나 끝나지 마라.\n"
-        "      [X] ends_with 'to your'   (전치사로 끝남)\n"
-        "      [X] starts_with 'the very' (관사로 시작)\n"
-        "  · 고유명사나 하이픈 복합어를 중간에서 쪼개지 마라.\n"
-        "      [X] 'straight line of the twenty-second'  → twenty-second parallel 을 쪼갬\n"
-        "  · 관용구를 중간에서 끊지 마라.\n"
-        "      [X] 'trail off over the course'  → over the course of 를 쪼갬\n\n"
+        "## STEP 4 — 구두점은 빈칸 밖에 남긴다\n"
+        "보기에는 구두점이 없어 학생이 쉼표 위치를 복원할 수 없다.\n"
+        "구절 안에 . ! ? , ; : 가 들어가면 그 문항은 버려진다.\n"
+        "  원문: dwindle and trail off, over the course of your writing\n"
+        "  [X] dwindle and trail off, over the course   — 쉼표를 물었다\n"
+        "  [O] dwindle and trail off                    — 쉼표 앞에서 끊었다\n\n"
 
-        "## STEP 4-b — 출력 전 자가 점검 (반드시)\n"
-        "  ★★ 실측 실패 사례 — 이 셋이 반복된다. 출력 전에 반드시 세어라.\n"
-        "     · starts_with 와 ends_with 가 같은 자리를 가리켜 2단어가 됨 → 거부\n"
-        "       (ends_with 는 span 의 끝이지 시작 근처가 아니다)\n"
-        "     · 21단어짜리 범위를 잡음 → 거부. ends_with 를 훨씬 앞으로 당겨라\n"
-        "     · 범위 안에 쉼표가 들어감 ('the original, straight line') → 거부.\n"
-        "       쉼표 앞에서 ends_with 를 끊어라\n"
-        "  1. starts_with 부터 ends_with 까지 단어를 세어라. 4~11 인가?\n"
-        "  2. 그 범위 안에 마침표·쉼표·세미콜론·콜론이 있는가? 있으면 다시 잡아라.\n"
-        "  3. 첫 단어가 관사·전치사·접속사인가? 마지막 단어는? 그렇다면 다시 잡아라.\n"
-        "  4. 그 범위를 지문에서 도려내고 읽어보라. 남은 문장이 자연스럽게 이어지는가?\n"
-        "  5. starts_with 가 그 단락에서 한 번만 나오는가? 여러 번이면 더 긴 표현으로 바꿔라.\n\n"
+        "## STEP 5 — 경계를 어정쩡하게 끊지 마라\n"
+        "  · 관사·전치사·접속사·조동사로 시작하거나 끝나지 마라\n"
+        "      [X] 'to your'로 끝남   [X] 'the very'로 시작\n"
+        "  · 고유명사나 하이픈 복합어를 중간에서 쪼개지 마라\n"
+        "      [X] straight line of the twenty-second  — twenty-second parallel 을 쪼갬\n"
+        "  · 관용구를 중간에서 끊지 마라\n"
+        "      [X] trail off over the course  — over the course of 를 쪼갬\n\n"
 
-        "## STEP 5 — (A)와 (B)\n"
-        "  · ★★ blank_A 의 para 와 blank_B 의 para 는 반드시 다른 숫자여야 한다.\n"
-        "    같은 숫자면 REJECTED — 지문 한쪽만 비고 나머지가 온전해 읽기 균형이 깨진다.\n"
-        "    지문 맨 위에 '### para = N' 으로 단락이 표시돼 있다. 그 숫자를 그대로 쓰라.\n"
+        "## STEP 6 — (A)와 (B)\n"
+        "  · ★ blank_A 의 para 와 blank_B 의 para 가 서로 달라야 한다.\n"
+        "    같은 단락에 몰면 지문 한쪽만 비고 나머지가 온전해 읽기 균형이 깨진다.\n"
         "  · 후보는 para = 0 (intro, 주어진 글) 부터 마지막 단락까지 전부다.\n"
-        "    intro 에서 blank_A 를, 뒤 단락에서 blank_B 를 고르는 것도 좋다.\n"
-        "    어느 두 단락을 쓸지는 논지가 어디에 있느냐로 네가 판단한다.\n"
-        "  · ★ starts_with / ends_with 가 네가 지정한 그 para 안에 실제로 있는지 확인하라.\n"
-        "    다른 단락의 표현을 적으면 코드가 잘라내지 못해 REJECTED 된다.\n"
         "  · (A)가 (B)보다 지문에서 먼저 나와야 한다.\n"
-        "  · 두 개가 같은 논리 단계를 반복하지 않게 — (A)는 전제·전환, (B)는 결론.\n"
-        "  · ★ starts_with / ends_with 는 그 단락 안에서 딱 한 번만 나오는 표현이어야 한다.\n"
-        "    'the' 'of course' 같이 여러 번 나오는 말로 시작하지 마라 — 자를 위치가 모호해진다.\n\n"
+        "  · 두 구절이 같은 논리 단계를 반복하지 않게 — (A)는 전제·전환, (B)는 결론.\n"
+        "  · 각 구절은 그 단락 안에서 한 번만 나오는 표현이어야 한다.\n\n"
 
-        "## OUTPUT — 지목만 하라. 문장을 쓰지 마라.\n"
-        "  ★★ word_count 를 반드시 함께 적어라. starts_with 부터 ends_with 까지\n"
-        "     지문에서 단어를 하나씩 세어 그 숫자를 쓴다. 4~11 이 아니면 다시 잡아라.\n"
-        "     ★ 이걸 안 세면 18단어짜리 범위를 잡고도 모른다(실측). 시작과 끝만 보고\n"
-        "       고르면 그 사이가 얼마나 긴지 알 수 없다.\n"
-        "  ★★ span_preview 도 적어라. starts_with 부터 ends_with 까지를 지문에서\n"
-        "     그대로 옮겨 적는 것이다. 여기에 쉼표·마침표가 보이면 그 자리는 못 쓴다 —\n"
-        "     구두점 앞에서 ends_with 를 다시 잡아라.\n"
-        "     실측 실패: 'Egypt understandably claimed the original, straight line...'\n"
-        "               → 'the original,' 의 쉼표를 물어 거부됐다.\n"
-        "  ★ 출력 직전 마지막 확인: blank_A.para != blank_B.para 인가?\n"
-        '{"blank_A": {"para": <n>, "starts_with": "<exact first 2-3 words>",\n'
-        '             "ends_with": "<exact last 2-3 words>",\n'
-        '             "word_count": <starts_with 부터 ends_with 까지 센 단어 수, 4~11>,\n'
-        '             "span_preview": "<그 범위를 지문에서 그대로 옮긴 것 — 구두점이 보이면 다시 잡아라>",\n'
-        '             "why": "<position type + evidence type, quote the neighboring words>"},\n'
-        ' "blank_B": {"para": <n>, "starts_with": "...", "ends_with": "...",\n'
-        '             "word_count": <4~11>, "span_preview": "...", "why": "..."}}'
+        "## 출력 직전 — 네가 쓴 구절을 다시 읽어라\n"
+        "세지 말고 보라. 여섯 가지만 확인한다.\n"
+        "  1. 이 구절이 지문에 글자 그대로 있는가? 지문에서 찾아 대조하라.\n"
+        "  2. 이 자리가 (A)(B)(C)(D) 중 무엇인가? 넷 다 아니면 다른 자리를 골라라.\n"
+        "  3. 근거가 되는 옆 문장을 그대로 옮겨 적을 수 있는가? 못 하면 못 쓰는 자리다.\n"
+        "  4. 성분 하나인가, 두 개를 물었는가? 두 개면 뒤쪽 하나만 남겨라.\n"
+        "  5. 구두점이 보이는가? 보이면 그 앞에서 끊어라.\n"
+        "  6. blank_A.para 와 blank_B.para 가 다른 숫자인가?\n\n"
+
+        "[OUTPUT JSON]\n"
+        '{"blank_A": {"para": <n>, "text": "<지문에서 그대로 옮긴 구절>",\n'
+        '             "unit": "<술부 | 보어 | to부정사구 | that절 | 주절 | 명사구>",\n'
+        '             "slot_type": "<A구문틀 | B재진술 | C인과연결어 | D두괄식>",\n'
+        '             "evidence": "<근거가 되는 옆 문장을 지문에서 그대로>"},\n'
+        ' "blank_B": {"para": <n>, "text": "...", "unit": "...",\n'
+        '             "slot_type": "...", "evidence": "..."}}'
     )
 
 

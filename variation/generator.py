@@ -446,6 +446,30 @@ def _span_from_marks(paragraphs, mark, pid="?", lab="?") -> Optional[str]:
     return span
 
 
+# 마지막 Q5 거부 사유 — 재시도 프롬프트에 그대로 돌려준다.
+#   "다시 골라라"만 하면 LLM은 같은 실수를 반복한다. 무엇이 왜 걸렸는지 알려줘야 한다.
+_Q5_FAIL_REASONS = []
+
+
+def _q5_text_of(raw, paragraphs, pid="?", lab="?"):
+    """LLM이 준 blank_A/blank_B 에서 구절 문자열을 꺼낸다.
+
+    ★ _s93부터 기본은 {"para": n, "text": "구절"} 이다. 구절을 통째로 받는다.
+      · 창작 방지 — validate_llm_q5_spans 가 '원문에 없으면 거부'로 잡는다.
+        _s70에서 이걸 구조(위치 지목)로 막으려다 길이 통제를 잃었다.
+      · 길이 통제 — 구절을 직접 쓰면 LLM 눈에 길이가 보인다. 프롬프트가
+        '한 문법 단위' 기준을 주므로 저절로 4~12단어가 된다.
+    구 형식({starts_with, ends_with})과 순수 문자열도 그대로 받는다(하위호환)."""
+    if isinstance(raw, dict):
+        t = str(raw.get("text") or "").strip()
+        if t:
+            return re.sub(r"\s+", " ", t)
+        if raw.get("starts_with") or raw.get("ends_with"):
+            return _span_from_marks(paragraphs, raw, pid, lab)
+        return ""
+    return re.sub(r"\s+", " ", str(raw or "")).strip()
+
+
 def validate_llm_q5_spans(paragraphs, span_a: str, span_b: str, pid: str = "?") -> Optional[dict]:
     """LLM이 고른 Q5 빈칸 두 구절을 검증한다. 통과하면 마킹된 paragraphs를 반환.
 
@@ -455,6 +479,7 @@ def validate_llm_q5_spans(paragraphs, span_a: str, span_b: str, pid: str = "?") 
     """
     def _fail(why):
         print(f"[VAR][A][{pid}] Q5 LLM 픽 거부: {why}")
+        _Q5_FAIL_REASONS.append(str(why))
         return None
 
     try:
@@ -848,7 +873,12 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s92 = Q3 정답 자리 기준을 품사→반대말 유무로(modesty·majority 같은 방향 있는 명사 허용). _s91 누적분 포함.
+    # _s93 = A Q5 위치지목(starts_with/ends_with) 폐기 → 구절을 통째로 받는다.
+    #        창작은 verbatim 검사로 막고, 길이는 '한 문법 단위' 기준을 프롬프트가
+    #        설명해 LLM이 스스로 판단하게 한다(기출 115선지 실측 3~12단어, 12초과 0개).
+    #        지목 방식은 시작·끝만 짚어 그 사이 길이가 안 보였고 5시도 전부 폴백됐다.
+    #        + Q3 어휘 정답 자리를 강 단위로 3·4·5 순환(매번 ③에 몰림). _s92 누적분 포함.
+    # (구) _s92 = Q3 정답 자리 기준을 품사→반대말 유무로(modesty·majority 같은 방향 있는 명사 허용). _s91 누적분 포함.
     # (구) _s91 = Q5 지목에 word_count·span_preview 자기신고 추가 + 거부 시 사유를 알려주고 1회 재시도. 18단어·쉼표 위반이 반복됐다. _s90 누적분 포함.
     # (구) _s90 = Q3 어휘 정답 자리를 형용사·동사로 강제(명사·부사 거부). 구체명사는 반의어가 없어 반전이 불가능하다. _s89 누적분 포함.
     # (구) _s89 = 로그 표기 개선(VOCAB→Q3어휘, 정답 번호를 원숫자로). _s88 누적분 포함.
@@ -884,7 +914,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s92"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s93"
 
 
 # ============ Supabase 캐시 ============
@@ -1174,12 +1204,9 @@ def generate_variation_a(
                                          max_tokens=1200)
                     _q5 = extract_json_from_response(_q5raw)
                     _ra, _rb = _q5.get("blank_A"), _q5.get("blank_B")
-                    # 새 형식: {para, starts_with, ends_with} 지목 → 코드가 원문에서 잘라냄
-                    if isinstance(_ra, dict) or isinstance(_rb, dict):
-                        _sa = _span_from_marks(_q5paras, _ra, pid, "A")
-                        _sb = _span_from_marks(_q5paras, _rb, pid, "B")
-                    else:                                   # 구 형식(문자열) 하위호환
-                        _sa, _sb = str(_ra or ""), str(_rb or "")
+                    del _Q5_FAIL_REASONS[:]
+                    _sa = _q5_text_of(_ra, _q5paras, pid, "A")
+                    _sb = _q5_text_of(_rb, _q5paras, pid, "B")
                     _picked = validate_llm_q5_spans(_q5paras, _sa, _sb, pid) \
                         if (_sa and _sb) else None
 
@@ -1188,25 +1215,29 @@ def generate_variation_a(
                     #   코드 픽으로 바로 넘기면 'twenty-second parallel'을 쪼개는 자리가 나온다.
                     if not _picked:
                         try:
+                            _why = "\n".join("  - " + r for r in _Q5_FAIL_REASONS[:4]) \
+                                or "  - (사유 미기록)"
                             _retry_msg = (
-                                "\n\n[이전 시도가 거부됐다. 아래를 고쳐 다시 지목하라]\n"
-                                "· starts_with 부터 ends_with 까지 지문에서 단어를 하나씩 세어라.\n"
-                                "  4~11 단어여야 한다. 18단어짜리 범위를 잡고도 모르는 일이 있다.\n"
-                                "· 그 범위를 지문에서 그대로 옮겨 적어 쉼표·마침표가 있는지 보라.\n"
-                                "  있으면 구두점 앞에서 ends_with 를 다시 잡아라.\n"
-                                "· word_count 와 span_preview 를 반드시 채워라.")
+                                "\n\n[이전 시도가 거부됐다. 사유는 이것이다]\n" + _why + "\n\n"
+                                "다시 고를 때 이렇게 하라.\n"
+                                "· 네가 쓴 구절을 지문에서 찾아 눈으로 대조하라. 한 글자라도 다르면 못 쓴다.\n"
+                                "· 성분을 두 개 물었으면 뒤쪽 하나만 남겨라\n"
+                                "  (조건절+주절 → 주절의 술부만 / 주어부+술부 → 술부만).\n"
+                                "· 구절 안에 쉼표·마침표가 보이면 그 앞에서 끊어라.\n"
+                                "· 첫 단어와 마지막 단어가 관사·전치사·접속사·조동사면 다시 잡아라.\n"
+                                "· blank_A.para 와 blank_B.para 는 서로 다른 숫자여야 한다.")
                             _q5raw2 = call_claude(Q5_BLANK_SYS,
                                                   build_q5_blank_prompt(_q5paras) + _retry_msg,
                                                   max_tokens=1200)
                             _q52 = extract_json_from_response(_q5raw2)
                             _ra2, _rb2 = _q52.get("blank_A"), _q52.get("blank_B")
-                            if isinstance(_ra2, dict) or isinstance(_rb2, dict):
-                                _sa2 = _span_from_marks(_q5paras, _ra2, pid, "A")
-                                _sb2 = _span_from_marks(_q5paras, _rb2, pid, "B")
-                                if _sa2 and _sb2:
-                                    _picked = validate_llm_q5_spans(_q5paras, _sa2, _sb2, pid)
-                                    if _picked:
-                                        print(f"[VAR][A][{pid}] Q5 재시도 성공")
+                            del _Q5_FAIL_REASONS[:]
+                            _sa2 = _q5_text_of(_ra2, _q5paras, pid, "A")
+                            _sb2 = _q5_text_of(_rb2, _q5paras, pid, "B")
+                            if _sa2 and _sb2:
+                                _picked = validate_llm_q5_spans(_q5paras, _sa2, _sb2, pid)
+                                if _picked:
+                                    print(f"[VAR][A][{pid}] Q5 재시도 성공")
                         except Exception as _re2:
                             print(f"[VAR][A][{pid}] Q5 재시도 예외({_re2})")
                     if _picked:
@@ -1270,10 +1301,23 @@ def generate_variation_a(
                 #   밑줄은 Q5 빈칸이 차지한 토큰 범위를 피해서 잡는다.
                 try:
                     _spans = blank_token_spans(data["paragraphs"])
+                    # ★ 정답 자리(③④⑤)를 코드가 정해 내려보낸다.
+                    #   지문마다 따로 주사위를 굴리면 한 강에 지문이 3개뿐이라 겹친다
+                    #   (시뮬레이션: 셋 다 같은 번호 17%, 완전 분산 13%).
+                    #   → 강 안에서 3·4·5를 돌려 쓴다. 지문 번호를 순번으로 삼고
+                    #     시작 위치만 강 이름 해시로 정한다. 3개면 반드시 하나씩 깔린다.
+                    #   같은 강·같은 번호는 항상 같은 자리라 답지가 안 흔들린다.
+                    _seq = re.findall(r"\d+", str(pid))
+                    _seq = int(_seq[0]) if _seq else 0
+                    _start = int(hashlib.md5(
+                        (str(book) + "|" + str(unit) + "|vocabpos").encode()
+                    ).hexdigest()[:8], 16) % 3
+                    _want_n = 3 + ((_start + _seq) % 3)
                     _vraw = call_claude(
                         VOCAB_SYS,
                         build_vocab_prompt(data["paragraphs"],
-                                           [data.get("blank_A", ""), data.get("blank_B", "")]),
+                                           [data.get("blank_A", ""), data.get("blank_B", "")],
+                                           want_n=_want_n),
                         max_tokens=1800)
                     _v = extract_json_from_response(_vraw)
                     _items = normalize_llm_vocab(_v.get("vocab_items"), data["paragraphs"], _spans)

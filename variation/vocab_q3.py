@@ -471,31 +471,31 @@ _VERB_BASE = {
 def answer_pos_ok(word: str) -> bool:
     """정답 자리에 쓸 수 있는 단어인가.
 
-    ★ 기출 7세트 실측: 정답 품사 형용사 4 / 동사 3, 명사·부사 0.
-      구체명사는 반의어가 없어 반전 자체가 불가능하다. 실제로 LLM이 'story.'를
-      정답으로 고르자 바꿀 말이 없어 'story.' → 'story.' 를 냈고,
-      그 지문이 3회 재시도 끝에 통째로 누락됐다.
-
-    ★ 방식: '형용사·동사를 통과시키는' 화이트리스트가 아니라
-      '명사·부사가 확실한 것만 거부하는' 블랙리스트로 간다.
-      화이트리스트는 rely/decline/multiple/single 처럼 어미 없는 말을 계속 놓친다.
-      (실측 31/37 → 목록을 아무리 채워도 샌다)"""
+    ★ 기준은 '품사'가 아니라 '반대말이 있는가'다.
+      명사도 방향이 있으면 정답이 된다 — 기출에 실제로 쓰인다:
+        modesty ↔ arrogance (연성 하천공학) / restrictions (바자르)
+        concern (상황윤리) / necessity / majority ↔ minority
+      쓸 수 없는 건 방향이 없는 구체명사다:
+        story / tasks / readers / line — 반대말 자체가 없다
+    ★ 그런데 'story' 와 'modesty' 는 형태로 구분할 수 없다(둘 다 명사).
+      의미 판단이라 LLM 몫이고, 코드는 확실한 것만 거른다:
+        · 대명사·기능어  (문맥 판단 대상이 아님)
+        · 접속부사       (논리 흐름 표지)
+        · 부사(-ly)      (기출 정답에 없음)
+      반의어를 못 만든 경우는 shown == original 검사가 따로 잡는다."""
     w = re.sub(r"[^A-Za-z-]", "", str(word or "")).lower()
     if not w or len(w) < 3:
         return False
-    if w in _NOUN_HARD or w in _CONCRETE:            # 구체명사 — 반의어 없음
+    if w in _VOCAB_STOP:                             # 관사·전치사·대명사 등 기능어
         return False
     if w in _DISCOURSE_MARKER:                       # 접속부사 — 문맥 판단 대상 아님
         return False
-    if w.endswith(_NOUN_SUFFIX):                     # -tion/-ment/-ity 등 추상명사
-        return False
-    # -ly 는 대개 부사지만, rely/apply/imply/comply 처럼 동사도 있고
-    # early/likely/costly 처럼 형용사도 있다. 그것들만 예외로 둔다.
+    # -ly 는 대개 부사. rely/apply 처럼 동사이거나 early/likely 처럼 형용사인 것만 허용
     _LY_OK = {"rely", "apply", "imply", "comply", "supply", "reply", "multiply",
               "early", "only", "likely", "costly", "friendly", "lonely",
               "lively", "timely", "ugly", "holy", "silly", "daily", "deadly"}
     if w.endswith("ly") and w not in _LY_OK:
-        return False                                 # 부사 — 기출 정답에 없음
+        return False
     return True
 
 

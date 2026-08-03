@@ -422,6 +422,13 @@ def _span_from_marks(paragraphs, mark, pid="?", lab="?") -> Optional[str]:
         return None
     span = text[ms.start():ms.start() + me.end()].strip()
 
+    # ★ LLM 자기신고(word_count)와 실제가 다르면 남긴다 — 세지 않았다는 뜻이다.
+    _wc_said = mark.get("word_count")
+    _wc_real = len(span.split())
+    if isinstance(_wc_said, int) and _wc_said != _wc_real:
+        print(f"[VAR][A][{pid}] Q5 지목({lab}) 자기신고 {_wc_said}단어 ≠ 실제 {_wc_real}단어 "
+              f"— 세지 않고 답했다")
+
     # ★ 코드는 자르지 않는다 — 조건을 지켜서 지목하는 것이 LLM의 일이다.
     #   뒤에서 잘라 맞추면 'very few of your readers would make it to your dramatic'처럼
     #   목적어(conclusion)가 빠진 어정쩡한 구절이 나온다. 조건 위반은 거부하고
@@ -841,7 +848,9 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s90 = Q3 어휘 정답 자리를 형용사·동사로 강제(명사·부사 거부). 구체명사는 반의어가 없어 반전이 불가능하다. _s89 누적분 포함.
+    # _s92 = Q3 정답 자리 기준을 품사→반대말 유무로(modesty·majority 같은 방향 있는 명사 허용). _s91 누적분 포함.
+    # (구) _s91 = Q5 지목에 word_count·span_preview 자기신고 추가 + 거부 시 사유를 알려주고 1회 재시도. 18단어·쉼표 위반이 반복됐다. _s90 누적분 포함.
+    # (구) _s90 = Q3 어휘 정답 자리를 형용사·동사로 강제(명사·부사 거부). 구체명사는 반의어가 없어 반전이 불가능하다. _s89 누적분 포함.
     # (구) _s89 = 로그 표기 개선(VOCAB→Q3어휘, 정답 번호를 원숫자로). _s88 누적분 포함.
     # (구) _s88 = 어휘 shown==original을 생성 단계에서 걸러 Q3만 핵심빈칸으로 우회(지문 통째 누락 방지) + Q5 실패사례 프롬프트 명시. _s87 누적분 포함.
     # (구) _s87 = 부정 접두사 반의어(inhabitable/uninhabitable)를 철자유사 오탐에서 제외. 3회 재시도 후 관대 fallback 원인이었다. _s86 누적분 포함.
@@ -875,7 +884,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s90"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s92"
 
 
 # ============ Supabase 캐시 ============
@@ -1173,6 +1182,33 @@ def generate_variation_a(
                         _sa, _sb = str(_ra or ""), str(_rb or "")
                     _picked = validate_llm_q5_spans(_q5paras, _sa, _sb, pid) \
                         if (_sa and _sb) else None
+
+                    # ★ 한 번 더 기회를 준다 — 거부 사유를 알려주고 다시 고르게 한다.
+                    #   실측: 18단어·쉼표 포함처럼 프롬프트에 이미 적힌 조건을 어긴다.
+                    #   코드 픽으로 바로 넘기면 'twenty-second parallel'을 쪼개는 자리가 나온다.
+                    if not _picked:
+                        try:
+                            _retry_msg = (
+                                "\n\n[이전 시도가 거부됐다. 아래를 고쳐 다시 지목하라]\n"
+                                "· starts_with 부터 ends_with 까지 지문에서 단어를 하나씩 세어라.\n"
+                                "  4~11 단어여야 한다. 18단어짜리 범위를 잡고도 모르는 일이 있다.\n"
+                                "· 그 범위를 지문에서 그대로 옮겨 적어 쉼표·마침표가 있는지 보라.\n"
+                                "  있으면 구두점 앞에서 ends_with 를 다시 잡아라.\n"
+                                "· word_count 와 span_preview 를 반드시 채워라.")
+                            _q5raw2 = call_claude(Q5_BLANK_SYS,
+                                                  build_q5_blank_prompt(_q5paras) + _retry_msg,
+                                                  max_tokens=1200)
+                            _q52 = extract_json_from_response(_q5raw2)
+                            _ra2, _rb2 = _q52.get("blank_A"), _q52.get("blank_B")
+                            if isinstance(_ra2, dict) or isinstance(_rb2, dict):
+                                _sa2 = _span_from_marks(_q5paras, _ra2, pid, "A")
+                                _sb2 = _span_from_marks(_q5paras, _rb2, pid, "B")
+                                if _sa2 and _sb2:
+                                    _picked = validate_llm_q5_spans(_q5paras, _sa2, _sb2, pid)
+                                    if _picked:
+                                        print(f"[VAR][A][{pid}] Q5 재시도 성공")
+                        except Exception as _re2:
+                            print(f"[VAR][A][{pid}] Q5 재시도 예외({_re2})")
                     if _picked:
                         # intro 를 다시 떼어내 원래 구조로 복원
                         data["intro"] = _picked["paragraphs"][0][1]

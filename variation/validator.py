@@ -454,6 +454,26 @@ def blank_order_wrong(text: str, mk_a: str, mk_b: str) -> bool:
 
 
 # ====================== 유형 A 검증 (완화) ======================
+def _tag_type(errors: list, kind: str) -> list:
+    """오류 메시지에 유형(A/B)을 붙인다.
+
+    'Q4 blank_A 단어 수 부족' 만 보면 A 유형인지 B 유형인지 알 수 없다.
+    A와 B는 같은 번호라도 전혀 다른 문항이다(A Q4=불일치, B Q4=요약빈칸).
+    → '[01번] [유형B] [CRITICAL] Q4 ...' 형태로 만든다."""
+    out = []
+    for e in errors:
+        e = str(e)
+        if "[유형" in e:                      # 이미 붙어 있으면 그대로
+            out.append(e); continue
+        # '[pid] ' 다음에 삽입 (없으면 맨 앞)
+        m = re.match(r"^(\[[^\]]+\]\s*)", e)
+        if m:
+            out.append(m.group(1) + f"[유형{kind}] " + e[m.end():])
+        else:
+            out.append(f"[유형{kind}] " + e)
+    return out
+
+
 def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient: bool = False) -> list:
     """유형 A 검증 - 평가원 순서형 (intro + (A)(B)(C) 3문단 + 고정 5선지)"""
     errors = []
@@ -723,7 +743,7 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
             errors.append(
                 f"[{pid}] [CRITICAL] Q4 불일치 진술이 하나도 없음 — 최소 1개는 거짓이어야 함")
 
-    return errors
+    return _tag_type(errors, "A")
 
 
 # ====================== 유형 B 검증 (완화) ======================
@@ -1020,7 +1040,7 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
                             f"[{pid}] {_lab} {_i + 1}번이 같은 명제 ({sorted(_ov)}) — "
                             f"한 유형의 답이 다른 유형의 힌트가 된다. 명제를 갈 것")
 
-    return errors
+    return _tag_type(errors, "B")
 
 
 # ====================== 호환용 함수 (예전 코드용) ======================

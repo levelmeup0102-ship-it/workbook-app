@@ -948,16 +948,19 @@ def build_vocab_prompt(paragraphs, blank_phrases=None) -> str:
         "## STEP 3 — 정답 자리와 반의어\n"
         "  · The answer MUST be number 3, 4, or 5. 기출 정답 위치는 ③2회 ④3회 ⑤2회이고\n"
         "    ①②가 정답인 적은 없다. 앞쪽 밑줄이 논지를 확인시키고 뒤에서 뒤집는 구조다.\n"
-        "  · ★★ The answer word MUST be an ADJECTIVE or a VERB. 기출 정답 형용사4·동사3,\n"
-        "    명사·부사가 정답인 적은 한 번도 없다. 구체명사는 반의어가 아예 없어\n"
-        "    반전이 불가능하다.\n"
-        "      [X] story / tasks / readers / line / reason / result / information\n"
-        "      [X] flexibility / adaptability / ability  (-ity, -ment 등 추상명사)\n"
-        "      [X] capriciously / arbitrarily            (-ly 부사)\n"
-        "      [O] significant / inhabitable / desirable / coveted   (형용사)\n"
-        "      [O] undermines / rely / disregard / abandon / claim   (동사)\n"
+        "  · ★★ 정답 자리의 기준은 품사가 아니라 '반대말이 있는가' 다.\n"
+        "    고르기 전에 스스로 물어라 — 이 단어의 반대말을 댈 수 있는가?\n"
+        "    못 대면 그 자리는 쓸 수 없다. 반전할 수가 없기 때문이다.\n"
+        "      [O] 형용사  significant ↔ trivial / inhabitable ↔ uninhabitable\n"
+        "      [O] 동사    undermines ↔ reinforces / rely ↔ disregard / abandon ↔ retain\n"
+        "      [O] 명사    modesty ↔ arrogance / majority ↔ minority / presence ↔ absence\n"
+        "                  기출에도 명사가 쓰인다 — modesty(연성 하천공학), restrictions(바자르),\n"
+        "                  concern(상황윤리), necessity. 방향만 있으면 명사도 정답이 된다.\n"
+        "      [X] story / tasks / readers / line — 반대말 자체가 없다\n"
+        "      [X] capriciously / arbitrarily     — 부사는 기출 정답에 없다\n"
         "    실측 실패: 정답 자리에 'story.' 를 골라 바꿀 말이 없어 'story.' → 'story.' 를\n"
         "    냈고, 그 지문이 3회 재시도 끝에 통째로 누락됐다.\n"
+        "    ★ 참고로 기출 정답 품사는 형용사 4·동사 3이다. 명사가 가능은 하지만 드물다.\n"
         "  · Replace it with a word of OPPOSITE direction — not a random word, not a\n"
         "    near-synonym. The sentence must still read grammatically.\n"
         "  · ★ NEVER use a word that merely LOOKS or SOUNDS similar (affect/effect,\n"
@@ -1161,11 +1164,23 @@ def build_q5_blank_prompt(paragraphs) -> str:
         "    'the' 'of course' 같이 여러 번 나오는 말로 시작하지 마라 — 자를 위치가 모호해진다.\n\n"
 
         "## OUTPUT — 지목만 하라. 문장을 쓰지 마라.\n"
+        "  ★★ word_count 를 반드시 함께 적어라. starts_with 부터 ends_with 까지\n"
+        "     지문에서 단어를 하나씩 세어 그 숫자를 쓴다. 4~11 이 아니면 다시 잡아라.\n"
+        "     ★ 이걸 안 세면 18단어짜리 범위를 잡고도 모른다(실측). 시작과 끝만 보고\n"
+        "       고르면 그 사이가 얼마나 긴지 알 수 없다.\n"
+        "  ★★ span_preview 도 적어라. starts_with 부터 ends_with 까지를 지문에서\n"
+        "     그대로 옮겨 적는 것이다. 여기에 쉼표·마침표가 보이면 그 자리는 못 쓴다 —\n"
+        "     구두점 앞에서 ends_with 를 다시 잡아라.\n"
+        "     실측 실패: 'Egypt understandably claimed the original, straight line...'\n"
+        "               → 'the original,' 의 쉼표를 물어 거부됐다.\n"
         "  ★ 출력 직전 마지막 확인: blank_A.para != blank_B.para 인가?\n"
         '{"blank_A": {"para": <n>, "starts_with": "<exact first 2-3 words>",\n'
         '             "ends_with": "<exact last 2-3 words>",\n'
+        '             "word_count": <starts_with 부터 ends_with 까지 센 단어 수, 4~11>,\n'
+        '             "span_preview": "<그 범위를 지문에서 그대로 옮긴 것 — 구두점이 보이면 다시 잡아라>",\n'
         '             "why": "<position type + evidence type, quote the neighboring words>"},\n'
-        ' "blank_B": {"para": <n>, "starts_with": "...", "ends_with": "...", "why": "..."}}'
+        ' "blank_B": {"para": <n>, "starts_with": "...", "ends_with": "...",\n'
+        '             "word_count": <4~11>, "span_preview": "...", "why": "..."}}'
     )
 
 

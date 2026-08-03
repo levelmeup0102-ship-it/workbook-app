@@ -9,7 +9,7 @@ STEP_VERSIONS = {
     "step2_order": "v10",
     "step3_blank": "v6",
     "step4_topic": "v5",
-    "step5_grammar": "v15",
+    "step5_grammar": "v16",  # v16: 후보기반 괄호수 + 잘린JSON복구 + 단어경계치환
     "step6_vocab_content": "v7",
     "step7_writing": "v4",
     "step8_answers": "v10",
@@ -274,7 +274,7 @@ def call_claude(system_prompt: str, user_prompt: str, max_retries=2, max_tokens=
             if result.returncode != 0:
                 raise Exception(f"curl error: {result.stderr.decode('utf-8','replace')[:200]}")
             
-           data = json.loads(result.stdout.decode('utf-8'))
+            data = json.loads(result.stdout.decode('utf-8'))
             if 'error' in data:
                 raise Exception(f"API error: {json.dumps(data['error'])[:200]}")
             stop = data.get("stop_reason")
@@ -1305,7 +1305,8 @@ def _sub_token_once(sent: str, target: str, replacement: str):
     return sent[:m.start()] + replacement + sent[m.end():]
 
 
-def _assemble_bracket_passage(triples, sentences):    """
+def _assemble_bracket_passage(triples, sentences):
+    """
     AI가 반환한 [[원문장, 정답, 오답], ...] 를 받아
     grammar_bracket_passage 문자열 + grammar_bracket_answers 리스트로 변환.
     50% 확률로 정답 좌우 swap.

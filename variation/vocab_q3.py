@@ -431,6 +431,15 @@ def _looks_alike(a: str, b: str) -> bool:
     # 굴절형은 오탐 — 한쪽이 다른쪽으로 시작하면 같은 어간으로 본다
     if x.startswith(y) or y.startswith(x):
         return False
+    # ★ 부정 접두사로 만든 반의어는 정상이다. 철자가 비슷할 수밖에 없다.
+    #   inhabitable/uninhabitable, possible/impossible, regular/irregular 등.
+    #   실측: 'inhabitable'→'uninhabitable' 가 철자유사로 거부돼 3회 재시도 끝에
+    #   관대 fallback 으로 떨어졌다. affect/effect 같은 혼동어와는 전혀 다르다.
+    _NEG = ("un", "in", "im", "il", "ir", "dis", "non", "a", "anti", "de", "mis")
+    _lo, _hi = (x, y) if len(x) <= len(y) else (y, x)
+    for _p in _NEG:
+        if _hi == _p + _lo:
+            return False
     if abs(len(x) - len(y)) > 3:
         return False
     return difflib.SequenceMatcher(None, x, y).ratio() >= 0.75

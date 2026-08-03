@@ -841,7 +841,10 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s87 = 부정 접두사 반의어(inhabitable/uninhabitable)를 철자유사 오탐에서 제외. 3회 재시도 후 관대 fallback 원인이었다. _s86 누적분 포함.
+    # _s90 = Q3 어휘 정답 자리를 형용사·동사로 강제(명사·부사 거부). 구체명사는 반의어가 없어 반전이 불가능하다. _s89 누적분 포함.
+    # (구) _s89 = 로그 표기 개선(VOCAB→Q3어휘, 정답 번호를 원숫자로). _s88 누적분 포함.
+    # (구) _s88 = 어휘 shown==original을 생성 단계에서 걸러 Q3만 핵심빈칸으로 우회(지문 통째 누락 방지) + Q5 실패사례 프롬프트 명시. _s87 누적분 포함.
+    # (구) _s87 = 부정 접두사 반의어(inhabitable/uninhabitable)를 철자유사 오탐에서 제외. 3회 재시도 후 관대 fallback 원인이었다. _s86 누적분 포함.
     # (구) _s86 = 오류 메시지에 유형(A/B) 표시 — Q4만 보면 A(불일치)인지 B(요약빈칸)인지 알 수 없다. _s85 누적분 포함.
     # (구) _s85 = validator를 generator와 일치(B Q4 하한 4→3, 간격 3→1). 어긋나서 정상 문항이 3회 재시도 후 관대 모드로 떨어졌다. _s84 누적분 포함.
     # (구) _s84 = 어휘 폴백 폐기(shown=original은 문항 성립 불가) + 원문단어 그대로면 CRITICAL. LLM 실패 시 핵심빈칸으로 남긴다. _s83 누적분 포함.
@@ -872,7 +875,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s87"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s90"
 
 
 # ============ Supabase 캐시 ============
@@ -1238,6 +1241,22 @@ def generate_variation_a(
                         max_tokens=1800)
                     _v = extract_json_from_response(_vraw)
                     _items = normalize_llm_vocab(_v.get("vocab_items"), data["paragraphs"], _spans)
+                    # ★ shown == original 이면 그 자리는 바뀐 게 없다. 정답 자리가 그러면
+                    #   '틀린 단어'가 없어 문항이 성립하지 않는다. 여기서 걸러 Q3를
+                    #   핵심빈칸으로 되돌린다 — validator 까지 가면 지문이 통째로 누락된다
+                    #   (실측: 'story.' → 'story.' 로 01번 A가 3회 실패 후 RuntimeError).
+                    if _items:
+                        _same = [i for i in _items
+                                 if str(i.get("shown", "")).strip().lower()
+                                 == str(i.get("original", "")).strip().lower()]
+                        if _same:
+                            _ans_same = any(i.get("is_answer") for i in _same)
+                            _ns = "".join("①②③④⑤"[(i.get('n', 0) - 1)]
+                                          for i in _same if 1 <= i.get('n', 0) <= 5)
+                            print(f"[VAR][A][{pid}] Q3어휘 거부 — {_ns}번이 "
+                                  f"원문 단어 그대로"
+                                  + (" (정답 자리)" if _ans_same else "") + " → Q3는 핵심빈칸으로")
+                            _items = None
                     if _items:
                         # ★ 정답 위치 분산 — 프롬프트만으론 매번 ③에 몰린다(실측 3/3)
                         _items = shuffle_answer_position(_items, pid)
@@ -1245,17 +1264,18 @@ def generate_variation_a(
                         if _v.get("vocab_explain"):
                             data["vocab_explain"] = _v["vocab_explain"]
                         _ans = next((i for i in _items if i.get("is_answer")), None)
-                        print(f"[VAR][A][{pid}] VOCAB ok — 정답 {_ans['n'] if _ans else '?'}번 "
-                              f"'{_ans['original'] if _ans else ''}' → '{_ans['shown'] if _ans else ''}'")
+                        _cn = "①②③④⑤"[(_ans['n'] - 1)] if (_ans and 1 <= _ans.get('n', 0) <= 5) else '?'
+                        print(f"[VAR][A][{pid}] Q3어휘 ok — 정답 {_cn}번 "
+                              f"원문'{_ans['original'] if _ans else ''}' → 제시'{_ans['shown'] if _ans else ''}'")
                     else:
                         raise ValueError("normalize 실패")
                 except Exception as _ve:
                     _fb = build_vocab_fallback(data["paragraphs"], blank_token_spans(data["paragraphs"]))
                     if _fb:
                         data["vocab_items"] = shuffle_answer_position(_fb, pid)
-                        print(f"[VAR][A][{pid}] VOCAB 폴백 사용 ({_ve})")
+                        print(f"[VAR][A][{pid}] Q3어휘 폴백 사용 ({_ve})")
                     else:
-                        print(f"[VAR][A][{pid}] VOCAB 생성 실패 ({_ve}) — Q3는 핵심빈칸으로 유지")
+                        print(f"[VAR][A][{pid}] Q3어휘 생성 실패 ({_ve}) — Q3는 핵심빈칸으로 유지")
 
             if "mismatch_count" not in data and "statements" in data:
                 data["mismatch_count"] = sum(1 for _, _, ok in data["statements"] if not ok)

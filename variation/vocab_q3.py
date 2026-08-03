@@ -334,6 +334,18 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
     if len(crowded) >= 3:      # 세 문장 이상에서 몰리면 설계가 잘못된 것
         errors.append(f"[{pid}] Q3 어휘 밑줄이 여러 문장에 몰림 {crowded} — 지문 전체에 흩을 것")
 
+    # ★ 정답 자리는 형용사·동사여야 한다. 구체명사는 반의어가 없어 반전이 불가능하다.
+    for it in vocab_items:
+        if not it.get("is_answer"):
+            continue
+        o, sh = str(it.get("original", "")), str(it.get("shown", ""))
+        if not answer_pos_ok(o) or not answer_pos_ok(sh):
+            _bad = o if not answer_pos_ok(o) else sh
+            errors.append(
+                f"[{pid}] [CRITICAL] Q3 어휘 정답 자리 '{_bad}'는 반의어를 만들 수 없는 품사 — "
+                f"기출 정답은 형용사 4·동사 3이고 명사가 정답인 적이 없다. "
+                f"방향을 가진 형용사·동사로 고를 것")
+
     # 문두 접속부사·담화표지는 어휘 문제로 부적절 (기출 정답 품사: 형용사4·동사3, 부사 0)
     for it in vocab_items:
         o = str(it.get("original", ""))
@@ -415,6 +427,76 @@ def strip_edge_punct(w: str) -> str:
 def is_discourse_marker(w: str) -> bool:
     """문두 접속부사·담화표지인가."""
     return strip_edge_punct(w).lower() in _DISCOURSE_MARKER
+
+
+# 형용사·동사로 보이는 어미 — 기출 정답은 형용사 4·동사 3이고 명사가 정답인 적이 없다.
+_ADJ_SUFFIX = ("able", "ible", "ive", "ous", "ful", "less", "ant", "ent",
+               "ic", "ical", "al", "ary", "ory", "ish", "like", "worthy",
+               "ed", "ing", "en")
+_VERB_SUFFIX = ("ize", "ise", "ify", "ate", "en", "ed", "ing", "s", "es")
+# 명사임이 확실한 어미 — 이런 걸 정답 자리에 두면 반의어를 만들 수 없다
+_NOUN_SUFFIX = ("tion", "sion", "ment", "ness", "ity", "ance", "ence",
+                "ship", "hood", "dom", "ism", "ist", "ure", "age", "cy")
+# 자주 나오는 구체명사 (어미로는 안 걸린다)
+_NOUN_HARD = {
+    "story", "stories", "line", "lines", "word", "words", "book", "books",
+    "hand", "hands", "eye", "eyes", "face", "faces", "head", "heads",
+    "house", "room", "city", "country", "school", "student", "students",
+    "teacher", "child", "children", "man", "men", "woman", "women",
+    "water", "food", "money", "car", "cars", "road", "roads", "door",
+    "reader", "readers", "writer", "writers", "author", "authors",
+    "name", "names", "idea", "ideas", "fact", "facts", "reason", "reasons",
+    "result", "results", "problem", "problems", "question", "questions",
+    "answer", "answers", "step", "steps", "level", "levels", "side", "sides",
+}
+
+
+# 어미가 없어 형태로는 판정 안 되는 원형 동사 — 실제 산출물 정답에 쓰인 것들
+_VERB_BASE = {
+    "rely", "depend", "disregard", "ignore", "reject", "accept", "deny",
+    "allow", "prevent", "enable", "hinder", "help", "harm", "cause",
+    "reduce", "raise", "lower", "boost", "curb", "limit", "expand",
+    "shrink", "grow", "fade", "rise", "fall", "gain", "lose", "keep",
+    "drop", "hold", "block", "clear", "open", "close", "start", "stop",
+    "begin", "end", "join", "split", "unite", "divide", "share", "hide",
+    "reveal", "conceal", "seek", "avoid", "meet", "miss", "win", "fail",
+    "succeed", "improve", "worsen", "protect", "attack", "defend", "resist",
+    "obey", "follow", "lead", "trail", "value", "waste", "save", "spend",
+    "trust", "doubt", "confirm", "refute", "affirm", "oppose", "support",
+    "favor", "shun", "embrace", "abandon", "retain", "discard", "claim",
+    "refuse", "grant", "withhold", "attract", "repel", "ease", "strain",
+}
+
+
+def answer_pos_ok(word: str) -> bool:
+    """정답 자리에 쓸 수 있는 단어인가.
+
+    ★ 기출 7세트 실측: 정답 품사 형용사 4 / 동사 3, 명사·부사 0.
+      구체명사는 반의어가 없어 반전 자체가 불가능하다. 실제로 LLM이 'story.'를
+      정답으로 고르자 바꿀 말이 없어 'story.' → 'story.' 를 냈고,
+      그 지문이 3회 재시도 끝에 통째로 누락됐다.
+
+    ★ 방식: '형용사·동사를 통과시키는' 화이트리스트가 아니라
+      '명사·부사가 확실한 것만 거부하는' 블랙리스트로 간다.
+      화이트리스트는 rely/decline/multiple/single 처럼 어미 없는 말을 계속 놓친다.
+      (실측 31/37 → 목록을 아무리 채워도 샌다)"""
+    w = re.sub(r"[^A-Za-z-]", "", str(word or "")).lower()
+    if not w or len(w) < 3:
+        return False
+    if w in _NOUN_HARD or w in _CONCRETE:            # 구체명사 — 반의어 없음
+        return False
+    if w in _DISCOURSE_MARKER:                       # 접속부사 — 문맥 판단 대상 아님
+        return False
+    if w.endswith(_NOUN_SUFFIX):                     # -tion/-ment/-ity 등 추상명사
+        return False
+    # -ly 는 대개 부사지만, rely/apply/imply/comply 처럼 동사도 있고
+    # early/likely/costly 처럼 형용사도 있다. 그것들만 예외로 둔다.
+    _LY_OK = {"rely", "apply", "imply", "comply", "supply", "reply", "multiply",
+              "early", "only", "likely", "costly", "friendly", "lonely",
+              "lively", "timely", "ugly", "holy", "silly", "daily", "deadly"}
+    if w.endswith("ly") and w not in _LY_OK:
+        return False                                 # 부사 — 기출 정답에 없음
+    return True
 
 
 def _looks_alike(a: str, b: str) -> bool:

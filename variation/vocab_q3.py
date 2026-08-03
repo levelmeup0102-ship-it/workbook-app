@@ -362,12 +362,15 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
     # shown이 original과 같으면 패러프레이즈가 안 된 것
     #   ★ 폴백(코드가 자리만 잡은 것)은 shown=original이 정상이다. 면제하지 않으면
     #     폴백이 절대 통과할 수 없어 3회 재시도 끝에 항목이 통째로 fallback으로 떨어진다.
-    if not any(it.get("_fallback") for it in vocab_items):
-        same = [it["n"] for it in vocab_items
-                if str(it.get("shown", "")).strip().lower() == str(it.get("original", "")).strip().lower()]
-        if same:
-            errors.append(f"[{pid}] Q3 어휘 {same}번이 원문 단어 그대로 — "
-                          f"오답 자리도 동의어로 바꿔야 학생이 '원문에 있던 말'로 넘기지 못한다")
+    #   ★ shown == original 이면 그 자리는 아무것도 바뀌지 않은 것이다.
+    #     특히 정답 자리가 그러면 '틀린 단어'가 없어 문항이 성립하지 않는다.
+    same = [it["n"] for it in vocab_items
+            if str(it.get("shown", "")).strip().lower() == str(it.get("original", "")).strip().lower()]
+    if same:
+        _ans_same = any(it.get("is_answer") for it in vocab_items if it.get("n") in same)
+        errors.append(f"[{pid}] {'[CRITICAL] ' if _ans_same else ''}"
+                      f"Q3 어휘 {same}번이 원문 단어 그대로 — 바뀐 게 없어 문항이 성립하지 않는다"
+                      + (" (정답 자리라 치명적)" if _ans_same else ""))
 
     return errors
 
@@ -507,18 +510,13 @@ def shuffle_answer_position(vocab_items, pid: str = "") -> list:
 
 
 def build_vocab_fallback(paragraphs, blank_spans=None) -> Optional[list]:
-    """LLM 실패 시 — 코드가 자리만 잡아 최소한의 문항을 만든다.
-    shown은 original 그대로라 패러프레이즈 검증에 걸린다(경고). 누락보다는 낫다."""
-    slots = pick_vocab_slots(paragraphs, blank_spans)
-    if not slots:
-        return None
-    for it in slots:
-        it["shown"] = it["original"]
-        it["shown_clean"] = strip_edge_punct(it["original"])
-        it["original_clean"] = strip_edge_punct(it["original"])
-        it["is_answer"] = (it["n"] == 4)          # 기출 최빈 위치 (뒤에서 분산됨)
-        it["_fallback"] = True                    # 패러프레이즈 검사 면제
-        it["evidence_type"] = ""
-        it["evidence"] = ""
-        it["why"] = ""
-    return slots
+    """★ 폐기됨 — 항상 None 을 돌려준다.
+
+    폴백은 자리만 잡을 뿐 반의어·동의어를 만들 수 없다(의미 판정은 코드 밖의 일).
+    shown = original 인 문항은 '틀린 단어'가 아예 없어 문제가 성립하지 않는다.
+    그런데도 내보내면 답지가 이렇게 나간다(실측):
+        ④ proved → proved
+        나머지 선지 ① patience → patience ② journalistic → journalistic ...
+    이런 걸 배포하느니 None 을 돌려주고 Q3 를 기존 핵심빈칸으로 두는 편이 낫다.
+    호출부는 None 을 받으면 vocab_items 를 세팅하지 않고, 템플릿이 core_blank 로 분기한다."""
+    return None

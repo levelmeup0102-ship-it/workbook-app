@@ -812,15 +812,18 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
         errors.append(f"[{pid}] Q3 summary_template에 (A)/(B) 빈칸이 없음 — (A)(B) placeholder를 남길 것")
 
     # ★ Q4 blank_A, blank_B 단어 수 (최소 4, 최대 12 백스톱)
-    min_blank_words = 4  # 빈칸은 자연스러운 핵심 구절(4~6단어) 허용
+    # ★ 하한 3 — generator(pick_b_q4_blanks min_w=3)·프롬프트(3~9단어)와 맞춘다.
+    #   학교 기출 실측도 3~9단어다('a disordered array' 3단어). 4로 두면 정상 문항이
+    #   3회 재시도 끝에 관대 모드로 떨어진다(실측).
+    min_blank_words = 3
     max_blank_words = 12
     try:
         wa = len(data["blank_A"].split())
         wb = len(data["blank_B"].split())
         if wa < min_blank_words:
-            errors.append(f"[{pid}] [CRITICAL] Q4 blank_A 단어 수 부족 ({wa}개 < {min_blank_words}개) — 4단어 이상 필수")
+            errors.append(f"[{pid}] [CRITICAL] Q4 blank_A 단어 수 부족 ({wa}개 < {min_blank_words}개) — 3단어 이상 필수")
         if wb < min_blank_words:
-            errors.append(f"[{pid}] [CRITICAL] Q4 blank_B 단어 수 부족 ({wb}개 < {min_blank_words}개) — 4단어 이상 필수")
+            errors.append(f"[{pid}] [CRITICAL] Q4 blank_B 단어 수 부족 ({wb}개 < {min_blank_words}개) — 3단어 이상 필수")
         if wa > max_blank_words:
             errors.append(f"[{pid}] [CRITICAL] Q4 blank_A 단어 수 과다 ({wa}개 > {max_blank_words}개) — 영작 빈칸으로 너무 김, 5~7단어로 줄일 것")
         if wb > max_blank_words:
@@ -873,10 +876,13 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
         _lo, _hi = (_ia, _ib) if _ia < _ib else (_ib, _ia)
         _between = _bst[_lo + 3:_hi].strip()
         _wc = len(_between.split()) if _between else 0
-        if _wc < 3:
+        # ★ 최소 1단어 — generator 와 맞춘다. 기출 'Depression (A), so the complexity of (B)'
+        #   처럼 연결어 하나만 사이에 두는 것이 정상이다. 3단어를 요구하면 그런 조합이
+        #   전부 거부돼 LLM 지목이 버려진다(실측 CRITICAL 3회).
+        if _wc < 1:
             errors.append(
-                f"[{pid}] [CRITICAL] Q4 (A)와 (B) 빈칸 사이 {_wc}단어 — 붙어 있으면 사실상 빈칸 하나다. "
-                f"최소 3단어 떨어뜨릴 것")
+                f"[{pid}] [CRITICAL] Q4 (A)와 (B) 빈칸이 붙어 있음 — 사실상 빈칸 하나다. "
+                f"사이에 최소 1단어(연결어)를 남길 것")
 
     # ★ B Q4 빈칸에 정답을 넣었을 때 경계 단어/구절 중복 (빈칸이 앞/뒤 단어를 먹음)
     if data.get("blank_A") and data.get("blank_B") and data.get("blank_summary_template"):

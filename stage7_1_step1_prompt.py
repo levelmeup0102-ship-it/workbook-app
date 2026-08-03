@@ -290,6 +290,8 @@ def plan_bracket_count(sentences: list[str]) -> tuple[int, list[int]]:
     cand_idx = [i for i, s in enumerate(sentences) if is_grammar_testable(s)]
     if not cand_idx:
         cand_idx = list(range(len(sentences)))
-    target = max(MIN_BRACKETS, min(MAX_BRACKETS, len(cand_idx)))
+    # 후보 전부에 출제하면 금지 필터(C1~C5)에 걸려 결국 못 채운다.
+    # 실제로 통과하는 비율을 감안해 후보의 약 60%를 목표로 잡는다.
+    target = max(MIN_BRACKETS, min(MAX_BRACKETS, round(len(cand_idx) * 0.6)))
     target = min(target, len(sentences))  # 문장당 최대 1개이므로 문장 수 초과 불가
     return target, cand_idx

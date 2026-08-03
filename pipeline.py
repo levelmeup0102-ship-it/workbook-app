@@ -19,8 +19,7 @@ STEP_VERSIONS = {
     "topic_background": "v3",  # v3: 이미지 사이즈업·다중주입·keyterm 보강
 }
 import asyncio, json, os, sys, time, random, re, math, logging
-from stage7_1_step1_prompt import PROMPT_TEMPLATE
-
+from stage7_1_step1_prompt import PROMPT_TEMPLATE, plan_bracket_count, MIN_BRACKETS
 logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s] %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
@@ -275,10 +274,22 @@ def call_claude(system_prompt: str, user_prompt: str, max_retries=2, max_tokens=
             if result.returncode != 0:
                 raise Exception(f"curl error: {result.stderr.decode('utf-8','replace')[:200]}")
             
-            data = json.loads(result.stdout.decode('utf-8'))
+           data = json.loads(result.stdout.decode('utf-8'))
             if 'error' in data:
                 raise Exception(f"API error: {json.dumps(data['error'])[:200]}")
-            return data["content"][0]["text"].strip()
+            stop = data.get("stop_reason")
+            usage = data.get("usage", {}) or {}
+            blocks = [b.get("type") for b in data.get("content", []) or []]
+            text = "".join(
+                b.get("text", "") for b in (data.get("content") or [])
+                if b.get("type") == "text"
+            ).strip()
+            if stop == "max_tokens" or not text:
+                _safe_print(
+                    f"  [API] stop={stop} out_tokens={usage.get('output_tokens')} "
+                    f"blocks={blocks} text_len={len(text)}"
+                )
+            return text
         except Exception as e:
             if tmp_path:
                 try: os.unlink(tmp_path)
@@ -345,7 +356,48 @@ def _parse_json_robust(text: str) -> dict:
     except (json.JSONDecodeError, Exception):
         pass
     
-    raise json.JSONDecodeError("모든 파싱 전략 실패", text[:200], 0)
+    # 6) max_tokens로 잘린 JSON 복구 시도
+    try:
+        return json.loads(_repair_truncated_json(text))
+    except Exception:
+        pass
+
+    head = text[:150].replace('\n', ' ')
+    tail = text[-150:].replace('\n', ' ')
+    raise json.JSONDecodeError(
+        f"모든 파싱 전략 실패 (len={len(text)} head={head!r} tail={tail!r})",
+        text[:200], 0)
+
+
+def _repair_truncated_json(text: str) -> str:
+    """max_tokens로 잘린 JSON 복구: 열린 문자열/배열/객체를 닫아준다."""
+    start = text.find('{')
+    s = text[start:] if start >= 0 else text
+    stack, in_str, esc = [], False, False
+    for ch in s:
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == '\\':
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch in '{[':
+            stack.append(ch)
+        elif ch in '}]':
+            if stack:
+                stack.pop()
+    if in_str:
+        s += '"'
+    # 잘린 끝의 미완성 조각(`, "key":` 같은 것) 제거
+    s = re.sub(r',\s*("(?:[^"\\]|\\.)*"\s*:\s*)?$', '', s.rstrip())
+    for ch in reversed(stack):
+        s += '}' if ch == '{' else ']'
+    s = re.sub(r',(\s*[}\]])', r'\1', s)   # 트레일링 콤마 제거
+    return s
 
 def _fix_json_quotes(text: str) -> str:
     """JSON 문자열 안의 이스케이프 안 된 따옴표를 수정"""
@@ -1240,8 +1292,20 @@ def _distribute_brackets(sent_count: int, total: int, max_per: int = 2) -> list:
     return counts
 
 
-def _assemble_bracket_passage(triples, sentences):
-    """
+def _sub_token_once(sent: str, target: str, replacement: str):
+    """단어 경계를 지켜 target 첫 등장 1회만 교체. 실패 시 None.
+    'his' 안의 'is' 를 잡아 h(3)[are / is] 를 만드는 사고 방지."""
+    if not target:
+        return None
+    lead = r'(?<!\w)' if (target[0].isalnum() or target[0] == '_') else ''
+    tail = r'(?!\w)' if (target[-1].isalnum() or target[-1] == '_') else ''
+    m = re.search(lead + re.escape(target) + tail, sent)
+    if not m:
+        return None
+    return sent[:m.start()] + replacement + sent[m.end():]
+
+
+def _assemble_bracket_passage(triples, sentences):    """
     AI가 반환한 [[원문장, 정답, 오답], ...] 를 받아
     grammar_bracket_passage 문자열 + grammar_bracket_answers 리스트로 변환.
     50% 확률로 정답 좌우 swap.
@@ -1273,9 +1337,11 @@ def _assemble_bracket_passage(triples, sentences):
                 if s.strip() == stripped:
                     idx = i
                     break
-        if idx == -1:
-            continue
-        if ans not in bracketed[idx]:
+        # 단어 경계로 못 찾으면 폐기 (부분문자열 오삽입 방지)
+        if _sub_token_once(bracketed[idx], ans, "\x00") is None:
+            logger.debug(
+                f"STAGE 7-1 | STEP 1 | 토큰 경계 불일치로 폐기: "
+                f"{ans!r} in {bracketed[idx][:70]!r}")
             continue
         n += 1
         # 50% 확률로 정답 좌우 swap
@@ -1283,7 +1349,7 @@ def _assemble_bracket_passage(triples, sentences):
             bracket_form = f"({n})[{wrong} / {ans}]"
         else:
             bracket_form = f"({n})[{ans} / {wrong}]"
-        bracketed[idx] = bracketed[idx].replace(ans, bracket_form, 1)
+        bracketed[idx] = _sub_token_once(bracketed[idx], ans, bracket_form)
         logger.debug(f"STAGE 7-1 | STEP 1 | 괄호 추가한 문장 확인: {bracketed[idx]}")
         answers.append({"num": n, "answer": ans, "wrong": wrong})
 
@@ -1300,32 +1366,19 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     sent_count = len(sentences)
     word_count = len(passage.split())
 
-    # ★ 지문 길이에 따라 최소 괄호 수 동적 계산 (사용자 명시 요구)
-    #   박스 4줄(~80단어) → 최소 2개 / 6줄(~120단어) → 최소 3개 / 그 이상 → 최소 8개
-    if word_count <= 80:
-        min_brackets = 2
-    elif word_count <= 120:
-        min_brackets = 3
-    else:
-        min_brackets = 8
+   # ★ 괄호 개수 = 출제 가능 문장(후보) 기반. 문장 수와 무관. (RULES.md 7.1)
+    #   문장당 1개씩 강제하던 분배는 폐기 — 괄호 없는 문장이 있는 것이 정상.
+    bracket_count, cand_idx = plan_bracket_count(sentences)
+    logger.debug(
+        f"STAGE 7-1 | STEP 1 | 지문 {word_count}단어 / {sent_count}문장 "
+        f"→ 후보 {len(cand_idx)}문장, 목표 {bracket_count}개 (최소 {MIN_BRACKETS})")
 
-    bracket_count = sent_count  # 문장당 1개 → 합계 = 총 문장 수
-    # ★ 8-1 괄호 분배: AI 호출 전에 어느 문장에 몇 개 출제할지 코드가 결정
-    bracket_dist = _distribute_brackets(sent_count, bracket_count, max_per=1)
-    bracket_dist_lines = "\n".join(
-        f"- 문장 {i}번 (\"{sentences[i][:60]}{'...' if len(sentences[i])>60 else ''}\") → {bracket_dist[i]}개"
-        for i in range(sent_count)
-    )
-    logger.debug(f"STAGE 7-1 | STEP 1 | 지문 {word_count}단어 / {sent_count}문장 → 최소 {min_brackets}개, 권장 {bracket_count}개, 분배 {bracket_dist}")
-    
     logger.debug("  step5: generating Lv.8 grammar...")
     prompt = PROMPT_TEMPLATE.format(
         sent_count=sent_count,
         passage=passage,
         bracket_count=bracket_count,
-        bracket_dist_lines=bracket_dist_lines,
     )
-
     # ★ v14: Supabase grammar_points 자동 학습 시스템 (stage7-1 어법 출제용)
     # 한국 수능·내신 빈출 어법 함정을 시스템 프롬프트에 동적 주입
     # → 어법 괄호 출제 시 사용자 9가지 + 김대균 영문법 핵심을 우선 활용
@@ -1335,9 +1388,18 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
         sys_prompt_stage7 = SYS_JSON + "\n\n" + grammar_addendum
         logger.debug(f"  step5: grammar_points 주입됨 ({len(grammar_addendum):,} chars)")
 
-    def _ai_call():
-        """call_claude_json + 8-1 triples → string 조립을 한 번에."""
-        d = call_claude_json(sys_prompt_stage7, prompt, max_tokens=4000)
+    def _ai_call(attempt: int = 0):
+        """call_claude_json + 8-1 triples → string 조립을 한 번에.
+        attempt>0 이면 조건을 바꿔서 호출 (동일 호출 반복 방지)."""
+        if attempt == 0:
+            sys_p, target = sys_prompt_stage7, bracket_count
+        else:
+            # 2회차부터: grammar_points 주입 해제 + 목표 개수 하향
+            sys_p = SYS_JSON
+            target = max(MIN_BRACKETS, bracket_count - attempt)
+        p = PROMPT_TEMPLATE.format(
+            sent_count=sent_count, passage=passage, bracket_count=target)
+        d = call_claude_json(sys_p, p, max_tokens=8000, max_retries=1)
         triples = d.get("grammar_bracket_passage", [])
         logger.debug(f"STAGE 7-1 | STEP 1 | AI 응답의 triples 값 확인\n{triples}")
         bracket_str, bracket_answers = _assemble_bracket_passage(triples, sentences)
@@ -1347,7 +1409,28 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
         d["grammar_bracket_count"] = len(bracket_answers)
         return d    
 
-    data = _ai_call()
+    data = None
+    for _try in range(3):
+        try:
+            data = _ai_call(_try)
+            break
+        except Exception as e:
+            _safe_print(
+                f"  step5: 시도 {_try+1}/3 실패 ({type(e).__name__}) → 조건 변경 후 재시도")
+
+    if data is None:
+        # ★ 어법 하나 때문에 지문 전체를 죽이지 않는다. Lv.8만 비우고 진행.
+        #   (캐시에 저장하지 않음 — 다음 실행 때 다시 시도)
+        _safe_print("  ⚠️ step5 최종 실패 → Lv.8 비우고 나머지 레벨로 PDF 생성")
+        return {
+            "grammar_bracket_passage": passage,
+            "grammar_bracket_answers": [],
+            "grammar_bracket_count": 0,
+            "grammar_error_passage": passage,
+            "grammar_error_answers": [],
+            "grammar_error_count": 0,
+            "_step5_failed": True,
+        }
 
     # 🔒 8-2 grammar_error_passage 검증
     err_text = data.get("grammar_error_passage", "")
@@ -2021,7 +2104,37 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
     # ★★ 최종 안전장치: 항상 핵심 차단 한 번 더 (캐시되기 전)
     # data = _apply_critical_grammar_filters(data) 테스트1: 안전장치 제거.
 
+    # ★ 8-1 괄호 개수 == 8-2 오류 개수 (RULES: 어법 두 문제는 항상 같은 개수)
+    data = _sync_error_count_with_brackets(data)
+
     save_step(passage_dir, "step5_grammar", data)
+    return data
+
+
+def _sync_error_count_with_brackets(data: dict) -> dict:
+    """8-2 오류 개수를 8-1 괄호 개수에 맞춘다.
+    초과분은 grammar_error_passage에서 오류 표현을 원래 표현으로 되돌려 제거."""
+    bcnt = len(data.get("grammar_bracket_answers", []) or [])
+    errs = list(data.get("grammar_error_answers", []) or [])
+    if bcnt <= 0 or len(errs) <= bcnt:
+        return data
+    text = data.get("grammar_error_passage", "") or ""
+    keep, drop = errs[:bcnt], errs[bcnt:]
+    restored = 0
+    for e in drop:
+        err_s = (e.get("error") or "").strip()
+        orig_s = (e.get("original") or "").strip()
+        if err_s and orig_s and err_s in text:
+            text = text.replace(err_s, orig_s, 1)
+            restored += 1
+    for i, e in enumerate(keep):
+        e["num"] = i + 1
+    data["grammar_error_passage"] = text
+    data["grammar_error_answers"] = keep
+    data["grammar_error_count"] = len(keep)
+    _safe_print(
+        f"  🔁 8-2 오류 {len(errs)}개 → 8-1 괄호 {bcnt}개에 맞춤 "
+        f"({len(drop)}개 제거, 지문 원복 {restored}개)")
     return data
 
 # ============================================================

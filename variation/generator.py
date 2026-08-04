@@ -249,16 +249,22 @@ def build_insert_blocks_b(en_text: str, pid: str = "?", preferred: int = None) -
 _Q5_MODALS = {"can", "will", "must", "should", "would", "could", "may", "might", "shall"}
 
 
-def _quote_ok(s: str) -> bool:
+def _quote_ok(s: str, allow_comma: bool = False) -> bool:
     """빈칸 후보 검사: 문장경계(.!?) 없고, 따옴표 '짝'이 갈리지 않음(균형).
     따옴표가 있어도 쌍이 맞으면 허용 — "good student" 통째는 OK, 여는 짝만 먹으면 제외.
 
-    ★ 쉼표/세미콜론/콜론도 제외한다. 보기(bogi)는 구두점을 떼고 만들어지므로,
-      정답 안에 쉼표가 있으면 학생이 그 쉼표를 복원할 근거가 없고 채점이 갈린다.
-      (16강 03번 'empty, landlocked patch of desert,' 사례)"""
+    ★ allow_comma=True 면 구절 '안쪽'의 쉼표·세미콜론·콜론을 허용한다 (_s94, A Q5 전용).
+      옛 정책(_s65)은 쉼표를 통째로 배제했다 — 보기에서 구두점을 떼니 학생이 쉼표
+      자리를 복원할 수 없다는 이유였다. 그런데 renderer.bogi_words 는 _s66부터
+      중간 구두점을 앞 단어에 붙여 제시한다('signals,' 'first,'). B Q5 주제영작이
+      이미 그 방식으로 돌고 있고, A Q5만 옛 정책에 남아 있었다.
+      실측: LLM 픽 거부 5건 중 3건이 쉼표 하나 때문이었다
+      ('uses not one, but multiple routes' — not A but B 구문이라 좋은 빈칸인데 버려졌다).
+    ★ B Q4(_b_candidates)는 기본값(False) 그대로다. 그쪽 validator 가 아직 쉼표를
+      거부하므로 같이 풀면 어긋난다. B는 별도로 결정한다."""
     if re.search(r'[.!?]', s):
         return False
-    if re.search(r'[,;:]', s):
+    if not allow_comma and re.search(r'[,;:]', s):
         return False
     # 대시(─ — –)도 배제. 하이픈(-)은 south-facing 같은 복합어라 허용한다.
     if re.search(r'[\u2500\u2014\u2013]', s):
@@ -319,7 +325,7 @@ def _clean_boundary_ok(phrase: str, full_text: str, strict: bool = True) -> bool
     return True
 
 
-def _cut_before_punct(sub: str, min_w: int = 4) -> str:
+def _cut_before_punct(sub: str, min_w: int = 4, sentence_only: bool = False) -> str:
     """구절 안·끝의 구두점 직전까지 자른다. 남은 단어가 min_w 미만이면 빈 문자열.
 
     구두점은 빈칸 밖에 남는다 — 지문에 그대로 인쇄되고 학생은 그 앞부분만 배열한다.
@@ -329,10 +335,12 @@ def _cut_before_punct(sub: str, min_w: int = 4) -> str:
     t = str(sub or "").strip()
     if not t:
         return ""
-    m = re.search(r'[.!?,;:]', t)
+    # ★ sentence_only=True 면 문장 경계(. ! ?)에서만 자른다 (_s94, A Q5 전용).
+    #   쉼표는 빈칸 안에 남고 보기에 'original,' 처럼 붙어 제시된다.
+    m = re.search(r'[.!?]' if sentence_only else r'[.!?,;:]', t)
     if m:
         t = t[:m.start()].strip()
-    t = t.rstrip('.,;:!?').strip()
+    t = t.rstrip('.,;:!?').strip()          # 끝 구두점은 언제나 떼어낸다
     return t if len(t.split()) >= min_w else ""
 
 
@@ -357,10 +365,10 @@ def _q5_candidates(ptext: str, min_w: int = 4, max_w: int = 8) -> list:
                 #   쉼표 든 구절을 통째로 버리면 'trail off over'(쉼표 건너뛴 자리)가 뽑힌다.
                 #   대신 구두점 직전까지 잘라 'dwindle and trail off'를 후보로 만든다.
                 #   지문에는 쉼표가 그대로 인쇄되고 학생은 그 앞부분만 배열한다.
-                sub = _cut_before_punct(sub, min_w)
+                sub = _cut_before_punct(sub, min_w, sentence_only=True)
                 if not sub:
                     continue
-                if not _quote_ok(sub):
+                if not _quote_ok(sub, allow_comma=True):
                     continue
                 if not _clean_boundary_ok(sub, ptext, strict=strict):
                     continue
@@ -493,9 +501,10 @@ def validate_llm_q5_spans(paragraphs, span_a: str, span_b: str, pid: str = "?") 
     if a == b:
         return _fail("(A)(B) 동일")
 
-    # 구두점이 붙어 오면 그 직전까지 잘라 쓴다 (구두점은 빈칸 밖)
-    a = _cut_before_punct(a, 4) or a
-    b = _cut_before_punct(b, 4) or b
+    # 문장 경계(. ! ?)가 붙어 오면 그 직전까지 잘라 쓴다.
+    # ★ 쉼표는 자르지 않는다 (_s94) — 빈칸 안에 남고 보기에 붙어 제시된다.
+    a = _cut_before_punct(a, 4, sentence_only=True) or a
+    b = _cut_before_punct(b, 4, sentence_only=True) or b
 
     # 단어 중간에서 잘린 구절 거부 ('arbitrarily' → 'arily')
     def _word_bounded(v, whole):
@@ -518,10 +527,13 @@ def validate_llm_q5_spans(paragraphs, span_a: str, span_b: str, pid: str = "?") 
             return _fail(f"({lab}) {n}단어 — 4단어 미만: '{v[:50]}'")
         if n > 11:
             return _fail(f"({lab}) {n}단어 — 11단어 초과: '{v[:50]}'")
-        if re.search(r"[.!?,;:]", v):
-            return _fail(f"({lab}) 구두점 포함: '{v[:50]}'")
-        if not _quote_ok(v):
-            return _fail(f"({lab}) 따옴표/문장부호 문제: '{v[:50]}'")
+        # ★ 문장 경계만 거부. 안쪽 쉼표는 허용한다 (_s94) — 보기에 'original,' 로 붙어 나간다.
+        if re.search(r"[.!?]", v):
+            return _fail(f"({lab}) 문장 경계(. ! ?) 포함 — 한 문장 안에서 고를 것: '{v[:50]}'")
+        if re.search(r"[,;:]\s*$", v):
+            return _fail(f"({lab}) 쉼표로 끝남 — 끝 구두점은 빈칸 밖에 남길 것: '{v[:50]}'")
+        if not _quote_ok(v, allow_comma=True):
+            return _fail(f"({lab}) 따옴표 짝이 안 맞음: '{v[:50]}'")
         # ★ LLM 픽에는 완화 경계(strict=False). strict 는 코드가 단어 수만 보고
         #   아무 데나 자를 때 쓰는 안전장치다. 기출도 관사·전치사로 시작한다.
         if not _clean_boundary_ok(v, _whole, strict=False):
@@ -586,14 +598,14 @@ def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?
         if not val:
             return None
         v = str(val).strip()
-        v = _cut_before_punct(v, 4) or v      # 구두점은 빈칸 밖에 남긴다
+        v = _cut_before_punct(v, 4, sentence_only=True) or v   # 문장 경계만 자른다(_s94)
         if len(v.split()) < 4:
             return None
         if len(v.split()) > MAX_BLANK_WORDS:   # 너무 길면(예: 27단어) 거부 → 코드가 깔끔한 5~7단어로 대체
             return None
         if texts[idx].count(v) != 1:
             return None
-        if not _quote_ok(v):
+        if not _quote_ok(v, allow_comma=True):
             return None
         if modal_no_verb(v):
             return None
@@ -873,7 +885,12 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s93 = A Q5 위치지목(starts_with/ends_with) 폐기 → 구절을 통째로 받는다.
+    # _s94 = A Q5 쉼표 허용 — B Q5(_s66)와 방식 통일. 보기에 'original,' 로 붙여 제시하므로
+    #        학생이 쉼표 자리를 복원할 수 있다. A만 _s65의 배제 정책에 남아 있어 LLM 픽
+    #        거부 5건 중 3건이 쉼표 하나 때문이었다. + 4단어 하한을 프롬프트에서 복구
+    #        ('세지 마라'가 하한 검사까지 껐다 — 'designed to' 2단어 실측).
+    #        + '빈칸 밖에 남는 것이 단서'를 기출 예시로 명시. _s93 누적분 포함.
+    # (구) _s93 = A Q5 위치지목(starts_with/ends_with) 폐기 → 구절을 통째로 받는다.
     #        창작은 verbatim 검사로 막고, 길이는 '한 문법 단위' 기준을 프롬프트가
     #        설명해 LLM이 스스로 판단하게 한다(기출 115선지 실측 3~12단어, 12초과 0개).
     #        지목 방식은 시작·끝만 짚어 그 사이 길이가 안 보였고 5시도 전부 폴백됐다.
@@ -914,7 +931,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s93"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s94"
 
 
 # ============ Supabase 캐시 ============
@@ -1223,7 +1240,10 @@ def generate_variation_a(
                                 "· 네가 쓴 구절을 지문에서 찾아 눈으로 대조하라. 한 글자라도 다르면 못 쓴다.\n"
                                 "· 성분을 두 개 물었으면 뒤쪽 하나만 남겨라\n"
                                 "  (조건절+주절 → 주절의 술부만 / 주어부+술부 → 술부만).\n"
-                                "· 구절 안에 쉼표·마침표가 보이면 그 앞에서 끊어라.\n"
+                                "· 쉼표는 그대로 둬도 된다 — 보기에 'original,' 처럼 붙어 나간다.\n"
+                                "  ★ 쉼표만 지워서 다시 내지 마라. 지문에 없는 문자열이 되어 또 거부된다.\n"
+                                "· 마침표·물음표를 넘었으면 한 문장 안으로 줄여라.\n"
+                                "· 4단어 미만이면 성분을 끝까지 잡아라('designed to' → 'designed to recognize objects').\n"
                                 "· 첫 단어와 마지막 단어가 관사·전치사·접속사·조동사면 다시 잡아라.\n"
                                 "· blank_A.para 와 blank_B.para 는 서로 다른 숫자여야 한다.")
                             _q5raw2 = call_claude(Q5_BLANK_SYS,

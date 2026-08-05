@@ -787,6 +787,41 @@ def _span_from_marks_summary(summary: str, mark, pid="?", lab="?") -> Optional[s
     return span
 
 
+# ★ 짝을 이루는 표현 (_s101). 한쪽만 빈칸 밖에 남으면 홀로 떠서 문장이 어색해진다.
+#   실측: 'demand (A) rather (B)' — 'rather' 를 밖에 두고 'than delayed revelation' 을 뚫었다.
+#   (앞말, 뒷말) — 둘이 갈라지면 안 된다.
+#   ★ 앞말은 '그것만 나오면 뒷말이 반드시 따라오는' 것만 넣는다. 'to' 'not' 'as'
+#     처럼 홀로도 흔히 쓰이는 말을 넣으면 오탐이 폭발한다(실측: 정상 문장까지 전부 거부).
+_PAIRED_PHRASES = [
+    ("rather", "than"),
+    ("not only", "but"),
+    ("no sooner", "than"),
+    ("either", "or"),
+    ("neither", "nor"),
+    ("whether", "or"),
+    ("so as", "to"),
+    ("in order", "to"),
+    ("as well", "as"),
+]
+
+
+def _orphan_pair(template: str) -> str:
+    """빈칸 밖에 남은 텍스트에 짝을 잃고 홀로 뜬 앞말이 있는지 (_s101).
+
+    template 은 (A)/(B) 가 뚫린 상태다. 앞말은 밖에 남았는데 뒷말이 안 보이면
+    뒷말이 빈칸 안에 먹힌 것이다 — 'rather' 만 남고 'than' 이 빈칸으로 들어간 꼴.
+    ★ 한 방향만 본다. 뒷말('than')만 밖에 남는 건 정상일 때가 많다
+      ('more … than', 'less … than' 처럼 앞말이 목록에 없는 비교 구문).
+    """
+    _out = re.sub(r"\(A\)|\(B\)", " \u2588 ", str(template or ""))
+    low = " " + re.sub(r"[^a-z ]", " ", _out.lower()) + " "
+    low = re.sub(r"\s+", " ", low)
+    for a, b in _PAIRED_PHRASES:
+        if f" {a} " in low and f" {b} " not in low:
+            return a
+    return ""
+
+
 def pick_b_q4_blanks(full_summary, llm_a: str = "", llm_b: str = "", min_w: int = 3, max_w: int = 7) -> Optional[dict]:
     """B Q4 빈칸 — LLM이 지목한 자리를 최대한 그대로 쓴다.
 
@@ -850,6 +885,10 @@ def pick_b_q4_blanks(full_summary, llm_a: str = "", llm_b: str = "", min_w: int 
         if tmpl.replace("(A)", va).replace("(B)", vb) != hn:   # 복원 확인
             return None
         if fill_boundary_dup(tmpl, [("(A)", va), ("(B)", vb)]):
+            return None
+        # ★ 짝 표현이 갈라지면 안 된다 (_s101)
+        _orp = _orphan_pair(tmpl)
+        if _orp:
             return None
         return {"blank_A": va, "blank_B": vb}
 
@@ -947,7 +986,12 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s100 = Q3·Q4 요약문 겹침 비교를 '정답 채운 완성 문장'으로 (빈칸 자리에서 3연속이
+    # _s101 = B Q4 에 '짝 표현 갈라짐' 검사 추가. 실측: 'demand (A) rather (B) to ensure'
+    #        — 'rather' 를 밖에 두고 'than delayed revelation' 을 뚫어 짝이 갈렸다.
+    #        A Q5 에는 관용구 규칙이 있었는데 B Q4 에는 없었다. 프롬프트·코드 양쪽에 넣었다.
+    #        짝 목록은 앞말이 '그것만 나오면 뒷말이 따라오는' 것만 담는다 — 'to' 'not' 'as'
+    #        처럼 홀로도 흔한 말을 넣으면 정상 문장까지 거부한다(실측).
+    # (구) _s100 = Q3·Q4 요약문 겹침 비교를 '정답 채운 완성 문장'으로 (빈칸 자리에서 3연속이
     #        끊겨 실측 2/3을 놓쳤다). + Q3어휘 형태 검사를 -s 중심으로 재설계 —
     #        'overwhelming' 'boring' 같은 -ing 형용사를 굴절형으로 오판해 정상 치환을
     #        거부하고 A 를 누락시켰다. 수일치가 실제로 깨지는 -s 만 끝까지 막고
@@ -1054,7 +1098,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s100"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s101"
 
 
 # ============ Supabase 캐시 ============

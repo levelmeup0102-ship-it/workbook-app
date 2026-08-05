@@ -831,6 +831,12 @@ def build_summary_sentence_prompt(passage_text: str) -> str:
 #   빈칸으로 만들고, 같은 문법구조의 패러프레이즈를 정답으로 만든다.
 #   "원문이 절이면 정답도 절" 규칙을 강제해 빈칸 문법 불일치를 막는다.
 # ════════════════════════════════════════════════════════════════
+# ★★ 폐기됨 (_s96) — A Q3의 유일한 유형은 어휘(수능 30번)다.
+#   핵심빈칸은 _s58에서 어휘로 전환하며 '예비'로 남겨둔 옛 유형인데, 예비가 실패하면
+#   validate_a 가 CRITICAL 을 쏴서 1·2·4·5번이 멀쩡한 A 가 통째로 죽었다(16강 3/3 누락).
+#   게다가 '첫 문장 안에서만' 뚫어야 해 정식보다 훨씬 좁았다
+#   ('Bir Tawil is a strange place.' 6단어면 아예 불가능).
+#   generator 는 더 이상 이것을 import 하지 않는다. 호환을 위해 정의만 남겨둔다.
 CORE_BLANK_SYS = (
     "You are an English exam content generator for Korean high school students. "
     "All English you write MUST be grammatically correct (check subject-verb agreement, tense, prepositions). Output ONLY valid JSON, no markdown, no text outside JSON."
@@ -893,7 +899,7 @@ def build_translate_prompt(en_sentence: str) -> str:
 # A Q3 — 어휘 유형 (수능 30번)
 #   기출 7세트 35개 밑줄 실측:
 #     · 첫 문장에 밑줄 0/7  · 밑줄 위치 평균 61% 지점
-#     · 정답 위치 ③2 ④3 ⑤2 — ①②는 한 번도 정답이 아니다
+#     · 정답 위치 ③2 ④3 ⑤2 (원문 순서 지문 기준. 우리는 셔플돼 있어 ①~⑤ 전부 쓴다)
 #     · 밑줄 품사 형용사37% 동사37% 명사17% 부사5%
 #     · 정답 품사 형용사4 동사3 — 명사·부사가 정답인 적 없음
 # ════════════════════════════════════════════════════════════════
@@ -915,15 +921,19 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
       is_answer 만 옮기면 반의어가 박힌 자리가 오답이 되어 문항이 깨진다(_s68).
       → 자리를 코드가 정해서 내려보내고, 그 자리의 반의어는 LLM이 만든다."""
     body = "\n\n".join(f"({lab}) {txt}" for lab, txt in paragraphs)
-    if want_n in (3, 4, 5):
+    if want_n in (1, 2, 3, 4, 5):
         _want_txt = (
             f"  · ★★ 정답은 반드시 {want_n}번 자리다. 다른 번호에 두면 그 항목은 버려진다.\n"
             f"    {want_n}번 자리의 단어를 반의어로 바꾸고, 나머지 네 자리는 동의어로 바꿔라.\n"
             f"    자리를 먼저 정해 놓고 고르는 것이다 — {want_n}번에 놓을 만한 단어를 찾아\n"
-            f"    그 문장을 밑줄 자리로 잡아라. 반대말을 못 대는 단어면 다른 문장을 쓴다.\n")
+            f"    그 문장을 밑줄 자리로 잡아라. 반대말을 못 대는 단어면 다른 문장을 쓴다.\n"
+            f"  · ★ 기출은 정답이 ③④⑤에만 있지만 그 규칙은 여기 적용되지 않는다.\n"
+            f"    기출은 지문이 원문 순서 그대로라 '앞쪽이 논지를 확인시키고 뒤에서 뒤집는'\n"
+            f"    구조가 성립한다. 이 지문은 (A)(B)(C)가 셔플돼 학생이 보는 순서와\n"
+            f"    원문 순서가 다르다. 앞뒤 개념이 없으므로 ①~⑤ 어디든 정답이 될 수 있다.\n")
     else:
         _want_txt = (
-            "  · The answer MUST be number 3, 4, or 5. 기출 정답 위치는 ③2회 ④3회 ⑤2회이고\n")
+            "  · 정답은 ①~⑤ 어디든 될 수 있다. 지문이 셔플돼 있어 앞뒤 개념이 없다.\n")
     avoid = ""
     if blank_phrases:
         avoid = ("\n\n[ALREADY USED AS FILL-IN BLANKS — do not underline any word inside these]\n"
@@ -964,7 +974,7 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
 
         "## STEP 3 — 정답 자리와 반의어\n"
         + _want_txt +
-        "    ①②가 정답인 적은 없다. 앞쪽 밑줄이 논지를 확인시키고 뒤에서 뒤집는 구조다.\n"
+
         "  · ★★ 정답 자리의 기준은 품사가 아니라 '반대말이 있는가' 다.\n"
         "    고르기 전에 스스로 물어라 — 이 단어의 반대말을 댈 수 있는가?\n"
         "    못 대면 그 자리는 쓸 수 없다. 반전할 수가 없기 때문이다.\n"
@@ -980,6 +990,9 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
         "    ★ 참고로 기출 정답 품사는 형용사 4·동사 3이다. 명사가 가능은 하지만 드물다.\n"
         "  · Replace it with a word of OPPOSITE direction — not a random word, not a\n"
         "    near-synonym. The sentence must still read grammatically.\n"
+        "  · ★ 정답 자리의 치환어도 나머지 넷과 같은 수준·같은 문체여야 한다.\n"
+        "    정답만 유난히 어렵거나 쉬우면 학생이 내용을 안 읽고 그것부터 찍는다.\n"
+        "    기출은 정답과 오답의 난이도가 구분되지 않는다 — 그게 30번의 핵심이다.\n"
         "  · ★ NEVER use a word that merely LOOKS or SOUNDS similar (affect/effect,\n"
         "    adapt/adopt, comprise/compose, principal/principle). That tests spelling,\n"
         "    not reading. The wrong word must be a genuine ANTONYM whose meaning the\n"
@@ -997,6 +1010,33 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
         "          thesis: external control harms autonomy\n"
         "            → '④ drives the acquisition of self-responsibility' reverses it\n"
         "    Name which of (a)(b)(c) you used, and quote the exact evidence.\n\n"
+
+        "## ★★ 유의어·반의어는 사전이 아니라 '이 문맥에서' 판정한다\n"
+        "이것이 평가원 30번의 핵심이고, 여기서 가장 많이 틀린다.\n"
+        "\n"
+        "### 사전적 동의어가 아니라 '이 문장에서 바꿔 넣어도 논지가 그대로인 말'\n"
+        "  · 사전에서 같은 뜻이어도 이 문맥에 안 맞으면 못 쓴다.\n"
+        "      'a critical moment'(결정적) 를 'a judgmental moment'(비판적) 로 바꾸면\n"
+        "      사전상 critical 의 한 뜻이지만 이 문장에서는 딴 말이 된다.\n"
+        "  · 반대로 사전에 유의어로 안 실려 있어도, 이 문맥에서 같은 일을 하면 쓸 수 있다.\n"
+        "      'the brain uses multiple routes' 의 'uses' → 'draws on'\n"
+        "  · 바꿔 넣고 그 문장을 소리 내어 읽어라. 앞뒤 문장과의 관계가 그대로여야 한다.\n"
+        "\n"
+        "### 반의어도 '이 문맥에서 논지를 뒤집는 말'\n"
+        "  · 사전적 반대말을 찾는 게 아니다. 그 자리에 넣었을 때 **지문이 하는 주장과\n"
+        "    어긋나는** 말을 찾는 것이다.\n"
+        "      지문: 뇌는 신호가 막히면 다른 경로로 갈아탄다 (= 유연함)\n"
+        "      원문 'flexibility' → 'rigidity'\n"
+        "      rigidity 가 flexibility 의 사전적 반대라서가 아니라, 그 자리에 넣으면\n"
+        "      '갈아탄다'는 지문의 주장과 정면으로 어긋나기 때문이다.\n"
+        "  · ★ 문장 자체는 여전히 문법적이고 그럴듯해야 한다. 읽다가 걸리면 안 된다.\n"
+        "    걸려서 아는 게 아니라, **앞뒤를 대조해서** 알아야 한다.\n"
+        "  · 그래서 '반대말이 없는 단어'는 못 쓴다 — story / tasks / readers 는\n"
+        "    무엇으로 바꿔도 논지가 뒤집히지 않는다. 방향이 없기 때문이다.\n"
+        "\n"
+        "### 출력 직전에 다섯 자리를 전부 대입해 읽어라\n"
+        "  네 자리: 바꿔 넣어도 지문의 주장이 그대로인가? 아니면 그 자리를 다시 잡아라.\n"
+        "  한 자리: 바꿔 넣으면 지문의 주장과 어긋나는가? 안 어긋나면 정답이 성립 안 한다.\n\n"
 
         "## STEP 4 — 나머지 네 자리도 패러프레이즈하라\n"
         "  ★ Do NOT leave the four correct slots as the passage's own words. Replace each\n"
@@ -1019,14 +1059,44 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
         "    Pick words that a CSAT student would plausibly accept in that slot; the point is\n"
         "    that only the argument, not the word's surface, reveals which one is wrong.\n\n"
 
-        "## STEP 5 — 어휘 난이도: 수능 수준과 반 단계 위를 섞어라\n"
+        "## STEP 5 — 어휘 수준과 문체: 평가원 30번 그대로\n"
+        "\n"
+        "### 어떤 종류의 말인가 — 이게 목록보다 중요하다\n"
+        "  · ★ 주제어가 아니라 **판단어**를 쓴다.\n"
+        "    지문이 무엇에 관한 글인지 알려주는 말(perception, territory, algorithm)이\n"
+        "    아니라, 그것을 어떻게 평가·규정하는지를 담은 말이다.\n"
+        "      [O] significant / diminished / undermines / justifies / absolute / abandon\n"
+        "      [X] perception / territory / readers / process — 방향이 없다\n"
+        "  · 라틴·프랑스 어원의 학술적 추상어. 수능 필수어휘 범위 안에서 고른다.\n"
+        "  · 파생명사(-ity, -tion, -ness)보다 형용사·동사 어근형이 자연스럽다.\n"
+        "    기출 밑줄 품사도 형용사 37% 동사 37%로 74%가 이 둘이다.\n"
+        "\n"
+        "### 난이도 — 다섯 개가 고르게\n"
         "  수능 수준      significant, absolute, internal, permanent, similar, necessary,\n"
         "                 assess, justify, abandon, restore, undermine, diminish\n"
         "  반 단계 위      discernible, contingent, provisional, marginal, redundant,\n"
         "                 tenable, latent, incremental, adverse, salient, tacit,\n"
         "                 conspicuous, circumspect, gauge, forfeit, curtail\n"
-        "  Use two or three from each register across the five slots. Do not make all five\n"
-        "  hard (it reads artificial) or all five plain (it reads easy).\n\n"
+        "  ★ 이 목록은 '수준의 눈금'이지 고르는 통이 아니다. 문맥에 맞는 말을 쓰되\n"
+        "    난이도가 이 범위 안에 들어오게 하라.\n"
+        "  ★★ 다섯 개의 난이도가 고르게 깔려야 한다. 하나만 유난히 어려우면 학생이\n"
+        "    내용을 안 읽고 그것부터 의심한다 — 정답이 어휘 난이도로 새어나간다.\n"
+        "    각 단에서 두셋씩 섞어라. 다섯 다 어려우면 인위적이고, 다섯 다 쉬우면\n"
+        "    변별이 안 된다.\n"
+        "\n"
+        "### 문체 — 학술 산문. 이런 말은 쓰지 않는다\n"
+        "  [X] 구어체·구동사      get, make it, stuff, a lot of, kind of, come up with\n"
+        "  [X] 과장·감정어        amazing, terrible, awesome, devastating, crucial하게 남발\n"
+        "  [X] 지문 밖 전문용어    지문이 다루지 않는 분야의 술어를 끌어오지 마라\n"
+        "  [X] 최신 조어·유행어    학술 산문에 안 쓰는 말\n"
+        "  ★ 밑줄 단어를 넣은 문장을 읽었을 때, 원래 지문과 같은 결로 읽혀야 한다.\n"
+        "    갑자기 문체가 튀면 그 자리가 표가 난다.\n"
+        "\n"
+        "### 선지에 나갈 형태\n"
+        "  · 선지는 밑줄 단어 하나만 보인다 — 구가 아니라 한 단어다.\n"
+        "  · 원문이 굴절형이면 굴절형을 그대로 유지한다\n"
+        "    (depends → relies, 아니라 depend → rely 로 원형화하지 마라).\n"
+        "  · 원문에 구두점이 붙어 있으면('uncomfortable.') 치환어에도 붙인다.\n\n"
 
         "## OUTPUT — 자리는 '몇 번째 단락, 몇 번째 단어'로 정확히 지목하라\n"
         "  ★ why 는 정답 항목에만, 40자 이내 한 줄로 쓴다. 답지에 한 줄로 들어가므로\n"

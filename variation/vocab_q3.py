@@ -22,9 +22,14 @@ A Q3 어휘 유형 (수능 30번) — 밑줄 자리 선정 코드
 기출 7세트 35개 밑줄 실측:
   · 첫 문장에 밑줄: 0/7 (첫 문장은 논지 기준점이라 건드리지 않는다)
   · 밑줄 위치 평균: 전체의 61% 지점
-  · 정답 위치: ③2회 ④3회 ⑤2회 — ①② 없음 (앞쪽이 논지를 확인시키고 뒤에서 뒤집는다)
+    ★ 단, 이 분포는 원문 순서 지문 기준이다(_s97). 우리 A 지문은 Q2 순서배열 때문에
+      (A)(B)(C)가 셔플돼 학생이 보는 순서와 원문 순서가 다르다.
+      '앞/뒤' 개념이 없으므로 위치 가중치를 쓰지 않는다. 고르게 흩기만 한다.
+  · 정답 위치: ③2회 ④3회 ⑤2회 — 같은 이유로 제약하지 않는다. ①~⑤ 전부 쓴다(_s96).
   · 밑줄 품사: 형용사 37% / 동사 37% / 명사 17% / 부사 5%
-  · 정답 품사: 형용사 4 / 동사 3 — 명사·부사가 정답인 경우 없음
+  · 정답 품사: ★ 명사도 정답이 된다(_s97). 2015 수능 30번 정답이 'concern'(명사)이고,
+    연성 하천공학 'modesty', 바자르 'restrictions' 도 명사다.
+    기준은 품사가 아니라 '이 문맥에서 방향을 뒤집을 수 있는가'다.
 """
 import re
 import hashlib
@@ -59,7 +64,10 @@ _GRADABLE_HINT = {
     "acquire", "gain", "remove", "restore", "create", "destroy", "accept", "reject",
     "modesty", "arrogance", "justifies", "insignificant", "important", "trivial",
 }
-# 구체 명사 — 반의어가 없어 문제가 성립하지 않는다
+# 방향이 없는 구체 명사 — 무엇으로 바꿔도 논지가 뒤집히지 않는다.
+#   ★ '명사라서' 막는 게 아니다(_s97). 방향이 있는 명사는 정답이 된다 —
+#     기출 'concern'(상황윤리 ⑤ 정답), 'modesty', 'restrictions', 'majority'.
+#     여기 목록은 반대말 자체를 댈 수 없는 것들만 남긴다.
 _CONCRETE = {
     "tasks", "task", "work", "works", "people", "person", "thing", "things",
     "time", "times", "place", "places", "part", "parts", "case", "cases",
@@ -69,16 +77,33 @@ _CONCRETE = {
 }
 
 
+# 방향을 가진 추상명사 — 기출 정답에 실제로 쓰인다(_s97).
+#   'concern'(상황윤리 ⑤) 'modesty'(연성 하천공학) 'restrictions'(바자르) 'necessity'
+_DIRECTIONAL_NOUN = {
+    "concern", "modesty", "arrogance", "majority", "minority", "presence",
+    "absence", "necessity", "restriction", "restrictions", "freedom", "constraint",
+    "advantage", "disadvantage", "benefit", "harm", "gain", "loss", "surplus",
+    "shortage", "excess", "scarcity", "abundance", "priority", "neglect",
+    "consensus", "dispute", "certainty", "doubt", "clarity", "ambiguity",
+    "stability", "volatility", "autonomy", "dependence", "openness", "secrecy",
+    "trust", "suspicion", "growth", "decline", "progress", "regression",
+}
+
+
 def _looks_gradable(bare: str, toks: list, i: int) -> bool:
-    """반의어 치환이 가능한 단어인가 — 형용사·동사 위주로 거른다."""
+    """반의어 치환이 가능한 단어인가.
+
+    ★ 기준은 품사가 아니라 '이 문맥에서 방향을 뒤집을 수 있는가'다(_s97).
+      명사도 방향이 있으면 정답이 된다 — 2015 수능 30번 정답이 'concern' 이다.
+      막아야 할 것은 방향 없는 구체명사(tasks, time, readers)뿐이다."""
     if bare in _CONCRETE:
         return False
-    if bare in _GRADABLE_HINT:
+    if bare in _GRADABLE_HINT or bare in _DIRECTIONAL_NOUN:
         return True
     if bare.endswith(_GRADABLE_SUFFIX):
         return True
-    # 3인칭 단수 동사 (-s로 끝나되 복수명사 어미는 제외)
-    if len(bare) >= 6 and bare.endswith("s") and not bare.endswith(("ss", "us", "is", "ies")):
+    # 3인칭 단수 동사 / 복수형 (-s로 끝나되 명백한 예외는 제외)
+    if len(bare) >= 6 and bare.endswith("s") and not bare.endswith(("ss", "us", "is")):
         return True
     return False
 
@@ -92,8 +117,8 @@ def _slot_score(bare: str, toks: list, i: int) -> int:
         sc += 2          # 형용사 — 기출 정답 4/7
     if bare.endswith(("ize", "izes", "ify", "ifies", "ate", "ates")):
         sc += 2          # 동사 — 기출 정답 3/7
-    if bare.endswith(("tion", "sion", "ment", "ness", "ity")):
-        sc -= 1          # 추상명사 — 기출 정답에 없음
+    if bare in _DIRECTIONAL_NOUN:
+        sc += 3          # 방향 있는 추상명사 — 기출 정답에 실제로 쓰인다(concern, modesty)
     if len(bare) >= 8:
         sc += 1          # 긴 어휘가 변별력이 높다
     return sc
@@ -188,6 +213,8 @@ def vocab_candidates(paragraphs, blank_spans=None, min_sent_gap=1) -> list:
                     continue
                 out.append({
                     "para": p_i, "idx": i, "word": toks[i], "bare": bare,
+                    # ratio 는 지문 내 상대 위치. _s97부터 자리 선정에는 쓰지 않는다
+                    # (셔플돼 있어 앞뒤 개념이 없다). 진단용으로만 남긴다.
                     "sent": sent_no, "ratio": sent_no / max(all_sents, 1),
                     "score": _slot_score(bare, toks, i),
                 })
@@ -198,8 +225,11 @@ def pick_vocab_slots(paragraphs, blank_spans=None, n=5) -> Optional[list]:
     """밑줄 5자리를 고른다. 기출 분포를 따른다.
 
     · 문장당 최대 1개 (한 문장에 몰리지 않게)
-    · 지문 전체에 흩어지되 후반부에 무게 (기출 평균 61% 지점)
-    · 정답은 ③④⑤ 자리에서 고르므로, 앞 두 자리는 전반부에 둔다
+    · 지문 전체에 고르게 흩는다
+      ★ 후반부 가중치를 쓰지 않는다(_s97). 기출이 61% 지점에 몰리는 것은
+        원문 순서 지문이라 '앞에서 확인시키고 뒤에서 뒤집는' 구조가 성립하기 때문이다.
+        우리 A 지문은 Q2 순서배열 때문에 (A)(B)(C)가 셔플돼 앞뒤 개념이 없다.
+    · 정답 자리도 ①~⑤ 전부 쓴다(_s96) — 같은 이유다.
     반환: [{"n":1..5, "para":p, "idx":i, "original":w}, ...] (지문 순서)
     """
     cands = vocab_candidates(paragraphs, blank_spans)
@@ -231,11 +261,13 @@ def pick_vocab_slots(paragraphs, blank_spans=None, n=5) -> Optional[list]:
         return [{"n": i + 1, "para": c["para"], "idx": c["idx"], "original": c["word"]}
                 for i, c in enumerate(picked[:n])]
 
-    # 문장을 고르게 뽑되 뒤쪽에 무게 — 기출은 밑줄이 61% 지점에 몰린다
+    # ★ 문장을 처음부터 끝까지 고르게 뽑는다 (_s97).
+    #   옛 코드는 0.15~1.00 으로 뒤쪽에 무게를 뒀는데, 그건 원문 순서 지문 기준이다.
+    #   우리 지문은 셔플돼 있어 '뒤쪽'이라는 게 없다. 균등 분할이 맞다.
     chosen_sents = []
     total = len(sents)
     for k in range(n):
-        pos = 0.15 + 0.85 * (k / max(n - 1, 1))      # 0.15 ~ 1.00
+        pos = (k + 0.5) / n                          # 0 ~ 1 균등
         want = sents[min(int(pos * (total - 1)), total - 1)]
         while want in chosen_sents:
             want = sents[min(sents.index(want) + 1, total - 1)]
@@ -298,10 +330,11 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
     ans = [it for it in vocab_items if it.get("is_answer")]
     if len(ans) != 1:
         errors.append(f"[{pid}] [CRITICAL] Q3 어휘 정답은 정확히 1개여야 함 ({len(ans)}개)")
-    elif ans[0]["n"] < 3:
-        # 기출 7세트 정답 위치: ③2 ④3 ⑤2 — ①② 없음
-        errors.append(f"[{pid}] Q3 어휘 정답이 {ans[0]['n']}번 — 기출은 ③④⑤에서만 나온다. "
-                      f"앞쪽 밑줄이 논지를 확인시키고 뒤에서 뒤집는 구조")
+    # ★ 정답 자리 ③④⑤ 제약은 _s96에서 해제했다.
+    #   기출이 ③④⑤뿐인 이유는 원문 지문 순서가 고정이라 '앞쪽 밑줄이 논지를
+    #   확인시키고 뒤에서 뒤집는' 구조가 성립하기 때문이다.
+    #   우리 A 지문은 Q2 순서배열 때문에 (A)(B)(C)가 셔플돼 있다. 학생이 보는 순서와
+    #   원문 순서가 다르므로 '앞뒤' 개념 자체가 없다. ①~⑤ 전부 정답이 될 수 있다.
 
     # 자리 검증: 원문의 그 인덱스에 original이 실제로 있는가
     for it in vocab_items:
@@ -343,8 +376,9 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
             _bad = o if not answer_pos_ok(o) else sh
             errors.append(
                 f"[{pid}] [CRITICAL] Q3 어휘 정답 자리 '{_bad}'는 반의어를 만들 수 없는 품사 — "
-                f"기출 정답은 형용사 4·동사 3이고 명사가 정답인 적이 없다. "
-                f"방향을 가진 형용사·동사로 고를 것")
+                f"기준은 품사가 아니라 '반대말을 댈 수 있는가'다 — "
+                f"기출에도 명사 정답이 있다(concern, modesty, restrictions). "
+                f"방향을 가진 말로 고를 것")
 
     # 문두 접속부사·담화표지는 어휘 문제로 부적절 (기출 정답 품사: 형용사4·동사3, 부사 0)
     for it in vocab_items:
@@ -364,12 +398,32 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
                 f"[{pid}] Q3 어휘 {it.get('n')}번({kind}) '{o}'→'{sh}'는 철자만 비슷함 — "
                 f"발음·철자 유사어 금지. 뜻이 반대(정답)이거나 같은(오답) 단어로 쓸 것")
 
+    # ★ 형태(굴절) 일치 — 지문이 'depends' 인데 shown 이 'rely' 면 본문 수일치가 깨진다.
+    #   normalize 단계에서 이미 걸러지지만, 폴백 경로로 들어온 것도 있으므로 백스톱을 둔다.
+    for it in vocab_items:
+        _sm = shape_mismatch(str(it.get("original", "")), str(it.get("shown", "")))
+        if _sm:
+            errors.append(f"[{pid}] [CRITICAL] Q3 어휘 {it.get('n')}번 형태 불일치 — {_sm}")
+
     # 같은 단어가 두 번 밑줄 — 기출은 5개가 전부 다른 단어다
-    bares = [re.sub(r"[^A-Za-z-]", "", str(it.get("original", ""))).lower()
-             for it in vocab_items]
+    #   ★ 굴절형도 같은 단어로 본다(_s97). 'depends' 와 'depend' 는 학생 눈에 같은 말이라
+    #     ②③에 나란히 나오면 "왜 같은 단어가 두 번이지" 한다. 기출은 5개가 전부 다르다.
+    def _stem(w):
+        x = re.sub(r"[^A-Za-z-]", "", str(w or "")).lower()
+        for suf in ("ies", "ied", "ing", "es", "ed", "s"):
+            if x.endswith(suf) and len(x) - len(suf) >= 3:
+                base = x[:-len(suf)]
+                if suf in ("ies", "ied"):
+                    base += "y"
+                return base
+        return x
+    bares = [_stem(it.get("original", "")) for it in vocab_items]
     dup = [w for w in set(bares) if bares.count(w) > 1 and w]
     if dup:
-        errors.append(f"[{pid}] Q3 어휘 밑줄에 같은 단어 반복 {dup} — 5개는 서로 다른 단어여야 함")
+        _pairs = [str(it.get("original", "")) for it in vocab_items
+                  if _stem(it.get("original", "")) in dup]
+        errors.append(f"[{pid}] Q3 어휘 밑줄에 같은 단어 반복 {_pairs} — "
+                      f"5개는 서로 다른 단어여야 한다 (굴절형도 같은 단어로 본다)")
 
     # shown이 original과 같으면 패러프레이즈가 안 된 것
     #   ★ 폴백(코드가 자리만 잡은 것)은 shown=original이 정상이다. 면제하지 않으면
@@ -429,7 +483,8 @@ def is_discourse_marker(w: str) -> bool:
     return strip_edge_punct(w).lower() in _DISCOURSE_MARKER
 
 
-# 형용사·동사로 보이는 어미 — 기출 정답은 형용사 4·동사 3이고 명사가 정답인 적이 없다.
+# 형용사·동사로 보이는 어미. ★ 명사도 방향이 있으면 정답이 된다(_s97) —
+# 기출 'concern'(2015 수능 30번 ⑤ 정답), 'modesty', 'restrictions'.
 _ADJ_SUFFIX = ("able", "ible", "ive", "ous", "ful", "less", "ant", "ent",
                "ic", "ical", "al", "ary", "ory", "ish", "like", "worthy",
                "ed", "ing", "en")
@@ -527,49 +582,140 @@ def _looks_alike(a: str, b: str) -> bool:
     return difflib.SequenceMatcher(None, x, y).ratio() >= 0.75
 
 
-def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None) -> Optional[list]:
+# ════════════════════════════════════════════════════════════════
+# 형태(굴절) 판정 — 코드는 '고치지 않고' 어긋났다는 사실만 알려준다 (_s97)
+#   지문이 'depends'(3인칭 단수)면 치환어도 'relies'여야 한다. 'rely'를 넣으면
+#   본문이 'the brain rely on ...' 로 수일치가 깨진다.
+#   ★ 코드가 어미를 고쳐 통과시키면 안 된다 — 'depends' 를 보고 'rely' 를 냈다는 건
+#     문맥을 제대로 안 봤다는 뜻이고, 어미만 고치면 그 부주의가 그대로 남는다.
+#     어긋난 사실을 사유로 돌려주고 LLM 이 다시 만들게 한다.
+# ════════════════════════════════════════════════════════════════
+def _word_shape(w: str) -> str:
+    """단어의 굴절 형태를 대략 판정한다. 정확한 품사 분석이 아니라
+    '치환어가 같은 꼴인가'만 보면 되므로 어미로 충분하다."""
+    x = re.sub(r"[^A-Za-z-]", "", str(w or "")).lower()
+    if not x:
+        return "?"
+    if x.endswith("ing"):
+        return "-ing"
+    if x.endswith("ied") or (x.endswith("ed") and len(x) > 3):
+        return "-ed"
+    if x.endswith("ies") or x.endswith("es") or (
+            x.endswith("s") and not x.endswith(("ss", "us", "is"))):
+        return "-s"
+    return "원형"
+
+
+def shape_mismatch(original: str, shown: str) -> str:
+    """치환어가 원문 단어와 형태가 어긋나면 사유 문자열, 맞으면 빈 문자열.
+
+    ★ 형태가 같아도 '-s' 는 복수명사일 수도 3인칭 단수 동사일 수도 있다.
+      그건 구분하지 않는다 — 어차피 지문 자리가 같으므로 꼴만 맞으면 된다."""
+    a, b = _word_shape(original), _word_shape(shown)
+    if a == b:
+        return ""
+    _nm = {"-s": "3인칭 단수/복수형", "-ed": "과거·과거분사형",
+           "-ing": "-ing형", "원형": "원형", "?": "판정 불가"}
+    return f"지문은 '{original}'({_nm[a]})인데 shown 이 '{shown}'({_nm[b]})"
+
+
+def _cap_mismatch(original: str, shown: str) -> str:
+    """첫 글자 대소문자가 어긋나면 사유. 문장 첫 단어를 소문자로 내면 문장이 깨진다."""
+    o, sh = str(original or "").strip(), str(shown or "").strip()
+    if not o or not sh:
+        return ""
+    if o[:1].isupper() != sh[:1].isupper():
+        return (f"지문은 '{o}'({'대문자' if o[:1].isupper() else '소문자'} 시작)인데 "
+                f"shown 이 '{sh}'({'대문자' if sh[:1].isupper() else '소문자'} 시작)")
+    return ""
+
+
+def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
+                        pid: str = "?", report=None) -> Optional[list]:
     """LLM이 준 vocab_items를 검증·보정한다. 못 쓰면 None.
 
-    LLM은 단어 인덱스를 자주 한두 칸 틀린다. original 문자열이 그 근처에 있으면
-    실제 위치로 보정한다. 아예 못 찾으면 그 항목은 버린다."""
-    if not isinstance(raw_items, list) or len(raw_items) != 5:
+    ★ _s97에서 세 가지를 바꿨다.
+      1) 좌표 찾기를 느슨하게 — LLM 이 original 에 'depends.' 처럼 구두점을 붙이거나
+         대소문자를 달리 적어도 지문의 그 자리를 찾는다. 찾은 뒤에는 original 을
+         **지문의 실제 형태로 덮어쓴다**. 좌표는 출력물과 무관하므로 느슨해도 안전하다.
+      2) 형태 검사를 추가 — 지문이 'depends' 인데 shown 이 'rely' 면 본문 수일치가
+         깨진다. 코드가 어미를 고치지는 않는다. 어긋난 사실을 report 에 담아
+         재시도 프롬프트로 돌려준다.
+      3) 하나가 틀렸다고 다섯을 버리지 않는다 — 못 살린 자리만 표시하고, 호출부가
+         코드 픽으로 채우거나 사유를 보고 재시도한다.
+
+    report: list 를 넘기면 실패 사유가 문자열로 쌓인다(로그·재시도용).
+    """
+    _rep = report if isinstance(report, list) else []
+
+    def _fail(msg):
+        _rep.append(msg)
+        print(f"[VAR][A][{pid}] Q3어휘 normalize — {msg}")
         return None
+
+    if not isinstance(raw_items, list) or len(raw_items) != 5:
+        return _fail(f"항목이 {len(raw_items) if isinstance(raw_items, list) else '리스트 아님'}개 (5개여야 함)")
     out = []
-    for it in raw_items:
+    for _no, it in enumerate(raw_items, 1):
         if not isinstance(it, dict):
-            return None
+            return _fail(f"{_no}번 항목이 dict 가 아님")
         p, i = it.get("para"), it.get("idx")
         orig = str(it.get("original", "")).strip()
-        if not isinstance(p, int) or p < 0 or p >= len(paragraphs) or not orig:
-            return None
+        if not orig:
+            return _fail(f"{_no}번 original 이 비어 있음")
+        if not isinstance(p, int) or p < 0 or p >= len(paragraphs):
+            return _fail(f"{_no}번 '{orig}' 의 para={p} 가 범위 밖 (0~{len(paragraphs)-1})")
         toks = paragraphs[p][1].split()
-        if not isinstance(i, int) or i < 0 or i >= len(toks) or toks[i] != orig:
-            # ±6칸 안에서 같은 단어를 찾아 보정
-            found = None
+
+        # ── 좌표 찾기: 정확 → 느슨(구두점·대소문자 무시) 순 ──
+        def _loose(w):
+            return re.sub(r"[^A-Za-z0-9'-]", "", str(w or "")).lower()
+
+        found = None
+        if isinstance(i, int) and 0 <= i < len(toks) and toks[i] == orig:
+            found = i
+        if found is None:                       # ±6칸 정확 일치
             base = i if isinstance(i, int) else 0
             for d in range(0, 7):
                 for j in (base - d, base + d):
                     if 0 <= j < len(toks) and toks[j] == orig:
-                        found = j
-                        break
+                        found = j; break
                 if found is not None:
                     break
-            if found is None:                     # 단락 전체에서 유일하면 그 자리로
-                hits = [j for j, w in enumerate(toks) if w == orig]
-                if len(hits) == 1:
-                    found = hits[0]
-            if found is None:
-                return None
-            i = found
+        if found is None:                       # 단락 전체 정확 일치, 유일할 때만
+            hits = [j for j, w in enumerate(toks) if w == orig]
+            if len(hits) == 1:
+                found = hits[0]
+        if found is None:                       # ★ 느슨 매칭 (_s97)
+            lo = _loose(orig)
+            hits = [j for j, w in enumerate(toks) if _loose(w) == lo]
+            if len(hits) == 1:
+                found = hits[0]
+            elif len(hits) > 1 and isinstance(i, int):
+                found = min(hits, key=lambda j: abs(j - i))
+        if found is None:
+            _near = " ".join(toks[max(0, (i or 0) - 2):(i or 0) + 3]) if toks else ""
+            return _fail(f"{_no}번 '{orig}' 를 para={p} 에서 못 찾음 (idx={i} 근처: '{_near}')")
+        i = found
+        orig = toks[i]                          # ★ 지문의 실제 형태로 덮어쓴다
+
         # Q5 빈칸 자리를 덮으면 문항이 깨진다
         if blank_spans:
             b_lo, b_hi = blank_spans.get(p, (-1, -1))
             if b_lo <= i <= b_hi:
-                return None
-        # 마커 자체를 밑줄로 잡은 경우
+                return _fail(f"{_no}번 '{orig}' 가 Q5 빈칸 자리와 겹침 (para={p} idx={i})")
         if "<BLANK" in orig:
-            return None
+            return _fail(f"{_no}번이 빈칸 마커 자체를 잡음")
+
         _shown = str(it.get("shown", "")).strip() or orig
+
+        # ── ★ 형태 검사 (_s97) — 고치지 않고 사유만 돌려준다 ──
+        _sm = shape_mismatch(orig, _shown)
+        if _sm:
+            return _fail(f"{_no}번 형태 불일치 — {_sm}. 지문 형태 그대로 쓸 것")
+        _cm = _cap_mismatch(orig, _shown)
+        if _cm:
+            return _fail(f"{_no}번 대소문자 불일치 — {_cm}")
         out.append({
             "n": it.get("n"), "para": p, "idx": i, "original": orig,
             "shown": _shown,

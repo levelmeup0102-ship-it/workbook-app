@@ -15,11 +15,62 @@ from typing import Optional
 
 import httpx
 
-from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt, CORE_BLANK_SYS, build_core_blank_prompt, TRANSLATE_SYS, build_translate_prompt, VOCAB_SYS, build_vocab_prompt, Q5_BLANK_SYS, build_q5_blank_prompt, INSERT_SYS, build_insert_prompt
+from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt, TRANSLATE_SYS, build_translate_prompt, VOCAB_SYS, build_vocab_prompt, Q5_BLANK_SYS, build_q5_blank_prompt, INSERT_SYS, build_insert_prompt
 from variation.validator import validate_a, validate_b, check_marker_positions, fill_boundary_dup, modal_no_verb
-from variation.vocab_q3 import (normalize_llm_vocab, build_vocab_fallback,
-                                validate_vocab, blank_token_spans,
-                                shuffle_answer_position)
+import variation.validator as _validator
+
+
+# ════════════════════════════════════════════════════════════════
+# blank_has_punct 정책 통일 (_s95)
+#   renderer.bogi_words 는 A·B 둘 다 중간 구두점을 앞 단어에 붙여 제시한다
+#   ('original,' 'signals,'). _s66부터 그렇다. 그러니 빈칸 안쪽 쉼표는
+#   학생이 복원할 수 있고, 배열 결과가 원문과 글자까지 일치한다.
+#   그런데 validator.blank_has_punct 만 _s65의 '쉼표 통째 배제'에 남아 있었다.
+#   실측: generator 가 통과시킨 'desert, which is Bir Tawil' 을 validator 가
+#   CRITICAL 로 쳐서 03번 A 가 3회 재시도 끝에 통째로 누락됐다.
+#   B Q4 도 같은 문제를 안고 있다 — _span_from_marks_summary 는 안쪽 쉼표를
+#   허용하는데 validator 가 막는다(잠재 버그).
+#   → 여기서 한 번에 맞춘다. 끝 구두점과 문장 경계는 계속 거부한다.
+#   ※ validator.py 를 직접 고칠 수 있게 되면 이 블록을 지우고 그쪽에 옮길 것.
+# ════════════════════════════════════════════════════════════════
+def _blank_has_punct_v2(s) -> bool:
+    t = str(s or "")
+    if re.search(r'[.,;:!?]\s*$', t):     # 끝 구두점 — 배열 결과가 갈린다
+        return True
+    return bool(re.search(r'[.!?]', t))    # 문장 경계 — 빈칸은 한 문장 안에
+
+
+_validator.blank_has_punct = _blank_has_punct_v2
+
+from variation.vocab_q3 import (normalize_llm_vocab, validate_vocab,
+                                blank_token_spans)
+import variation.vocab_q3 as _vq3
+
+# ════════════════════════════════════════════════════════════════
+# Q3 어휘 정답 자리 제약 해제 (_s96)
+#   validate_vocab 은 정답이 ①②면 오류로 본다. 기출 7세트가 ③④⑤뿐이라서다.
+#   그런데 기출이 그런 이유는 원문 지문 순서가 고정이라 '앞쪽 밑줄이 논지를
+#   확인시키고 뒤에서 뒤집는' 구조가 성립하기 때문이다.
+#   우리 A 지문은 Q2 순서배열 때문에 (A)(B)(C)가 셔플돼 있다. 학생이 보는 순서와
+#   원문 순서가 다르므로 '앞뒤' 개념 자체가 없다. ①~⑤ 전부 정답이 될 수 있다.
+#   → 그 검사만 걸러낸다. 나머지 검증(자리 일치·중복·철자유사 등)은 그대로 둔다.
+#   ※ vocab_q3.py 를 직접 고칠 수 있게 되면 이 블록을 지우고 그쪽에서 뺄 것.
+# ════════════════════════════════════════════════════════════════
+_vq3_validate_raw = _vq3.validate_vocab
+
+
+def _validate_vocab_v2(vocab_items, paragraphs, pid="?"):
+    return [e for e in _vq3_validate_raw(vocab_items, paragraphs, pid)
+            if "기출은 ③④⑤에서만 나온다" not in str(e)]
+
+
+_vq3.validate_vocab = _validate_vocab_v2
+validate_vocab = _validate_vocab_v2
+try:
+    _validator.validate_vocab = _validate_vocab_v2
+except Exception:
+    pass
+
 
 
 # ============================================================
@@ -885,7 +936,24 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s94 = A Q5 쉼표 허용 — B Q5(_s66)와 방식 통일. 보기에 'original,' 로 붙여 제시하므로
+    # _s96 = A Q3 핵심빈칸 완전 폐기. A Q3의 유일한 유형은 어휘(수능 30번)다(_s58인데
+    #        옛 핵심빈칸을 '예비'로 남겨둔 게 화근이었다 — 예비가 실패하면 CRITICAL 이 나서
+    #        1·2·4·5번이 멀쩡한 A 가 통째로 죽었다. 16강 3/3 누락).
+    #        예비도 어휘로 한다(같은 유형 재시도, 지문 전체에서 고르므로 성공률이 높다).
+    #        2회 다 실패하면 Q3 없이 4문항으로 낸다.
+    #        + 정답 자리 ③④⑤ 제약 해제 → ①~⑤. 기출이 ③④⑤인 건 원문 순서가 고정이라
+    #        그런 것이고, 우리 A 는 Q2 때문에 (A)(B)(C)가 셔플돼 앞뒤 개념이 없다.
+    #        + 유의어·반의어를 사전적 의미가 아니라 문맥으로 판정(평가원 30번 경향).
+    #        + 어휘 수준·문체를 평가원 기준으로 재작성 — '주제어가 아니라 판단어',
+    #        다섯 개 난이도 균일(정답만 어려우면 어휘로 답이 새어나간다), 학술 산문
+    #        (구어·과장어·지문 밖 전문용어 금지), 굴절형 유지.
+    #        _s95 누적분 포함.
+    # (구) _s95 = validator.blank_has_punct 정책 통일(쉼표 허용) — generator 는 통과시키는데
+    #        validator 가 CRITICAL 을 쏴서 A 가 누락됐다(03번). renderer 는 A·B 둘 다
+    #        보기에 쉼표를 붙여 제시하므로 학생이 복원할 수 있다.
+    #        + Q3 핵심빈칸 폴백 복구 — 어휘 실패 시 폴백도 깨져 A 가 통째로 죽던 것을
+    #        재생성 1회 → 그래도 실패하면 Q3 없이 4문항으로. _s94 누적분 포함.
+    # (구) _s94 = A Q5 쉼표 허용 — B Q5(_s66)와 방식 통일. 보기에 'original,' 로 붙여 제시하므로
     #        학생이 쉼표 자리를 복원할 수 있다. A만 _s65의 배제 정책에 남아 있어 LLM 픽
     #        거부 5건 중 3건이 쉼표 하나 때문이었다. + 4단어 하한을 프롬프트에서 복구
     #        ('세지 마라'가 하한 검사까지 껐다 — 'designed to' 2단어 실측).
@@ -931,7 +999,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s94"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s96"
 
 
 # ============ Supabase 캐시 ============
@@ -1081,7 +1149,7 @@ def generate_variation_a(
                     "\n\n# ⚠️ PREVIOUS ATTEMPT FAILED — FIX THESE ERRORS:\n"
                     + "\n".join(f"  ✗ {e}" for e in last_errors[:5])
                     + "\n\n# REMINDER OF CRITICAL CHECKS FOR TYPE A (sentence-order style):\n"
-                    "  1. intro = the given lead (first 1-2 sentences, with <CORE_BLANK>). It must NOT reappear in (A)/(B)/(C).\n"
+                    "  1. intro = the given lead (first 1-2 sentences). It must NOT reappear in (A)/(B)/(C).\n"
                     "  2. ★ (A)(B)(C) = exactly 3 paragraphs. Each must be a CONSECUTIVE run of whole sentences from the passage — "
                     "NEVER merge sentences that are far apart in the original. Cut ONLY at sentence boundaries.\n"
                     "  3. ★ RECONSTRUCTION TEST: intro + (A)(B)(C) reassembled in the order_correct sequence must EQUAL the original passage word-for-word "
@@ -1089,8 +1157,7 @@ def generate_variation_a(
                     "  4. order_correct = index 0-4 into FIXED choices (0=(A)-(C)-(B) 1=(B)-(A)-(C) 2=(B)-(C)-(A) 3=(C)-(A)-(B) 4=(C)-(B)-(A)); never (A)-(B)-(C).\n"
                     "  5. blank_A and blank_B are natural key phrases (~4-8 words each, do not pad), taken verbatim from INSIDE (A)/(B)/(C) (not intro), in different paragraphs.\n"
                     "  6. bogi must contain EVERY SINGLE WORD from blank_A + blank_B — count articles ('the','a','an') and prepositions carefully.\n"
-                    "  7. core_blank_target must have AT LEAST 3 words; the Q3 correct option must be a PARAPHRASE of core_blank_target "
-                    "(synonym or figurative rewording) that keeps the SAME grammatical structure as the original (clause stays a clause, noun phrase stays a noun phrase) so the sentence reads grammatically when the option fills the blank; NOT the original wording copied verbatim."
+                    "  7. Q3 is a VOCABULARY item (CSAT #30) — five underlined words, four replaced by synonyms and ONE by an antonym. Do NOT produce core_blank fields."
                 )
 
             raw = call_claude(SYSTEM_PROMPT_A, user_msg)
@@ -1106,45 +1173,17 @@ def generate_variation_a(
                 data["paragraphs"] = [list(p) for p in ob["paragraphs"]]
                 data["order_correct"] = ob["order_correct"]
 
-                # ★★ Q3 핵심빈칸 단독 재생성 (첫 문장만 주고 집중 — that절↔명사구 불일치 방지)
-                #   intro(첫 문장)는 코드가 확정했으므로, 그 문장에서 핵심 구절+패러프레이즈 정답을
-                #   따로 한 번 더 만든다. "원문이 절이면 정답도 절" 규칙으로 빈칸 문법 불일치를 막는다.
-                try:
-                    # intro에서 첫 한 문장만 추출 (마침표 기준)
-                    _intro_txt = re.sub(r'\s+', ' ', str(data.get("intro", ""))).strip()
-                    _sents_i = re.split(r'(?<=[.!?])\s+', _intro_txt) if _intro_txt else []
-                    _first = ""
-                    for _s in _sents_i:
-                        if len(_s.split()) > 4:
-                            _first = _s
-                            break
-                    if not _first and _sents_i:
-                        _first = _sents_i[0]
-                    if _first and len(_first.split()) >= 4:
-                        _c_raw = call_claude(CORE_BLANK_SYS, build_core_blank_prompt(_first), max_tokens=700)
-                        _c = extract_json_from_response(_c_raw)
-                        _tg = (_c.get("core_blank_target") or "").strip()
-                        _op = _c.get("core_blank_options")
-                        _co = _c.get("core_blank_correct")
-                        # target이 첫 문장 안에 실제로 있고 선지 5개가 정상일 때만 교체
-                        if (_tg and _tg in _first and isinstance(_op, list) and len(_op) == 5
-                                and isinstance(_co, int) and 0 <= _co <= 4):
-                            data["core_blank_target"] = _tg
-                            # ★ (버 하드닝) focused 재생성 결과를 '소스에서 즉시' 셔플한다.
-                            #   바깥 루프(검증 직전)가 core_blank엔 실측상 안 먹어(같은 행 topic은 섞임)
-                            #   원인 불명이라, 값이 정해지는 이 자리에서 직접 섞고 인덱스를 재계산해
-                            #   ②쏠림을 원천 차단. 원소 추적이라 정답 의미 불변. 바깥 루프는 이걸 건너뜀.
-                            _op, _co = _shuffle_choices(_op, _co, _choice_seed(pid, "coreA", _op))
-                            data["core_blank_options"] = _op
-                            data["core_blank_correct"] = _co
-                            data["_core_shuffled"] = True
-                            print(f"[VAR][A][{pid}] SHUF coreA(src): -> {_co}")
-                            if _c.get("core_blank_explain"):
-                                data["core_blank_explain"] = _c["core_blank_explain"]
-                except Exception:
-                    pass  # 실패하면 기존(한번에 만든) Q3 유지
+                # ★★ Q3 핵심빈칸은 _s96에서 폐기했다.
+                #   A Q3의 정식 유형은 어휘(수능 30번)다(_s58). 핵심빈칸은 그때 지우지 않고
+                #   '예비'로 남겨둔 옛 유형인데, 예비가 실패하면 validate_a 가 CRITICAL 을
+                #   쏴서 A 가 통째로 죽었다 — 쓰지도 않는 유형 때문에 1·2·4·5번이 멀쩡한
+                #   지문이 버려졌다(16강 3/3 누락).
+                #   게다가 핵심빈칸은 '첫 문장 안에서만' 뚫어야 해 정식보다 훨씬 좁다.
+                #   'Bir Tawil is a strange place.'(6단어) 같은 첫 문장은 아예 불가능하다.
+                #   → 예비도 어휘로 한다. 같은 유형을 다시 시도하는 편이 성공률이 높다
+                #     (지문 전체에서 고르므로). 그래도 실패하면 Q3 없이 4문항으로 낸다.
 
-                # ★ 따옴표·대시·구두점·하이픈·공백·대소문자 차이까지 흡수하는 마킹 함수 (core_blank / blank 공통)
+                # ★ 따옴표·대시·구두점·하이픈·공백 차이까지 흡수하는 마킹 함수 (Q5 빈칸용)
                 def _mark_phrase(text, phrase, mk):
                     if not phrase:
                         return text, False
@@ -1175,34 +1214,16 @@ def generate_variation_a(
                                 return text[:s_char] + mk + text[e_char:], True
                     return text, False
 
-                # Q3 핵심빈칸: LLM이 고른 구절을 intro(첫 문장)에서 찾아 마킹 (따옴표 흡수)
-                tgt = (data.get("core_blank_target") or "").strip()
-                if tgt:
-                    new_intro, core_ok = _mark_phrase(data["intro"], tgt, "<CORE_BLANK>")
-                    if core_ok:
-                        data["intro"] = new_intro
-                    data["_core_marked"] = core_ok
+                # ★ SYSTEM_PROMPT_A 가 아직 core_blank_* 를 만들어 보낼 수 있다.
+                #   폐기된 필드이므로 여기서 지운다 — 남아 있으면 validate_a 의
+                #   핵심빈칸 검사 블록을 타서 CRITICAL 이 난다.
+                for _ck in ("core_blank_target", "core_blank_options",
+                            "core_blank_correct", "core_blank_explain"):
+                    data.pop(_ck, None)
+                data["intro"] = str(data.get("intro", "")).replace("<CORE_BLANK>", "").strip()
+                data["intro"] = re.sub(r"\s{2,}", " ", data["intro"])
 
-                # ★★ Q3가 어휘 유형으로 대체되면 intro 의 <CORE_BLANK> 는 아무 문항도
-                #   참조하지 않는다. 그대로 두면 지문에 쓰이지 않는 빈칸이 남는다(실측:
-                #   'you are taught to write up your results thus: "____, and so on until').
-                #   원문 구절로 되돌려 intro 를 온전한 문장으로 만든다.
-                #   ※ Q5 LLM 픽 try 블록 밖에서 처리한다 — 안에 두면 호출이 예외로 죽을 때
-                #     빈칸이 그대로 남는다.
-                if data.get("vocab_items") and "<CORE_BLANK>" in str(data.get("intro", "")):
-                    _tgt_r = str(data.get("core_blank_target", "") or "").strip()
-                    if _tgt_r:
-                        data["intro"] = data["intro"].replace("<CORE_BLANK>", _tgt_r)
-                        print(f"[VAR][A][{pid}] intro <CORE_BLANK> → 원문 복원")
-                    else:
-                        _ob_r = build_order_blocks_a(en_text, pid)
-                        if _ob_r and _ob_r.get("intro"):
-                            data["intro"] = _ob_r["intro"]
-                            print(f"[VAR][A][{pid}] intro <CORE_BLANK> → 원문에서 재구성")
-                        else:
-                            print(f"[VAR][A][{pid}] ⚠ intro <CORE_BLANK> 복원 실패 (target 없음)")
-
-                # Q5 영작빈칸: ★ 코드가 (A)(B)(C)에서 직접 골라 뚫는다 (B 빈칸뚫기와 같은 철학).
+                # Q5 영작빈칸: ★ 코드가 (A)(B)(C)에서 직접 골라 뚫는다                # Q5 영작빈칸: ★ 코드가 (A)(B)(C)에서 직접 골라 뚫는다 (B 빈칸뚫기와 같은 철학).
                 #   LLM 구절이 유효하면 우선 쓰고, 아니면 코드가 깨끗한 구절을 골라 verbatim 마킹.
                 #   → 빈칸 짧음/원문 미발견/경계 단어중복(예: 'questions') 원천 차단. 서로 다른 단락.
                 marked = {}
@@ -1296,43 +1317,31 @@ def generate_variation_a(
                         marked[mk] = done
                 data["_blanks_marked"] = marked
 
-                # ★★ Q3가 어휘 유형으로 대체되면 intro 의 <CORE_BLANK> 는 아무 문항도
-                #   참조하지 않는다. 그대로 두면 지문에 쓰이지 않는 빈칸이 남는다(실측).
-                #   원문 구절로 되돌려 intro 를 온전한 문장으로 만든다.
-                #   ※ Q5 LLM 픽 try 블록 밖에서 처리한다 — 그 안에 두면 호출이 예외로
-                #     죽었을 때 빈칸이 그대로 남는다.
-                if "<CORE_BLANK>" in str(data.get("intro", "")):
-                    _tgt = str(data.get("core_blank_target", "") or "").strip()
-                    if _tgt:
-                        data["intro"] = data["intro"].replace("<CORE_BLANK>", _tgt)
-                        print(f"[VAR][A][{pid}] intro <CORE_BLANK> → 원문 복원")
-                    else:
-                        # target 이 없으면 되돌릴 말이 없다 — 원문 첫 문장으로 intro 를 재구성
-                        _ob2 = build_order_blocks_a(en_text, pid)
-                        if _ob2 and _ob2.get("intro"):
-                            data["intro"] = _ob2["intro"]
-                            print(f"[VAR][A][{pid}] intro <CORE_BLANK> → 원문에서 재구성")
-                        else:
-                            print(f"[VAR][A][{pid}] ⚠ intro <CORE_BLANK> 복원 실패 — target 없음")
-
-                # ★★ Q3 어휘 유형 (수능 30번) — Q5 빈칸이 확정된 뒤에 호출한다.
-                #   원문(paragraphs)은 안 건드리고 '자리(인덱스)'만 기록하므로
-                #   Q2 순서 복원 검증은 지금 코드 그대로 돌아간다.
+                # ★★ Q3 어휘 유형 (수능 30번) — A Q3의 정식이자 유일한 유형이다(_s96).
+                #   Q5 빈칸이 확정된 뒤에 호출한다. 원문(paragraphs)은 안 건드리고
+                #   '자리(인덱스)'만 기록하므로 Q2 순서 복원 검증에 영향이 없다.
                 #   밑줄은 Q5 빈칸이 차지한 토큰 범위를 피해서 잡는다.
-                try:
+                #
+                #   ★ 실패하면 같은 유형으로 한 번 더 시도한다(_s96).
+                #     옛 코드는 핵심빈칸이라는 다른 유형으로 갈아탔는데, 그건 첫 문장
+                #     안에서만 뚫을 수 있어 정식보다 훨씬 좁았고, 실패하면 CRITICAL 이
+                #     나서 A 가 통째로 죽었다. 같은 유형 재시도가 성공률이 높다 —
+                #     지문 전체에서 고르므로. 두 번 다 실패하면 Q3 없이 4문항으로 낸다.
+                def _try_vocab(_attempt: int):
                     _spans = blank_token_spans(data["paragraphs"])
-                    # ★ 정답 자리(③④⑤)를 코드가 정해 내려보낸다.
-                    #   지문마다 따로 주사위를 굴리면 한 강에 지문이 3개뿐이라 겹친다
-                    #   (시뮬레이션: 셋 다 같은 번호 17%, 완전 분산 13%).
-                    #   → 강 안에서 3·4·5를 돌려 쓴다. 지문 번호를 순번으로 삼고
-                    #     시작 위치만 강 이름 해시로 정한다. 3개면 반드시 하나씩 깔린다.
-                    #   같은 강·같은 번호는 항상 같은 자리라 답지가 안 흔들린다.
+                    # ★ 정답 자리를 코드가 정해 내려보낸다.
+                    #   프롬프트만으론 매번 ③에 몰린다(_s63·_s92 실측 3/3).
+                    #   ★ ①~⑤ 전부 쓴다(_s96). 기출이 ③④⑤인 것은 원문 지문 순서가
+                    #     고정이라 '앞쪽이 논지를 확인시키고 뒤에서 뒤집는' 구조가
+                    #     성립하기 때문이다. 우리 A 지문은 Q2 순서배열 때문에
+                    #     (A)(B)(C)가 셔플돼 있어 앞뒤 개념 자체가 없다.
+                    #   강 안에서 1~5를 돌려 써 한 강에서 번호가 겹치지 않게 한다.
                     _seq = re.findall(r"\d+", str(pid))
                     _seq = int(_seq[0]) if _seq else 0
                     _start = int(hashlib.md5(
                         (str(book) + "|" + str(unit) + "|vocabpos").encode()
-                    ).hexdigest()[:8], 16) % 3
-                    _want_n = 3 + ((_start + _seq) % 3)
+                    ).hexdigest()[:8], 16) % 5
+                    _want_n = 1 + ((_start + _seq + _attempt) % 5)
                     _vraw = call_claude(
                         VOCAB_SYS,
                         build_vocab_prompt(data["paragraphs"],
@@ -1340,42 +1349,44 @@ def generate_variation_a(
                                            want_n=_want_n),
                         max_tokens=1800)
                     _v = extract_json_from_response(_vraw)
-                    _items = normalize_llm_vocab(_v.get("vocab_items"), data["paragraphs"], _spans)
-                    # ★ shown == original 이면 그 자리는 바뀐 게 없다. 정답 자리가 그러면
-                    #   '틀린 단어'가 없어 문항이 성립하지 않는다. 여기서 걸러 Q3를
-                    #   핵심빈칸으로 되돌린다 — validator 까지 가면 지문이 통째로 누락된다
-                    #   (실측: 'story.' → 'story.' 로 01번 A가 3회 실패 후 RuntimeError).
-                    if _items:
-                        _same = [i for i in _items
-                                 if str(i.get("shown", "")).strip().lower()
-                                 == str(i.get("original", "")).strip().lower()]
-                        if _same:
-                            _ans_same = any(i.get("is_answer") for i in _same)
-                            _ns = "".join("①②③④⑤"[(i.get('n', 0) - 1)]
-                                          for i in _same if 1 <= i.get('n', 0) <= 5)
-                            print(f"[VAR][A][{pid}] Q3어휘 거부 — {_ns}번이 "
-                                  f"원문 단어 그대로"
-                                  + (" (정답 자리)" if _ans_same else "") + " → Q3는 핵심빈칸으로")
-                            _items = None
-                    if _items:
-                        # ★ 정답 위치 분산 — 프롬프트만으론 매번 ③에 몰린다(실측 3/3)
-                        _items = shuffle_answer_position(_items, pid)
+                    _items = normalize_llm_vocab(_v.get("vocab_items"),
+                                                 data["paragraphs"], _spans)
+                    if not _items:
+                        raise ValueError("normalize 실패")
+                    # shown == original 이면 그 자리는 바뀐 게 없다.
+                    # 정답 자리가 그러면 '틀린 단어'가 아예 없어 문항이 성립하지 않는다.
+                    _same = [i for i in _items
+                             if str(i.get("shown", "")).strip().lower()
+                             == str(i.get("original", "")).strip().lower()]
+                    if _same:
+                        _ns = "".join("①②③④⑤"[(i.get('n', 0) - 1)]
+                                      for i in _same if 1 <= i.get('n', 0) <= 5)
+                        _as = any(i.get("is_answer") for i in _same)
+                        raise ValueError(f"{_ns}번이 원문 단어 그대로"
+                                         + (" (정답 자리)" if _as else ""))
+                    return _items, _v
+
+                _vok = False
+                for _va in range(2):
+                    try:
+                        _items, _v = _try_vocab(_va)
                         data["vocab_items"] = _items
                         if _v.get("vocab_explain"):
                             data["vocab_explain"] = _v["vocab_explain"]
                         _ans = next((i for i in _items if i.get("is_answer")), None)
                         _cn = "①②③④⑤"[(_ans['n'] - 1)] if (_ans and 1 <= _ans.get('n', 0) <= 5) else '?'
                         print(f"[VAR][A][{pid}] Q3어휘 ok — 정답 {_cn}번 "
-                              f"원문'{_ans['original'] if _ans else ''}' → 제시'{_ans['shown'] if _ans else ''}'")
-                    else:
-                        raise ValueError("normalize 실패")
-                except Exception as _ve:
-                    _fb = build_vocab_fallback(data["paragraphs"], blank_token_spans(data["paragraphs"]))
-                    if _fb:
-                        data["vocab_items"] = shuffle_answer_position(_fb, pid)
-                        print(f"[VAR][A][{pid}] Q3어휘 폴백 사용 ({_ve})")
-                    else:
-                        print(f"[VAR][A][{pid}] Q3어휘 생성 실패 ({_ve}) — Q3는 핵심빈칸으로 유지")
+                              f"원문'{_ans['original'] if _ans else ''}' "
+                              f"→ 제시'{_ans['shown'] if _ans else ''}'"
+                              + (f" (재시도 {_va})" if _va else ""))
+                        _vok = True
+                        break
+                    except Exception as _ve:
+                        print(f"[VAR][A][{pid}] Q3어휘 시도 {_va + 1} 실패 — {_ve}")
+                if not _vok:
+                    data.pop("vocab_items", None)
+                    data.pop("vocab_explain", None)
+                    print(f"[VAR][A][{pid}] ⚠ Q3어휘 2회 실패 — Q3 없이 4문항으로 진행")
 
             if "mismatch_count" not in data and "statements" in data:
                 data["mismatch_count"] = sum(1 for _, _, ok in data["statements"] if not ok)
@@ -1402,9 +1413,6 @@ def generate_variation_a(
                             data["paragraphs"] = _pk2["paragraphs"]
                             data["blank_A"] = _pk2["blank_A"]
                             data["blank_B"] = _pk2["blank_B"]
-                        _tg2 = (data.get("core_blank_target") or "").strip()
-                        if _tg2 and "<CORE_BLANK>" not in data["intro"] and _tg2 in data["intro"]:
-                            data["intro"] = data["intro"].replace(_tg2, "<CORE_BLANK>", 1)
                         print(f"[VAR][A][{pid}] intro 중복 감지 → 코드가 순서 강제 재분할(안전장치)")
             except Exception:
                 pass
@@ -1441,13 +1449,9 @@ def generate_variation_a(
                 print(f"[VAR][A][{pid}] PREVAL 예외: {_pe}")
 
             # ★★ (버) 객관식 정답 위치 셔플 (A: 주제 Q1 / 핵심빈칸 Q3) — 정답이 ①에 쏠리던 문제 교정.
-            #   순서(order_correct)는 위치형이라 손대지 않는다. core_blank가 소스에서 이미 셔플됐으면
-            #   건너뛴다(중복 셔플 방지). before/after를 로그로 남겨 다음 생성 때 동작을 확인.
-            for _tag, _ok, _ck in (("topicA", "topic_options", "topic_correct"),
-                                   ("coreA", "core_blank_options", "core_blank_correct")):
-                if _tag == "coreA" and data.get("_core_shuffled"):
-                    print(f"[VAR][A][{pid}] SHUF coreA(loop): 소스에서 이미 셔플 -> {data.get(_ck)}")
-                    continue
+            #   순서(order_correct)는 위치형이라 손대지 않는다.
+            #   Q3는 어휘 유형이라 번호가 지문 등장 순서로 붙는다 — 셔플 대상이 아니다.
+            for _tag, _ok, _ck in (("topicA", "topic_options", "topic_correct"),):
                 if isinstance(data.get(_ok), list) and isinstance(data.get(_ck), int):
                     _before = data[_ck]
                     data[_ok], data[_ck] = _shuffle_choices(

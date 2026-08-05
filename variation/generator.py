@@ -986,7 +986,19 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s101 = B Q4 에 '짝 표현 갈라짐' 검사 추가. 실측: 'demand (A) rather (B) to ensure'
+    # _s103 = Q3어휘가 Q5 빈칸 자리에서 단어를 고르던 문제 수정. 원인은 프롬프트가
+    #        'Q5 가 쓴 구절' 목록을 따로 보여준 것 — 피하라고 준 목록이 오히려 그
+    #        단어들을 눈앞에 갖다놓았다(실측: 'relies' 'flexibility' 'available,' 전부
+    #        Q5 빈칸 안 단어). 목록을 없애고 지문 안에 [[[여기는 Q5 빈칸]]] 으로 표시한다.
+    #        + 접속부사·방향없는단어 검사를 normalize 로 앞당김. validate 에서만 잡으니
+    #        사유가 재시도로 안 넘어가 'Similarly,' 를 두 번 고르고 A 02번이 누락됐다.
+    #        _s102 누적분 포함.
+    # (구) _s102 = Q3어휘 두 가지 금지 추가. (1) 정답 자리에 부정 접두사 반의어 금지 —
+    #        'inhabitable'→'uninhabitable' 은 철자가 거의 같아 논지를 안 읽고 찍힌다.
+    #        어근이 다른 반의어를 쓰게 한다(CRITICAL 아님 — 재시도만 시킨다).
+    #        (2) 선지는 반드시 한 단어 — 'largest'→'most extensive'(두 단어)가 나갔다.
+    #        밑줄 길이가 달라져 그 자리가 표가 난다. _s101 누적분 포함.
+    # (구) _s101 = B Q4 에 '짝 표현 갈라짐' 검사 추가. 실측: 'demand (A) rather (B) to ensure'
     #        — 'rather' 를 밖에 두고 'than delayed revelation' 을 뚫어 짝이 갈렸다.
     #        A Q5 에는 관용구 규칙이 있었는데 B Q4 에는 없었다. 프롬프트·코드 양쪽에 넣었다.
     #        짝 목록은 앞말이 '그것만 나오면 뒷말이 따라오는' 것만 담는다 — 'to' 'not' 'as'
@@ -1098,7 +1110,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s101"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s103"
 
 
 # ============ Supabase 캐시 ============
@@ -1470,7 +1482,16 @@ def generate_variation_a(
                                    "  본문이 'the brain rely on ...' 이 되어 수일치가 깨진다.\n"
                                    "· para 와 idx 는 그 단락 안에서 0부터 공백으로 센 위치다.\n"
                                    "· 다섯 자리는 서로 다른 단어여야 한다 — 굴절형도 같은 단어다\n"
-                                   "  ('depends' 와 'depend' 를 둘 다 밑줄 치지 마라).")
+                                   "  ('depends' 와 'depend' 를 둘 다 밑줄 치지 마라).\n"
+                                   "· ★ [[[여기는 Q5 빈칸 …]]] 안의 단어는 고르지 마라. 이미 사라졌다.\n"
+                                   "· ★ 접속부사·담화표지는 밑줄 대상이 아니다\n"
+                                   "  (Similarly, Conversely, However, Therefore, Moreover …).\n"
+                                   "  논리 흐름 표지지 문맥 판단 대상이 아니다.\n"
+                                   "· ★ 정답 자리는 반대말을 댈 수 있는 단어여야 한다.\n"
+                                   "  방향 없는 말(tasks, time, readers, story)은 못 쓴다.\n"
+                                   "· 선지는 반드시 한 단어. 'most extensive' 같은 두 단어는 안 된다.\n"
+                                   "· 부정 접두사만 붙이거나 떼서 만들지 마라\n"
+                                   "  ('inhabitable'↔'uninhabitable'). 어근이 다른 말을 쓸 것.")
                     _vraw = call_claude(VOCAB_SYS, _msg, max_tokens=1800)
                     _v = extract_json_from_response(_vraw)
                     #   ★ 첫 시도만 -ing/-ed 형태까지 본다(_s100). 재시도에서는

@@ -44,32 +44,6 @@ _validator.blank_has_punct = _blank_has_punct_v2
 
 from variation.vocab_q3 import (normalize_llm_vocab, validate_vocab,
                                 blank_token_spans)
-import variation.vocab_q3 as _vq3
-
-# ════════════════════════════════════════════════════════════════
-# Q3 어휘 정답 자리 제약 해제 (_s96)
-#   validate_vocab 은 정답이 ①②면 오류로 본다. 기출 7세트가 ③④⑤뿐이라서다.
-#   그런데 기출이 그런 이유는 원문 지문 순서가 고정이라 '앞쪽 밑줄이 논지를
-#   확인시키고 뒤에서 뒤집는' 구조가 성립하기 때문이다.
-#   우리 A 지문은 Q2 순서배열 때문에 (A)(B)(C)가 셔플돼 있다. 학생이 보는 순서와
-#   원문 순서가 다르므로 '앞뒤' 개념 자체가 없다. ①~⑤ 전부 정답이 될 수 있다.
-#   → 그 검사만 걸러낸다. 나머지 검증(자리 일치·중복·철자유사 등)은 그대로 둔다.
-#   ※ vocab_q3.py 를 직접 고칠 수 있게 되면 이 블록을 지우고 그쪽에서 뺄 것.
-# ════════════════════════════════════════════════════════════════
-_vq3_validate_raw = _vq3.validate_vocab
-
-
-def _validate_vocab_v2(vocab_items, paragraphs, pid="?"):
-    return [e for e in _vq3_validate_raw(vocab_items, paragraphs, pid)
-            if "기출은 ③④⑤에서만 나온다" not in str(e)]
-
-
-_vq3.validate_vocab = _validate_vocab_v2
-validate_vocab = _validate_vocab_v2
-try:
-    _validator.validate_vocab = _validate_vocab_v2
-except Exception:
-    pass
 
 
 
@@ -493,8 +467,8 @@ def _span_from_marks(paragraphs, mark, pid="?", lab="?") -> Optional[str]:
     #   목적어(conclusion)가 빠진 어정쩡한 구절이 나온다. 조건 위반은 거부하고
     #   폴백(코드 픽)으로 넘긴다. 프롬프트가 STEP 4에서 같은 조건을 명시한다.
     ws = span.split()
-    if len(ws) > 11:
-        print(f"[VAR][A][{pid}] Q5 지목({lab}) {len(ws)}단어 — 11단어 초과, ends_with를 앞으로 당겨야 함")
+    if len(ws) > 12:
+        print(f"[VAR][A][{pid}] Q5 지목({lab}) {len(ws)}단어 — 12단어 초과, ends_with를 앞으로 당겨야 함")
         return None
     if len(ws) < 4:
         print(f"[VAR][A][{pid}] Q5 지목({lab}) {len(ws)}단어 — 4단어 미만")
@@ -576,8 +550,10 @@ def validate_llm_q5_spans(paragraphs, span_a: str, span_b: str, pid: str = "?") 
         n = len(v.split())
         if n < 4:
             return _fail(f"({lab}) {n}단어 — 4단어 미만: '{v[:50]}'")
-        if n > 11:
-            return _fail(f"({lab}) {n}단어 — 11단어 초과: '{v[:50]}'")
+        if n > 12:
+            # ★ 상한 12 (_s96) — 기출 115선지 실측 최대가 정확히 12다. 11로 두면
+            #   12단어 정상 빈칸이 거부돼 코드 픽으로 떨어진다(실측 2건).
+            return _fail(f"({lab}) {n}단어 — 12단어 초과: '{v[:50]}'")
         # ★ 문장 경계만 거부. 안쪽 쉼표는 허용한다 (_s94) — 보기에 'original,' 로 붙어 나간다.
         if re.search(r"[.!?]", v):
             return _fail(f"({lab}) 문장 경계(. ! ?) 포함 — 한 문장 안에서 고를 것: '{v[:50]}'")
@@ -936,7 +912,19 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s96 = A Q3 핵심빈칸 완전 폐기. A Q3의 유일한 유형은 어휘(수능 30번)다(_s58인데
+    # _s97 = Q3어휘 normalize 를 세 갈래로 고침. (1) 좌표 찾기를 느슨하게 — original 에
+    #        구두점·대소문자가 달라도 지문 자리를 찾고, 찾은 뒤 지문 실제 형태로 덮어쓴다.
+    #        (2) 형태 검사 추가 — 지문 'depends' 인데 shown 이 'rely' 면 수일치가 깨진다.
+    #        코드가 어미를 고치지 않고 사유를 재시도 프롬프트로 돌려준다.
+    #        (3) 실패 사유를 전부 로그·재시도에 남긴다(옛날엔 'normalize 실패'만 찍혔다).
+    #        + 굴절형 중복 차단('depends'/'depend' 동시 밑줄).
+    #        + 4문항 폴백 폐기 — 번호가 1·2·4·5 로 건너뛰면 학생에게 못 나간다.
+    #        + 명사 정답 허용 — 2015 수능 30번 ⑤ 정답이 'concern'(명사)이다.
+    #        기준은 품사가 아니라 '이 문맥에서 방향을 뒤집을 수 있는가'다.
+    #        + 밑줄 자리 후반부 가중치 제거 — 기출 61% 분포는 원문 순서 지문 기준이고
+    #        우리 A 는 (A)(B)(C)가 셔플돼 앞뒤 개념이 없다. 균등 분할로.
+    #        _s96 누적분 포함.
+    # (구) _s96 = A Q3 핵심빈칸 완전 폐기. A Q3의 유일한 유형은 어휘(수능 30번)다(_s58인데
     #        옛 핵심빈칸을 '예비'로 남겨둔 게 화근이었다 — 예비가 실패하면 CRITICAL 이 나서
     #        1·2·4·5번이 멀쩡한 A 가 통째로 죽었다. 16강 3/3 누락).
     #        예비도 어휘로 한다(같은 유형 재시도, 지문 전체에서 고르므로 성공률이 높다).
@@ -999,7 +987,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s96"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s97"
 
 
 # ============ Supabase 캐시 ============
@@ -1220,10 +1208,19 @@ def generate_variation_a(
                 for _ck in ("core_blank_target", "core_blank_options",
                             "core_blank_correct", "core_blank_explain"):
                     data.pop(_ck, None)
-                data["intro"] = str(data.get("intro", "")).replace("<CORE_BLANK>", "").strip()
-                data["intro"] = re.sub(r"\s{2,}", " ", data["intro"])
+                #   ★ 마커를 '지우면' 그 자리 구절이 통째로 사라져 지문이 깨진다.
+                #     원문에서 intro 를 다시 만들어 온전한 문장으로 되돌린다.
+                if "<CORE_BLANK>" in str(data.get("intro", "")):
+                    _ob_c = build_order_blocks_a(en_text, pid)
+                    if _ob_c and _ob_c.get("intro"):
+                        data["intro"] = _ob_c["intro"]
+                        print(f"[VAR][A][{pid}] intro 에 남은 <CORE_BLANK> → 원문에서 재구성")
+                    else:
+                        data["intro"] = re.sub(
+                            r"\s{2,}", " ",
+                            str(data["intro"]).replace("<CORE_BLANK>", "")).strip()
 
-                # Q5 영작빈칸: ★ 코드가 (A)(B)(C)에서 직접 골라 뚫는다                # Q5 영작빈칸: ★ 코드가 (A)(B)(C)에서 직접 골라 뚫는다 (B 빈칸뚫기와 같은 철학).
+                # Q5 영작빈칸: ★ 코드가 (A)(B)(C)에서 직접 골라 뚫는다 (B 빈칸뚫기와 같은 철학).
                 #   LLM 구절이 유효하면 우선 쓰고, 아니면 코드가 깨끗한 구절을 골라 verbatim 마킹.
                 #   → 빈칸 짧음/원문 미발견/경계 단어중복(예: 'questions') 원천 차단. 서로 다른 단락.
                 marked = {}
@@ -1327,6 +1324,8 @@ def generate_variation_a(
                 #     안에서만 뚫을 수 있어 정식보다 훨씬 좁았고, 실패하면 CRITICAL 이
                 #     나서 A 가 통째로 죽었다. 같은 유형 재시도가 성공률이 높다 —
                 #     지문 전체에서 고르므로. 두 번 다 실패하면 Q3 없이 4문항으로 낸다.
+                _vfail = []          # normalize 실패 사유 — 재시도 프롬프트로 돌려준다
+
                 def _try_vocab(_attempt: int):
                     _spans = blank_token_spans(data["paragraphs"])
                     # ★ 정답 자리를 코드가 정해 내려보낸다.
@@ -1342,17 +1341,32 @@ def generate_variation_a(
                         (str(book) + "|" + str(unit) + "|vocabpos").encode()
                     ).hexdigest()[:8], 16) % 5
                     _want_n = 1 + ((_start + _seq + _attempt) % 5)
-                    _vraw = call_claude(
-                        VOCAB_SYS,
-                        build_vocab_prompt(data["paragraphs"],
-                                           [data.get("blank_A", ""), data.get("blank_B", "")],
-                                           want_n=_want_n),
-                        max_tokens=1800)
+                    _msg = build_vocab_prompt(
+                        data["paragraphs"],
+                        [data.get("blank_A", ""), data.get("blank_B", "")],
+                        want_n=_want_n)
+                    # ★ 재시도에는 앞선 실패 사유를 그대로 붙인다 (_s97).
+                    #   "다시 만들어라"만 하면 같은 실수를 반복한다 — Q5 에서 사유를
+                    #   돌려주니 성공률이 올랐던 것과 같은 처방이다.
+                    if _attempt and _vfail:
+                        _msg += ("\n\n[이전 시도가 거부됐다. 사유는 이것이다]\n"
+                                 + "\n".join("  - " + x for x in _vfail[-5:])
+                                 + "\n\n다시 만들 때 이렇게 하라.\n"
+                                   "· original 은 지문에 인쇄된 글자를 그대로 옮겨 적어라.\n"
+                                   "  구두점·대소문자까지 포함해서다('uncomfortable.' 'Similarly').\n"
+                                   "· shown 은 original 과 같은 형태여야 한다.\n"
+                                   "  지문이 'depends'(3인칭 단수)면 'relies' 다. 'rely' 를 쓰면\n"
+                                   "  본문이 'the brain rely on ...' 이 되어 수일치가 깨진다.\n"
+                                   "· para 와 idx 는 그 단락 안에서 0부터 공백으로 센 위치다.\n"
+                                   "· 다섯 자리는 서로 다른 단어여야 한다 — 굴절형도 같은 단어다\n"
+                                   "  ('depends' 와 'depend' 를 둘 다 밑줄 치지 마라).")
+                    _vraw = call_claude(VOCAB_SYS, _msg, max_tokens=1800)
                     _v = extract_json_from_response(_vraw)
                     _items = normalize_llm_vocab(_v.get("vocab_items"),
-                                                 data["paragraphs"], _spans)
+                                                 data["paragraphs"], _spans,
+                                                 pid=pid, report=_vfail)
                     if not _items:
-                        raise ValueError("normalize 실패")
+                        raise ValueError(_vfail[-1] if _vfail else "normalize 실패")
                     # shown == original 이면 그 자리는 바뀐 게 없다.
                     # 정답 자리가 그러면 '틀린 단어'가 아예 없어 문항이 성립하지 않는다.
                     _same = [i for i in _items
@@ -1384,9 +1398,14 @@ def generate_variation_a(
                     except Exception as _ve:
                         print(f"[VAR][A][{pid}] Q3어휘 시도 {_va + 1} 실패 — {_ve}")
                 if not _vok:
+                    # ★ 4문항 시험지는 만들지 않는다 (_s97).
+                    #   번호가 1·2·4·5 로 건너뛰면 학생에게 못 나간다.
+                    #   여기서 raise 하면 바깥 재시도 루프가 A 를 처음부터 다시 만든다.
                     data.pop("vocab_items", None)
                     data.pop("vocab_explain", None)
-                    print(f"[VAR][A][{pid}] ⚠ Q3어휘 2회 실패 — Q3 없이 4문항으로 진행")
+                    raise ValueError(
+                        "Q3어휘 2회 실패 — "
+                        + (_vfail[-1] if _vfail else "사유 미기록"))
 
             if "mismatch_count" not in data and "statements" in data:
                 data["mismatch_count"] = sum(1 for _, _, ok in data["statements"] if not ok)

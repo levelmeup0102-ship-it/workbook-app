@@ -898,10 +898,13 @@ def build_translate_prompt(en_sentence: str) -> str:
 # ════════════════════════════════════════════════════════════════
 # A Q3 — 어휘 유형 (수능 30번)
 #   기출 7세트 35개 밑줄 실측:
-#     · 첫 문장에 밑줄 0/7  · 밑줄 위치 평균 61% 지점
+#     · 첫 문장에 밑줄 0/7
+#     · 밑줄 위치 평균 61% 지점 — ★ 원문 순서 지문 기준. 우리 A 는 (A)(B)(C)가
+#       셔플돼 앞뒤 개념이 없으므로 위치 가중치를 쓰지 않는다(_s97).
 #     · 정답 위치 ③2 ④3 ⑤2 (원문 순서 지문 기준. 우리는 셔플돼 있어 ①~⑤ 전부 쓴다)
 #     · 밑줄 품사 형용사37% 동사37% 명사17% 부사5%
-#     · 정답 품사 형용사4 동사3 — 명사·부사가 정답인 적 없음
+#     · 정답 품사 형용사4 동사3 — ★ 명사도 정답이 된다(_s97). 2015 수능 30번 ⑤ 'concern',
+#       연성 하천공학 'modesty', 바자르 'restrictions'. 기준은 품사가 아니라 방향이다.
 # ════════════════════════════════════════════════════════════════
 VOCAB_SYS = (
     "You write CSAT-style vocabulary-in-context questions (수능 30번). "
@@ -954,8 +957,10 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
         "## STEP 2 — 밑줄 자리 고르기 (기출 실측을 따르라)\n"
         "  · NEVER underline a word in the passage's FIRST sentence. 기출 0/7.\n"
         "    That sentence sets the premise; if it wavers, nothing else can be judged.\n"
-        "  · Spread the five across the passage, weighted toward the second half\n"
-        "    (기출 평균 61% 지점). One per sentence at most — never two in one sentence.\n"
+        "  · 다섯 자리를 지문 전체에 **고르게** 흩어라. 한 문장에 둘은 안 된다.\n"
+        "    ★ 뒤쪽에 몰지 마라. 기출이 61% 지점에 몰리는 것은 원문 순서 지문이라\n"
+        "      '앞에서 확인시키고 뒤에서 뒤집는' 구조가 성립하기 때문이다.\n"
+        "      이 지문은 (A)(B)(C)가 셔플돼 앞뒤 개념이 없다. 처음부터 끝까지 균등하게.\n"
         "  · Underline only words whose OPPOSITE would change the argument:\n"
         "      GOOD  significant / diminished / undermines / drives / absolute / insignificant\n"
         "            justifies / abandon / permanently / modesty / careful / least\n"
@@ -967,7 +972,7 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
         "    Similarly, Conversely, However, Moreover, Therefore, Instead, Meanwhile,\n"
         "    Nevertheless, Consequently, Perhaps, Indeed, Finally.\n"
         "    These signal the flow of argument, not a judgment about meaning in context.\n"
-        "    기출 정답 품사는 형용사 4·동사 3이고 부사는 한 번도 없었다.\n"
+        "    부사는 기출 정답에 한 번도 없었다.\n"
         "  · Never underline the same word twice.\n"
         "  · A sentence-final word is fine — 기출에도 흔하다 (2025 수능 ③ 'uncomfortable.').\n"
         "    Give 'original' exactly as it appears in the passage, punctuation included.\n\n"
@@ -987,7 +992,9 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
         "      [X] capriciously / arbitrarily     — 부사는 기출 정답에 없다\n"
         "    실측 실패: 정답 자리에 'story.' 를 골라 바꿀 말이 없어 'story.' → 'story.' 를\n"
         "    냈고, 그 지문이 3회 재시도 끝에 통째로 누락됐다.\n"
-        "    ★ 참고로 기출 정답 품사는 형용사 4·동사 3이다. 명사가 가능은 하지만 드물다.\n"
+        "    ★ 명사를 꺼리지 마라. 2015 수능 30번 정답이 'concern'(명사)이고,\n"
+        "      연성 하천공학은 'modesty', 바자르는 'restrictions' 였다.\n"
+        "      품사가 아니라 '이 문맥에서 방향을 뒤집을 수 있는가'가 기준이다.\n"
         "  · Replace it with a word of OPPOSITE direction — not a random word, not a\n"
         "    near-synonym. The sentence must still read grammatically.\n"
         "  · ★ 정답 자리의 치환어도 나머지 넷과 같은 수준·같은 문체여야 한다.\n"
@@ -1092,11 +1099,22 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
         "  ★ 밑줄 단어를 넣은 문장을 읽었을 때, 원래 지문과 같은 결로 읽혀야 한다.\n"
         "    갑자기 문체가 튀면 그 자리가 표가 난다.\n"
         "\n"
-        "### 선지에 나갈 형태\n"
-        "  · 선지는 밑줄 단어 하나만 보인다 — 구가 아니라 한 단어다.\n"
-        "  · 원문이 굴절형이면 굴절형을 그대로 유지한다\n"
-        "    (depends → relies, 아니라 depend → rely 로 원형화하지 마라).\n"
-        "  · 원문에 구두점이 붙어 있으면('uncomfortable.') 치환어에도 붙인다.\n\n"
+        "### ★★ 형태를 지문에 맞춰라 — 여기서 가장 많이 버려진다\n"
+        "  · original 은 **지문에 인쇄된 글자를 그대로** 옮겨 적는다.\n"
+        "    구두점·대소문자까지 포함해서다. 'uncomfortable.' 'Similarly'\n"
+        "  · shown 은 original 과 **같은 형태**여야 한다. 이게 안 맞으면 본문이 깨진다.\n"
+        "      지문 'depends' (3인칭 단수)\n"
+        "        [O] relies      → the brain relies on external features   (정상)\n"
+        "        [X] rely        → the brain rely on external features     (수일치 깨짐)\n"
+        "      지문 'adapted' (과거형)     [O] adjusted   [X] adjust\n"
+        "      지문 'recognizing' (-ing)   [O] discerning [X] discern\n"
+        "      지문 'features' (복수)      [O] traits     [X] trait\n"
+        "  · 원문에 구두점이 붙어 있으면 치환어에도 붙인다\n"
+        "    ('uncomfortable.' → 'disconcerted.').\n"
+        "  · 첫 글자 대소문자도 맞춘다. 문장 첫 단어를 소문자로 내면 문장이 깨진다.\n"
+        "  ★ 다섯 자리는 서로 다른 단어여야 한다 — **굴절형도 같은 단어로 본다.**\n"
+        "    'depends' 와 'depend' 를 둘 다 밑줄 치지 마라. 학생 눈에는 같은 말이다.\n"
+        "  · 선지는 밑줄 단어 하나만 보인다 — 구가 아니라 한 단어다.\n\n"
 
         "## OUTPUT — 자리는 '몇 번째 단락, 몇 번째 단어'로 정확히 지목하라\n"
         "  ★ why 는 정답 항목에만, 40자 이내 한 줄로 쓴다. 답지에 한 줄로 들어가므로\n"

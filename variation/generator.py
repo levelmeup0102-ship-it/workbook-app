@@ -316,21 +316,46 @@ _BAD_EDGE = {"the","a","an","of","for","to","in","on","at","by","with","from","i
              "have","has","had","having","do","does","did",
              "may","might","can","could","will","would","shall","should","must"}
 # 완화 모드에서 시작으로 절대 허용하지 않는 것 (기존 bad_start와 동일)
-_BAD_START_MIN = {"and","or","but","that","which","who","of","to","for","than","as",
-                  "is","are","was","were"}
+# ★ 시작 경계 (_s98) — 기출 23개 정답 빈칸 실측으로 다시 잡았다.
+#   첫 단어가 기능어인 것이 7/23(30%)이다:
+#     'the less similarity is required...'  'the real product being sold is you'
+#     'the commonalities between us...'     'a justification for converting...'
+#     'a comprehensive description of...'   'is often counterproductive in cases...'
+#     'not in the perception of the figure but...'
+#   → 관사·전치사·be동사·부정어로 시작하는 건 정상이다. 막으면 안 된다.
+#   막아야 하는 것은 '앞 절과 이어붙는 접속사·관계사'뿐이다. 그런 걸로 시작하면
+#   빈칸 앞이 잘린 것처럼 읽힌다.
+_BAD_START_MIN = {"and", "or", "but", "nor", "yet", "so",
+                  "that", "which", "who", "whom", "whose",
+                  "because", "although", "though", "while", "since", "unless",
+                  "as", "if", "when", "whereas"}
 
 
 def _clean_boundary_ok(phrase: str, full_text: str, strict: bool = True) -> bool:
-    """빈칸 경계가 깔끔한지: 관사/전치사/접속사/관계사/주격대명사/조동사로 시작·끝나지 않고,
-    괄호 짝이 맞고, 고유명사(대문자 단어)를 중간에서 쪼개지 않을 것.
+    """빈칸 경계가 깔끔한지 검사한다.
 
-    strict=True  : 시작·끝 모두 _BAD_EDGE로 판정 (깐깐)
-    strict=False : 끝만 _BAD_EDGE, 시작은 _BAD_START_MIN만 (기존 동작)
+    ★ 시작과 끝의 기준이 다르다 (_s98, 기출 23개 실측).
+        시작 — 거의 안 가린다. 기능어 시작이 7/23(30%)다.
+               막는 것은 접속사·관계사뿐 — 그걸로 시작하면 앞이 잘린 것처럼 읽힌다.
+        끝   — 엄격하다. 기능어로 끝나는 기출 빈칸은 0/23이다.
+    옛 코드는 양쪽을 같은 목록(_BAD_EDGE)으로 봐서 'is known as vicarious functioning'
+    같은 정상 빈칸을 거부했다 — 기출에 'is often counterproductive in cases of conflict'
+    가 있다.
 
-    호출부가 strict로 먼저 훑고 후보가 0이면 완화 모드로 재시도하므로,
-    깐깐하게 걸러도 항목이 통째로 누락되지 않는다."""
-    bad_end = _BAD_EDGE
-    bad_start = _BAD_EDGE if strict else _BAD_START_MIN
+    strict 는 이제 '시작'에만 영향을 준다:
+      strict=True  : 시작도 접속사·관계사 + 주격대명사·조동사까지 본다(코드 픽용)
+      strict=False : 시작은 접속사·관계사만 본다(LLM 픽용 — 기출 기준)
+    끝은 어느 모드에서나 _BAD_EDGE 로 엄격히 본다."""
+    # ★ 끝 검사에서 대명사는 뺀다 (_s98). 대명사로 끝나는 구절은 목적어·보어가
+    #   제자리에 있는 완결된 형태다 — 기출 'the real product being sold is you'.
+    #   막아야 하는 건 소유격 한정사(their/its/your...)로 끝나는 것이다. 뒤에
+    #   명사가 와야 하므로 잘린 게 맞다.
+    bad_end = _BAD_EDGE - {"they", "we", "he", "she", "it", "you", "i"}
+    bad_start = (_BAD_START_MIN | {"they", "we", "he", "she", "it", "you", "i",
+                                   "have", "has", "had", "do", "does", "did",
+                                   "may", "might", "can", "could", "will",
+                                   "would", "shall", "should", "must"}
+                 ) if strict else _BAD_START_MIN
     ws = phrase.split()
     if not ws:
         return False
@@ -413,7 +438,16 @@ def _q5_candidates(ptext: str, min_w: int = 4, max_w: int = 8) -> list:
     return out
 
 
-MAX_BLANK_WORDS = 9  # 영작 빈칸(A Q5 / B Q4) 최대 단어 수 — 초과 LLM 빈칸은 거부하고 코드가 5~7단어로 대체
+# ════════════════════════════════════════════════════════════════
+# 영작 빈칸 상한 (_s98) — A 와 B 는 근거가 되는 기출이 달라 값도 다르다.
+#   A Q5 : 수능 32~34번 빈칸 115선지 실측 3~12단어, 평균 7.4, 12초과 0개  → 12
+#   B Q4 : 학교 기말 기출 실측 3~9단어, 평균 5.9                          → 9
+#   옛 코드는 하나(9)로 묶어 A Q5 의 10~12단어 정상 빈칸이 코드 픽 경로에서
+#   거부됐다. LLM 픽 경로는 12를 쓰는데 코드 픽만 9라 기준이 어긋나 있었다.
+# ════════════════════════════════════════════════════════════════
+MAX_BLANK_WORDS_A = 12   # A Q5 빈칸영작
+MAX_BLANK_WORDS_B = 9    # B Q4 요약영작
+MAX_BLANK_WORDS = MAX_BLANK_WORDS_B   # 하위호환 (옛 이름을 참조하는 코드가 있으면 B 기준)
 
 
 def _span_from_marks(paragraphs, mark, pid="?", lab="?") -> Optional[str]:
@@ -628,7 +662,7 @@ def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?
         v = _cut_before_punct(v, 4, sentence_only=True) or v   # 문장 경계만 자른다(_s94)
         if len(v.split()) < 4:
             return None
-        if len(v.split()) > MAX_BLANK_WORDS:   # 너무 길면(예: 27단어) 거부 → 코드가 깔끔한 5~7단어로 대체
+        if len(v.split()) > MAX_BLANK_WORDS_A:   # A Q5 상한 12 (_s98)
             return None
         if texts[idx].count(v) != 1:
             return None
@@ -746,8 +780,9 @@ def _span_from_marks_summary(summary: str, mark, pid="?", lab="?") -> Optional[s
     if n < 3:
         print(f"[VAR][B][{pid}] Q4 지목({lab}) {n}단어 — 3단어 미만")
         return None
-    if n > 9:
-        print(f"[VAR][B][{pid}] Q4 지목({lab}) {n}단어 — 9단어 초과, ends_with를 앞으로 당길 것")
+    if n > MAX_BLANK_WORDS_B:
+        print(f"[VAR][B][{pid}] Q4 지목({lab}) {n}단어 — "
+              f"{MAX_BLANK_WORDS_B}단어 초과, ends_with를 앞으로 당길 것")
         return None
     return span
 
@@ -772,7 +807,7 @@ def pick_b_q4_blanks(full_summary, llm_a: str = "", llm_b: str = "", min_w: int 
         v = re.sub(r'\s+', ' ', str(v or "")).strip()
         if len(v.split()) < min_w:
             return None
-        if len(v.split()) > MAX_BLANK_WORDS:
+        if len(v.split()) > MAX_BLANK_WORDS_B:   # B Q4 상한 9 (_s98)
             return None
         _bare = lambda w: w.strip('.,;:!?"\'\u201c\u201d()')
         toks = hn.split(); pw = v.split()
@@ -912,7 +947,17 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s97 = Q3어휘 normalize 를 세 갈래로 고침. (1) 좌표 찾기를 느슨하게 — original 에
+    # _s98 = 빈칸 경계 기준을 기출 실측으로 다시 잡음 (A Q5 · B Q4 공통).
+    #        기출 23개 정답 빈칸 중 기능어로 '시작'하는 것이 7개(30%)다
+    #        ('the less similarity...' 'a justification for...' 'is often counterproductive...').
+    #        반면 기능어로 '끝'나는 것은 0개다. 시작과 끝의 기준이 다르다.
+    #        옛 코드는 양쪽을 같은 목록으로 봐서 'is known as vicarious functioning'
+    #        같은 정상 빈칸을 거부했다. → 시작은 접속사·관계사만, 끝은 엄격히.
+    #        + 상한을 A/B 로 분리: A Q5=12(수능 115선지 실측), B Q4=9(학교 기출 실측).
+    #        하나(9)로 묶여 있어 A 코드픽만 10~12단어를 거부하고 LLM픽은 통과시켰다.
+    #        + 프롬프트에 '네 몫과 코드 몫'을 명시 — 길이 세기·보기 생성은 코드 일이고
+    #        LLM 은 논지 판단과 '글자 그대로 옮기기'에 집중한다. _s97 누적분 포함.
+    # (구) _s97 = Q3어휘 normalize 를 세 갈래로 고침. (1) 좌표 찾기를 느슨하게 — original 에
     #        구두점·대소문자가 달라도 지문 자리를 찾고, 찾은 뒤 지문 실제 형태로 덮어쓴다.
     #        (2) 형태 검사 추가 — 지문 'depends' 인데 shown 이 'rely' 면 수일치가 깨진다.
     #        코드가 어미를 고치지 않고 사유를 재시도 프롬프트로 돌려준다.
@@ -987,7 +1032,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s97"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s98"
 
 
 # ============ Supabase 캐시 ============

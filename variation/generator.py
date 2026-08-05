@@ -947,7 +947,29 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s98 = 빈칸 경계 기준을 기출 실측으로 다시 잡음 (A Q5 · B Q4 공통).
+    # _s100 = Q3·Q4 요약문 겹침 비교를 '정답 채운 완성 문장'으로 (빈칸 자리에서 3연속이
+    #        끊겨 실측 2/3을 놓쳤다). + Q3어휘 형태 검사를 -s 중심으로 재설계 —
+    #        'overwhelming' 'boring' 같은 -ing 형용사를 굴절형으로 오판해 정상 치환을
+    #        거부하고 A 를 누락시켰다. 수일치가 실제로 깨지는 -s 만 끝까지 막고
+    #        -ing/-ed 는 첫 시도에만 본다. + original 을 지문에서 '베껴' 적으라고 명시
+    #        (실측: 지문 'internal' 인데 'external' 이라고 적어 항목이 버려졌다).
+    #        _s99 누적분 포함.
+    # (구) _s99 = B Q3 요약빈칸을 평가원 40번 실측(8문항)으로 재작성. 복수정답이 세 번 연속
+    #        났다(disclosure/revelation/presentation × engagement/curiosity/attention).
+    #        원인은 (A)(B) 양쪽에 유의어를 둔 것. 기출은 유의어를 쓰되 그 행의
+    #        반대쪽 칸을 틀리게 만들어 '짝'이 하나만 맞게 짠다.
+    #        + summary_check 필드 신설 — 다섯 선지를 요약문에 넣어 완성 문장으로 적게
+    #        하고, 정답 외에 성립한다고 적힌 행이 있으면 코드가 재시도시킨다.
+    #        + Q3·Q4 요약문 분리 — 둘이 사실상 같은 문장이었다(실측 3/3).
+    #        Q3 요약문을 Q4 프롬프트에 넘겨 '다른 각도로 잘라라' 고 시키고,
+    #        겹치면(3연속 겹침·첫 내용어 동일) 재생성 → 검증 단계에서도 한 번 더 막는다.
+    #        ★ 비교는 '정답을 채운 완성 문장'으로 한다(_s100). 빈칸을 공백으로 지우고
+    #        비교하면 3연속이 그 자리에서 끊겨 뒷부분을 통째로 공유해도 통과한다(실측 2/3).
+    #        2연속은 안 본다 — 같은 지문이라 'online writing' 같은 주어가 양쪽에
+    #        자연스럽게 들어가 헛돈다. 어구는 달라도 같은 주장인 경우는 코드가 못 잡으므로
+    #        프롬프트에 실측 사례 3종을 넣어 LLM 이 스스로 걸러내게 했다.
+    #        _s98 누적분 포함.
+    # (구) _s98 = 빈칸 경계 기준을 기출 실측으로 다시 잡음 (A Q5 · B Q4 공통).
     #        기출 23개 정답 빈칸 중 기능어로 '시작'하는 것이 7개(30%)다
     #        ('the less similarity...' 'a justification for...' 'is often counterproductive...').
     #        반면 기능어로 '끝'나는 것은 0개다. 시작과 끝의 기준이 다르다.
@@ -1032,7 +1054,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s98"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s100"
 
 
 # ============ Supabase 캐시 ============
@@ -1407,9 +1429,13 @@ def generate_variation_a(
                                    "  ('depends' 와 'depend' 를 둘 다 밑줄 치지 마라).")
                     _vraw = call_claude(VOCAB_SYS, _msg, max_tokens=1800)
                     _v = extract_json_from_response(_vraw)
+                    #   ★ 첫 시도만 -ing/-ed 형태까지 본다(_s100). 재시도에서는
+                    #     -s 불일치만 막는다 — 'vast'→'overwhelming' 같은 정상 치환을
+                    #     형태소로 못 가려 지문이 통째로 누락됐다.
                     _items = normalize_llm_vocab(_v.get("vocab_items"),
                                                  data["paragraphs"], _spans,
-                                                 pid=pid, report=_vfail)
+                                                 pid=pid, report=_vfail,
+                                                 strict=(_attempt == 0))
                     if not _items:
                         raise ValueError(_vfail[-1] if _vfail else "normalize 실패")
                     # shown == original 이면 그 자리는 바뀐 게 없다.
@@ -1738,21 +1764,95 @@ def generate_variation_b(
 
             # ★★ Q4 요약문 단독 재생성 (영작이라 비문 잦음 → 따로 집중 생성)
             #   요약문(full_summary)만 따로 생성하고, 그 안의 두 구절을 코드가 빈칸으로 뚫는다.
+            #
+            #   ★★ Q3 요약문을 함께 넘긴다 (_s99). 안 넘기면 같은 지문·같은 요구라
+            #   LLM 이 Q3 와 똑같은 문장을 만든다. 실측:
+            #     Q3 'The brain's (A) deployment of alternative sensory pathways ensures (B) recognition…'
+            #     Q4 'The brain's (A) ensures (B).'      ← 같은 문장을 빈칸만 넓힌 것
+            #   Q3 를 푼 학생이 Q4 를 그냥 베껴 쓰게 된다.
+            #   → Q3 문장을 보여주고 '다른 각도로 잘라라' 고 시킨 뒤, 겹치면 한 번 더 시킨다.
+            _SUM_FW = {"the", "a", "an", "of", "to", "in", "on", "at", "by", "with",
+                       "from", "and", "or", "but", "that", "which", "is", "are", "was",
+                       "were", "be", "as", "for", "its", "their", "this", "these", "it",
+                       "while", "although", "though", "when", "may", "can", "has",
+                       "have", "had", "been"}
+
+            def _sum_grams(t, n):
+                """내용어를 하나라도 포함한 n연속 집합. 기능어 연쇄는 겹쳐도 무방하다."""
+                w = re.sub(r"[^a-z ]", " ", str(t or "").lower()).split()
+                out = set()
+                for k in range(len(w) - n + 1):
+                    g = w[k:k + n]
+                    if any(x not in _SUM_FW for x in g):
+                        out.add(" ".join(g))
+                return out
+
+            def _summary_overlap(t1, t2):
+                """Q3·Q4 요약문이 같은 각도로 잘렸는지 (_s99). 겹친 근거를 집합으로 반환.
+
+                두 신호를 본다:
+                  · 3연속 겹침    01번 'deployment of alternative' (같은 문장을 재사용)
+                  · 첫 내용어 동일 02번 'Conflicting …'            (같은 자리에서 출발)
+
+                ★ 2연속 겹침은 안 본다(_s99). 같은 지문을 요약하면 'online writing'
+                  'historical fiction' 같은 주어가 양쪽에 자연스럽게 들어간다.
+                  그걸로 재생성을 돌리면 헛돈다. 대신 03번 유형('online writing'만
+                  겹치고 각도는 같은 경우)은 코드가 못 잡는다 — 프롬프트가 진다.
+                """
+                out = _sum_grams(t1, 3) & _sum_grams(t2, 3)
+
+                def _first(t):
+                    w = [x for x in re.sub(r"[^a-z ]", " ", str(t or "").lower()).split()
+                         if x not in _SUM_FW]
+                    return w[0] if w else ""
+                if _first(t1) and _first(t1) == _first(t2):
+                    out.add(f"(첫 내용어 '{_first(t1)}' 동일 — 같은 자리에서 출발)")
+                return out
+
+            def _filled_q3():
+                """Q3 요약문의 (A)(B)에 정답을 채워 완성 문장으로 만든다 (_s100).
+
+                ★ 빈칸을 공백으로 지우고 비교하면 3연속이 그 자리에서 끊겨 겹침을 못 잡는다.
+                  실측: Q3 'requires (A) of key findings to sustain reader (B) in an impatient
+                  digital environment' 와 Q4 '(A) requires (B) to sustain reader engagement in
+                  an impatient digital environment' 이 뒷부분을 통째로 공유하는데도 통과했다."""
+                _t = str(data.get("summary_template") or "")
+                _o = data.get("summary_options")
+                _c = data.get("summary_correct")
+                if isinstance(_o, list) and isinstance(_c, int) and 0 <= _c < len(_o) \
+                        and isinstance(_o[_c], (list, tuple)) and len(_o[_c]) >= 2:
+                    _t = _t.replace("(A)", str(_o[_c][0]), 1).replace("(B)", str(_o[_c][1]), 1)
+                return _t.replace("(A)", " ").replace("(B)", " ")
+
+            _q3_sum = _filled_q3()
             try:
-                _s_raw = call_claude(SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt(en_text), max_tokens=600)
-                _s = extract_json_from_response(_s_raw)
-                _fs = (_s.get("full_summary") or "").strip()
-                _ba = (_s.get("blank_A") or "").strip()
-                _bb = (_s.get("blank_B") or "").strip()
-                # 셋 다 있고 blank_A/B가 full_summary 안에 실제로 들어있을 때만 교체
-                if _fs and _ba and _bb and _ba in _fs and _bb in _fs and _ba != _bb:
+                for _sa in range(2):
+                    _msg = build_summary_sentence_prompt(en_text, q3_summary=_q3_sum)
+                    if _sa:
+                        _msg += ("\n\n[이전 시도가 Q3 요약문과 겹쳤다]\n"
+                                 "  겹친 어구: " + ", ".join(sorted(_ov)[:4]) + "\n"
+                                 "논리 구조·주어·축이 되는 문장을 전부 바꿔서 다시 써라.")
+                    _s_raw = call_claude(SUMMARY_SENTENCE_SYS, _msg, max_tokens=600)
+                    _s = extract_json_from_response(_s_raw)
+                    _fs = (_s.get("full_summary") or "").strip()
+                    _ba = (_s.get("blank_A") or "").strip()
+                    _bb = (_s.get("blank_B") or "").strip()
+                    if not (_fs and _ba and _bb and _ba in _fs and _bb in _fs and _ba != _bb):
+                        break                      # 형식 오류 — 기존(한번에 만든) 요약문 유지
+                    _ov = _summary_overlap(_fs, _q3_sum)
+                    if _ov and _sa == 0:
+                        print(f"[VAR][B][{pid}] Q4 요약문이 Q3 와 겹침 {sorted(_ov)[:3]} → 재생성")
+                        continue
+                    if _ov:
+                        print(f"[VAR][B][{pid}] ⚠ Q4 요약문이 Q3 와 여전히 겹침 {sorted(_ov)[:3]}")
                     data["full_summary"] = _fs
                     data["blank_A"] = _ba
                     data["blank_B"] = _bb
                     # ★ 요약문 해석도 같은 문장의 번역으로 함께 교체 (topic과 동일 이유).
                     data["blank_summary_template_kr"] = _ensure_kr(_fs, _s.get("full_summary_kr"))
-            except Exception:
-                pass  # 실패하면 기존(한번에 만든) 요약문 유지
+                    break
+            except Exception as _se:
+                print(f"[VAR][B][{pid}] Q4 요약문 재생성 예외({_se})")
 
             # ★★ Q4 빈칸을 코드가 요약문에서 직접 골라 4단어+ 보장 (A Q5와 같은 철학).
             #   LLM이 짧게/비verbatim으로 뽑아도 코드가 깨끗한 4단어 구절로 대체 → 누락 차단.
@@ -1870,6 +1970,65 @@ def generate_variation_b(
                 if isinstance(data.get(_ok), list) and isinstance(data.get(_ck), int):
                     data[_ok], data[_ck] = _shuffle_choices(
                         data[_ok], data[_ck], _choice_seed(pid, _tag, data.get(_ok)))
+
+            # ★★ Q3·Q4 요약문 겹침 최종 확인 (_s99)
+            #   재생성 2회가 다 실패해도 여기서 막는다. 같은 문장이면 Q3 를 푼 학생이
+            #   Q4 를 그냥 베껴 쓴다 — 두 문항이 사실상 하나가 된다.
+            try:
+                # ★ 양쪽 다 '정답을 채운 완성 문장'으로 비교한다 (_s100).
+                #   Q4 는 full_summary 가 곧 완성 문장이고, Q3 는 정답을 끼워 넣어 만든다.
+                _q3t = _filled_q3()
+                _q4t = str(data.get("full_summary") or "")
+                if not _q4t:
+                    _q4t = str(data.get("blank_summary_template") or "")
+                    _ba2, _bb2 = data.get("blank_A"), data.get("blank_B")
+                    if _ba2 and _bb2:
+                        _q4t = _q4t.replace("(A)", str(_ba2), 1).replace("(B)", str(_bb2), 1)
+                    _q4t = _q4t.replace("(A)", " ").replace("(B)", " ")
+                _ov2 = _summary_overlap(_q4t, _q3t)
+                if _ov2 and not is_last:
+                    last_errors = [
+                        f"[{pid}] [유형B] Q3 요약문과 Q4 요약문이 겹침 {sorted(_ov2)[:4]} — "
+                        f"두 문항은 별개다. Q3 를 푼 학생이 Q4 를 베껴 쓰게 된다. "
+                        f"논리 구조(속성→결과 / 조건→귀결 / 대비)와 주어와 축이 되는 문장을 "
+                        f"전부 다르게 잡아 Q4 요약문을 새로 쓸 것."]
+                    print(f"[VAR][B][{pid}] Q3·Q4 요약문 겹침 {sorted(_ov2)[:3]} → 재시도")
+                    continue
+            except Exception as _oe:
+                print(f"[VAR][B][{pid}] Q3·Q4 겹침 확인 예외({_oe})")
+
+            # ★★ B Q3 복수정답 방지 (_s99) — 자가검증을 실제로 했는지 확인한다.
+            #   프롬프트만으론 세 번 연속 복수정답이 새어나갔다
+            #   (disclosure/revelation/presentation × engagement/curiosity/attention).
+            #   유의어 판정은 코드가 못 하지만, '다섯 행을 문장으로 써 봤는가'는 확인할 수 있다.
+            #   써 보게 만드는 것만으로도 스스로 걸러낸다 — Q5 에서 사유를 돌려주니
+            #   성공률이 올랐던 것과 같은 원리다.
+            try:
+                _chk = data.get("summary_check")
+                _sc = data.get("summary_correct")
+                if not isinstance(_chk, list) or len(_chk) != 5:
+                    if not is_last:
+                        last_errors = [
+                            f"[{pid}] [유형B] Q3 summary_check 5개를 채우지 않음 — "
+                            f"다섯 선지를 각각 요약문에 넣어 완성 문장으로 적고, "
+                            f"오답이면 어느 칸이 왜 틀렸는지 쓸 것. "
+                            f"머리로만 판단하면 복수정답이 그대로 나간다."]
+                        print(f"[VAR][B][{pid}] Q3 자가검증 누락 → 재시도")
+                        continue
+                else:
+                    # 정답 행 외에 '정답/성립/맞' 이라고 적힌 행이 있으면 복수정답이다
+                    _alive = [k for k, t in enumerate(_chk)
+                              if k != _sc and re.search(r"정답|성립|맞다|가능", str(t))
+                              and not re.search(r"안 |못 |아니|틀렸|탈락|불가", str(t))]
+                    if _alive and not is_last:
+                        last_errors = [
+                            f"[{pid}] [유형B] Q3 복수정답 — {[k+1 for k in _alive]}번도 성립한다고 "
+                            f"스스로 적었다. 그 행의 한쪽 칸을 갈아라. "
+                            f"유의어는 (A)(B) 중 한쪽에만 두고, 그 행의 반대쪽 칸은 반드시 틀리게 채울 것."]
+                        print(f"[VAR][B][{pid}] Q3 복수정답 감지 {[k+1 for k in _alive]} → 재시도")
+                        continue
+            except Exception as _ce:
+                print(f"[VAR][B][{pid}] Q3 자가검증 확인 예외({_ce})")
 
             errors = validate_b(data, en_text, pid, strict=not is_last, a_data=_a_data)
             if not errors:

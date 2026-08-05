@@ -401,7 +401,10 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
     # ★ 형태(굴절) 일치 — 지문이 'depends' 인데 shown 이 'rely' 면 본문 수일치가 깨진다.
     #   normalize 단계에서 이미 걸러지지만, 폴백 경로로 들어온 것도 있으므로 백스톱을 둔다.
     for it in vocab_items:
-        _sm = shape_mismatch(str(it.get("original", "")), str(it.get("shown", "")))
+        # ★ 백스톱은 -s 만 본다(_s100). -ing/-ed 는 형태소로 판정이 안 돼
+        #   'vast'→'overwhelming' 같은 정상 치환을 CRITICAL 로 죽인다.
+        _sm = shape_mismatch(str(it.get("original", "")), str(it.get("shown", "")),
+                             strict=False)
         if _sm:
             errors.append(f"[{pid}] [CRITICAL] Q3 어휘 {it.get('n')}번 형태 불일치 — {_sm}")
 
@@ -590,30 +593,73 @@ def _looks_alike(a: str, b: str) -> bool:
 #     문맥을 제대로 안 봤다는 뜻이고, 어미만 고치면 그 부주의가 그대로 남는다.
 #     어긋난 사실을 사유로 돌려주고 LLM 이 다시 만들게 한다.
 # ════════════════════════════════════════════════════════════════
+# ★ -ing / -ed 로 끝나지만 굴절형이 아니라 '어근이 그런' 형용사·명사들 (_s100).
+#   어미만 보면 'overwhelming' 을 -ing형으로 오판해 'vast' 의 동의어로 못 쓰게 된다.
+#   실측: A 01번이 'vast' → 'overwhelming' 때문에 2회 실패하고 지문이 통째로 누락됐다.
+_INHERENT_ING = {
+    "overwhelming", "interesting", "outstanding", "demanding", "challenging",
+    "compelling", "convincing", "striking", "surprising", "promising",
+    "misleading", "lasting", "leading", "willing", "cunning", "charming",
+    "everything", "nothing", "something", "anything", "morning", "evening",
+    "meaning", "being", "thing", "king", "ring", "wing", "spring", "string",
+    "long", "along", "among", "young", "strong", "wrong",
+}
+_INHERENT_ED = {
+    "sophisticated", "complicated", "dedicated", "detailed", "limited",
+    "advanced", "concerned", "determined", "experienced", "qualified",
+    "skilled", "aged", "sacred", "wicked", "naked", "indeed", "need",
+    "speed", "deed", "breed", "seed", "creed", "greed", "proceed", "exceed",
+    "succeed", "red", "bed", "fed", "led", "wed", "shed", "hundred",
+}
+_INHERENT_S = {
+    "always", "perhaps", "thus", "less", "unless", "across", "various",
+    "previous", "obvious", "serious", "curious", "conscious", "precious",
+    "analysis", "basis", "crisis", "focus", "status", "bonus", "campus",
+    "consensus", "surplus", "process", "access", "success", "excess",
+    "progress", "express", "address", "witness", "illness", "business",
+}
+
+
 def _word_shape(w: str) -> str:
-    """단어의 굴절 형태를 대략 판정한다. 정확한 품사 분석이 아니라
-    '치환어가 같은 꼴인가'만 보면 되므로 어미로 충분하다."""
+    """단어의 굴절 형태를 대략 판정한다.
+
+    ★ 어미만 보면 안 된다(_s100). 'overwhelming' 'sophisticated' 'various' 는
+      -ing/-ed/-s 로 끝나지만 굴절형이 아니라 어근이 그런 형용사다.
+      목록에 있으면 원형으로 본다. 정확한 형태소 분석은 아니지만,
+      '치환어가 같은 꼴인가'만 보면 되므로 이 정도면 충분하다."""
     x = re.sub(r"[^A-Za-z-]", "", str(w or "")).lower()
     if not x:
         return "?"
-    if x.endswith("ing"):
+    if x in _INHERENT_ING or x in _INHERENT_ED or x in _INHERENT_S:
+        return "원형"
+    if x.endswith("ing") and len(x) > 5:
         return "-ing"
-    if x.endswith("ied") or (x.endswith("ed") and len(x) > 3):
+    if x.endswith("ied") or (x.endswith("ed") and len(x) > 4):
         return "-ed"
-    if x.endswith("ies") or x.endswith("es") or (
-            x.endswith("s") and not x.endswith(("ss", "us", "is"))):
+    if x.endswith("ies") or (x.endswith("es") and len(x) > 4) or (
+            x.endswith("s") and len(x) > 3 and not x.endswith(("ss", "us", "is"))):
         return "-s"
     return "원형"
 
 
-def shape_mismatch(original: str, shown: str) -> str:
+def shape_mismatch(original: str, shown: str, strict: bool = True) -> str:
     """치환어가 원문 단어와 형태가 어긋나면 사유 문자열, 맞으면 빈 문자열.
 
-    ★ 형태가 같아도 '-s' 는 복수명사일 수도 3인칭 단수 동사일 수도 있다.
-      그건 구분하지 않는다 — 어차피 지문 자리가 같으므로 꼴만 맞으면 된다."""
+    ★ -s 와 나머지를 다르게 다룬다 (_s100).
+      · **-s 불일치는 항상 막는다.** 여기서 실제로 문장이 깨진다 —
+        지문 'the brain depends on' 에 'rely' 를 넣으면 'the brain rely on' 이 된다.
+      · **-ing / -ed 불일치는 strict 일 때만 막는다.** 이쪽은 형태소로 판정이 안 된다.
+        'overwhelming' 'boring' 'sophisticated' 는 어미가 -ing/-ed 지만 굴절형이 아니라
+        어근이 그런 형용사다. 목록으로 막으려 하면 끝없이 샌다
+        (실측: 'vast' → 'overwhelming' 이 거부돼 A 01번이 통째로 누락됐다).
+        → 첫 시도에는 사유를 돌려주되, 재시도에서는 통과시킨다.
+          진짜 깨지는 경우('is adapted to' 에 'adjust')는 드물고,
+          그것 때문에 지문을 통째로 버리는 편이 훨씬 손해다."""
     a, b = _word_shape(original), _word_shape(shown)
     if a == b:
         return ""
+    if not strict and "-s" not in (a, b):
+        return ""                      # 재시도에서는 -ing/-ed 차이를 넘어간다
     _nm = {"-s": "3인칭 단수/복수형", "-ed": "과거·과거분사형",
            "-ing": "-ing형", "원형": "원형", "?": "판정 불가"}
     return f"지문은 '{original}'({_nm[a]})인데 shown 이 '{shown}'({_nm[b]})"
@@ -631,7 +677,7 @@ def _cap_mismatch(original: str, shown: str) -> str:
 
 
 def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
-                        pid: str = "?", report=None) -> Optional[list]:
+                        pid: str = "?", report=None, strict: bool = True) -> Optional[list]:
     """LLM이 준 vocab_items를 검증·보정한다. 못 쓰면 None.
 
     ★ _s97에서 세 가지를 바꿨다.
@@ -710,7 +756,7 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
         _shown = str(it.get("shown", "")).strip() or orig
 
         # ── ★ 형태 검사 (_s97) — 고치지 않고 사유만 돌려준다 ──
-        _sm = shape_mismatch(orig, _shown)
+        _sm = shape_mismatch(orig, _shown, strict=strict)
         if _sm:
             return _fail(f"{_no}번 형태 불일치 — {_sm}. 지문 형태 그대로 쓸 것")
         _cm = _cap_mismatch(orig, _shown)

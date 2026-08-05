@@ -314,7 +314,13 @@ _BAD_EDGE = {"the","a","an","of","for","to","in","on","at","by","with","from","i
              "our","your","my","not","no","so","if","when","while","because",
              "they","we","i","he","she","it","you",
              "have","has","had","having","do","does","did",
-             "may","might","can","could","will","would","shall","should","must"}
+             "may","might","can","could","will","would","shall","should","must",
+             # ★ _s104 — 뒤에 명사가 와야 하는 한정사·수식어. 여기서 끊으면 잘린 것이다.
+             #   실측: 'region forces both' (both nations 에서 nations 가 잘림)
+             "both","each","every","either","neither","another","other","such",
+             "more","most","less","least","many","much","few","several","some","any",
+             "very","own","same","only","just","also","even","rather","instead",
+             "like","there","then"}
 # 완화 모드에서 시작으로 절대 허용하지 않는 것 (기존 bad_start와 동일)
 # ★ 시작 경계 (_s98) — 기출 23개 정답 빈칸 실측으로 다시 잡았다.
 #   첫 단어가 기능어인 것이 7/23(30%)이다:
@@ -986,7 +992,10 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s103 = Q3어휘가 Q5 빈칸 자리에서 단어를 고르던 문제 수정. 원인은 프롬프트가
+    # _s104 = 빈칸 끝 경계 목록을 검사기와 동기화. generator._BAD_EDGE 에 'both' 'each'
+    #        'such' 'more' 같은 한정사가 빠져 있어 'region forces both' 처럼 뒤 명사가
+    #        잘린 채 통과했다(검사기는 잡는데 코드는 안 잡아 어긋나 있었다).
+    # (구) _s103 = Q3어휘가 Q5 빈칸 자리에서 단어를 고르던 문제 수정. 원인은 프롬프트가
     #        'Q5 가 쓴 구절' 목록을 따로 보여준 것 — 피하라고 준 목록이 오히려 그
     #        단어들을 눈앞에 갖다놓았다(실측: 'relies' 'flexibility' 'available,' 전부
     #        Q5 빈칸 안 단어). 목록을 없애고 지문 안에 [[[여기는 Q5 빈칸]]] 으로 표시한다.
@@ -1110,7 +1119,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s103"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s104"
 
 
 # ============ Supabase 캐시 ============

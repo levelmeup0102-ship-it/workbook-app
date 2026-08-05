@@ -398,6 +398,46 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
                 f"[{pid}] Q3 어휘 {it.get('n')}번({kind}) '{o}'→'{sh}'는 철자만 비슷함 — "
                 f"발음·철자 유사어 금지. 뜻이 반대(정답)이거나 같은(오답) 단어로 쓸 것")
 
+    # ★ 정답 자리에 부정 접두사 반의어를 쓰면 안 된다 (_s102)
+    #   'inhabitable' → 'uninhabitable' 은 철자가 거의 같아 학생이 논지를 안 읽고
+    #   'un- 이 붙었네' 로 찍는다. 독해 문항이 철자 찾기가 된다.
+    #   ★ CRITICAL 이 아니다 — 이것 하나로 지문을 통째로 버릴 일은 아니다.
+    #     엄격 모드에서 재시도만 시키고, 관대 모드에서는 통과시킨다.
+    for it in vocab_items:
+        o, sh = str(it.get("original", "")), str(it.get("shown", ""))
+        _pfx = _is_prefix_antonym(o, sh)
+        if not _pfx:
+            continue
+        if it.get("is_answer"):
+            errors.append(
+                f"[{pid}] Q3 어휘 {it.get('n')}번(정답) '{o}'→'{sh}'는 부정 접두사"
+                f"('{_pfx}-')만 붙인 반의어 — 철자로 답이 새어나간다. "
+                f"어근이 다른 반의어를 쓸 것 (inhabitable→barren, possible→futile)")
+        else:
+            # ★ 오답 자리는 동의어여야 한다. 접두사를 붙이거나 떼면 뜻이 뒤집힌다.
+            #   실측: 원문 'inhabitable' 을 오답 자리에서 'habitable' 로 보여줬다 —
+            #   in- 을 떼어 반대 뜻이 됐다. 정답이 둘이 되거나 지문이 어긋난다.
+            errors.append(
+                f"[{pid}] [CRITICAL] Q3 어휘 {it.get('n')}번(오답) '{o}'→'{sh}'는 "
+                f"부정 접두사('{_pfx}-')를 붙이거나 뗀 것 — 뜻이 뒤집혔다. "
+                f"오답 자리는 반드시 같은 뜻(동의어)이어야 한다")
+
+    # ★ 선지는 한 단어여야 한다 (_s102)
+    #   실측: 'largest' → 'most extensive'(두 단어)가 나갔다. 수능 30번 선지는
+    #   예외 없이 한 단어다. 두 단어면 밑줄 길이가 달라져 그 자리가 표가 난다.
+    for it in vocab_items:
+        sh = str(it.get("shown", "")).strip()
+        if len(sh.split()) > 1:
+            kind = "정답" if it.get("is_answer") else "오답"
+            errors.append(
+                f"[{pid}] [CRITICAL] Q3 어휘 {it.get('n')}번({kind}) 제시어가 "
+                f"{len(sh.split())}단어 '{sh}' — 선지는 반드시 한 단어여야 한다")
+        o = str(it.get("original", "")).strip()
+        if len(o.split()) > 1:
+            errors.append(
+                f"[{pid}] [CRITICAL] Q3 어휘 {it.get('n')}번 원문어가 "
+                f"{len(o.split())}단어 '{o}' — 밑줄은 한 단어에만 친다")
+
     # ★ 형태(굴절) 일치 — 지문이 'depends' 인데 shown 이 'rely' 면 본문 수일치가 깨진다.
     #   normalize 단계에서 이미 걸러지지만, 폴백 경로로 들어온 것도 있으므로 백스톱을 둔다.
     for it in vocab_items:
@@ -555,6 +595,27 @@ def answer_pos_ok(word: str) -> bool:
     if w.endswith("ly") and w not in _LY_OK:
         return False
     return True
+
+
+_NEG_PREFIX = ("un", "in", "im", "il", "ir", "dis", "non", "anti", "de", "mis")
+
+
+def _is_prefix_antonym(a: str, b: str) -> str:
+    """부정 접두사만 붙여 만든 반의어인가. 맞으면 접두사, 아니면 빈 문자열.
+
+    ★ 정답 자리에 쓰면 안 된다 (_s102). 'inhabitable' → 'uninhabitable' 처럼
+      철자가 거의 같으면 학생이 논지를 안 읽고 'un- 이 붙었네' 로 찍는다.
+      독해를 묻는 문항이 철자 찾기가 된다.
+    ★ 오답 자리(동의어 치환)에서는 상관없다 — 거기는 방향이 안 뒤집히므로."""
+    x = re.sub(r"[^a-z]", "", str(a or "").lower())
+    y = re.sub(r"[^a-z]", "", str(b or "").lower())
+    if not x or not y or x == y:
+        return ""
+    lo, hi = (x, y) if len(x) <= len(y) else (y, x)
+    for p in _NEG_PREFIX:
+        if hi == p + lo:
+            return p
+    return ""
 
 
 def _looks_alike(a: str, b: str) -> bool:
@@ -754,6 +815,39 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
             return _fail(f"{_no}번이 빈칸 마커 자체를 잡음")
 
         _shown = str(it.get("shown", "")).strip() or orig
+
+        # ★ 선지는 한 단어 (_s102) — 'most extensive' 같은 두 단어가 나갔다
+        if len(_shown.split()) > 1:
+            return _fail(f"{_no}번 제시어가 {len(_shown.split())}단어 '{_shown}' — "
+                         f"선지는 한 단어여야 한다")
+        # ★★ 접속부사·담화표지는 밑줄 대상이 아니다 (_s103)
+        #   'Similarly,' 'Conversely,' 는 논리 흐름 표지지 문맥 판단 대상이 아니다.
+        #   옛 코드는 validate_vocab 에서만 잡아 CRITICAL 을 냈다 — 앞문은 열고
+        #   뒷문을 잠근 꼴이라 사유가 재시도 프롬프트로 안 넘어가 같은 단어를
+        #   두 번 골랐고 A 02번이 통째로 누락됐다. 여기서 막아 사유를 돌려준다.
+        if is_discourse_marker(orig):
+            _k = "정답" if it.get("is_answer") else "오답"
+            return _fail(f"{_no}번({_k}) '{orig}' 는 접속부사·담화표지 — "
+                         f"논리 흐름 표지라 문맥 판단 대상이 아니다. "
+                         f"밑줄은 방향을 가진 형용사·동사·명사에만 친다")
+
+        # ★ 정답 자리는 반대말을 댈 수 있는 단어여야 한다 (_s103)
+        if it.get("is_answer") and not answer_pos_ok(orig):
+            return _fail(f"{_no}번(정답) '{orig}' 는 반대말을 댈 수 없는 단어 — "
+                         f"방향이 있는 말을 고를 것 "
+                         f"(significant/undermines/abandon/concern 처럼)")
+
+        # ★ 부정 접두사 붙이기·떼기 금지 (_s102)
+        #   정답 자리 — 철자로 답이 새어나간다 ('inhabitable'→'uninhabitable')
+        #   오답 자리 — 뜻이 뒤집힌다 ('inhabitable'→'habitable'). 동의어여야 한다.
+        _pfx = _is_prefix_antonym(orig, _shown)
+        if _pfx:
+            _k = "정답" if it.get("is_answer") else "오답"
+            _why = ("철자로 답이 새어나간다. 어근이 다른 반의어를 쓸 것"
+                    if it.get("is_answer")
+                    else "뜻이 뒤집혔다. 오답 자리는 같은 뜻(동의어)이어야 한다")
+            return _fail(f"{_no}번({_k}) '{orig}'→'{_shown}' 는 부정 접두사"
+                         f"('{_pfx}-')를 붙이거나 뗀 것 — {_why}")
 
         # ── ★ 형태 검사 (_s97) — 고치지 않고 사유만 돌려준다 ──
         _sm = shape_mismatch(orig, _shown, strict=strict)

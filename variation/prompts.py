@@ -1030,7 +1030,17 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
       original/shown 을 교환하면 원문 인덱스와 어긋나 validate_vocab 이 거부하고,
       is_answer 만 옮기면 반의어가 박힌 자리가 오답이 되어 문항이 깨진다(_s68).
       → 자리를 코드가 정해서 내려보내고, 그 자리의 반의어는 LLM이 만든다."""
-    body = "\n\n".join(f"({lab}) {txt}" for lab, txt in paragraphs)
+    # ★★ Q5 빈칸 자리를 지문 안에서 눈에 보이게 표시한다 (_s103).
+    #   옛 코드는 원본처럼 보이는 지문에 <BLANK_A> 마커만 박아 두고, 아래에
+    #   'Q5 가 쓴 구절' 목록을 따로 보여줬다. 그 목록이 오히려 그 단어들을 눈앞에
+    #   갖다놓는 꼴이라 LLM 이 거기서 골랐다(실측: 'relies' 'flexibility' 'available,'
+    #   전부 Q5 빈칸 안 단어). 목록은 없애고, 지문에서 그 자리를 못 고르게 막는다.
+    def _mask(txt):
+        t = str(txt or "")
+        t = t.replace("<BLANK_A>", "[[[여기는 Q5 빈칸 — 이 안의 단어는 이미 사라졌다]]]")
+        t = t.replace("<BLANK_B>", "[[[여기는 Q5 빈칸 — 이 안의 단어는 이미 사라졌다]]]")
+        return t
+    body = "\n\n".join(f"({lab}) {_mask(txt)}" for lab, txt in paragraphs)
     if want_n in (1, 2, 3, 4, 5):
         _want_txt = (
             f"  · ★★ 정답은 반드시 {want_n}번 자리다. 다른 번호에 두면 그 항목은 버려진다.\n"
@@ -1044,10 +1054,12 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
     else:
         _want_txt = (
             "  · 정답은 ①~⑤ 어디든 될 수 있다. 지문이 셔플돼 있어 앞뒤 개념이 없다.\n")
-    avoid = ""
-    if blank_phrases:
-        avoid = ("\n\n[ALREADY USED AS FILL-IN BLANKS — do not underline any word inside these]\n"
-                 + "\n".join(f"  - {p}" for p in blank_phrases if p))
+    # ★ blank_phrases 는 더 이상 프롬프트에 싣지 않는다 (_s103).
+    #   보여주면 LLM 이 그 안에서 고른다. 자리는 위 지문의 [[[...]]] 표시로 충분하다.
+    avoid = ("\n\n★★ 지문에 [[[여기는 Q5 빈칸 …]]] 이라고 적힌 자리가 있다.\n"
+             "  그 자리의 단어들은 **이미 다른 문항이 가져가서 학생 시험지에 안 보인다.**\n"
+             "  거기서 고르면 밑줄 칠 단어가 없어 그 항목은 버려진다.\n"
+             "  [[[...]]] 밖에 **실제로 인쇄돼 있는 단어** 중에서만 다섯을 골라라.\n")
     return (
         "Read the passage and design a 수능 30번 vocabulary question.\n\n"
         "[PASSAGE]\n" + body + avoid + "\n\n"
@@ -1104,6 +1116,17 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
         "      품사가 아니라 '이 문맥에서 방향을 뒤집을 수 있는가'가 기준이다.\n"
         "  · Replace it with a word of OPPOSITE direction — not a random word, not a\n"
         "    near-synonym. The sentence must still read grammatically.\n"
+        "  · ★★ 부정 접두사만 붙여서 반의어를 만들지 마라. **어근이 다른 말**을 써라.\n"
+        "    [X] inhabitable → uninhabitable   [X] possible → impossible\n"
+        "    [X] regular → irregular           [X] agree → disagree\n"
+        "    철자가 거의 같으면 학생이 논지를 안 읽고 'un- 이 붙었네' 로 찍는다.\n"
+        "    독해를 묻는 문항이 철자 찾기가 된다.\n"
+        "    [O] inhabitable → barren    [O] possible → futile\n"
+        "    [O] regular → erratic       [O] agree → object\n"
+        "    ★★ 오답 자리에서도 접두사를 붙이거나 떼지 마라. 뜻이 뒤집힌다.\n"
+        "      실측 실패: 원문 'inhabitable' 을 오답 자리에서 'habitable' 로 보여줬다\n"
+        "      — in- 을 떼어 반대 뜻이 됐다. 오답은 반드시 **같은 뜻**이어야 한다.\n"
+        "      [X] inhabitable → habitable   [O] inhabitable → livable\n"
         "  · ★ 정답 자리의 치환어도 나머지 넷과 같은 수준·같은 문체여야 한다.\n"
         "    정답만 유난히 어렵거나 쉬우면 학생이 내용을 안 읽고 그것부터 찍는다.\n"
         "    기출은 정답과 오답의 난이도가 구분되지 않는다 — 그게 30번의 핵심이다.\n"

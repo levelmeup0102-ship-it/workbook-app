@@ -406,69 +406,103 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
    (d) ★ DISTRACTORS must be the SAME part of speech and individually plausible, but each must FAIL the passage's logic — NOT mere synonyms/antonyms of the answer. Avoid 5 near-synonyms (manage/control/handle/regulate/direct) — that makes the answer guessable. Mix in words that fit grammar but contradict or overstate the passage.
    (e) ★ WORD LEVEL = GRE/upper-CSAT abstract vocabulary (finite, fixed, controllability, manageability, intensify, diminish, constrain, reciprocal, provisional). No basic words (increase, reduce, manage, activate).
 
-2-1. **Q3 SUMMARY_OPTIONS — 한쪽은 흐리게, 다른 쪽은 선명하게**:
-   - Each (A) and each (B) value MUST be exactly ONE single word — never a phrase.
-   - Content words only (nouns, adjectives, verbs).
-   - ALL FIVE (A) values must be DIFFERENT words. ALL FIVE (B) values must be DIFFERENT words.
-     Never repeat the same word inside a column.
- 
-   ★★★ THE CORE DESIGN — read this carefully, it decides whether the item works.
- 
-   Pick ONE column to be the BLURRED side and the OTHER to be the DECIDING side.
- 
-   ## BLURRED side (say it is (A))
-   - Put the correct word here, AND put 2 NEAR-SYNONYMS of it in other rows.
-     They are different words on the page, but to a student they mean nearly the same thing.
-     → The student CANNOT eliminate those rows from this column alone.
-   - The remaining 2 rows get words that clearly do NOT fit (an antonym, or a concept the
-     passage never raises). Those two fall away.
-   - Net effect: this column narrows five rows down to about three, and then stalls.
- 
-   ## DECIDING side (then it is (B))
-   - NO SYNONYMS HERE. Exactly one word fits the passage's logic; the other four are
-     clearly wrong (wrong direction, wrong object, or unmentioned).
-   - Crucially: the rows that survived (A) — the near-synonym rows — must have a (B) that
-     is plainly wrong. That is what kills them.
-   - Net effect: this column settles the answer.
- 
-   ## Worked example (correct answer is the 4th row: stability / strategies)
-     ["dominance",   "priorities"]     (A) wrong direction → out
-     ["consistency", "hierarchies"]    (A) near-synonym of stability → survives (A), killed by (B)
-     ["cohesion",    "preferences"]    (A) near-synonym → survives (A), killed by (B)
-     ["stability",   "strategies"]     CORRECT
-     ["rigidity",    "pathways"]       (A) antonym → out
-   Reading (A) alone leaves rows 2, 3, 4 in play — consistency / cohesion / stability all
-   sound right. Only (B) separates them: strategies fits the passage; hierarchies and
-   preferences do not.
- 
-   ## ALTERNATE the blurred side across items
-   Item 1: blur (A), decide with (B).  Item 2: blur (B), decide with (A).
-   If (B) is the blurred side, put the near-synonyms in (B) and make (A) the clean decider.
-   Students must not be able to learn "the answer is always settled by (B)."
- 
-   ## CHECKLIST before you output the five pairs
-   1. Are all five (A) words different? All five (B) words different?  (no repeats)
-   2. On the BLURRED side: does the correct word have 2 near-synonyms among the others?
-   3. On the DECIDING side: is there exactly ONE word that fits, with NO synonym of it present?
-   4. Do the near-synonym rows have a clearly wrong word on the deciding side?
-   5. Can you name, for each of the four wrong rows, the reason it fails? If not, rewrite it.
- 
-   BAD — both columns blurred (no way to decide, unfair):
-     [["consistency","stability"], ["cohesion","steadiness"], ...]
- 
-   BAD — both columns clean (too easy, (A) alone gives it away):
-     [["dominance","priorities"], ["rigidity","hierarchies"], ["stability","strategies"], ...]
- 
-   BAD — a word repeats in a column:
-     [["stability","preferences"], ["stability","strategies"], ...]
- 
-   BAD — phrases instead of single words:
-     ["south-facing garden beds", "flat stones from beach"]
+2-1. **Q3 SUMMARY_OPTIONS — 평가원 40번 실측(8문항)으로 짠다**:
 
-2-2. **★ CRITICAL: Q3 (summary_options) AND Q4 (blank_A/blank_B) ARE COMPLETELY SEPARATE QUESTIONS!**
-   - Q3 = OBJECTIVE choice question with SHORT single-word options for (A)(B)
-   - Q4 = WRITING question where students fill in natural key phrases (~4-8 words each)
-   - They use DIFFERENT templates and DIFFERENT answer formats!
+   ## 대전제
+   - 각 (A)(B)는 정확히 한 단어. 내용어(명사·형용사·동사)만.
+   - (A) 다섯 개 서로 다른 단어, (B) 다섯 개 서로 다른 단어.
+   - ★★ **복수정답이 있으면 그 문항은 폐기다.** 아래 검증을 반드시 거쳐라.
+
+   ## ★★★ 핵심 원리 — 유의어를 쓰되, '짝'이 하나만 맞게 하라
+
+   기출은 유의어를 **적극적으로 쓴다.** 피하는 게 아니다. 다만 유의어가 든 행은
+   **반대쪽 칸이 틀리게** 만들어 짝이 안 맞게 한다. 실측 예시다.
+
+   합성식품 (정답 ① controllability / challenge)
+     ① controllability … challenge     ← 정답
+     ② predictability  … support       (A) 유의어인데 (B)가 반대 → 탈락
+     ③ manageability   … intensify     (A) 유의어인데 (B)가 안 맞음 → 탈락
+     ④ affordability   … reverse       (A) 안 맞음 → 탈락
+     ⑤ accessibility   … question      (B) 유의어인데 (A)가 안 맞음 → 탈락
+   ★ (A)에 유의어 셋(controllability·predictability·manageability), (B)에 유의어 둘
+     (challenge·question)이 있는데도 **짝이 맞는 행은 하나뿐**이다. 이게 설계다.
+
+   제약 AI (정답 ⑤ disregard / underserved)
+     ① prevention … marginalized   (B) 유의어인데 (A)가 반대 → 탈락
+     ③ overlook   … native         (A) 유의어인데 (B)가 안 맞음 → 탈락
+     ④ ignorance  … wealthy        (A) 유의어인데 (B)가 반대 → 탈락
+     ⑤ disregard  … underserved    ← 정답
+   ★ (A)에 유의어가 셋(overlook·ignorance·disregard), (B)에 둘(marginalized·underserved).
+     그래도 짝은 하나다.
+
+   ## 만드는 순서 — 이대로 하라
+   1. 정답 쌍 (A₁, B₁)을 먼저 정한다. 지문 논지를 담은 추상어 두 개다.
+   2. **(A)에 유의어 2개**를 만든다. 그 행들의 (B)는 **반드시 틀리게** 채운다
+      (반대 방향이거나 지문이 말하지 않은 것).
+   3. **(B)에 유의어 1개**를 만든다. 그 행의 (A)는 **반드시 틀리게** 채운다.
+   4. 남은 한 행은 (A)(B) 둘 다 틀리게 — 방향이 반대인 쌍이 좋다.
+   5. 아래 검증을 통과할 때까지 고친다.
+
+   ## ★★ 검증 — 다섯 행을 요약문에 실제로 넣어 읽어라
+   머리로 "이건 오답이겠지" 하지 마라. **문장으로 완성해서 소리 내어 읽어라.**
+   각 행마다 이렇게 적어 보라(출력에는 안 넣지만 반드시 하라):
+
+     ① [완성된 문장] → 성립하는가? 아니면 어느 칸이 왜 틀렸는가?
+     ② [완성된 문장] → …
+     ③ [완성된 문장] → …
+     ④ [완성된 문장] → …
+     ⑤ [완성된 문장] → …
+
+   ★ 성립하는 행이 **둘 이상이면 문항이 깨진 것이다.** 그 행의 한쪽 칸을 갈아라.
+   ★ 실측 실패: 'upfront (A) of the conclusion to retain reader (B)' 에
+     ① disclosure/engagement ② revelation/curiosity ⑤ presentation/attention 이
+     **셋 다 성립했다.** (A)도 유의어 넷, (B)도 유의어 셋이었기 때문이다.
+     한쪽에만 유의어를 두고 다른 쪽은 반드시 갈랐어야 했다.
+
+   ## 어휘 수준·문체 (기출 8문항 실측)
+   기출에 실제로 쓰인 말들이다. 이 정도 수준·이 종류로 쓰라.
+     (A)류  obstacle, insufficient, enables, fruitful, feature, controllability,
+            challenges, disregard, predictability, manageability, resurface
+     (B)류  surroundings, enrich, leaves, critical, transformation, challenge,
+            secure, underserved, marginalized, variation, question
+   · 라틴어원 학술 추상어. 파생명사(-ability, -ation, -ment)가 흔하다.
+   · 구어·과장어 금지(a lot of, amazing, terrible).
+   · 지문에 그대로 나온 단어는 정답으로 쓰지 마라 — 한 단계 추상화한 말이어야 한다
+     (지문 'precisely controlled' → 정답 'controllability').
+
+   ## 요약문 (기출 8문항 실측: 21~35단어, 평균 29)
+   · 한 문장. (A)와 (B)가 **논리적으로 다른 역할**을 맡아야 한다.
+       속성 → 결과      'The (A) of the production process … may (B) the assumption'
+       원인 → 귀결      'Exploring one subject after another (A) remarkable work … which (B) room'
+       양보 → 주장      'Although economic growth can be somewhat (A) …, direct approaches play a(n) (B) role'
+       조건 → 기능      'may act as a(n) (A) to its adaptability when … changes arise in its (B)'
+   · 두 빈칸이 같은 것을 반복하면 안 된다. (A)가 원인이면 (B)는 결과다.
+   · 연결어(although / while / as / which)는 빈칸 밖에 남긴다 — 관계를 알려주는 단서다.
+
+   ## 출력 직전 확인
+   1. (A) 다섯 개 다 다른 단어인가? (B)도?
+   2. 다섯 행을 전부 문장으로 만들어 읽었는가?
+   3. 성립하는 행이 정확히 하나인가? **둘 이상이면 다시 짜라.**
+   4. 정답 (A)(B)가 지문에 그대로 나온 단어는 아닌가?
+   5. 유의어가 한쪽 칸에만 몰려 있는가? (양쪽 다 흐리면 복수정답이 된다)
+
+2-2. **★★ Q3 와 Q4 는 완전히 다른 문항이다 — 요약문도 서로 달라야 한다**
+   - Q3 = 객관식. 한 단어씩 두 칸을 뚫고 다섯 쌍 중 고르게 한다(추상어 판단).
+   - Q4 = 영작. 구절 두 개를 뚫고 보기 단어로 원문을 복원하게 한다.
+   - ★★★ **두 요약문이 같으면 안 된다.** Q3 를 푼 학생이 Q4 를 그냥 베껴 쓴다.
+     실측 실패:
+       Q3 'The brain's (A) deployment of alternative sensory pathways ensures (B) recognition
+           despite environmental variability.'
+       Q4 'The brain's (A) ensures (B).'        ← 같은 문장을 빈칸만 넓힌 것
+     또 다른 실측:
+       Q3 '... has resulted in territorial (B) driven by strategic calculation.'
+       Q4 '... abandonment of land driven by rational pursuit of greater strategic ...'
+                                    ↑ 'driven by ... strategic' 이 통째로 겹침
+   - ★ 다른 각도로 잘라라:
+       · 논리 구조를 바꾼다 (Q3 가 '속성→결과' 면 Q4 는 '조건→귀결' 이나 '대비')
+       · 주어를 바꾼다 (Q3 가 'The brain's ...' 면 Q4 는 'When primary routes are blocked, ...')
+       · 지문의 다른 문장을 축으로 삼는다 (Q3 결론부 → Q4 전환점)
+   - ★ 두 요약문이 **연속 세 단어 이상 겹치면 거부된다.**
    
    Structure:
    - summary_template = "Strategic (A) of microclimate enables (B) of cultivation."  ← Q3 (short)
@@ -542,6 +576,10 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
   "summary_template_kr": "<Korean translation of the summary sentence with correct (A)/(B) filled in — use PLAIN declarative style ~한다/~이다, NEVER honorific ~합니다/~입니다>",
   "summary_options": [["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"]],
   "summary_correct": <0-4>,
+  "summary_check": [
+    "<①번을 요약문에 넣은 완성 문장 → 왜 틀렸는지 (정답 행은 '정답')>",
+    "<②번 …>", "<③번 …>", "<④번 …>", "<⑤번 …>"
+  ],
   "full_summary": "<ONE complete grammatical summary sentence, NO blanks — the code blanks it>",
   "blank_summary_template": "<leave as the full sentence; code overwrites it with (A)/(B)>",
   "blank_summary_template_kr": "<Korean translation of the Q4 summary with blank_A/blank_B filled in — PLAIN style ~한다/~이다, NOT ~합니다>",
@@ -563,9 +601,14 @@ VERIFY BEFORE OUTPUT:
 - Same words (case-insensitive) appear in bogi and the answer
 - ★ Every (A) and (B) in summary_options is EXACTLY ONE WORD (no spaces, no phrases!)
 - ★ All five (A) values are different words; all five (B) values are different words.
-- ★ ONE column is BLURRED (correct word + 2 near-synonyms + 2 clearly wrong) and the OTHER
-  is the DECIDER (exactly one fitting word, no synonym of it present). Never blur both,
-  never make both clean. Alternate which column is blurred from item to item.
+- ★★ summary_check 5개를 반드시 채워라. 각 행을 요약문에 넣어 **완성된 문장**으로
+  적고, 오답이면 어느 칸이 왜 틀렸는지 한 줄로 쓴다.
+  머리로만 판단하지 말고 문장으로 써 봐야 복수정답이 드러난다.
+- ★★ summary_check 를 다 쓴 뒤 세어라. **성립하는 행이 정확히 하나인가?**
+  둘 이상이면 그 행의 한쪽 칸을 갈고 처음부터 다시 검증하라.
+  (실측 실패: disclosure/engagement · revelation/curiosity · presentation/attention
+   셋이 다 성립했다 — (A)(B) 양쪽에 유의어를 둔 탓이다)
+- ★ 유의어는 **한쪽 칸에만** 둔다. 그 행들의 반대쪽 칸은 반드시 틀리게 채운다.
 
 Return ONLY the JSON object."""
 
@@ -715,7 +758,7 @@ SUMMARY_SENTENCE_SYS = (
     "All English you write MUST be grammatically correct (check subject-verb agreement, tense, prepositions). Output ONLY valid JSON, no markdown, no text outside JSON."
 )
 
-def build_summary_sentence_prompt(passage_text: str) -> str:
+def build_summary_sentence_prompt(passage_text: str, q3_summary: str = "") -> str:
     """B Q4 — 요약문 한 문장 + 빈칸 두 자리 지목.
 
     ★ 핵심 원리 (26-1 기말 학교 기출 4문항을 지문까지 읽고 도출):
@@ -732,9 +775,41 @@ def build_summary_sentence_prompt(passage_text: str) -> str:
                → 요약문 'Depression (A), so the complexity of (B).'
                → 빈칸 둘이 원인과 귀결
     """
+    _avoid = ""
+    if str(q3_summary or "").strip():
+        _avoid = (
+            "\n\n## ★★★ 이미 Q3 가 쓴 요약문 — 이것과 겹치면 안 된다\n"
+            "[Q3 요약문]\n" + str(q3_summary).strip() + "\n\n"
+            "Q3(객관식 요약빈칸)와 Q4(요약영작)는 **다른 문항**이다. 같은 지문을 쓰지만\n"
+            "학생에게 요구하는 것이 전혀 다르다.\n"
+            "  Q3 — 논리 축의 두 지점을 **한 단어씩** 뚫고 다섯 쌍 중 고르게 한다(추상어 판단)\n"
+            "  Q4 — 논리 축의 양쪽을 **구절로** 뚫고 보기 단어로 복원하게 한다(영작)\n"
+            "★ 같은 문장을 쓰면 Q3 를 푼 학생이 Q4 를 그냥 베껴 쓴다. 실측 실패 3건이다:\n"
+            "  (1) 같은 문장을 재사용\n"
+            "      Q3 'The brain's (A) deployment of alternative sensory pathways ensures (B) recognition…'\n"
+            "      Q4 'The brain's (A) ensures (B).'\n"
+            "  (2) 같은 자리에서 출발\n"
+            "      Q3 'Conflicting (A) over border demarcation has resulted in territorial (B)…'\n"
+            "      Q4 'Conflicting claims have forced (A) of land driven by (B)…'\n"
+            "  (3) ★ 어구는 달라도 **같은 각도** — 이게 제일 놓치기 쉽다\n"
+            "      Q3 'Unlike academic convention, online writing demands upfront (A) of the conclusion\n"
+            "          to retain reader (B).'\n"
+            "      Q4 'Online writing requires (A) to (B) throughout the narrative.'\n"
+            "      두 문장이 **똑같은 말을 하고 있다** — '온라인 글은 결론을 먼저 내야 독자를 붙든다'.\n"
+            "      어구가 안 겹쳐도 이러면 실패다. 두 문장을 나란히 읽어 보고\n"
+            "      **같은 주장을 하고 있으면 다시 써라.**\n"
+            "\n"
+            "### 그러니 **다른 각도로 잘라라**\n"
+            "  · Q3 가 '속성 → 결과' 로 썼으면 Q4 는 '조건 → 귀결' 이나 '대비' 로 쓴다.\n"
+            "  · 주어를 바꾼다. Q3 가 'The brain's ...' 로 시작했으면 Q4 는\n"
+            "    'When primary routes are blocked, ...' 처럼 다른 데서 시작한다.\n"
+            "  · 지문의 **다른 문장**을 축으로 삼는다. Q3 가 결론부를 썼으면 Q4 는 전환점을,\n"
+            "    Q3 가 전환점을 썼으면 Q4 는 결론부를 축으로 삼는다.\n"
+            "★ 위 Q3 요약문과 **연속 세 단어 이상 겹치면 거부된다.** 어구를 통째로 옮기지 마라.\n"
+            "  (관사·전치사 같은 기능어 연쇄는 어쩔 수 없지만, 내용어 조합은 겹치면 안 된다)\n")
     return (
         "Write ONE summary sentence of this passage, then mark TWO blanks in it.\n\n"
-        "[PASSAGE]\n" + passage_text + "\n\n"
+        "[PASSAGE]\n" + passage_text + _avoid + "\n\n"
 
         "## ★★ 네 몫과 코드 몫\n"
         "  네 몫  · 지문의 논리 축(대비·인과·양보)을 찾아 요약문 한 문장으로 옮기는 것\n"
@@ -832,7 +907,13 @@ def build_summary_sentence_prompt(passage_text: str) -> str:
         "  2. starts_with / ends_with 가 full_summary 안에 글자 그대로 있는가?\n"
         "  3. 각 span 이 3~9 단어인가?\n"
         "  4. 연결어가 두 빈칸 사이에 남아 있는가?\n"
-        "  5. 두 span 을 빼고 읽었을 때 관계가 드러나는가?\n\n"
+        "  5. 두 span 을 빼고 읽었을 때 관계가 드러나는가?\n"
+        "  6. ★★ Q3 요약문이 위에 주어졌다면 — 두 문장을 나란히 놓고 읽어라.\n"
+        "     · 연속 세 단어 이상 겹치는 데가 있는가?\n"
+        "     · 같은 단어로 시작하는가?\n"
+        "     · ★ 어구가 안 겹쳐도 **같은 주장을 하고 있는가?**\n"
+        "       (이건 코드가 못 잡는다. 네가 봐야 한다)\n"
+        "     셋 중 하나라도 해당하면 논리축·주어·축이 되는 문장을 바꿔 다시 써라.\n\n"
 
         "[OUTPUT JSON]\n"
         '{"full_summary": "<one summary sentence, 25-32 words>", '
@@ -1116,9 +1197,16 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
         "  ★ 밑줄 단어를 넣은 문장을 읽었을 때, 원래 지문과 같은 결로 읽혀야 한다.\n"
         "    갑자기 문체가 튀면 그 자리가 표가 난다.\n"
         "\n"
-        "### ★★ 형태를 지문에 맞춰라 — 여기서 가장 많이 버려진다\n"
-        "  · original 은 **지문에 인쇄된 글자를 그대로** 옮겨 적는다.\n"
-        "    구두점·대소문자까지 포함해서다. 'uncomfortable.' 'Similarly'\n"
+        "### ★★ original 은 지문에서 '베껴' 적어라 — 여기서 가장 많이 버려진다\n"
+        "  · ★★★ original 은 네가 기억해서 쓰는 게 아니다. **지문의 그 자리를 눈으로 보고\n"
+        "    글자를 그대로 옮겨** 적는 것이다. 구두점·대소문자까지 포함해서다.\n"
+        "    실측 실패 — 지문에 없는 단어를 적어 그 항목이 통째로 버려졌다:\n"
+        "      지문 'internal features such as eyes'  →  original 에 'external' 이라고 적음\n"
+        "      지문 'vicarious functioning.'          →  original 에 'flexibility' 라고 적음\n"
+        "    비슷한 뜻의 다른 단어를 쓰면 안 된다. 그 자리에 **실제로 인쇄된** 글자여야 한다.\n"
+        "  · para 와 idx 를 적기 전에, 그 단락을 공백으로 끊어 세어 확인하라.\n"
+        "    idx 가 틀려도 코드가 근처에서 찾아 보정하지만, original 자체가 지문에 없으면\n"
+        "    찾을 방법이 없다.\n"
         "  · shown 은 original 과 **같은 형태**여야 한다. 이게 안 맞으면 본문이 깨진다.\n"
         "      지문 'depends' (3인칭 단수)\n"
         "        [O] relies      → the brain relies on external features   (정상)\n"

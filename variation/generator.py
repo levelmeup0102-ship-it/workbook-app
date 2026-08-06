@@ -357,6 +357,12 @@ def _clean_boundary_ok(phrase: str, full_text: str, strict: bool = True) -> bool
     #   막아야 하는 건 소유격 한정사(their/its/your...)로 끝나는 것이다. 뒤에
     #   명사가 와야 하므로 잘린 게 맞다.
     bad_end = _BAD_EDGE - {"they", "we", "he", "she", "it", "you", "i"}
+    # ★ 하이픈 복합어로 끝나면 잘린 것이다 (_s105).
+    #   'twenty-second' 'well-known' 'long-term' 은 뒤에 꾸밀 명사가 따라온다.
+    #   실측: 'straight line of the twenty-second' — twenty-second parallel 을 쪼갰다.
+    #   ※ 하이픈이 있어도 홀로 쓰는 말은 예외로 둔다(self-esteem, one-of-a-kind 등 명사).
+    _HYPHEN_OK_END = {"one-of-a-kind", "self-esteem", "well-being", "know-how",
+                      "trade-off", "by-product", "side-effect", "vice-versa"}
     bad_start = (_BAD_START_MIN | {"they", "we", "he", "she", "it", "you", "i",
                                    "have", "has", "had", "do", "does", "did",
                                    "may", "might", "can", "could", "will",
@@ -369,6 +375,9 @@ def _clean_boundary_ok(phrase: str, full_text: str, strict: bool = True) -> bool
         return False
     bare = lambda w: re.sub(r"[^A-Za-z'-]", "", w).lower()
     if bare(ws[0]) in bad_start or bare(ws[-1]) in bad_end:
+        return False
+    _last = bare(ws[-1])
+    if "-" in _last and _last not in _HYPHEN_OK_END:
         return False
     m = re.search(re.escape(phrase), full_text)
     if m:
@@ -790,6 +799,12 @@ def _span_from_marks_summary(summary: str, mark, pid="?", lab="?") -> Optional[s
         print(f"[VAR][B][{pid}] Q4 지목({lab}) {n}단어 — "
               f"{MAX_BLANK_WORDS_B}단어 초과, ends_with를 앞으로 당길 것")
         return None
+    # ★ 경계 검사 (_s105) — 여기엔 원래 없었다. 코드 픽(_b_candidates)에만 있어
+    #   LLM 지목은 'twenty-second' 'both' 같은 끊김이 그대로 통과했다.
+    if not _clean_boundary_ok(span, text, strict=False):
+        print(f"[VAR][B][{pid}] Q4 지목({lab}) 경계 어정쩡 "
+              f"(시작 '{span.split()[0]}' / 끝 '{span.split()[-1]}'): '{span[:50]}'")
+        return None
     return span
 
 
@@ -992,7 +1007,15 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s104 = 빈칸 끝 경계 목록을 검사기와 동기화. generator._BAD_EDGE 에 'both' 'each'
+    # _s106 = 답지 보강 — A 정답 주제문·B 정답 제목의 한글 해석(topic_answer_kr /
+    #        title_answer_kr), B Q3·Q4 요약문의 '정답 채운 완성 영문'
+    #        (summary_template_en / blank_summary_template_en) 을 저장 직전에 만든다.
+    #        영문만 있으면 답지를 보고도 맞는지 판단하기 어렵다.
+    # (구) _s105 = 하이픈 복합어로 끝나는 빈칸 차단 (A Q5 · B Q4 · B Q5 공통).
+    #        'twenty-second' 'well-known' 은 뒤에 꾸밀 명사가 따라오므로 거기서 끊으면
+    #        잘린 것이다. 실측: 'straight line of the twenty-second' — twenty-second
+    #        parallel 을 쪼갰다. (더) 미해결 목록에 오래 남아 있던 항목이다.
+    # (구) _s104 = 빈칸 끝 경계 목록을 검사기와 동기화. generator._BAD_EDGE 에 'both' 'each'
     #        'such' 'more' 같은 한정사가 빠져 있어 'region forces both' 처럼 뒤 명사가
     #        잘린 채 통과했다(검사기는 잡는데 코드는 안 잡아 어긋나 있었다).
     # (구) _s103 = Q3어휘가 Q5 빈칸 자리에서 단어를 고르던 문제 수정. 원인은 프롬프트가
@@ -1119,7 +1142,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s104"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s106"
 
 
 # ============ Supabase 캐시 ============
@@ -1635,6 +1658,17 @@ def generate_variation_a(
                 except Exception:
                     data["paragraphs_render"] = None
 
+            # ★ 답지용 한글 해석 (_s106) — 정답 주제문은 영어라 답지만 보고는
+            #   맞는지 알기 어렵다. 저장 직전 한 번만 만든다(캐시에 함께 들어간다).
+            try:
+                _tc = data.get("topic_correct")
+                _to = data.get("topic_options")
+                if (isinstance(_to, list) and isinstance(_tc, int)
+                        and 0 <= _tc < len(_to) and not data.get("topic_answer_kr")):
+                    data["topic_answer_kr"] = _ensure_kr(str(_to[_tc]))
+            except Exception as _ke:
+                print(f"[VAR][A][{pid}] 주제 해석 생성 예외({_ke})")
+
             errors = validate_a(data, en_text, pid, lenient=is_last)
             if not errors:
                 save_cached(cache_key, "variation_a", data)
@@ -2103,6 +2137,35 @@ def generate_variation_b(
                         continue
             except Exception as _ce:
                 print(f"[VAR][B][{pid}] Q3 자가검증 확인 예외({_ce})")
+
+            # ★ 답지용 한글 해석 + 요약문 영문 (_s106)
+            try:
+                _tc = data.get("topic_correct")
+                _to = data.get("topic_options")
+                if (isinstance(_to, list) and isinstance(_tc, int)
+                        and 0 <= _tc < len(_to) and not data.get("title_answer_kr")):
+                    data["title_answer_kr"] = _ensure_kr(str(_to[_tc]))
+
+                # Q3 요약문 — 정답을 채운 완성 영문 (답지에 한글 해석 위에 넣는다)
+                _st = str(data.get("summary_template") or "")
+                _so = data.get("summary_options")
+                _sc = data.get("summary_correct")
+                if (_st and isinstance(_so, list) and isinstance(_sc, int)
+                        and 0 <= _sc < len(_so) and len(_so[_sc]) >= 2):
+                    data["summary_template_en"] = (
+                        _st.replace("(A)", str(_so[_sc][0]), 1)
+                           .replace("(B)", str(_so[_sc][1]), 1))
+
+                # Q4 요약문 — 정답 구절을 채운 완성 영문
+                _bt = str(data.get("blank_summary_template") or "")
+                _ba, _bb = data.get("blank_A"), data.get("blank_B")
+                if _bt and _ba and _bb:
+                    data["blank_summary_template_en"] = (
+                        _bt.replace("(A)", str(_ba), 1).replace("(B)", str(_bb), 1))
+                elif data.get("full_summary"):
+                    data["blank_summary_template_en"] = str(data["full_summary"])
+            except Exception as _ke:
+                print(f"[VAR][B][{pid}] 답지 보강 예외({_ke})")
 
             errors = validate_b(data, en_text, pid, strict=not is_last, a_data=_a_data)
             if not errors:

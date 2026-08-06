@@ -1054,7 +1054,12 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s108 = 절대어 오답 차단을 코드로 (A Q1 주제 · B Q2 제목). 프롬프트에만 규칙이
+    # _s109 = Q3어휘 후보에서 방향 없는 명사를 더 막는다. 'audience' 가 -ence 어미라
+    #        _GRADABLE_SUFFIX 를 통과해 밑줄로 나갔다 — -ence 는 보통 추상명사지만
+    #        사람 집단은 방향이 없다. _CONCRETE 에 사람·집단·구체사물 90여 개 추가.
+    #        + 방향 있는 동사 60여 개를 _GRADABLE_HINT 에 추가 — 'dissuade' 가 -ade 로
+    #        끝나 어미 목록에 안 걸려 원래부터 거부되고 있었다.
+    # (구) _s108 = 절대어 오답 차단을 코드로 (A Q1 주제 · B Q2 제목). 프롬프트에만 규칙이
     #        있고 코드 검사가 없어 새어 나갔다 — 실측 'Why One Sensory Pathway Is
     #        Never Enough'. 대소문자를 무시한다(제목 선지는 각 단어가 대문자로 시작해
     #        'Never' 가 된다).
@@ -1200,7 +1205,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s108"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s109"
 
 
 # ============ Supabase 캐시 ============

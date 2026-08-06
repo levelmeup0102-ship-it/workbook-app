@@ -533,6 +533,47 @@ def _span_from_marks(paragraphs, mark, pid="?", lab="?") -> Optional[str]:
 _Q5_FAIL_REASONS = []
 
 
+# ════════════════════════════════════════════════════════════════
+# 절대어 오답 차단 (_s108)
+#   기출 28개 오답 중 all/always/never/only 를 쓴 것은 0개다. 절대어가 있으면
+#   학생이 지문을 안 읽고 그 선지를 소거한다 — 오답이 오답 구실을 못 한다.
+#   프롬프트에는 규칙이 있었지만 **코드 검사가 아예 없어** 새어 나갔다.
+#   실측: B Q2 오답 ④ 'Why One Sensory Pathway Is Never Enough' — 대문자 Never.
+#   ★ 대소문자를 무시한다. 제목 선지는 각 단어가 대문자로 시작해 'Never' 가 된다.
+# ════════════════════════════════════════════════════════════════
+_ABSOLUTE_WORDS = {
+    "all", "always", "never", "none", "nothing", "every", "everything",
+    "only", "cannot", "impossible", "entirely", "completely",
+    "absolutely", "totally", "invariably", "universally",
+}
+
+
+def absolute_word_in_option(opt: str) -> str:
+    """선지에 절대어가 있으면 그 단어, 없으면 빈 문자열. 대소문자 무시."""
+    t = " " + re.sub(r"[^A-Za-z ]", " ", str(opt or "").lower()) + " "
+    t = re.sub(r"\s+", " ", t)
+    for w in _ABSOLUTE_WORDS:
+        if f" {w} " in t:
+            return w
+    return ""
+
+
+def check_absolute_words(options, correct_idx, label, pid="?"):
+    """A Q1 주제 / B Q2 제목 오답에 절대어가 있는지. 정답은 안 본다
+    (정답에 필요한 말이면 쓸 수 있다)."""
+    out = []
+    if not isinstance(options, list):
+        return out
+    for k, o in enumerate(options):
+        if k == correct_idx:
+            continue
+        w = absolute_word_in_option(o)
+        if w:
+            out.append(f"[{pid}] {label} 오답 {k+1}번에 절대어 '{w}' — "
+                       f"지문을 안 읽고 소거된다. 절대어를 빼라: '{str(o)[:60]}'")
+    return out
+
+
 def _q5_text_of(raw, paragraphs, pid="?", lab="?"):
     """LLM이 준 blank_A/blank_B 에서 구절 문자열을 꺼낸다.
 
@@ -1013,7 +1054,13 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s107 = B Q4 pick_b_q4_blanks._locate 에 경계 검사 추가. _s105 에서 지목 경로
+    # _s108 = 절대어 오답 차단을 코드로 (A Q1 주제 · B Q2 제목). 프롬프트에만 규칙이
+    #        있고 코드 검사가 없어 새어 나갔다 — 실측 'Why One Sensory Pathway Is
+    #        Never Enough'. 대소문자를 무시한다(제목 선지는 각 단어가 대문자로 시작해
+    #        'Never' 가 된다).
+    #        + B Q3 결정 칸을 (A)↔(B) 번갈아 지정 — 3문항 전부 (B)가 결정 칸이면
+    #        학생이 "항상 B를 보면 된다"를 배운다.
+    # (구) _s107 = B Q4 pick_b_q4_blanks._locate 에 경계 검사 추가. _s105 에서 지목 경로
     #        (_span_from_marks_summary)에만 넣고 이 경로를 놓쳐 'When contradictory
     #        claims prioritize a more valuable prize' 처럼 종속접속사로 시작하는
     #        빈칸이 나갔다. B Q4 는 경로가 셋(지목·LLM 구절·코드 픽)인데 셋 다
@@ -1153,7 +1200,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s107"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s108"
 
 
 # ============ Supabase 캐시 ============
@@ -1680,6 +1727,14 @@ def generate_variation_a(
             except Exception as _ke:
                 print(f"[VAR][A][{pid}] 주제 해석 생성 예외({_ke})")
 
+            # ★ 절대어 오답 차단 (_s108) — 코드 검사가 없어 새어 나갔다.
+            _abs = check_absolute_words(data.get("topic_options"),
+                                        data.get("topic_correct"), "Q1 주제", pid)
+            if _abs and not is_last:
+                last_errors = _abs
+                print(f"[VAR][A][{pid}] 주제 오답에 절대어 → 재시도")
+                continue
+
             errors = validate_a(data, en_text, pid, lenient=is_last)
             if not errors:
                 save_cached(cache_key, "variation_a", data)
@@ -1779,6 +1834,24 @@ def generate_variation_b(
                     "     BAD: [['south-facing garden beds', 'flat stones from beach'], ...]\n"
                     "  7. All five (A) values must be DIFFERENT words; all five (B) values must be DIFFERENT"
                 )
+
+            # ★ (누) 결정 칸을 (A)↔(B) 번갈아 지정한다 (_s108).
+            #   프롬프트에 "한쪽만 흐리게"라고만 하면 LLM 이 매번 같은 쪽을 고른다
+            #   (실측: 3문항 전부 (B)가 결정 칸). 그러면 학생이 "항상 B를 보면 된다"를
+            #   배운다. 어휘 정답 자리와 같은 방식으로 강 안에서 번갈아 준다.
+            _seqb = re.findall(r"\d+", str(pid))
+            _seqb = int(_seqb[0]) if _seqb else 0
+            _startb = int(hashlib.md5(
+                (str(book) + "|" + str(unit) + "|decider").encode()
+            ).hexdigest()[:8], 16) % 2
+            _decider = "(B)" if (_startb + _seqb) % 2 == 0 else "(A)"
+            _blurred = "(A)" if _decider == "(B)" else "(B)"
+            user_msg += (
+                f"\n\n★★ 이 지문의 Q3 결정 칸은 **{_decider}** 다.\n"
+                f"  {_blurred} 는 흐리게 — 정답 + 근사 유의어 2개를 넣어 그 칸만으로는 못 고르게 한다.\n"
+                f"  {_decider} 는 선명하게 — 맞는 말이 하나뿐이고 그 유의어를 다른 행에 두지 마라.\n"
+                f"  ★ 매번 같은 칸이 결정 칸이면 학생이 '항상 그 칸만 보면 된다'를 배운다.\n"
+                f"    이 지문은 반드시 {_decider} 로 결정되게 하라.")
 
             raw = call_claude(SYSTEM_PROMPT_B, user_msg)
             data = extract_json_from_response(raw)
@@ -2177,6 +2250,16 @@ def generate_variation_b(
                     data["blank_summary_template_en"] = str(data["full_summary"])
             except Exception as _ke:
                 print(f"[VAR][B][{pid}] 답지 보강 예외({_ke})")
+
+            # ★ 절대어 오답 차단 (_s108)
+            #   실측: 'Why One Sensory Pathway Is Never Enough' — 대문자라 프롬프트 규칙을
+            #   빠져나갔고 코드 검사는 아예 없었다.
+            _abs = check_absolute_words(data.get("topic_options"),
+                                        data.get("topic_correct"), "Q2 제목", pid)
+            if _abs and not is_last:
+                last_errors = _abs
+                print(f"[VAR][B][{pid}] 제목 오답에 절대어 → 재시도")
+                continue
 
             errors = validate_b(data, en_text, pid, strict=not is_last, a_data=_a_data)
             if not errors:

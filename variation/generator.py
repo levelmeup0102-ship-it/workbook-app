@@ -880,6 +880,12 @@ def pick_b_q4_blanks(full_summary, llm_a: str = "", llm_b: str = "", min_w: int 
         span = span.rstrip(".,;:!?")
         if len(span.split()) < min_w:
             return None
+        # ★ 경계 검사 (_s107) — 여기엔 없었다. _s105 에서 _span_from_marks_summary
+        #   (지목 경로)에만 넣고 이 경로를 놓쳤다. LLM 이 준 구절이 그대로 통과해
+        #   'When contradictory claims prioritize a more valuable prize' 처럼
+        #   종속접속사로 시작하는 빈칸이 나갔다(뒤에 주절이 와야 하는 자리다).
+        if not _clean_boundary_ok(span, hn, strict=False):
+            return None
         return (i, i + len(pw) - 1, span)
 
     def _try(ca, cb):
@@ -1007,7 +1013,12 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s106 = 답지 보강 — A 정답 주제문·B 정답 제목의 한글 해석(topic_answer_kr /
+    # _s107 = B Q4 pick_b_q4_blanks._locate 에 경계 검사 추가. _s105 에서 지목 경로
+    #        (_span_from_marks_summary)에만 넣고 이 경로를 놓쳐 'When contradictory
+    #        claims prioritize a more valuable prize' 처럼 종속접속사로 시작하는
+    #        빈칸이 나갔다. B Q4 는 경로가 셋(지목·LLM 구절·코드 픽)인데 셋 다
+    #        같은 검사를 타야 한다.
+    # (구) _s106 = 답지 보강 — A 정답 주제문·B 정답 제목의 한글 해석(topic_answer_kr /
     #        title_answer_kr), B Q3·Q4 요약문의 '정답 채운 완성 영문'
     #        (summary_template_en / blank_summary_template_en) 을 저장 직전에 만든다.
     #        영문만 있으면 답지를 보고도 맞는지 판단하기 어렵다.
@@ -1142,7 +1153,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s106"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s107"
 
 
 # ============ Supabase 캐시 ============

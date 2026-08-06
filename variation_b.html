@@ -25,7 +25,23 @@ body {
   font-size: 9.5pt; color: #111; line-height: 1.55;
   -webkit-print-color-adjust: exact; print-color-adjust: exact;
 }
-.q-page { page-break-after: always; }
+.q-page {
+  page-break-after: always;
+  /* ★ MEMO 를 페이지 '바닥'에 고정하기 위한 세로 플렉스 (_로고·MEMO 정리).
+     A4 297mm - 위 여백 11mm - 아래 여백 14mm = 272mm 가 인쇄 영역 높이다.
+     이만큼을 최소 높이로 잡아두고 .memo-box 에 margin-top:auto 를 주면
+     남는 공간이 전부 MEMO 위로 밀려 MEMO 가 바닥에 붙는다.
+     지문 길이가 제각각이라 그냥 두면 MEMO 위치가 페이지마다 달라진다. */
+  display: flex;
+  flex-direction: column;
+  min-height: 272mm;
+  position: relative;        /* .page-no 의 기준점 */
+  /* ★ max-height + overflow:hidden 은 쓰지 않는다.
+     내용이 넘칠 때 문항이 잘려 안 보이게 되는데, 그건 페이지가 갈리는 것보다 나쁘다.
+     넘치면 페이지가 갈리고 MEMO 가 다음 장으로 밀린다 — 보기 흉하지만
+     문항은 다 보인다. 지금 지문 기준 여유가 25mm 쯤이라 실제로는 안 넘친다. */
+}
+.q-page > * { flex-shrink: 0; }
 .hdr {
   display: flex; justify-content: space-between; align-items: center;
   padding-bottom: 4px; border-bottom: 2px solid var(--purple); margin-bottom: 10px;
@@ -302,9 +318,24 @@ body {
    깨짐 방지: page-break-inside:avoid 로 페이지 경계에서 잘리지 않게 하고
    높이는 고정한다. 여백을 채우려고 늘리면 긴 지문에서 페이지가 넘친다. */
 .memo-box {
-  margin-top: 7px;
+  margin-top: auto;          /* ★ 남는 공간을 위로 밀어 MEMO 를 아래쪽에 붙인다 */
+  padding-top: 7px;          /* 위 문항과 최소 간격 */
+  /* ★ 바닥에 딱 붙이지 않는다 — 아래 8mm 는 페이지 번호 자리로 비워둔다. */
+  margin-bottom: 8mm;
   page-break-inside: avoid;
   break-inside: avoid;
+}
+
+/* 페이지 번호 자리 — MEMO 아래 8mm 를 비워둔다(.memo-box 의 margin-bottom).
+   번호는 여기서 넣지 않는다(따로 처리). 나중에 필요하면 .q-page 안 마지막에
+   <div class="page-no">…</div> 를 넣으면 이 스타일이 적용된다.
+   @page 의 @bottom-center 는 크롬이 지원하지 않아 요소로 놓아야 한다. */
+.page-no {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  text-align: center;
+  font-size: 8pt; color: #8A94A6;
+  letter-spacing: 1px;
 }
 .memo-hdr {
   font-size: 7.5pt; font-weight: bold; color: var(--accent);
@@ -314,7 +345,10 @@ body {
   border: 1px solid var(--border);
   border-radius: 5px;
   background: #fff;
-  height: 17mm;
+  /* 21mm — 라벨(약 4mm)·간격까지 더하면 블록 전체가 28mm 다.
+     긴 지문 기준 여유가 11mm 남는다(272 - 헤더10 - 지문95 - 문항120 - 28 - 번호8).
+     더 키우면 긴 지문에서 페이지가 갈린다. */
+  height: 21mm;
 }
 </style>
 </head>

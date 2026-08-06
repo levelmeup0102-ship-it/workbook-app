@@ -63,6 +63,21 @@ _GRADABLE_HINT = {
     "temporary", "similar", "different", "necessary", "optional", "abandon",
     "acquire", "gain", "remove", "restore", "create", "destroy", "accept", "reject",
     "modesty", "arrogance", "justifies", "insignificant", "important", "trivial",
+    # ★ 방향 있는 동사 (_s109) — 어미 목록으로는 안 잡힌다.
+    #   실측: 'dissuade' 가 -ade 로 끝나 _GRADABLE_SUFFIX 를 못 통과했다.
+    "dissuade", "persuade", "convince", "discourage", "encourage",
+    "conceal", "reveal", "expose", "hide", "ignore", "notice", "overlook",
+    "disregard", "value", "dismiss", "embrace", "resist", "sustain",
+    "maintain", "weaken", "strengthen", "expand", "shrink", "raise", "lower",
+    "improve", "worsen", "extend", "limit", "restrict", "release", "confine",
+    "capture", "release", "attract", "repel", "unite", "divide", "separate",
+    "combine", "simplify", "complicate", "clarify", "obscure", "confirm",
+    "deny", "affirm", "doubt", "trust", "suspect", "support", "oppose",
+    "advance", "delay", "accelerate", "slow", "begin", "cease", "continue",
+    "stop", "allow", "forbid", "permit", "block", "enable", "disable",
+    "succeed", "fail", "win", "lose", "rise", "fall", "grow", "decline",
+    "seek", "avoid", "pursue", "abandon", "adopt", "reject", "prefer",
+    "identify", "confuse", "recognize", "misread", "assert", "concede",
 }
 # 방향이 없는 구체 명사 — 무엇으로 바꿔도 논지가 뒤집히지 않는다.
 #   ★ '명사라서' 막는 게 아니다(_s97). 방향이 있는 명사는 정답이 된다 —
@@ -74,6 +89,29 @@ _CONCRETE = {
     "example", "examples", "point", "points", "kind", "kinds", "type", "types",
     "way", "ways", "day", "days", "year", "years", "world", "life", "lives",
     "group", "groups", "number", "numbers", "form", "forms", "area", "areas",
+    # ★ 사람·집단·역할 (_s109) — 방향이 없다. 무엇으로 바꿔도 논지가 안 뒤집힌다.
+    #   실측 실패: 'audience' 가 밑줄 자리로 나갔다. -ence 어미라 _GRADABLE_SUFFIX 를
+    #   통과했는데, -ence 는 보통 추상명사(difference, evidence)지 사람 집단이 아니다.
+    "audience", "audiences", "reader", "readers", "listener", "listeners",
+    "viewer", "viewers", "speaker", "speakers", "writer", "writers",
+    "author", "authors", "student", "students", "teacher", "teachers",
+    "scientist", "scientists", "researcher", "researchers", "expert", "experts",
+    "user", "users", "customer", "customers", "client", "clients",
+    "member", "members", "player", "players", "artist", "artists",
+    "child", "children", "adult", "adults", "man", "men", "woman", "women",
+    "nation", "nations", "country", "countries", "government", "governments",
+    "company", "companies", "industry", "industries", "market", "markets",
+    # ★ 구체 사물·장소·단위
+    "line", "lines", "story", "stories", "word", "words", "sentence", "sentences",
+    "page", "pages", "book", "books", "paper", "papers", "article", "articles",
+    "region", "regions", "border", "borders", "territory", "territories",
+    "land", "lands", "water", "waters", "city", "cities", "town", "towns",
+    "brain", "brains", "body", "bodies", "eye", "eyes", "hand", "hands",
+    "face", "faces", "head", "heads", "shape", "shapes", "color", "colors",
+    "system", "systems", "process", "processes", "method", "methods",
+    "result", "results", "reason", "reasons", "idea", "ideas", "topic", "topics",
+    "subject", "subjects", "field", "fields", "level", "levels", "step", "steps",
+    "stage", "stages", "period", "periods", "moment", "moments", "century",
 }
 
 

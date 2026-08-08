@@ -131,6 +131,13 @@ _DIRECTIONAL_NOUN = {
 def _looks_gradable(bare: str, toks: list, i: int) -> bool:
     """반의어 치환이 가능한 단어인가.
 
+    ★★ 이 함수는 **코드 픽 폴백(pick_vocab_slots)에서만** 쓴다 (_s109).
+      LLM 이 고른 것을 되짚어 판정하는 데는 쓰지 않는다 — 어미·목록으로는
+      'audience'(통과시키면 안 되는데 -ence 라 통과)와 'dissuade'(막으면 안 되는데
+      -ade 라 거부)를 둘 다 틀린다. 목록에 단어를 넣을수록 새는 곳이 늘어난다.
+      LLM 의 선택은 `antonym` 칸을 적게 해서 스스로 걸러내게 한다.
+      여기는 코드가 직접 고르는 자리라 어림짐작이라도 있어야 한다.
+
     ★ 기준은 품사가 아니라 '이 문맥에서 방향을 뒤집을 수 있는가'다(_s97).
       명사도 방향이 있으면 정답이 된다 — 2015 수능 30번 정답이 'concern' 이다.
       막아야 할 것은 방향 없는 구체명사(tasks, time, readers)뿐이다."""
@@ -228,14 +235,14 @@ def vocab_candidates(paragraphs, blank_spans=None, min_sent_gap=1) -> list:
     sent_no = 0
     for p_i, (_lab, text) in enumerate(paragraphs):
         toks = text.split()
-        b_lo, b_hi = blank_spans.get(p_i, (-1, -1))
+        _blocked = blank_spans.get(p_i) or set()   # ★ _s112: 마커 토큰 자리만
         for s_lo, s_hi, _s in _sentences(text):
             sent_no += 1
             # 기출 0/7 — 지문 첫 문장에는 밑줄을 넣지 않는다
             if p_i == 0 and sent_no == 1:
                 continue
             for i in range(s_lo, s_hi + 1):
-                if b_lo <= i <= b_hi:            # Q5 빈칸 자리 회피
+                if i in _blocked:                # Q5 빈칸 마커 자리 회피
                     continue
                 bare = re.sub(r"[^A-Za-z-]", "", toks[i]).lower()
                 if not bare or len(bare) < 5:
@@ -401,22 +408,20 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
     #   ★ '문장당 1개'는 권장 사항이라 오류로 올리지 않는다. generator는 오류가 하나라도
     #     있으면 재시도하므로, 경고만으로도 3회 재시도 끝에 관대 fallback으로 떨어진다.
     #     짧은 지문은 문장 수가 모자라 어쩔 수 없이 몰리기도 한다.
-    crowded = [ns for ns in sents.values() if len(ns) > 1]
-    if len(crowded) >= 3:      # 세 문장 이상에서 몰리면 설계가 잘못된 것
-        errors.append(f"[{pid}] Q3 어휘 밑줄이 여러 문장에 몰림 {crowded} — 지문 전체에 흩을 것")
+    #   ★★ _s110 — 이 검사를 뺐다. '흩어라'는 품질 판단이지 기계 확인이 아니다.
+    #     짧은 지문은 문장 수가 모자라 어쩔 수 없이 몰리는데 코드는 그걸 구분 못 한다.
+    #     프롬프트가 지고, 코드는 개입하지 않는다.
+    _ = sents  # (진단용으로만 남긴다)
 
-    # ★ 정답 자리는 형용사·동사여야 한다. 구체명사는 반의어가 없어 반전이 불가능하다.
+    # ★ '반대말을 댈 수 있는가'는 LLM 이 antonym 칸에 적어서 증명한다 (_s109).
+    #   코드가 어미·목록으로 되짚어 판정하면 양쪽으로 틀린다(audience 통과 / dissuade 거부).
+    #   여기서는 그 칸이 채워졌는지만 백스톱으로 본다.
     for it in vocab_items:
-        if not it.get("is_answer"):
-            continue
-        o, sh = str(it.get("original", "")), str(it.get("shown", ""))
-        if not answer_pos_ok(o) or not answer_pos_ok(sh):
-            _bad = o if not answer_pos_ok(o) else sh
+        _ant = str(it.get("antonym", "")).strip()
+        if not _ant:
             errors.append(
-                f"[{pid}] [CRITICAL] Q3 어휘 정답 자리 '{_bad}'는 반의어를 만들 수 없는 품사 — "
-                f"기준은 품사가 아니라 '반대말을 댈 수 있는가'다 — "
-                f"기출에도 명사 정답이 있다(concern, modesty, restrictions). "
-                f"방향을 가진 말로 고를 것")
+                f"[{pid}] Q3 어휘 {it.get('n')}번 '{it.get('original')}' 의 antonym 이 비었다 — "
+                f"반대말을 못 적을 단어는 밑줄 자리로 쓰지 마라")
 
     # 문두 접속부사·담화표지는 어휘 문제로 부적절 (기출 정답 품사: 형용사4·동사3, 부사 0)
     for it in vocab_items:
@@ -429,12 +434,12 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
 
     # 철자만 비슷한 단어로 바꿔치기 — 독해가 아니라 철자 암기를 묻게 된다
     for it in vocab_items:
-        o, sh = str(it.get("original", "")), str(it.get("shown", ""))
-        if o and sh and _looks_alike(o, sh):
-            kind = "정답" if it.get("is_answer") else "오답"
-            errors.append(
-                f"[{pid}] Q3 어휘 {it.get('n')}번({kind}) '{o}'→'{sh}'는 철자만 비슷함 — "
-                f"발음·철자 유사어 금지. 뜻이 반대(정답)이거나 같은(오답) 단어로 쓸 것")
+        # ★★ _s110 — 철자 유사 판정을 코드에서 뺐다.
+        #   difflib 유사도로 재다 보니 'inhabitable/uninhabitable'(_s87), 'modesty'(_s90)
+        #   같은 정상 치환을 반복해서 오탐했다. '철자만 비슷한가 뜻이 통하는가'는
+        #   의미 판단이라 코드가 못 한다. 프롬프트가 진다.
+        #   ★ 형태로 판정 가능한 것(부정 접두사)만 아래에서 계속 본다.
+        pass
 
     # ★ 정답 자리에 부정 접두사 반의어를 쓰면 안 된다 (_s102)
     #   'inhabitable' → 'uninhabitable' 은 철자가 거의 같아 학생이 논지를 안 읽고
@@ -481,10 +486,9 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
     for it in vocab_items:
         # ★ 백스톱은 -s 만 본다(_s100). -ing/-ed 는 형태소로 판정이 안 돼
         #   'vast'→'overwhelming' 같은 정상 치환을 CRITICAL 로 죽인다.
-        _sm = shape_mismatch(str(it.get("original", "")), str(it.get("shown", "")),
-                             strict=False)
-        if _sm:
-            errors.append(f"[{pid}] [CRITICAL] Q3 어휘 {it.get('n')}번 형태 불일치 — {_sm}")
+        # ★★ _s111 — 어미 형태 백스톱을 뺐다. 'exciting'→'compelling' 같은
+        #   정상 치환을 오탐한다. LLM 이 sentence 칸에 문장을 써서 스스로 검증한다.
+        pass
 
     # 같은 단어가 두 번 밑줄 — 기출은 5개가 전부 다른 단어다
     #   ★ 굴절형도 같은 단어로 본다(_s97). 'depends' 와 'depend' 는 학생 눈에 같은 말이라
@@ -525,15 +529,26 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
 def blank_token_spans(paragraphs) -> dict:
     """Q5 빈칸 마커(<BLANK_A>/<BLANK_B>)가 차지한 토큰 위치를 찾는다.
 
-    마킹된 paragraphs에서 마커는 토큰 1개다. 밑줄이 그 자리를 덮으면
-    빈칸 안에 밑줄이 들어가 문항이 깨지므로, 앞뒤 1토큰까지 여유를 둔다."""
+    ★★ _s112 — 금지 구역을 **마커 토큰 그 자리로만** 좁혔다.
+      옛 코드는 `(min(hits)-1, max(hits)+1)` 로 잡았는데 문제가 둘이었다.
+        (1) 두 마커가 같은 단락에 있으면 **그 사이 전체**가 막힌다.
+            `the brain <BLANK_A> ... the vast majority ... <BLANK_B> ...` 에서
+            중간의 'majority' 까지 금지 구역이 됐다(실측: A 01번이 이걸로 죽었다).
+        (2) 마커 양옆 1토큰도 막았는데 그럴 이유가 없다. 마커는 토큰 하나고
+            그 옆은 학생에게 그대로 보이는 지문이다.
+      Q5 빈칸 안 단어는 **애초에 지문에서 사라져** LLM 에게 안 보인다
+      (프롬프트가 [[[여기는 Q5 빈칸]]] 으로 가린다). 그러니 겹칠 일이 거의 없고,
+      막아야 할 것은 마커 자체를 밑줄로 잡는 경우뿐이다.
+
+    반환: {para_index: set(마커 토큰 위치)}
+    """
     spans = {}
     for p_i, (_lab, text) in enumerate(paragraphs):
         toks = text.split()
         hits = [i for i, w in enumerate(toks)
                 if "<BLANK_A>" in w or "<BLANK_B>" in w]
         if hits:
-            spans[p_i] = (min(hits) - 1, max(hits) + 1)
+            spans[p_i] = set(hits)
     return spans
 
 
@@ -846,9 +861,9 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
 
         # Q5 빈칸 자리를 덮으면 문항이 깨진다
         if blank_spans:
-            b_lo, b_hi = blank_spans.get(p, (-1, -1))
-            if b_lo <= i <= b_hi:
-                return _fail(f"{_no}번 '{orig}' 가 Q5 빈칸 자리와 겹침 (para={p} idx={i})")
+            if i in (blank_spans.get(p) or set()):
+                return _fail(f"{_no}번 '{orig}' 가 Q5 빈칸 마커 자리 (para={p} idx={i}) — "
+                             f"그 자리 단어는 이미 사라졌다. 다른 단어를 고를 것")
         if "<BLANK" in orig:
             return _fail(f"{_no}번이 빈칸 마커 자체를 잡음")
 
@@ -869,11 +884,22 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
                          f"논리 흐름 표지라 문맥 판단 대상이 아니다. "
                          f"밑줄은 방향을 가진 형용사·동사·명사에만 친다")
 
-        # ★ 정답 자리는 반대말을 댈 수 있는 단어여야 한다 (_s103)
-        if it.get("is_answer") and not answer_pos_ok(orig):
-            return _fail(f"{_no}번(정답) '{orig}' 는 반대말을 댈 수 없는 단어 — "
-                         f"방향이 있는 말을 고를 것 "
-                         f"(significant/undermines/abandon/concern 처럼)")
+        # ★★ '반대말을 댈 수 있는가'는 의미 판단이다 — 코드가 못 한다 (_s109).
+        #   옛 코드는 answer_pos_ok 로 어미·목록을 보고 되짚어 판정했는데 양쪽으로 틀렸다:
+        #     'audience'  → -ence 어미라 통과 (사람 집단이라 방향이 없는데)
+        #     'dissuade'  → -ade 라 목록에 없어 거부 (방향이 명백한 동사인데)
+        #   목록에 단어를 넣을수록 새는 곳이 늘어난다 — audience 넣으면 spectator 가 남는다.
+        #   → **LLM 이 다섯 자리 전부에 반대말을 적게 하고, 코드는 적혔는지만 본다.**
+        #     못 적는 자리는 LLM 이 스스로 버린다. 의미 판단은 LLM, 확인은 코드.
+        _ant = str(it.get("antonym", "")).strip()
+        if not _ant:
+            return _fail(f"{_no}번 '{orig}' 의 antonym 이 비었다 — "
+                         f"반대말을 못 적을 단어는 밑줄 자리로 쓰지 마라 "
+                         f"(audience/story/region 처럼 방향 없는 말). 다른 문장을 고를 것")
+        if re.sub(r"[^a-z]", "", _ant.lower()) == re.sub(r"[^a-z]", "", orig.lower()):
+            return _fail(f"{_no}번 antonym 이 원문어와 같다 ('{orig}') — 반대말을 적어라")
+        if len(_ant.split()) > 1:
+            return _fail(f"{_no}번 antonym 이 {len(_ant.split())}단어 '{_ant}' — 한 단어로 적어라")
 
         # ★ 부정 접두사 붙이기·떼기 금지 (_s102)
         #   정답 자리 — 철자로 답이 새어나간다 ('inhabitable'→'uninhabitable')
@@ -888,9 +914,32 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
                          f"('{_pfx}-')를 붙이거나 뗀 것 — {_why}")
 
         # ── ★ 형태 검사 (_s97) — 고치지 않고 사유만 돌려준다 ──
-        _sm = shape_mismatch(orig, _shown, strict=strict)
-        if _sm:
-            return _fail(f"{_no}번 형태 불일치 — {_sm}. 지문 형태 그대로 쓸 것")
+        # ★★ 어미로 형태를 판정하지 않는다 (_s111).
+        #   'exciting'→'compelling', 'interesting.'→'boring.', 'desirable'→'coveted'
+        #   전부 정상 치환인데 -ing/-ed 어미 때문에 오탐했다. 형태소로는 굴절형인지
+        #   어근이 그런 형용사인지 구분이 안 된다.
+        #   → LLM 이 `sentence` 칸에 치환 문장을 써서 낸다. 비문이면 써 보는 순간 보인다.
+        #   코드는 그 문장이 **원문 문장과 한 단어만 다른가**만 대조한다(기계 확인).
+        _sent = re.sub(r"\s+", " ", str(it.get("sentence", "")).strip())
+        if _sent:
+            _src = paragraphs[p][1]
+            _m = re.search(r"[^.!?]*" + re.escape(orig) + r"[^.!?]*[.!?]?", _src)
+            if _m:
+                _orig_sent = re.sub(r"\s+", " ", _m.group(0)).strip()
+                _a = _orig_sent.replace(orig, "\x01", 1).split()
+                _b = _sent.replace(_shown, "\x01", 1).split()
+                if len(_a) == len(_b):
+                    _diff = [k for k, (x, y) in enumerate(zip(_a, _b)) if x != y]
+                    if _diff:
+                        return _fail(
+                            f"{_no}번 sentence 가 원문과 {len(_diff)}군데 다르다 — "
+                            f"바꾼 단어 하나 말고는 원문 그대로여야 한다. "
+                            f"원문: '{_orig_sent[:60]}'")
+                else:
+                    return _fail(f"{_no}번 sentence 의 단어 수가 원문과 다르다 "
+                                 f"({len(_b)} vs {len(_a)}) — 단어를 넣거나 빼지 마라")
+
+        # ★ 대소문자만 코드가 본다 — 문장 첫 단어를 소문자로 내면 문장이 깨진다.
         _cm = _cap_mismatch(orig, _shown)
         if _cm:
             return _fail(f"{_no}번 대소문자 불일치 — {_cm}")

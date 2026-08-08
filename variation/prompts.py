@@ -1119,16 +1119,18 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
         "      품사가 아니라 '이 문맥에서 방향을 뒤집을 수 있는가'가 기준이다.\n"
         "  · Replace it with a word of OPPOSITE direction — not a random word, not a\n"
         "    near-synonym. The sentence must still read grammatically.\n"
-        "  · ★★ 부정 접두사만 붙여서 반의어를 만들지 마라. **어근이 다른 말**을 써라.\n"
-        "    [X] inhabitable → uninhabitable   [X] possible → impossible\n"
-        "    [X] regular → irregular           [X] agree → disagree\n"
-        "    철자가 거의 같으면 학생이 논지를 안 읽고 'un- 이 붙었네' 로 찍는다.\n"
-        "    독해를 묻는 문항이 철자 찾기가 된다.\n"
-        "    [O] inhabitable → barren    [O] possible → futile\n"
-        "    [O] regular → erratic       [O] agree → object\n"
-        "    ★★ 오답 자리에서도 접두사를 붙이거나 떼지 마라. 뜻이 뒤집힌다.\n"
+        "  · ★★ **철자로 답이 보이면 안 된다.** 정답 자리의 반의어는 원문어와\n"
+        "    글자가 확연히 달라야 한다. 학생이 논지를 안 읽고 눈으로 찾으면 실패다.\n"
+        "    [X] inhabitable → uninhabitable   ('un-' 이 붙은 게 바로 보인다)\n"
+        "    [X] possible → impossible         [X] regular → irregular\n"
+        "    [X] agree → disagree              [X] likely → unlikely\n"
+        "    [O] inhabitable → barren          [O] possible → futile\n"
+        "    [O] regular → erratic             [O] agree → object\n"
+        "    ★ 어근이 다른 말을 쓰면 자연히 해결된다.\n"
+        "    ★★ 오답 자리(①②④⑤)에는 **절대 반의어를 넣지 마라.** 정답이 둘이 된다.\n"
+        "      그 자리의 antonym 칸에 적은 말을 shown 에 그대로 옮기면 안 된다는 뜻이다.\n"
         "      실측 실패: 원문 'inhabitable' 을 오답 자리에서 'habitable' 로 보여줬다\n"
-        "      — in- 을 떼어 반대 뜻이 됐다. 오답은 반드시 **같은 뜻**이어야 한다.\n"
+        "      — in- 을 떼어 반대 뜻이 됐다.\n"
         "      [X] inhabitable → habitable   [O] inhabitable → livable\n"
         "  · ★ 정답 자리의 치환어도 나머지 넷과 같은 수준·같은 문체여야 한다.\n"
         "    정답만 유난히 어렵거나 쉬우면 학생이 내용을 안 읽고 그것부터 찍는다.\n"
@@ -1264,20 +1266,16 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
         "  · para 와 idx 를 적기 전에, 그 단락을 공백으로 끊어 세어 확인하라.\n"
         "    idx 가 틀려도 코드가 근처에서 찾아 보정하지만, original 자체가 지문에 없으면\n"
         "    찾을 방법이 없다.\n"
-        "  · ★★ shown 을 넣은 **문장을 실제로 써 보라.** 출력의 `sentence` 칸에 적는다.\n"
-        "    형태가 어긋나면 써 보는 순간 비문이 눈에 보인다 — 어미를 외울 일이 아니다.\n"
+        "  · ★★ **그 자리에 넣었을 때 문장이 읽히는가**를 머릿속으로 확인하라.\n"
+        "    어휘 문제는 단어 하나만 바꾸는 것이다. 그 하나가 문장을 깨면 안 된다.\n"
         "      지문 'the brain depends on external features'\n"
-        "        [O] relies → the brain relies on external features   읽힌다\n"
-        "        [X] rely   → the brain rely on external features     수일치가 깨진다\n"
+        "        [O] relies   the brain relies on ...   읽힌다\n"
+        "        [X] rely     the brain rely on ...     수일치가 깨진다\n"
         "      지문 'It is extraordinarily adapted to a changing world'\n"
-        "        [O] adjusted → It is extraordinarily adjusted to ...  읽힌다\n"
-        "        [X] adjust   → It is extraordinarily adjust to ...    비문\n"
-        "    ★ 반대로, 어미가 달라도 읽히면 정상이다.\n"
-        "      지문 'no matter how exciting it was'\n"
-        "        [O] compelling → no matter how compelling it was      읽힌다\n"
-        "      (exciting 은 -ing 로 끝나지만 형용사다. compelling 도 형용사라 맞는다.\n"
-        "       어미만 보면 '다른 형태'로 보이지만 문장은 멀쩡하다)\n"
-        "    ★ `sentence` 를 적을 수 없거나 어색하면 그 단어를 바꿔라.\n"
+        "        [O] adjusted   [X] adjust   (is + 과거분사 자리다)\n"
+        "    ★ 어미가 달라 보여도 읽히면 정상이다.\n"
+        "      지문 'no matter how exciting it was'  →  [O] compelling\n"
+        "      (exciting 도 compelling 도 형용사다. -ing 로 끝난다고 동사가 아니다)\n"
         "  · 원문에 구두점이 붙어 있으면 치환어에도 붙인다\n"
         "    ('uncomfortable.' → 'disconcerted.').\n"
         "  · ★★ 구동사(phrasal verb)의 동사만 바꾸지 마라. 뒤에 남은 전치사가 어긋난다.\n"
@@ -1332,12 +1330,13 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
            "     학생이 내용을 안 읽고 그것부터 찍는다.\n")
         + "\n"
 
+        "★★ 다섯 항목 **전부** antonym 을 채워라. 하나라도 비면 버려진다.\n"
+        "   그 단어의 반대말 한 단어. 못 적으면 그 자리를 쓰지 마라.\n\n"
         '{"vocab_items": [\n'
         '   {"n": 1, "para": 0, "idx": 12, "original": "<exact word in passage>",\n'
         '    "antonym": "<이 단어의 반대말 한 단어. 못 적겠으면 이 자리를 쓰지 마라>",\n'
-        '    "shown": "<synonym>",\n'
-        '    "sentence": "<shown 을 넣은 그 문장을 그대로. 읽어서 어색하면 단어를 바꿔라>",\n'
-        '    "is_answer": false, "why": "<why this slot matters>"},\n'
+        '    "shown": "<synonym>", "is_answer": false,\n'
+        '    "why": "<why this slot matters>"},\n'
         '   {"n": 2, "para": 1, "idx": 5,  "original": "...", "antonym": "...",\n'
         '    "shown": "...", "is_answer": false, "why": "..."},\n'
         '   {"n": 3, "para": 1, "idx": 22, "original": "...", "antonym": "<ANTONYM>",\n'

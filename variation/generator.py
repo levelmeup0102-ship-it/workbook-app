@@ -309,6 +309,17 @@ def _strip_edge_punct(s: str) -> str:
 
 # (더) 빈칸 경계 어휘 — 시작/끝 공통 사용
 _BAD_EDGE = {"the","a","an","of","for","to","in","on","at","by","with","from","into","onto",
+             # ★ 전치사 보강 (_s116) — 절반이 빠져 있었다.
+             #   실측: 'Rival claims over' 가 통과했다('over' 가 목록에 없었다).
+             #   전치사로 끝나면 목적어가 빈칸 밖에 남아 갈린다.
+             # ★ 부사로도 쓰여 문장을 끝맺을 수 있는 말은 뺀다 (_s116) —
+             #   around / off / near / past / behind 등. 기출
+             #   'tracks pretty closely with how she gets around' 가 정답이다.
+             "over","under","above","below","about","through","across",
+             "between","among","during","against","toward","towards","within",
+             "without","beside","besides","upon","until","till",
+             "along","amid","despite","except","inside","outside",
+             "per","since","throughout","underneath","unlike","versus","via",
              "and","or","but","that","which","who","whose","whom","as","than","is","are",
              "was","were","be","been","being","this","these","those","their","her","his","its",
              "our","your","my","not","no","so","if","when","while","because",
@@ -363,10 +374,15 @@ def _clean_boundary_ok(phrase: str, full_text: str, strict: bool = True) -> bool
     #   ※ 하이픈이 있어도 홀로 쓰는 말은 예외로 둔다(self-esteem, one-of-a-kind 등 명사).
     _HYPHEN_OK_END = {"one-of-a-kind", "self-esteem", "well-being", "know-how",
                       "trade-off", "by-product", "side-effect", "vice-versa"}
-    bad_start = (_BAD_START_MIN | {"they", "we", "he", "she", "it", "you", "i",
-                                   "have", "has", "had", "do", "does", "did",
-                                   "may", "might", "can", "could", "will",
-                                   "would", "shall", "should", "must"}
+    # ★ strict=True 는 **코드가 기계적으로 잘라내는 경로**용이다 (_s116).
+    #   거기엔 '기출 30%가 기능어로 시작한다'는 근거가 없다 — 그 통계는 LLM 이
+    #   논지를 보고 고른 자리 얘기다. 코드가 자를 때는 전치사·관사로 시작하면
+    #   앞이 잘린 조각이 된다. 실측: 'over a coastal'(전치사 시작)이 나갔다.
+    #   strict=False 는 LLM 픽용이라 접속사·관계사만 막는다(기출 근거 그대로).
+    bad_start = (_BAD_EDGE | {"they", "we", "he", "she", "it", "you", "i",
+                              "have", "has", "had", "do", "does", "did",
+                              "may", "might", "can", "could", "will",
+                              "would", "shall", "should", "must"}
                  ) if strict else _BAD_START_MIN
     ws = phrase.split()
     if not ws:
@@ -779,7 +795,13 @@ def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?
 
 
 def _b_candidates(hn: str, min_w: int = 4, max_w: int = 7) -> list:
-    """(더) 2단계: _q5_candidates와 동일. 깐깐한 경계로 먼저, 0개면 완화."""
+    """(더) 2단계: _q5_candidates와 동일. 깐깐한 경계로 먼저, 0개면 완화.
+
+    ★ 완화(strict=False)는 **시작 경계만** 푼다. 끝은 어느 모드에서나 _BAD_EDGE 로
+      엄격히 본다 — 전치사·관사로 끝나면 목적어가 빈칸 밖에 남아 갈리기 때문이다.
+      실측: 'over a coastal' 이 완화 모드로 나왔다('over' 가 _BAD_EDGE 에 없어서였고,
+      _s116 에서 전치사 30여 개를 채웠다).
+    """
     spans = [(m.start(), m.end()) for m in re.finditer(r'\S+', hn)]
     toks = [hn[s:e] for s, e in spans]
     n = len(toks)
@@ -925,7 +947,11 @@ def pick_b_q4_blanks(full_summary, llm_a: str = "", llm_b: str = "", min_w: int 
         #   (지목 경로)에만 넣고 이 경로를 놓쳤다. LLM 이 준 구절이 그대로 통과해
         #   'When contradictory claims prioritize a more valuable prize' 처럼
         #   종속접속사로 시작하는 빈칸이 나갔다(뒤에 주절이 와야 하는 자리다).
-        if not _clean_boundary_ok(span, hn, strict=False):
+        # ★ 시작도 엄격히 본다 (_s116). 완화 모드는 '기출 30%가 기능어로 시작'이라는
+        #   근거로 둔 것인데, 그건 **LLM 이 논지를 보고 고른 자리**에 해당한다.
+        #   여기는 코드가 요약문에서 기계적으로 잘라내는 경로라 그 근거가 없다 —
+        #   실측: 'over a coastal' 처럼 전치사로 시작하는 조각이 나왔다.
+        if not _clean_boundary_ok(span, hn, strict=True):
             return None
         return (i, i + len(pw) - 1, span)
 
@@ -1054,7 +1080,16 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s115 = 부정 접두사 판정을 antonym 대조로 바꿨다. 'un-/in- 이 붙었나'는 형태로
+    # _s116 = _BAD_EDGE 에 전치사 30여 개를 채웠다. 'over' 'under' 'about' 'through'
+    #        'between' 등 절반이 빠져 있어 'Rival claims over' 가 통과했다 —
+    #        전치사로 끝나면 목적어가 빈칸 밖에 남아 갈린다.
+    #        + pick_b_q4_blanks._locate 를 strict=True 로. 완화 모드는 '기출 30%가
+    #        기능어로 시작'이라는 근거로 둔 것인데, 그건 LLM 이 논지를 보고 고른 자리
+    #        얘기다. 코드가 요약문에서 기계적으로 잘라내는 경로엔 그 근거가 없다.
+    # (구) _s116 참고 = _BAD_EDGE 에 전치사 30여 개를 채웠다. 'over' 'under' 'about' 'through'
+    #        'between' 등 절반이 빠져 있어 'Rival claims over' 가 통과했다 —
+    #        전치사로 끝나면 목적어가 빈칸 밖에 남아 갈린다.
+    # (구) _s115 = 부정 접두사 판정을 antonym 대조로 바꿨다. 'un-/in- 이 붙었나'는 형태로
     #        보이지만 실제 판단은 '철자로 답이 새는가'라 의미 판단이고, 진짜 문제의
     #        일부만 잡았다 — 오답에 inhabitable→habitable 은 잡히는데
     #        significant→trivial 은 못 잡는다(둘 다 오답 자리에 반의어를 넣은 것).
@@ -1255,7 +1290,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s115"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s116"
 
 
 # ============ Supabase 캐시 ============

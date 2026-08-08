@@ -320,6 +320,12 @@ _BAD_EDGE = {"the","a","an","of","for","to","in","on","at","by","with","from","i
              "without","beside","besides","upon","until","till",
              "along","amid","despite","except","inside","outside",
              "per","since","throughout","underneath","unlike","versus","via",
+             # ★ 종속접속사·관계사·의문사 보강 (_s118) — 절반이 빠져 있었다.
+             #   실측: 'conventions determine whether' 가 통과했다.
+             #   이런 말로 끝나면 뒤에 와야 할 절이 빈칸 밖에 남아 갈린다.
+             "whether","although","though","unless","where","how","why","what",
+             "whom","whose","before","after","nor","yet","whereas","wherever",
+             "whenever","whatever","whoever","lest","provided","supposing",
              "and","or","but","that","which","who","whose","whom","as","than","is","are",
              "was","were","be","been","being","this","these","those","their","her","his","its",
              "our","your","my","not","no","so","if","when","while","because",
@@ -565,8 +571,16 @@ _ABSOLUTE_WORDS = {
 
 
 def absolute_word_in_option(opt: str) -> str:
-    """선지에 절대어가 있으면 그 단어, 없으면 빈 문자열. 대소문자 무시."""
-    t = " " + re.sub(r"[^A-Za-z ]", " ", str(opt or "").lower()) + " "
+    """선지에 절대어가 있으면 그 단어, 없으면 빈 문자열. 대소문자 무시.
+
+    ★ 하이픈 복합어 안의 것은 세지 않는다 (_s119).
+      'One-Size-Fits-All' 은 관용구지 절대어가 아니다 — 'all' 이 들어 있다고
+      막으면 정상 제목이 거부된다(실측 1건).
+      'all-in-one' 'know-it-all' 'once-and-for-all' 도 마찬가지다."""
+    _raw = str(opt or "")
+    # 하이픈으로 이어진 덩어리는 통째로 지우고 본다
+    _raw = re.sub(r"\b[A-Za-z]+(?:-[A-Za-z]+)+\b", " ", _raw)
+    t = " " + re.sub(r"[^A-Za-z ]", " ", _raw.lower()) + " "
     t = re.sub(r"\s+", " ", t)
     for w in _ABSOLUTE_WORDS:
         if f" {w} " in t:
@@ -1080,7 +1094,17 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s117 = antonym 지시를 프롬프트 맨 앞으로 올리고 출력 예시를 실물로 바꿨다.
+    # _s119 = normalize_llm_vocab 이 반환값에 antonym 을 안 실어서 validate_vocab 이
+    #        매번 "antonym 이 비었다"를 냈다. normalize 는 통과했는데 뒤에서 죽는
+    #        구조라 A 3/3 이 3회씩 전부 관대 모드로 떨어졌다(실측 40건).
+    #        지문 탓도 LLM 탓도 아니었다 — 넘기는 과정에서 필드를 흘린 것이다.
+    #        16강이 통과했던 건 그때 이 검사가 배포 전이었기 때문이다.
+    #        + 절대어 검사에서 하이픈 복합어 제외 — 'One-Size-Fits-All' 은 관용구다.
+    # (구) _s118 = _BAD_EDGE 에 종속접속사·관계사·의문사를 채웠다. whether/although/though/
+    #        unless/where/how/why/what/before/after/nor/yet 등 절반이 빠져 있어
+    #        'conventions determine whether' 가 통과했다 — 뒤에 와야 할 절이
+    #        빈칸 밖에 남아 갈린다. _s116(전치사 보강)과 같은 종류의 누락이다.
+    # (구) _s117 = antonym 지시를 프롬프트 맨 앞으로 올리고 출력 예시를 실물로 바꿨다.
     #        13,800자 프롬프트 뒤쪽(93~99% 지점)에만 있고 예시가 "antonym": "..." 라
     #        LLM 이 통째로 무시했다 — A 3/3 이 3회씩 전부 antonym 누락으로 실패해
     #        관대 모드로 떨어졌다(실측 세 지문 연속).
@@ -1296,7 +1320,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s117"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s119"
 
 
 # ============ Supabase 캐시 ============

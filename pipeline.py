@@ -2659,6 +2659,31 @@ def _split_sentences_chunks(sentences: list, max_per_page: int = 8) -> list:
     return chunks
 
 # ============================================================
+# Stage 6 빈칸 밑줄 — 고정폭 span 치환
+#   blank_passage 안의 글자 언더바(____)를 고정폭 밑줄 span으로 교체.
+#   - display:inline-block → 줄 끝에 안 들어가면 밑줄 통째로 다음 줄로 내려감
+#     (중간에서 안 쪼개짐 → 양측정렬 안 깨짐)
+#   - border-bottom → 언더바 대신 밑줄. 폭은 BLANK6_WIDTH로 고정.
+#   ★ BLANK6_WIDTH 값은 추정치. PDF 확인 후 숫자만 ± 조정.
+# ============================================================
+BLANK6_WIDTH = "120px"
+
+try:
+    from markupsafe import Markup as _Markup
+except Exception:
+    _Markup = None
+
+def _blankify(text: str):
+    if not text:
+        return text
+    span = (f'<span style="display:inline-block;width:{BLANK6_WIDTH};'
+            f'border-bottom:1px solid #333;vertical-align:text-bottom;'
+            f'margin:0 2px;"></span>')
+    out = re.sub(r'_{2,}', span, text)
+    return _Markup(out) if _Markup else out
+
+
+# ============================================================
 # 전체 데이터 → 템플릿 변수로 변환
 # ============================================================
 def merge_to_template_data(passage: str, meta: dict, all_steps: dict) -> dict:
@@ -2700,7 +2725,7 @@ def merge_to_template_data(passage: str, meta: dict, all_steps: dict) -> dict:
         "insert_passage": s2.get("insert_passage", ""),
         "full_order_blocks": s2.get("full_order_blocks", []),
         # Lv.6 빈칸
-        "blank_passage": s3.get("blank_passage", ""),
+        "blank_passage": _blankify(s3.get("blank_passage", "")),
         "blank_options": s3.get("blank_options", []),
         # Lv.7 주제
         "topic_passage": s4.get("topic_passage", ""),

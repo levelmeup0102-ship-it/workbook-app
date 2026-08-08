@@ -1065,6 +1065,19 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
              "  [[[...]]] 밖에 **실제로 인쇄돼 있는 단어** 중에서만 다섯을 골라라.\n")
     return (
         "Read the passage and design a 수능 30번 vocabulary question.\n\n"
+        "════════════════════════════════════════════════════\n"
+        "★★★ 가장 먼저 읽어라 — 다섯 항목 **전부** `antonym` 칸을 채워야 한다.\n"
+        "   하나라도 비면 그 문항은 통째로 버려진다. 실측: 세 지문 연속 전멸했다.\n"
+        "   antonym = 그 단어(original)의 **반대말 한 단어**.\n"
+        "     exciting → dull      convince → dissuade    rely → disregard\n"
+        "     adapted  → unsuited  internal → external    greater → lesser\n"
+        "   ★ 오답 자리(4개)도 적는다. 시험지에 나가지 않는다 —\n"
+        "     '이 자리가 반대말을 댈 수 있는 자리인가'를 확인하는 용도다.\n"
+        "   ★ 못 적겠으면(audience / story / region 처럼) **그 단어를 고르지 마라.**\n"
+        "     다른 문장에서 다른 단어를 고른다.\n"
+        "   ★ 정답 자리 하나만 antonym 을 shown 에 그대로 옮긴다.\n"
+        "     나머지 넷은 antonym 을 적어만 두고 shown 에는 **동의어**를 쓴다.\n"
+        "════════════════════════════════════════════════════\n\n"
         "[PASSAGE]\n" + body + avoid + "\n\n"
 
         "## 무엇을 만드는가\n"
@@ -1333,22 +1346,25 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
         "★★ 다섯 항목 **전부** antonym 을 채워라. 하나라도 비면 버려진다.\n"
         "   그 단어의 반대말 한 단어. 못 적으면 그 자리를 쓰지 마라.\n\n"
         '{"vocab_items": [\n'
-        '   {"n": 1, "para": 0, "idx": 12, "original": "<exact word in passage>",\n'
-        '    "antonym": "<이 단어의 반대말 한 단어. 못 적겠으면 이 자리를 쓰지 마라>",\n'
-        '    "shown": "<synonym>", "is_answer": false,\n'
-        '    "why": "<why this slot matters>"},\n'
-        '   {"n": 2, "para": 1, "idx": 5,  "original": "...", "antonym": "...",\n'
-        '    "shown": "...", "is_answer": false, "why": "..."},\n'
-        '   {"n": 3, "para": 1, "idx": 22, "original": "...", "antonym": "<ANTONYM>",\n'
-        '    "shown": "<위 antonym 을 그대로 — 정답 자리라 반대말이 실제로 들어간다>",\n'
+        '   {"n": 1, "para": 0, "idx": 12, "original": "exciting",\n'
+        '    "antonym": "dull",  "shown": "thrilling", "is_answer": false,\n'
+        '    "why": "도입부의 흡인력을 말하는 자리"},\n'
+        '   {"n": 2, "para": 1, "idx": 5,  "original": "internal",\n'
+        '    "antonym": "external", "shown": "intrinsic", "is_answer": false,\n'
+        '    "why": "..."},\n'
+        '   {"n": 3, "para": 1, "idx": 22, "original": "convince",\n'
+        '    "antonym": "dissuade",\n'
+        '    "shown": "dissuade",\n'
         '    "is_answer": true,\n'
         '    "evidence_type": "next_sentence | same_sentence | thesis",\n'
         '    "evidence": "<quote the exact words that prove the contradiction>",\n'
         '    "why": "<왜 틀렸는지 한 줄. 40자 이내. 예: \'초반에 주의를 끌면 독자를 설득한다는 인과와 정반대\'>"},\n'
-        '   {"n": 4, "para": 2, "idx": 8,  "original": "...", "antonym": "...",\n'
-        '    "shown": "...", "is_answer": false, "why": "..."},\n'
-        '   {"n": 5, "para": 2, "idx": 30, "original": "...", "antonym": "...",\n'
-        '    "shown": "...", "is_answer": false, "why": "..."}\n'
+        '   {"n": 4, "para": 2, "idx": 8,  "original": "adapted",\n'
+        '    "antonym": "unsuited", "shown": "adjusted", "is_answer": false,\n'
+        '    "why": "..."},\n'
+        '   {"n": 5, "para": 2, "idx": 30, "original": "greater",\n'
+        '    "antonym": "lesser", "shown": "larger", "is_answer": false,\n'
+        '    "why": "..."}\n'
         '],\n'
         ' "vocab_explain": ""}'
     )

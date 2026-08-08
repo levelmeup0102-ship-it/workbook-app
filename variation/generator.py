@@ -1080,7 +1080,13 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s116 = _BAD_EDGE 에 전치사 30여 개를 채웠다. 'over' 'under' 'about' 'through'
+    # _s117 = antonym 지시를 프롬프트 맨 앞으로 올리고 출력 예시를 실물로 바꿨다.
+    #        13,800자 프롬프트 뒤쪽(93~99% 지점)에만 있고 예시가 "antonym": "..." 라
+    #        LLM 이 통째로 무시했다 — A 3/3 이 3회씩 전부 antonym 누락으로 실패해
+    #        관대 모드로 떨어졌다(실측 세 지문 연속).
+    #        예시를 exciting→dull, convince→dissuade 처럼 실제 단어로 채우고,
+    #        재시도 안내 맨 앞에도 같은 내용을 박았다.
+    # (구) _s116 = _BAD_EDGE 에 전치사 30여 개를 채웠다. 'over' 'under' 'about' 'through'
     #        'between' 등 절반이 빠져 있어 'Rival claims over' 가 통과했다 —
     #        전치사로 끝나면 목적어가 빈칸 밖에 남아 갈린다.
     #        + pick_b_q4_blanks._locate 를 strict=True 로. 완화 모드는 '기출 30%가
@@ -1290,7 +1296,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s116"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s117"
 
 
 # ============ Supabase 캐시 ============
@@ -1652,7 +1658,13 @@ def generate_variation_a(
                     #   "다시 만들어라"만 하면 같은 실수를 반복한다 — Q5 에서 사유를
                     #   돌려주니 성공률이 올랐던 것과 같은 처방이다.
                     if _attempt and _vfail:
-                        _msg += ("\n\n[이전 시도가 거부됐다. 사유는 이것이다]\n"
+                        _msg += ("\n\n★★★ [이전 시도가 거부됐다] ★★★\n"
+                                 "가장 흔한 이유는 **antonym 칸을 안 채운 것**이다.\n"
+                                 "다섯 항목 전부에 반대말을 적어라. 하나라도 비면 버려진다.\n"
+                                 "  exciting → dull    convince → dissuade    rely → disregard\n"
+                                 "  adapted → unsuited internal → external    greater → lesser\n"
+                                 "오답 자리 넷도 적는다(시험지에 안 나간다. 확인용이다).\n\n"
+                                 "[사유]\n"
                                  + "\n".join("  - " + x for x in _vfail[-5:])
                                  + "\n\n다시 만들 때 이렇게 하라.\n"
                                    "· original 은 지문에 인쇄된 글자를 그대로 옮겨 적어라.\n"

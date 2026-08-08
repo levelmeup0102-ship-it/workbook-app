@@ -932,6 +932,10 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
         out.append({
             "n": it.get("n"), "para": p, "idx": i, "original": orig,
             "shown": _shown,
+            # ★ antonym 을 반드시 실어 보낸다 (_s119).
+            #   빠뜨렸더니 validate_vocab 이 "antonym 이 비었다"를 매번 냈다 —
+            #   normalize 는 통과했는데 뒤에서 죽는 구조였다(실측 40건, A 3/3 관대 모드).
+            "antonym": _ant,
             # 선지 표시용 — 구두점 뗀 형태 (본문에는 구두점 붙은 shown 을 쓴다)
             "shown_clean": strip_edge_punct(_shown),
             "original_clean": strip_edge_punct(orig),

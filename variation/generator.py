@@ -1054,7 +1054,36 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s109 = Q3어휘 후보에서 방향 없는 명사를 더 막는다. 'audience' 가 -ence 어미라
+    # _s112 = Q3어휘의 'Q5 빈칸 자리' 금지 구역을 마커 토큰 그 자리로만 좁혔다.
+    #        옛 코드 blank_token_spans 는 (min(hits)-1, max(hits)+1) 로 잡아
+    #        **두 마커 사이 전체**를 막았다 — 'the brain <BLANK_A> ... the vast
+    #        majority ... <BLANK_B>' 에서 중간의 'majority' 까지 금지 구역이 됐고
+    #        A 01번이 그것 때문에 죽었다(15개 토큰이 통째로 막혔다).
+    #        Q5 빈칸 안 단어는 애초에 지문에서 사라져 LLM 에게 안 보인다
+    #        (프롬프트가 [[[여기는 Q5 빈칸]]] 으로 가린다). 막아야 할 것은
+    #        마커 자체를 밑줄로 잡는 경우뿐이다.
+    # (구) _s111 = Q3어휘 형태(굴절) 판정을 어미 검사에서 '문장 쓰기'로 바꿨다.
+    #        'exciting'→'compelling', 'interesting.'→'boring.', 'desirable'→'coveted'
+    #        전부 정상 치환인데 -ing/-ed 어미 때문에 오탐해 첫 시도를 낭비했다
+    #        (A 01번은 그래서 두 번째 기회에 진짜 문제를 만나 죽었다).
+    #        형태소로는 굴절형인지 어근이 그런 형용사인지 구분이 안 된다.
+    #        → LLM 이 sentence 칸에 치환 문장을 써서 낸다. 비문이면 써 보는 순간 보인다.
+    #        코드는 그 문장이 원문과 한 단어만 다른가만 대조한다(기계 확인).
+    # (구) _s110 = Q3어휘에서 코드의 의미 판단을 더 걷어냈다. 뺀 것 둘:
+    #        (1) '철자만 비슷한가' — difflib 유사도로 재다 'inhabitable/uninhabitable'(_s87),
+    #        'modesty'(_s90) 같은 정상 치환을 반복 오탐했다. 의미 판단이라 코드가 못 한다.
+    #        (2) '한 문장에 몰림' — '흩어라'는 품질 판단이고, 짧은 지문은 어쩔 수 없이 몰린다.
+    #        둘 다 프롬프트의 '출력 직전 자가점검' 6항목으로 옮겼다.
+    #        코드에 남긴 것은 기계 확인뿐 — 개수·형식·좌표·중복·형태(-s)·antonym 유무.
+    # (구) _s109 = Q3어휘 '반대말을 댈 수 있는가' 판정을 코드에서 LLM 으로 넘겼다.
+    #        옛 코드(answer_pos_ok)는 어미·목록으로 되짚어 판정했는데 양쪽으로 틀렸다 —
+    #        'audience' 는 -ence 라 통과시키고(사람 집단이라 방향이 없는데),
+    #        'dissuade' 는 -ade 라 거부했다(방향이 명백한 동사인데).
+    #        목록에 단어를 넣을수록 새는 곳이 늘어난다(audience 넣으면 spectator 가 남는다).
+    #        → 출력에 antonym 칸을 신설해 **다섯 자리 전부에 반대말을 적게** 하고,
+    #        코드는 그 칸이 채워졌는지만 본다. 못 적는 자리는 LLM 이 스스로 버린다.
+    #        _looks_gradable 은 코드 픽 폴백에서만 쓴다.
+    # (구) _s109 참고 = Q3어휘 후보에서 방향 없는 명사를 더 막는다. 'audience' 가 -ence 어미라
     #        _GRADABLE_SUFFIX 를 통과해 밑줄로 나갔다 — -ence 는 보통 추상명사지만
     #        사람 집단은 방향이 없다. _CONCRETE 에 사람·집단·구체사물 90여 개 추가.
     #        + 방향 있는 동사 60여 개를 _GRADABLE_HINT 에 추가 — 'dissuade' 가 -ade 로
@@ -1205,7 +1234,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s109"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s112"
 
 
 # ============ Supabase 캐시 ============
@@ -1572,9 +1601,10 @@ def generate_variation_a(
                                  + "\n\n다시 만들 때 이렇게 하라.\n"
                                    "· original 은 지문에 인쇄된 글자를 그대로 옮겨 적어라.\n"
                                    "  구두점·대소문자까지 포함해서다('uncomfortable.' 'Similarly').\n"
-                                   "· shown 은 original 과 같은 형태여야 한다.\n"
-                                   "  지문이 'depends'(3인칭 단수)면 'relies' 다. 'rely' 를 쓰면\n"
-                                   "  본문이 'the brain rely on ...' 이 되어 수일치가 깨진다.\n"
+                                   "· ★ sentence 칸에 치환 문장을 **원문 그대로** 옮겨 적고\n"
+                                   "  바꾼 단어 하나만 갈아라. 단어를 넣거나 빼지 마라.\n"
+                                   "  써 보고 어색하면 그 단어를 바꿔라\n"
+                                   "  ('the brain rely on ...' 처럼 수일치가 깨지면 안 된다).\n"
                                    "· para 와 idx 는 그 단락 안에서 0부터 공백으로 센 위치다.\n"
                                    "· 다섯 자리는 서로 다른 단어여야 한다 — 굴절형도 같은 단어다\n"
                                    "  ('depends' 와 'depend' 를 둘 다 밑줄 치지 마라).\n"
@@ -1582,8 +1612,11 @@ def generate_variation_a(
                                    "· ★ 접속부사·담화표지는 밑줄 대상이 아니다\n"
                                    "  (Similarly, Conversely, However, Therefore, Moreover …).\n"
                                    "  논리 흐름 표지지 문맥 판단 대상이 아니다.\n"
-                                   "· ★ 정답 자리는 반대말을 댈 수 있는 단어여야 한다.\n"
-                                   "  방향 없는 말(tasks, time, readers, story)은 못 쓴다.\n"
+                                   "· ★★ 다섯 자리 **전부** antonym 칸에 반대말을 적어라.\n"
+                                   "  적을 수 있는 단어인지 확인하는 용도다.\n"
+                                   "  못 적겠으면 그 문장을 밑줄 자리로 쓰지 마라 — 다른 문장을 고른다.\n"
+                                   "  (audience / story / region / brain / process 처럼\n"
+                                   "   사람·집단·구체 사물은 반대말이 없다)\n"
                                    "· 선지는 반드시 한 단어. 'most extensive' 같은 두 단어는 안 된다.\n"
                                    "· 부정 접두사만 붙이거나 떼서 만들지 마라\n"
                                    "  ('inhabitable'↔'uninhabitable'). 어근이 다른 말을 쓸 것.")

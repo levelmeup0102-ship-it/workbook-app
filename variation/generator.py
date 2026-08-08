@@ -1054,7 +1054,28 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s112 = Q3어휘의 'Q5 빈칸 자리' 금지 구역을 마커 토큰 그 자리로만 좁혔다.
+    # _s115 = 부정 접두사 판정을 antonym 대조로 바꿨다. 'un-/in- 이 붙었나'는 형태로
+    #        보이지만 실제 판단은 '철자로 답이 새는가'라 의미 판단이고, 진짜 문제의
+    #        일부만 잡았다 — 오답에 inhabitable→habitable 은 잡히는데
+    #        significant→trivial 은 못 잡는다(둘 다 오답 자리에 반의어를 넣은 것).
+    #        → 오답 자리의 shown 이 그 자리 antonym 과 같은지 문자열 비교한다.
+    #        접두사든 어근이 다르든 전부 잡히고 오탐이 없다.
+    #        '철자로 답이 새는 반의어'는 프롬프트가 진다.
+    # (구) _s114 = sentence 칸을 없앴다. 어휘 문제는 단어 하나만 바꾸는 것인데 문장을 쓰게 하니
+    #        '그 문장이 어디까지인가'라는 새 문제가 생겼다 — _s111 은 코드가 정규식으로
+    #        문장을 추출해 대조하다 A 3/3 을 전멸시켰고(사유 43건), _s113 은 그걸 완화하니
+    #        'shown 이 들어 있나'만 보는 껍데기가 됐다. 애초에 필요 없는 칸이었다.
+    #        형태가 맞는지는 LLM 이 shown 을 고를 때 판단한다(프롬프트가 진다).
+    #        코드는 대소문자만 본다.
+    # (구) _s113 = sentence 대조를 완화했다. _s111 은 '그 문장'을 코드가 정규식으로 추출해
+    #        LLM 이 쓴 것과 단어 단위로 맞췄는데, **문장 경계 판정 자체가 코드의 일이
+    #        아니었다.** 쉼표로 이어진 긴 문장에서 LLM 은 뒷절만 '그 문장'이라 여기고
+    #        코드는 앞부터 다 끌어온다(실측 26단어 vs 8단어). A 3/3 전멸, 사유 43건.
+    #        → 코드는 sentence 안에 shown 이 들어 있는지만 본다. 그거면 "써 봤다"는
+    #        증거가 되고, 비문 판단은 LLM 이 읽으면서 한다.
+    #        + 출력 예시 다섯 항목 전부에 antonym·sentence 를 넣고 필수로 못 박았다
+    #        (2·4·5번 예시에 sentence 가 없어 LLM 이 생략했다 — antonym 누락 4건).
+    # (구) _s112 = Q3어휘의 'Q5 빈칸 자리' 금지 구역을 마커 토큰 그 자리로만 좁혔다.
     #        옛 코드 blank_token_spans 는 (min(hits)-1, max(hits)+1) 로 잡아
     #        **두 마커 사이 전체**를 막았다 — 'the brain <BLANK_A> ... the vast
     #        majority ... <BLANK_B>' 에서 중간의 'majority' 까지 금지 구역이 됐고
@@ -1234,7 +1255,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s112"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s115"
 
 
 # ============ Supabase 캐시 ============
@@ -1601,10 +1622,8 @@ def generate_variation_a(
                                  + "\n\n다시 만들 때 이렇게 하라.\n"
                                    "· original 은 지문에 인쇄된 글자를 그대로 옮겨 적어라.\n"
                                    "  구두점·대소문자까지 포함해서다('uncomfortable.' 'Similarly').\n"
-                                   "· ★ sentence 칸에 치환 문장을 **원문 그대로** 옮겨 적고\n"
-                                   "  바꾼 단어 하나만 갈아라. 단어를 넣거나 빼지 마라.\n"
-                                   "  써 보고 어색하면 그 단어를 바꿔라\n"
-                                   "  ('the brain rely on ...' 처럼 수일치가 깨지면 안 된다).\n"
+                                   "· ★ shown 을 그 자리에 넣었을 때 문장이 읽히는가 보라.\n"
+                                   "  'the brain rely on ...' 처럼 수일치가 깨지면 안 된다.\n"
                                    "· para 와 idx 는 그 단락 안에서 0부터 공백으로 센 위치다.\n"
                                    "· 다섯 자리는 서로 다른 단어여야 한다 — 굴절형도 같은 단어다\n"
                                    "  ('depends' 와 'depend' 를 둘 다 밑줄 치지 마라).\n"
@@ -1618,8 +1637,10 @@ def generate_variation_a(
                                    "  (audience / story / region / brain / process 처럼\n"
                                    "   사람·집단·구체 사물은 반대말이 없다)\n"
                                    "· 선지는 반드시 한 단어. 'most extensive' 같은 두 단어는 안 된다.\n"
-                                   "· 부정 접두사만 붙이거나 떼서 만들지 마라\n"
-                                   "  ('inhabitable'↔'uninhabitable'). 어근이 다른 말을 쓸 것.")
+                                   "· ★ 오답 자리(①②④⑤)에 반의어를 넣지 마라 — 정답이 둘이 된다.\n"
+                                   "  그 자리 antonym 칸의 말을 shown 에 옮기면 안 된다.\n"
+                                   "· 정답 반의어는 원문어와 철자가 확연히 달라야 한다\n"
+                                   "  ('inhabitable'→'uninhabitable' 은 눈으로 찾힌다. 'barren' 처럼).")
                     _vraw = call_claude(VOCAB_SYS, _msg, max_tokens=1800)
                     _v = extract_json_from_response(_vraw)
                     #   ★ 첫 시도만 -ing/-ed 형태까지 본다(_s100). 재시도에서는

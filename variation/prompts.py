@@ -1206,15 +1206,28 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
         "    지문이 무엇에 관한 글인지 알려주는 말(perception, territory, algorithm)이\n"
         "    아니라, 그것을 어떻게 평가·규정하는지를 담은 말이다.\n"
         "      [O] significant / diminished / undermines / justifies / absolute / abandon\n"
-        "  ★★ 명사를 쓸 때 특히 조심하라. **사람·집단·구체 사물은 방향이 없다.**\n"
-        "      [X] audience / readers / listeners / students / government / company\n"
-        "      [X] story / line / page / region / territory / brain / system / process\n"
-        "          — 이런 말은 무엇으로 바꿔도 논지가 뒤집히지 않는다.\n"
-        "            'audience' 를 'crowd' 로 바꾼들 글의 주장은 그대로다.\n"
-        "      [O] concern / modesty / majority / restrictions / necessity / adaptability\n"
-        "          — 반대말을 댈 수 있는 추상명사만 쓴다.\n"
-        "    ★ 시험: 그 단어의 **반대말을 한 단어로 댈 수 있는가?**\n"
-        "      못 대면 그 자리는 쓰지 마라. (실측 실패: 'audience' 가 밑줄로 나갔다)\n"
+        "\n"
+        "  ★★★ 자리를 고르는 방법 — **다섯 자리 전부에 반대말을 실제로 써 봐라.**\n"
+        "  이건 목록으로 외울 일이 아니다. 후보 단어를 놓고 이렇게 적어 보면 바로 갈린다.\n"
+        "\n"
+        "      significant  → 반대말 trivial        O  쓸 수 있다\n"
+        "      undermines   → 반대말 reinforces     O\n"
+        "      concern      → 반대말 indifference   O  (명사여도 방향이 있다)\n"
+        "      modesty      → 반대말 arrogance      O\n"
+        "      dissuade     → 반대말 persuade       O  (어미가 특이해도 방향이 있다)\n"
+        "\n"
+        "      audience     → 반대말 ???           X  못 쓴다 → 이 자리는 버려라\n"
+        "      story        → 반대말 ???           X\n"
+        "      region       → 반대말 ???           X\n"
+        "      brain        → 반대말 ???           X\n"
+        "      process      → 반대말 ???           X\n"
+        "\n"
+        "  ★ 출력의 `antonym` 칸에 그 반대말을 **반드시 적어라.** 다섯 자리 전부다.\n"
+        "    (정답 자리는 실제로 그 반대말을 shown 에 넣고, 오답 자리는 적기만 한다 —\n"
+        "     적을 수 있는 자리인지 확인하는 용도다.)\n"
+        "  ★ 반대말을 못 적겠으면 **그 문장을 밑줄 자리로 쓰지 마라.** 다른 문장을 고른다.\n"
+        "    실측 실패: 'audience' 가 밑줄로 나갔다. 사람·집단·구체 사물은 방향이 없어\n"
+        "    무엇으로 바꿔도 논지가 뒤집히지 않는다.\n"
         "      [X] perception / territory / readers / process — 방향이 없다\n"
         "  · 라틴·프랑스 어원의 학술적 추상어. 수능 필수어휘 범위 안에서 고른다.\n"
         "  · 파생명사(-ity, -tion, -ness)보다 형용사·동사 어근형이 자연스럽다.\n"
@@ -1251,13 +1264,20 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
         "  · para 와 idx 를 적기 전에, 그 단락을 공백으로 끊어 세어 확인하라.\n"
         "    idx 가 틀려도 코드가 근처에서 찾아 보정하지만, original 자체가 지문에 없으면\n"
         "    찾을 방법이 없다.\n"
-        "  · shown 은 original 과 **같은 형태**여야 한다. 이게 안 맞으면 본문이 깨진다.\n"
-        "      지문 'depends' (3인칭 단수)\n"
-        "        [O] relies      → the brain relies on external features   (정상)\n"
-        "        [X] rely        → the brain rely on external features     (수일치 깨짐)\n"
-        "      지문 'adapted' (과거형)     [O] adjusted   [X] adjust\n"
-        "      지문 'recognizing' (-ing)   [O] discerning [X] discern\n"
-        "      지문 'features' (복수)      [O] traits     [X] trait\n"
+        "  · ★★ shown 을 넣은 **문장을 실제로 써 보라.** 출력의 `sentence` 칸에 적는다.\n"
+        "    형태가 어긋나면 써 보는 순간 비문이 눈에 보인다 — 어미를 외울 일이 아니다.\n"
+        "      지문 'the brain depends on external features'\n"
+        "        [O] relies → the brain relies on external features   읽힌다\n"
+        "        [X] rely   → the brain rely on external features     수일치가 깨진다\n"
+        "      지문 'It is extraordinarily adapted to a changing world'\n"
+        "        [O] adjusted → It is extraordinarily adjusted to ...  읽힌다\n"
+        "        [X] adjust   → It is extraordinarily adjust to ...    비문\n"
+        "    ★ 반대로, 어미가 달라도 읽히면 정상이다.\n"
+        "      지문 'no matter how exciting it was'\n"
+        "        [O] compelling → no matter how compelling it was      읽힌다\n"
+        "      (exciting 은 -ing 로 끝나지만 형용사다. compelling 도 형용사라 맞는다.\n"
+        "       어미만 보면 '다른 형태'로 보이지만 문장은 멀쩡하다)\n"
+        "    ★ `sentence` 를 적을 수 없거나 어색하면 그 단어를 바꿔라.\n"
         "  · 원문에 구두점이 붙어 있으면 치환어에도 붙인다\n"
         "    ('uncomfortable.' → 'disconcerted.').\n"
         "  · ★★ 구동사(phrasal verb)의 동사만 바꾸지 마라. 뒤에 남은 전치사가 어긋난다.\n"
@@ -1283,23 +1303,53 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
         "  as it appears.\n"
         + (f"  ★ 출력 직전 확인: is_answer 가 true 인 항목의 n 이 {want_n} 인가?\n"
            f"    아래 예시 JSON 은 n:3 을 정답으로 보여주지만 그건 형식 예시일 뿐이다.\n"
-           if want_n in (3, 4, 5) else "")
+           if want_n in (1, 2, 3, 4, 5) else "")
+        + ("\n"
+           "## ★★ 출력 직전 자가점검 — 코드가 안 보는 것들이다. 네가 봐야 한다.\n"
+           "\n"
+           "  1. **다섯 자리가 서로 다른 문장에 있는가?**\n"
+           "     한 문장에 둘을 치면 그 문장만 유난히 촘촘해져 눈에 띈다.\n"
+           "     문장 수가 다섯보다 적으면 어쩔 수 없지만, 그 전엔 최대한 흩어라.\n"
+           "\n"
+           "  2. **철자만 비슷한 말로 바꾸지 않았는가?**\n"
+           "     [X] affect → effect / adapt → adopt / principal → principle\n"
+           "     [X] complement → compliment / assure → ensure\n"
+           "     이건 독해가 아니라 철자 암기를 묻는 것이다. 뜻으로 갈리게 하라.\n"
+           "     (단 부정 접두사는 따로 금지 — 아래 4번)\n"
+           "\n"
+           "  3. **antonym 다섯 개를 전부 적었는가?**\n"
+           "     못 적은 자리가 있으면 그 문장을 버리고 다른 문장을 골라라.\n"
+           "     시험: 'audience' 의 반대말? — 못 댄다. 그러면 쓰지 마라.\n"
+           "\n"
+           "  4. **부정 접두사만 붙이거나 떼지 않았는가?**\n"
+           "     [X] inhabitable ↔ uninhabitable / possible ↔ impossible\n"
+           "     철자로 답이 새어나간다. 어근이 다른 말을 써라.\n"
+           "\n"
+           "  5. **다섯 자리가 서로 다른 단어인가?** 굴절형도 같은 단어다\n"
+           "     ('depends' 와 'depend' 를 둘 다 치지 마라).\n"
+           "\n"
+           "  6. **다섯 개의 난이도가 고른가?** 정답만 유난히 어려우면\n"
+           "     학생이 내용을 안 읽고 그것부터 찍는다.\n")
         + "\n"
 
         '{"vocab_items": [\n'
         '   {"n": 1, "para": 0, "idx": 12, "original": "<exact word in passage>",\n'
-        '    "shown": "<synonym>", "is_answer": false, "why": "<why this slot matters>"},\n'
-        '   {"n": 2, "para": 1, "idx": 5,  "original": "...", "shown": "...",\n'
-        '    "is_answer": false, "why": "..."},\n'
-        '   {"n": 3, "para": 1, "idx": 22, "original": "...", "shown": "<ANTONYM>",\n'
+        '    "antonym": "<이 단어의 반대말 한 단어. 못 적겠으면 이 자리를 쓰지 마라>",\n'
+        '    "shown": "<synonym>",\n'
+        '    "sentence": "<shown 을 넣은 그 문장을 그대로. 읽어서 어색하면 단어를 바꿔라>",\n'
+        '    "is_answer": false, "why": "<why this slot matters>"},\n'
+        '   {"n": 2, "para": 1, "idx": 5,  "original": "...", "antonym": "...",\n'
+        '    "shown": "...", "is_answer": false, "why": "..."},\n'
+        '   {"n": 3, "para": 1, "idx": 22, "original": "...", "antonym": "<ANTONYM>",\n'
+        '    "shown": "<위 antonym 을 그대로 — 정답 자리라 반대말이 실제로 들어간다>",\n'
         '    "is_answer": true,\n'
         '    "evidence_type": "next_sentence | same_sentence | thesis",\n'
         '    "evidence": "<quote the exact words that prove the contradiction>",\n'
         '    "why": "<왜 틀렸는지 한 줄. 40자 이내. 예: \'초반에 주의를 끌면 독자를 설득한다는 인과와 정반대\'>"},\n'
-        '   {"n": 4, "para": 2, "idx": 8,  "original": "...", "shown": "...",\n'
-        '    "is_answer": false, "why": "..."},\n'
-        '   {"n": 5, "para": 2, "idx": 30, "original": "...", "shown": "...",\n'
-        '    "is_answer": false, "why": "..."}\n'
+        '   {"n": 4, "para": 2, "idx": 8,  "original": "...", "antonym": "...",\n'
+        '    "shown": "...", "is_answer": false, "why": "..."},\n'
+        '   {"n": 5, "para": 2, "idx": 30, "original": "...", "antonym": "...",\n'
+        '    "shown": "...", "is_answer": false, "why": "..."}\n'
         '],\n'
         ' "vocab_explain": ""}'
     )

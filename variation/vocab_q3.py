@@ -446,24 +446,19 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
     #   'un- 이 붙었네' 로 찍는다. 독해 문항이 철자 찾기가 된다.
     #   ★ CRITICAL 이 아니다 — 이것 하나로 지문을 통째로 버릴 일은 아니다.
     #     엄격 모드에서 재시도만 시키고, 관대 모드에서는 통과시킨다.
+    #   ★★ _s115 — 접두사 판정 대신 antonym 칸으로 대조한다.
+    #     오답 자리의 shown 이 그 자리 antonym 과 같으면 반의어를 넣은 것이다.
+    #     접두사든 어근이 다르든 전부 잡힌다. 순수 문자열 비교라 오탐이 없다.
+    _norm = lambda x: re.sub(r"[^a-z]", "", str(x or "").lower())
     for it in vocab_items:
-        o, sh = str(it.get("original", "")), str(it.get("shown", ""))
-        _pfx = _is_prefix_antonym(o, sh)
-        if not _pfx:
-            continue
         if it.get("is_answer"):
+            continue
+        _a, _sh = _norm(it.get("antonym")), _norm(it.get("shown"))
+        if _a and _a == _sh:
             errors.append(
-                f"[{pid}] Q3 어휘 {it.get('n')}번(정답) '{o}'→'{sh}'는 부정 접두사"
-                f"('{_pfx}-')만 붙인 반의어 — 철자로 답이 새어나간다. "
-                f"어근이 다른 반의어를 쓸 것 (inhabitable→barren, possible→futile)")
-        else:
-            # ★ 오답 자리는 동의어여야 한다. 접두사를 붙이거나 떼면 뜻이 뒤집힌다.
-            #   실측: 원문 'inhabitable' 을 오답 자리에서 'habitable' 로 보여줬다 —
-            #   in- 을 떼어 반대 뜻이 됐다. 정답이 둘이 되거나 지문이 어긋난다.
-            errors.append(
-                f"[{pid}] [CRITICAL] Q3 어휘 {it.get('n')}번(오답) '{o}'→'{sh}'는 "
-                f"부정 접두사('{_pfx}-')를 붙이거나 뗀 것 — 뜻이 뒤집혔다. "
-                f"오답 자리는 반드시 같은 뜻(동의어)이어야 한다")
+                f"[{pid}] [CRITICAL] Q3 어휘 {it.get('n')}번(오답) shown 이 그 자리 "
+                f"antonym 과 같다 ('{it.get('shown')}') — 오답 자리는 동의어여야 한다. "
+                f"반의어는 정답 자리 하나뿐이다")
 
     # ★ 선지는 한 단어여야 한다 (_s102)
     #   실측: 'largest' → 'most extensive'(두 단어)가 나갔다. 수능 30번 선지는
@@ -902,16 +897,19 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
             return _fail(f"{_no}번 antonym 이 {len(_ant.split())}단어 '{_ant}' — 한 단어로 적어라")
 
         # ★ 부정 접두사 붙이기·떼기 금지 (_s102)
-        #   정답 자리 — 철자로 답이 새어나간다 ('inhabitable'→'uninhabitable')
-        #   오답 자리 — 뜻이 뒤집힌다 ('inhabitable'→'habitable'). 동의어여야 한다.
-        _pfx = _is_prefix_antonym(orig, _shown)
-        if _pfx:
-            _k = "정답" if it.get("is_answer") else "오답"
-            _why = ("철자로 답이 새어나간다. 어근이 다른 반의어를 쓸 것"
-                    if it.get("is_answer")
-                    else "뜻이 뒤집혔다. 오답 자리는 같은 뜻(동의어)이어야 한다")
-            return _fail(f"{_no}번({_k}) '{orig}'→'{_shown}' 는 부정 접두사"
-                         f"('{_pfx}-')를 붙이거나 뗀 것 — {_why}")
+        #   ★★ _s115 — 부정 접두사 판정을 뺐다.
+        #     'un-/in- 이 붙었나'는 형태로 보이지만 실제 판단은 '철자로 답이 새는가'라
+        #     의미 판단이다. 게다가 진짜 문제의 일부만 잡는다 —
+        #       오답에 inhabitable→habitable  (접두사라 잡힘)
+        #       오답에 significant→trivial    (반의어인데 못 잡음)
+        #     ★ 대신 antonym 칸으로 기계 대조한다. 오답 자리의 shown 이 그 자리의
+        #       antonym 과 같으면 반의어를 넣은 것이다 — 접두사든 아니든 다 잡힌다.
+        if not it.get("is_answer"):
+            _n2 = lambda x: re.sub(r"[^a-z]", "", str(x or "").lower())
+            if _n2(_ant) and _n2(_ant) == _n2(_shown):
+                return _fail(f"{_no}번(오답) shown 이 그 자리 antonym 과 같다 "
+                             f"('{_shown}') — 오답 자리는 **동의어**여야 한다. "
+                             f"반의어는 정답 자리 하나뿐이다")
 
         # ── ★ 형태 검사 (_s97) — 고치지 않고 사유만 돌려준다 ──
         # ★★ 어미로 형태를 판정하지 않는다 (_s111).
@@ -920,24 +918,12 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
         #   어근이 그런 형용사인지 구분이 안 된다.
         #   → LLM 이 `sentence` 칸에 치환 문장을 써서 낸다. 비문이면 써 보는 순간 보인다.
         #   코드는 그 문장이 **원문 문장과 한 단어만 다른가**만 대조한다(기계 확인).
-        _sent = re.sub(r"\s+", " ", str(it.get("sentence", "")).strip())
-        if _sent:
-            _src = paragraphs[p][1]
-            _m = re.search(r"[^.!?]*" + re.escape(orig) + r"[^.!?]*[.!?]?", _src)
-            if _m:
-                _orig_sent = re.sub(r"\s+", " ", _m.group(0)).strip()
-                _a = _orig_sent.replace(orig, "\x01", 1).split()
-                _b = _sent.replace(_shown, "\x01", 1).split()
-                if len(_a) == len(_b):
-                    _diff = [k for k, (x, y) in enumerate(zip(_a, _b)) if x != y]
-                    if _diff:
-                        return _fail(
-                            f"{_no}번 sentence 가 원문과 {len(_diff)}군데 다르다 — "
-                            f"바꾼 단어 하나 말고는 원문 그대로여야 한다. "
-                            f"원문: '{_orig_sent[:60]}'")
-                else:
-                    return _fail(f"{_no}번 sentence 의 단어 수가 원문과 다르다 "
-                                 f"({len(_b)} vs {len(_a)}) — 단어를 넣거나 빼지 마라")
+        #   ★★ _s114 — sentence 칸을 없앴다.
+        #     어휘 문제는 **단어 하나만 바꾸는 것**이다. 문장을 쓰게 하니 '그 문장이
+        #     어디까지인가'라는 새 문제가 생겼고(_s111 에서 A 3/3 전멸), 그걸 완화하니
+        #     껍데기 검사만 남았다(_s113). 애초에 필요 없는 칸이었다.
+        #     형태가 맞는지는 LLM 이 shown 을 고를 때 판단한다 —
+        #     코드는 대소문자만 본다(아래).
 
         # ★ 대소문자만 코드가 본다 — 문장 첫 단어를 소문자로 내면 문장이 깨진다.
         _cm = _cap_mismatch(orig, _shown)

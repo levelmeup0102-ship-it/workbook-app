@@ -59,10 +59,14 @@
   .tool-btn .sw-r{border-bottom-color:#CC0000}.tool-btn .sw-b{border-bottom-color:#1155BB}
   .en.marking{cursor:cell;user-select:text}
   .en.marking .wd{cursor:cell}
-  .wd.mk-ulr{border-bottom:2px solid #CC0000}
-  .wd.mk-ulb{border-bottom:2px solid #1155BB}
-  .wd.mk-hl{background:#FFF3A3;border-radius:2px}
-  .wd.mk-box{border:1.5px solid #1f2937;border-radius:4px;padding:0 2px;margin:0 1px}
+  .wd.mk-ulr,.wsp.mk-ulr{border-bottom:2px solid #CC0000}
+  .wd.mk-ulb,.wsp.mk-ulb{border-bottom:2px solid #1155BB}
+  .wd.mk-hl,.wsp.mk-hl{background:#FFF3A3;border-radius:2px}
+  /* 네모: 위·아래 선은 전체 연결, 좌/우 끝만 세로선+둥근모서리 */
+  .wd.mk-box{border-top:1.5px solid #1f2937;border-bottom:1.5px solid #1f2937;padding:1px 0}
+  .wsp.mk-box{border-top:1.5px solid #1f2937;border-bottom:1.5px solid #1f2937}
+  .wd.mk-box-l{border-left:1.5px solid #1f2937;border-top-left-radius:4px;border-bottom-left-radius:4px;padding-left:2px}
+  .wd.mk-box-r{border-right:1.5px solid #1f2937;border-top-right-radius:4px;border-bottom-right-radius:4px;padding-right:2px}
   .sline{display:flex;gap:8px;align-items:flex-start}
   .bul{flex:none;width:18px;height:18px;border-radius:50%;background:var(--ink);color:#fff;font-size:10px;font-weight:800;display:grid;place-items:center;margin-top:3px}
   .en{font-family:var(--serif);font-size:14px;line-height:1.85;color:#1A1A1A}
@@ -401,7 +405,18 @@ let MARKS=_loadMarks();
 let curTool=null;               // 선택된 도구(없으면 일반 편집)
 function markClsAt(si,wi){
   let cls='';
-  MARKS.forEach(m=>{ if(m.si===si&&wi>=m.from&&wi<=m.to) cls+=' mk-'+m.tool; });
+  MARKS.forEach(m=>{
+    if(m.si===si&&wi>=m.from&&wi<=m.to){
+      cls+=' mk-'+m.tool;
+      if(m.tool==='box'){ if(wi===m.from)cls+=' mk-box-l'; if(wi===m.to)cls+=' mk-box-r'; }
+    }
+  });
+  return cls;
+}
+// 두 단어(prevWi,nextWi) 사이 공백을 잇는 마크 클래스
+function markClsSpace(si,prevWi,nextWi){
+  let cls='';
+  MARKS.forEach(m=>{ if(m.si===si&&m.from<=prevWi&&m.to>=nextWi) cls+=' mk-'+m.tool; });
   return cls;
 }
 function applyMark(si,from,to,tool){
@@ -510,7 +525,12 @@ function pickBlock(label,key,items,sel){
 }
 function tokenize(str,si,ctr){
   return str.split(/(\s+)/).map(t=>{
-    if(/^\s*$/.test(t))return t;
+    if(/^\s*$/.test(t)){
+      if(!t||!ctr)return t;
+      const prevWi=ctr.n-1, nextWi=ctr.n;        // 이 공백이 잇는 좌/우 단어 인덱스
+      const cls=(prevWi>=0)?markClsSpace(si,prevWi,nextWi):'';
+      return cls?`<span class="wsp${cls}">${t}</span>`:t;
+    }
     const c=t.toLowerCase().replace(/[^a-z']/g,'');
     const wi=ctr?ctr.n++:0;
     return `<span class="wd${markClsAt(si,wi)}" data-si="${si}" data-wi="${wi}" data-word="${c}">${esc(t)}</span>`;

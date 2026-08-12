@@ -604,3 +604,29 @@ if __name__ == "__main__":
             tr = f.read()
     data = build_sheet_data(pre, tr)
     print(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+# ════════════════════════════════════════════════════════════════
+# ★ 0회독 없이 원문만으로 '빈 분석지' 만들기
+#   - preclass(0회독)가 없는 지문도 분석지를 열 수 있게 한다.
+#   - 문장 분리 결과로 direct_translation(dt)을 합성해 넘기면
+#     build_sheet_data 가 문장별로 깔끔히 청크를 나눈다(마커/강조 없음).
+#   - 선생님은 저작모드에서 단어를 눌러 직접 강조/어휘를 채운다.
+# ════════════════════════════════════════════════════════════════
+def build_blank_sheet_data(passage_en: str, translation: str = "", saved_sheet: dict = None) -> dict:
+    passage_en = (passage_en or "").strip()
+    if not passage_en:
+        # 원문조차 없으면 완전 빈 구조 (호출측에서 처리)
+        return build_sheet_data({}, translation=translation, saved_sheet=saved_sheet)
+
+    sents = split_sentences(passage_en)
+    kr_lines = _split_translation(translation)
+    dt = []
+    for i, s in enumerate(sents):
+        dt.append({"e": s, "k": (kr_lines[i] if i < len(kr_lines) else "")})
+
+    pre = {
+        "passage_marked": passage_en,   # 마커 없는 평문 → 강조 0개
+        "direct_translation": dt,       # 문장별 분리 유도 (len>=2일 때 dt 경로)
+    }
+    return build_sheet_data(pre, translation=translation, saved_sheet=saved_sheet)

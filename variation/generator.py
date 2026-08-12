@@ -1074,6 +1074,11 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5")
 ANTHROPIC_VERSION = "2023-06-01"
 MAX_RETRIES = 3
+# ★ B 는 검사가 훨씬 많다 (_s122) — 제목 형식·절대어·Q3 본문베끼기·복수정답·
+#   요약문 겹침·역할 배치·풀이 검증. 3회로는 매번 다른 사유로 소진돼
+#   정작 복수정답을 고칠 기회가 없었다(실측: B 하나가 통째로 누락).
+#   문항이 빠지면 시험지가 안 되므로 B 만 넉넉히 준다.
+MAX_RETRIES_B = 6
 
 SB_URL = os.environ.get("SUPABASE_URL", "")
 SB_KEY = (
@@ -1104,7 +1109,13 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s121 = B Q3 를 **별도 호출로 실제로 풀려** 복수정답을 잡는다. 지금까지의 검사
+    # _s122 = B 재시도를 3 → 6회로 늘리고, 사유를 **누적해서** 전달한다.
+    #        B 는 검사가 훨씬 많다(제목 형식·절대어·본문베끼기·복수정답·요약문 겹침·
+    #        역할 배치·풀이 검증). 3회로는 매번 다른 사유로 소진돼 정작 복수정답을
+    #        고칠 기회가 없었고, 마지막 사유만 주니 그것만 고치고 앞서 지적받은 걸
+    #        다시 어겨 수렴하지 않았다. 실측: B 하나가 통째로 누락됐다.
+    #        문항이 빠지면 시험지가 안 되므로 넉넉히 준다. A 는 3회 그대로.
+    # (구) _s121 = B Q3 를 **별도 호출로 실제로 풀려** 복수정답을 잡는다. 지금까지의 검사
     #        (summary_check, 역할 라벨, antonym)는 전부 만든 LLM 에게 되묻는 방식이라
     #        대충 채우면 통과했다 — 낸 사람에게 "복수정답 아니죠?" 하고 묻는 셈이다.
     #        문항만 떼어 정답을 감추고 풀린다. 둘 이상 성립한다고 하면 재시도,
@@ -1341,7 +1352,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s121"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s122"
 
 
 # ============ Supabase 캐시 ============
@@ -1951,7 +1962,8 @@ def generate_variation_b(
 
     last_errors = []
     last_data = None  # 마지막 fallback용
-    for attempt in range(1, MAX_RETRIES + 1):
+    _err_history = []          # ★ 재시도 사유 누적 (_s122)
+    for attempt in range(1, MAX_RETRIES_B + 1):
         try:
             user_msg = (
                 f"Passage ID: {pid}\n\n"
@@ -1968,9 +1980,16 @@ def generate_variation_b(
                       "Same passage, different angle."
                 )
             if last_errors:
+                # ★ 지금까지 나온 사유를 **누적해서** 보여준다 (_s122).
+                #   마지막 사유만 주면 그건 고치고 앞서 지적받은 걸 다시 어긴다 —
+                #   재시도가 제목→절대어→복수정답 식으로 돌기만 하고 수렴하지 않았다.
+                for _e in last_errors:
+                    if _e not in _err_history:
+                        _err_history.append(_e)
                 user_msg += (
-                    "\n\n# ⚠️ PREVIOUS ATTEMPT FAILED — FIX THESE ERRORS:\n"
-                    + "\n".join(f"  ✗ {e}" for e in last_errors[:5])
+                    "\n\n# ⚠️ 지금까지 지적받은 것 전부 — 하나도 다시 어기지 마라\n"
+                    "#    (앞 항목을 고치면서 뒤 항목을 어기는 일이 반복되고 있다)\n"
+                    + "\n".join(f"  ✗ {e}" for e in _err_history[-8:])
                     + "\n\n# REMINDER OF CRITICAL CHECKS FOR TYPE B:\n"
                     "  1. <MARK1>, <MARK2>, <MARK3>, <MARK4>, <MARK5> MUST be spread across the ENTIRE passage\n"
                     "     There MUST be AT LEAST 3 words between every adjacent pair of markers\n"
@@ -2304,7 +2323,7 @@ def generate_variation_b(
                 pass
 
             # 마지막 시도면 strict=False (검증 풀어서라도 받아들임)
-            is_last = (attempt == MAX_RETRIES)
+            is_last = (attempt == MAX_RETRIES_B)
 
             # ★★ (버) 객관식 정답 위치 셔플 (B: 주제 Q2 / 요약빈칸 Q3) — 정답이 ①에 쏠리던 문제 교정.
             #   삽입(position_correct)은 위치형이라 손대지 않는다.
@@ -2519,7 +2538,7 @@ def generate_variation_b(
             print(f"[VAR][B][{pid}] ⚠️ 검증 실패했으나 데이터 fallback으로 저장")
             return last_data
 
-    raise RuntimeError(f"유형 B 생성 실패 ({MAX_RETRIES}회). 마지막 오류:\n" + "\n".join(last_errors[:5]))
+    raise RuntimeError(f"유형 B 생성 실패 ({MAX_RETRIES_B}회). 마지막 오류:\n" + "\n".join(last_errors[:5]))
 
 
 # ============ Passage 조회 ============

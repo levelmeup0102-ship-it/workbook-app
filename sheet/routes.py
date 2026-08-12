@@ -143,6 +143,7 @@ def _inject(html: str, sheet_data: dict, mode: str = "auth", readonly: bool = Fa
         "VPOOL": sheet_data.get("VPOOL", {}),
         "POOL": sheet_data.get("POOL", {}),
         "SEL": sheet_data.get("_SEL", {}),
+        "MARKS": sheet_data.get("MARKS", []),
         "MODE": mode,
         "READONLY": readonly,
         "TEACHER": teacher,

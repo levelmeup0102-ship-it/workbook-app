@@ -183,7 +183,7 @@ async def sheet_page(request: Request, book: str = "", unit: str = "", pid: str 
 
     if pre:
         # 0회독(자동 분석)이 있으면 그걸 소스로
-        data = sc.build_sheet_data(pre, translation=kr, saved_sheet=saved_sheet)
+        data = sc.build_sheet_data(pre, translation=kr, saved_sheet=saved_sheet, passage_en=eng)
     elif (eng or "").strip():
         # ★ 0회독이 없어도 원문만으로 '빈 분석지'를 연다 (선생님이 직접 강조/편집)
         data = sc.build_blank_sheet_data(eng, translation=kr, saved_sheet=saved_sheet)
@@ -328,7 +328,7 @@ async def sheet_student(token: str):
         pass
 
     if pre:
-        data = sc.build_sheet_data(pre, translation=kr, saved_sheet=row.get("sheet"))
+        data = sc.build_sheet_data(pre, translation=kr, saved_sheet=row.get("sheet"), passage_en=eng)
     elif (eng or "").strip():
         # ★ 0회독 없이 만든 분석지도 학생 공유 가능 (원문 기반 + 강사 저장본 반영)
         data = sc.build_blank_sheet_data(eng, translation=kr, saved_sheet=row.get("sheet"))

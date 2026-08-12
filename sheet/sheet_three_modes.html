@@ -48,6 +48,21 @@
   .a-side h3:first-child{margin-top:0}
   .sent{padding:7px 0 9px;border-bottom:1px dashed #EAEDF2}
   .sent .kr{margin:3px 0 0 20px;font-size:11.5px;color:#4A5568;line-height:1.5}
+  /* ── 강사 자유 강조 도구 ── */
+  .toolstrip{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
+  .ts-label{font-size:11px;font-weight:700;color:#2E4E8F}
+  .tool-btn{display:inline-flex;align-items:center;gap:3px;padding:5px 9px;border:1.5px solid #C2C8D2;background:#fff;color:#333;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer}
+  .tool-btn:hover{border-color:#2E4E8F}
+  .tool-btn.on{border-color:#2E4E8F;background:#EBF0FA;color:#2E4E8F}
+  .tool-btn.erase.on{border-color:#B91C1C;background:#FEF2F2;color:#B91C1C}
+  .tool-btn .sw{display:inline-block;width:14px;height:0;border-bottom:2px solid #999}
+  .tool-btn .sw-r{border-bottom-color:#CC0000}.tool-btn .sw-b{border-bottom-color:#1155BB}
+  .en.marking{cursor:cell;user-select:text}
+  .en.marking .wd{cursor:cell}
+  .wd.mk-ulr{border-bottom:2px solid #CC0000}
+  .wd.mk-ulb{border-bottom:2px solid #1155BB}
+  .wd.mk-hl{background:#FFF3A3;border-radius:2px}
+  .wd.mk-box{border:1.5px solid #1f2937;border-radius:4px;padding:0 2px;margin:0 1px}
   .sline{display:flex;gap:8px;align-items:flex-start}
   .bul{flex:none;width:18px;height:18px;border-radius:50%;background:var(--ink);color:#fff;font-size:10px;font-weight:800;display:grid;place-items:center;margin-top:3px}
   .en{font-family:var(--serif);font-size:14px;line-height:1.85;color:#1A1A1A}
@@ -211,6 +226,14 @@
 <div class="wrap">
   <div class="toolbar">
     <div class="seg"><button id="m0" class="on">저작 모드</button><button id="m1">정밀 인쇄물</button><button id="m2">학생 게시물</button></div>
+    <span class="toolstrip">
+      <span class="ts-label">강조:</span>
+      <button class="tool-btn" data-tool="ulr">밑줄<span class="sw sw-r"></span></button>
+      <button class="tool-btn" data-tool="ulb">밑줄<span class="sw sw-b"></span></button>
+      <button class="tool-btn" data-tool="hl">형광</button>
+      <button class="tool-btn" data-tool="box">⬜ 네모</button>
+      <button class="tool-btn erase" data-tool="erase">지우개</button>
+    </span>
     <span class="tch-wrap" id="tchWrap">
       <input id="tchName" class="tch-in" placeholder="강사명" autocomplete="off">
       <select id="tchSel" class="tch-sel"><option value="">― 저장된 강사 ―</option></select>
@@ -365,6 +388,56 @@ let TYPES=[
  {g:"서술형",t:"요약문 완성",on:true},{g:"서술형",t:"잘라쓰기(배열영작)",on:false},{g:"서술형",t:"어휘 형태 변화",on:true},{g:"서술형",t:"어법 수정",on:true}
 ];
 let SEL=(_D&&_D.SEL&&Object.keys(_D.SEL).length)?{title:_D.SEL.title||0,topic:_D.SEL.topic||0,sum:_D.SEL.sum||0,openPick:null,openTag:null}:{title:0,topic:0,sum:0,openPick:null,openTag:null};
+// ★ 강사 자유 강조 — 문장별 단어범위 [{si,from,to,tool}]
+//   tool: ulr(밑줄빨강) ulb(밑줄파랑) hl(형광) box(네모)
+const TOOLS={ulr:'밑줄',ulb:'밑줄',hl:'형광',box:'네모'};
+function _loadMarks(){
+  if(_D&&Array.isArray(_D.MARKS))return _D.MARKS.map(m=>({si:+m.si,from:+m.from,to:+m.to,tool:m.tool||'box'}));
+  // 구버전 호환: BOXES → box 도구로 승격
+  if(_D&&Array.isArray(_D.BOXES))return _D.BOXES.map(b=>({si:+b.si,from:+b.from,to:+b.to,tool:'box'}));
+  return [];
+}
+let MARKS=_loadMarks();
+let curTool=null;               // 선택된 도구(없으면 일반 편집)
+function markClsAt(si,wi){
+  let cls='';
+  MARKS.forEach(m=>{ if(m.si===si&&wi>=m.from&&wi<=m.to) cls+=' mk-'+m.tool; });
+  return cls;
+}
+function applyMark(si,from,to,tool){
+  if(from>to){const t=from;from=to;to=t;}
+  if(tool==='erase'){
+    MARKS=MARKS.filter(m=>!(m.si===si && !(to<m.from||from>m.to)));
+  }else{
+    const idx=MARKS.findIndex(m=>m.si===si&&m.tool===tool&&!(to<m.from||from>m.to));
+    if(idx>=0)MARKS.splice(idx,1);       // 같은 도구가 이미 있으면 토글 해제
+    else MARKS.push({si,from,to,tool});
+  }
+  renderAuth();saveSheet(true);
+}
+// 드래그로 구(句) 선택 → 그 문장 안 단어 인덱스 범위에 현재 도구 적용
+function bindMarkDrag(){
+  if(!curTool)return;
+  view.querySelectorAll('.en.marking').forEach(en=>{
+    en.addEventListener('mouseup',()=>{
+      const sel=window.getSelection&&window.getSelection();
+      if(!sel||sel.isCollapsed||!sel.rangeCount)return;
+      const range=sel.getRangeAt(0);
+      const si=+en.dataset.si;
+      const wds=[...en.querySelectorAll('.wd')].filter(w=>range.intersectsNode(w));
+      if(wds.length<2){sel.removeAllRanges();return;} // 2단어 미만은 클릭으로 처리
+      const idx=wds.map(w=>+w.dataset.wi);
+      applyMark(si,Math.min(...idx),Math.max(...idx),curTool);
+      sel.removeAllRanges();
+    });
+  });
+}
+function setTool(t){
+  curTool=(curTool===t)?null:t;   // 같은 도구 다시 누르면 끔
+  document.querySelectorAll('.tool-btn').forEach(b=>b.classList.toggle('on',b.dataset.tool===curTool));
+  if(mode!==0&&curTool)setMode(0);
+  renderAuth();
+}
 let DIFF=_D?(_D.DIFF||3):3; // 지문난이도 (0~5)
 const BG="바이오 발전(biopower)은 목재·농업 폐기물 등 바이오매스를 연소·분해해 전기를 만드는 재생에너지다. 화석연료와 달리 탄소·황 배출이 적어 친환경적이며, 폐기물 처리와 농촌 경제에도 기여한다.";
 const KEYV="biomass(생물자원) · sustainable(지속가능한) · alleviate(완화하다) · appreciable(상당한) · emissions(배출)";
@@ -390,19 +463,20 @@ function ceHtml(c){let e=esc(c.e);if(c.h){let cls=c.f===2?'hl v':'hl';if(isKey(c
 function renderAuth(){
   let h='<div class="auth"><div class="a-main">';
   S.forEach((chunks,si)=>{
-    let line='';
+    let line='';const ctr={n:0};
     chunks.forEach(c=>{
       if(c.h){const cls=(c.f===2?'vp':'gp')+(c.i>=2?'':' off');
         const parts=esc(c.e).split(esc(c.h));
-        line+=tokenize(parts[0],si)+`<span class="wd ${cls}" data-si="${si}" data-an="${c.h}">${esc(c.h)}</span>`+tokenize(parts[1]||'',si)+' ';
-      } else line+=tokenize(c.e,si)+' ';
+        const wi=ctr.n++;
+        line+=tokenize(parts[0],si,ctr)+`<span class="wd ${cls}${markClsAt(si,wi)}" data-si="${si}" data-wi="${wi}" data-an="${c.h}">${esc(c.h)}</span>`+tokenize(parts[1]||'',si,ctr)+' ';
+      } else line+=tokenize(c.e,si,ctr)+' ';
     });
     const tg=STAG[si]||{t:"(없음)",c:"none"};
     let dd='';
     if(SEL.openTag===si)dd='<div class="tagdd">'+TAGOPTS.map((o,oi)=>`<span class="tagopt ${o.c} ${tg.t===o.t?'sel':''}" data-tagpick="${si}" data-oi="${oi}">${o.t}</span>`).join('')+'</div>';
     const krLine=chunks.map(c=>c.k).filter(Boolean).join(' ').trim();
     const krHtml=krLine?`<div class="kr">${esc(krLine)}</div>`:'';
-    h+=`<div class="sent">${dd}<div class="en"><span class="snum">${si+1}.</span><span class="atag ${tg.c}" data-tagsi="${si}">${tg.t} ▾</span>${line}</div>${krHtml}</div>`;
+    h+=`<div class="sent">${dd}<div class="en${curTool?' marking':''}" data-si="${si}"><span class="snum">${si+1}.</span><span class="atag ${tg.c}" data-tagsi="${si}">${tg.t} ▾</span>${line}</div>${krHtml}</div>`;
   });
   h+='</div><div class="a-side"><h3>분석 결과 — 후보에서 선택</h3>';
   h+=`<div class="pick"><div class="pl">지문난이도 <span style="color:var(--faint);font-weight:600">클릭해 별 조정 (내신출제 가능성)</span></div><div class="stars-edit">`+[1,2,3,4,5].map(n=>`<span class="stedit ${n<=DIFF?'on':''}" data-diff="${n}">★</span>`).join('')+`</div></div>`;
@@ -434,10 +508,24 @@ function pickBlock(label,key,items,sel){
   items.forEach((it,i)=>{h+=`<div class="cnd ${i===sel?'sel':''}" data-pick="${key}" data-i="${i}">${it.k}${it.e?`<span class="e">${it.e}</span>`:''}</div>`;});
   h+='</div></div>';return h;
 }
-function tokenize(str,si){return str.split(/(\s+)/).map(t=>{if(/^\s*$/.test(t))return t;const c=t.toLowerCase().replace(/[^a-z']/g,'');return `<span class="wd" data-si="${si}" data-word="${c}">${esc(t)}</span>`;}).join('');}
+function tokenize(str,si,ctr){
+  return str.split(/(\s+)/).map(t=>{
+    if(/^\s*$/.test(t))return t;
+    const c=t.toLowerCase().replace(/[^a-z']/g,'');
+    const wi=ctr?ctr.n++:0;
+    return `<span class="wd${markClsAt(si,wi)}" data-si="${si}" data-wi="${wi}" data-word="${c}">${esc(t)}</span>`;
+  }).join('');
+}
 function bindAuth(){
   updateHeader();
-  view.querySelectorAll('.wd').forEach(w=>w.addEventListener('click',openAdd));
+  view.querySelectorAll('.wd').forEach(w=>w.addEventListener('click',e=>{
+    if(curTool){
+      e.stopPropagation();
+      const si=+w.dataset.si, wi=+w.dataset.wi;
+      applyMark(si,wi,wi,curTool);
+    } else openAdd(e);
+  }));
+  bindMarkDrag();
   view.querySelectorAll('.ck').forEach(c=>c.addEventListener('click',e=>{const r=e.target.closest('.row');const ch=S[+r.dataset.si][+r.dataset.ci];ch.i=ch.i>=2?1:2;renderAuth();}));
   view.querySelectorAll('[data-act="imp"]').forEach(el=>el.addEventListener('click',e=>{const r=el.closest('.row');const ch=S[+r.dataset.si][+r.dataset.ci];ch.i=ch.i%3+1;renderAuth();}));
   view.querySelectorAll('[data-act="hl"]').forEach(el=>el.addEventListener('click',e=>{const r=el.closest('.row');const ch=S[+r.dataset.si][+r.dataset.ci];ch.key=!isKey(ch);renderAuth();}));
@@ -574,7 +662,8 @@ function renderPost(){
 function setMode(m){mode=m;[0,1,2].forEach(i=>document.getElementById('m'+i).classList.toggle('on',i===m));
   document.getElementById('printBtn').classList.toggle('show',m===1);note.textContent=NOTES[m];exp.innerHTML=EXPS[m];pop.classList.remove('show');
   if(m===0)renderAuth();else if(m===1)renderOut();else renderPost();}
-['0','1','2'].forEach(i=>document.getElementById('m'+i).onclick=()=>setMode(+i));
+['0','1','2'].forEach(i=>document.getElementById('m'+i).onclick=()=>{if(curTool)setTool(curTool);setMode(+i);});
+document.querySelectorAll('.tool-btn').forEach(b=>b.onclick=()=>setTool(b.dataset.tool));
 document.addEventListener('click',e=>{if(e.target.classList&&e.target.classList.contains('hst')){DIFF=+e.target.dataset.d;updateHeader();if(mode===0)renderAuth();}});
 document.addEventListener('click',e=>{if(!pop.contains(e.target)&&!e.target.classList.contains('wd')&&!e.target.classList.contains('spot')){pop.classList.remove('show');view.querySelectorAll('.spot.open').forEach(s=>s.classList.remove('open'));}});
 /* ===== 저장 · 발행(학생 링크) · 강사 ===== */
@@ -592,7 +681,8 @@ function serializeSheet(){
   }));
   return {diff:DIFF,marks,
     selTitle:SEL.title||0,selTopic:SEL.topic||0,selSum:SEL.sum||0,
-    tags:(typeof STAG!=='undefined'&&STAG)?STAG:{},summary:''};
+    tags:(typeof STAG!=='undefined'&&STAG)?STAG:{},summary:'',
+    umarks:(typeof MARKS!=='undefined'&&MARKS)?MARKS:[]};
 }
 async function saveSheet(silent){
   const {book,unit,pid}=_qp();

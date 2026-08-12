@@ -15,6 +15,16 @@
   body{font-family:"Pretendard",-apple-system,"Noto Sans KR",sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased;padding:20px 14px 60px}
   .wrap{max-width:1140px;margin:0 auto}
   .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .legend{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:-4px 0 12px;padding:7px 12px;background:#F7F9FC;border:1px solid #E4E9F0;border-radius:8px;font-size:11px;color:#475}
+  .legend .lg-title{font-weight:800;color:#2E4E8F;font-size:10.5px}
+  .legend .lg-item{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+  .legend .lg-line{display:inline-block;width:16px;height:0;border-bottom:2px solid #999}
+  .legend .lg-red{border-bottom-color:#CC0000}
+  .legend .lg-blue{border-bottom-color:#1155BB}
+  .legend .lg-dot{border-bottom:2px dotted #C7CCD6}
+  .legend .lg-chip{display:inline-block;width:12px;height:12px;border-radius:3px;background:#B7BDC8}
+  .legend .lg-cred{background:#CC2222}.legend .lg-cblue{background:#2E4E8F}.legend .lg-cpurple{background:#6A1B9A}.legend .lg-corange{background:#C2660A}
+  .legend .lg-sep{width:1px;height:14px;background:#D6DEEA;margin:0 2px}
   .seg{display:flex;background:#fff;border:1px solid #D2D7E0;border-radius:11px;padding:3px}
   .seg button{border:none;background:none;font-family:inherit;font-size:13px;font-weight:700;color:var(--soft);padding:8px 15px;border-radius:8px;cursor:pointer}
   .seg button.on{background:var(--ink);color:#fff}
@@ -193,7 +203,7 @@
   .curnote.v .cn{color:#1E4FA8}
   .curnote .cd{color:#4B7A58;font-size:11px;margin-top:2px;line-height:1.5}
   .curnote .curdel{margin-top:5px;font-size:10px;padding:2px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer;color:var(--soft)}
-  @media print{@page{size:A4 landscape;margin:7mm}body{background:#fff;padding:0}.toolbar,.explain,.tch-wrap,.linkbar{display:none}.wrap{max-width:none}.sheet{border:none;box-shadow:none;border-radius:0}}
+  @media print{@page{size:A4 landscape;margin:7mm}body{background:#fff;padding:0}.toolbar,.explain,.tch-wrap,.linkbar,.legend{display:none}.wrap{max-width:none}.sheet{border:none;box-shadow:none;border-radius:0}}
 </style>
 </head>
 <body>
@@ -210,6 +220,18 @@
     <button class="print" id="printBtn" onclick="window.print()">인쇄 / PDF</button>
   </div>
   <div class="linkbar" id="linkbar"></div>
+  <div class="legend" id="legend">
+    <span class="lg-title">밑줄 색</span>
+    <span class="lg-item"><span class="lg-line lg-red"></span>어법(문법)</span>
+    <span class="lg-item"><span class="lg-line lg-blue"></span>어휘</span>
+    <span class="lg-item"><span class="lg-line lg-dot"></span>강조 끔(출력 제외)</span>
+    <span class="lg-sep"></span>
+    <span class="lg-title">문장 태그</span>
+    <span class="lg-item"><span class="lg-chip lg-cred"></span>주제·요지·서술형</span>
+    <span class="lg-item"><span class="lg-chip lg-cblue"></span>내용 일치·문장 삽입</span>
+    <span class="lg-item"><span class="lg-chip lg-cpurple"></span>어법·빈칸 추론</span>
+    <span class="lg-item"><span class="lg-chip lg-corange"></span>어휘 출제예감</span>
+  </div>
   <div class="sheet">
     <div class="head">
       <div class="num">02</div><div class="typ">무관한 문장 찾기</div>

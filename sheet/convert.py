@@ -612,6 +612,13 @@ def _apply_saved(out: dict, saved: dict) -> dict:
         "tags": saved.get("tags", {}),
         "summary": saved.get("summary", ""),
     }
+    # ★ 선생님 자유 강조(밑줄/형광/네모) 복원 — [{si,from,to,tool}]
+    um = saved.get("umarks")
+    if isinstance(um, list):
+        out["MARKS"] = um
+    elif isinstance(saved.get("boxes"), list):   # 구버전 호환
+        out["MARKS"] = [{"si": b.get("si"), "from": b.get("from"),
+                          "to": b.get("to"), "tool": "box"} for b in saved["boxes"]]
     return out
 
 

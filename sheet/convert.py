@@ -284,10 +284,10 @@ def build_sheet_data(pre: dict, translation: str = "", saved_sheet: dict = None,
 
     # ── 토큰 → 문장별 청크 ──
     tokens = _parse_marked(marked)
-    # ★ 문장 단위 우선순위:
-    #   1) 1회독(step1) sentences — 1회독과 완전히 동일한 분할 + 문장별 해석
-    #   2) 업로드된 영어 줄바꿈(한글과 1:1)
-    #   3) split_sentences 폴백
+    # ★ 문장 분할 = 1회독과 동일하게:
+    #   1) 1회독(step1) sentences + 문장별 해석 (있으면 그대로 — 완벽)
+    #   2) split_sentences(원문) 폴백 (1회독과 같은 분리기)
+    #   ※ 업로드 줄바꿈은 문단 통짜로 올라온 경우 under-split 을 일으켜 쓰지 않음.
     sentences = None
     kr_lines = None
     wb_s = [str(s).strip() for s in (wb_sentences or []) if str(s).strip()]
@@ -296,10 +296,6 @@ def build_sheet_data(pre: dict, translation: str = "", saved_sheet: dict = None,
         wb_t = [str(t).strip() for t in (wb_translations or [])]
         if len(wb_t) == len(wb_s):
             kr_lines = wb_t
-    if sentences is None:
-        up_lines = [l.strip() for l in (passage_en or "").splitlines() if l.strip()]
-        if len(up_lines) > 1 and _lines_match_original(up_lines, original):
-            sentences = up_lines
     if not sentences:
         sentences = split_sentences(original)
     if kr_lines is None:
@@ -591,16 +587,20 @@ def _zip_kr_en(kr_list, en_list):
 
 
 def _lines_match_original(lines, original) -> bool:
-    """업로드 영어 줄들이 (공백 무시) 0회독 원문과 순서대로 다 들어맞는지 확인.
-    0회독이 표현을 바꿨거나 원문이 다르면 False → split_sentences 폴백."""
+    """줄들이 (공백 무시) 원문과 순서대로 다 들어맞는지 확인.
+    공백/개행 차이는 무시하고 대조 → 1회독 문장이 사소한 공백차로 반려되지 않게."""
     if not lines or not original:
         return False
+    norm = re.sub(r"\s+", " ", original)
     cur = 0
     for ln in lines:
-        idx = original.find(ln, cur)
+        nl = re.sub(r"\s+", " ", ln).strip()
+        if not nl:
+            continue
+        idx = norm.find(nl, cur)
         if idx < 0:
             return False
-        cur = idx + len(ln)
+        cur = idx + len(nl)
     return True
 
 
@@ -610,9 +610,16 @@ def _sentence_bounds(original: str, sentences):
     for s in sentences:
         idx = original.find(s, cur)
         if idx < 0:
+            # 공백 차이로 실패 시: 앞 몇 단어로 근사 매칭
+            probe = " ".join(s.split()[:4])
+            idx = original.find(probe, cur) if probe else -1
+        if idx < 0:
             idx = cur
-        bounds.append((idx, idx + len(s)))
-        cur = idx + len(s)
+        end = idx + len(s)
+        if end > len(original):
+            end = len(original)
+        bounds.append((idx, end))
+        cur = end
     if not bounds:
         bounds = [(0, len(original))]
     return bounds
@@ -685,15 +692,9 @@ def build_blank_sheet_data(passage_en: str, translation: str = "", saved_sheet: 
         # 원문조차 없으면 완전 빈 구조 (호출측에서 처리)
         return build_sheet_data({}, translation=translation, saved_sheet=saved_sheet)
 
-    # 1회독 sentences 우선 → 업로드 줄바꿈 → 문장 분리기
+    # 1회독 sentences 우선 → 아니면 split_sentences (업로드 문단줄은 under-split 유발해 미사용)
     wb_s = [str(s).strip() for s in (wb_sentences or []) if str(s).strip()]
-    up_lines = [l.strip() for l in raw.splitlines() if l.strip()]
-    if len(wb_s) > 1:
-        sents = wb_s
-    elif len(up_lines) > 1:
-        sents = up_lines
-    else:
-        sents = split_sentences(passage_en)
+    sents = wb_s if len(wb_s) > 1 else split_sentences(passage_en)
 
     wb_t = [str(t).strip() for t in (wb_translations or [])]
     kr_lines = wb_t if len(wb_t) == len(sents) else _split_translation(translation)

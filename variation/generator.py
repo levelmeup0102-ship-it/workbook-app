@@ -1109,7 +1109,12 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s124 = 버그 둘. (1) Q4 요약문 재생성에서 blank_A/B 가 dict 로 오면
+    # _s125 = summary_design 을 쓰면 summary_check 를 요구하지 않는다. _s123 에서
+    #        출력 형식을 역할 칸으로 바꿔 LLM 이 summary_check 를 안 내는데,
+    #        코드가 계속 "5개 채워라"를 요구해 매 시도마다 '자가검증 누락'으로
+    #        재시도가 통째로 소진됐다(실측: A 1개 + B 2개 누락, 3문항만 나옴).
+    #        design 방식은 배치가 구조로 보장되고 판정은 풀이 검증(_s121)이 한다.
+    # (구) _s124 = 버그 둘. (1) Q4 요약문 재생성에서 blank_A/B 가 dict 로 오면
     #        'dict object has no attribute strip' 로 터져 **재생성이 아예 안 돌았다**
     #        (실측: 매 시도마다 예외 → Q3·Q4 겹침을 못 고치고 재시도 소진).
     #        (2) summary_design 을 쓰면 코드가 선지 순서와 정답 번호를 새로 정하는데
@@ -1365,7 +1370,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s124"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s125"
 
 
 # ============ Supabase 캐시 ============
@@ -2440,7 +2445,16 @@ def generate_variation_b(
             try:
                 _chk = data.get("summary_check")
                 _sc = data.get("summary_correct")
-                if not isinstance(_chk, list) or len(_chk) != 5:
+                # ★★ _s125 — summary_design 을 쓰면 summary_check 를 요구하지 않는다.
+                #   _s123 에서 출력 형식을 역할 칸(summary_design)으로 바꿔 LLM 이
+                #   summary_check 를 아예 안 낸다. 그런데 코드가 계속 "5개 채워라"를
+                #   요구해 매 시도마다 '자가검증 누락'으로 재시도가 소진됐다
+                #   (실측: A 1개 + B 2개 누락, 3문항만 생성).
+                #   design 방식에서는 배치가 구조로 보장되고, 판정은 풀이 검증(_s121)이 한다.
+                _use_design = isinstance(data.get("summary_design"), dict)
+                if _use_design:
+                    _chk = []          # design 방식은 자가검증표를 안 낸다
+                if (not _use_design) and (not isinstance(_chk, list) or len(_chk) != 5):
                     if not is_last:
                         last_errors = [
                             f"[{pid}] [유형B] Q3 summary_check 5개를 채우지 않음 — "
@@ -2449,8 +2463,9 @@ def generate_variation_b(
                             f"머리로만 판단하면 복수정답이 그대로 나간다."]
                         print(f"[VAR][B][{pid}] Q3 자가검증 누락 → 재시도")
                         continue
-                else:
+                if True:
                     # ★★ 역할 배치 확인 (_s120) — 순수 문자열 세기라 오탐이 없다.
+                    #   design 방식(_chk 가 빈 리스트)에서는 건너뛴다 — 배치가 구조로 보장된다.
                     #   설계: [정답]1 [유의어-A]2 [유의어-B]1 [둘다틀림]1
                     #   실측 실패: (A) 다섯 개를 전부 유의어로 넣어(demonstrate/suggest/
                     #   reveal/indicate/reflect) (A)로는 아무것도 못 걸렀다.
@@ -2517,13 +2532,6 @@ def generate_variation_b(
                     except Exception as _se:
                         print(f"[VAR][B][{pid}] Q3 풀이 검증 예외({_se}) — 건너뜀")
 
-                    # ★ _s124 — summary_design 을 쓴 경우 summary_check 는 못 쓴다.
-                    #   코드가 선지 순서를 새로 섞고 정답 번호도 다시 정하는데
-                    #   summary_check 는 LLM 이 **원래 순서**로 쓴 것이라 어긋난다.
-                    #   실측: '정답 1번'인데 '복수정답 감지 [1]' 이 떴다(정답 행을
-                    #   복수정답으로 오인). 이 경우 판정은 풀이 검증(_s121)에 맡긴다.
-                    if isinstance(data.get("summary_design"), dict):
-                        _chk = []
                     # 정답 행 외에 '정답/성립/맞' 이라고 적힌 행이 있으면 복수정답이다
                     _alive = [k for k, t in enumerate(_chk)
                               if k != _sc and re.search(r"정답|성립|맞다|가능", str(t))

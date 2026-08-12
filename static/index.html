@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- deploy: 저작권 하단 푸터로 이동 2026-08-01d -->
+<!-- deploy: 탭명 선생님 분석지 + 0회독 없이 열기 안내 2026-08-03 -->
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
@@ -183,7 +183,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
       <button class="logout-btn" onclick="doLogout()">로그아웃</button>
     </div>
     <div class="header-tabs">
-      <div class="header-tab" onclick="switchTab('sheet', this)"> 분석지</div>
+      <div class="header-tab" onclick="switchTab('sheet', this)"> 선생님 분석지</div>
       <div class="header-tab" onclick="switchTab('preclass', this)"> 0회독 — 수업 전 분석</div>
       <div class="header-tab active" onclick="switchTab('generate', this)"> 1회독 교재 생성</div>
       <div class="header-tab" onclick="switchTab('variation', this)"> 2회독 AB 변형문제</div>
@@ -263,7 +263,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
     <div class="three-col">
       <div style="grid-column: span 2;">
         <div class="card">
-          <div class="card-title"> 지문 선택 (0회독이 준비된 지문만 분석지 가능)</div>
+          <div class="card-title"> 지문 선택 (0회독 없어도 원문으로 열 수 있음)</div>
           <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
             <button class="btn btn-sm" onclick="asExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
             <button class="btn btn-sm" onclick="asCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
@@ -285,8 +285,8 @@ textarea:focus { border-color: #4A90D9; outline: none; }
             · <b>학생 게시물</b> — 공유 링크로 배포
           </div>
           <div style="background:#EBF0FA;border:1px solid #2E4E8F;border-radius:8px;padding:10px;margin-bottom:10px;font-size:10.5px;color:#445;line-height:1.6;">
-            ⓘ 분석지는 <b>0회독 자료</b>를 소스로 씁니다.<br>
-            0회독이 ⏳ 미생성인 지문은 먼저 0회독 탭에서 생성하세요.
+            ⓘ 0회독이 있으면 <b>자동 분석</b>을 얹어서, 없으면 <b>원문만</b>으로 엽니다.<br>
+            0회독 없이 열면 강조 없이 문장·해석만 나오며, 선생님이 직접 강조·편집하면 됩니다.
           </div>
           <button class="btn btn-primary" id="as-btn-open" onclick="asOpenSheets()" disabled style="width:100%;background:#2E4E8F;">
              분석지 열기 (새 창)

@@ -244,6 +244,7 @@
     <span class="tch-wrap" id="tchWrap">
       <input id="tchName" class="tch-in" placeholder="강사명" autocomplete="off">
       <select id="tchSel" class="tch-sel"><option value="">― 저장된 강사 ―</option></select>
+      <button class="tch-btn" id="newVerBtn">＋ 새 버전</button>
       <button class="tch-btn" id="saveBtn">저장</button>
       <button class="tch-btn" id="saveAsBtn">새 이름으로 저장</button>
       <button class="tch-btn link" id="linkBtn">학생 링크</button>
@@ -759,6 +760,13 @@ async function loadTeachers(){
   const ro=(_D&&(_D.READONLY||_D.MODE==='student'));
   const wrap=document.getElementById('tchWrap');
   if(ro){if(wrap)wrap.style.display='none';return;}
+  // ★ teacher 파라미터 없이 열렸는데 마지막 강사가 있으면, 그 강사 버전으로 다시 연다
+  //   (안 그러면 항상 '공용(빈)' 버전이 떠서 저장한 게 사라진 것처럼 보임)
+  const _sp=new URLSearchParams(location.search);
+  if(!_sp.has('teacher')){
+    let _last='';try{_last=localStorage.getItem('sheet_teacher')||'';}catch(e){}
+    if(_last){ _sp.set('teacher',_last); location.search=_sp.toString(); return; }
+  }
   let tname=(_D&&_D.TEACHER)||'';
   if(!tname){try{tname=localStorage.getItem('sheet_teacher')||'';}catch(e){}}
   const inp=document.getElementById('tchName');if(inp)inp.value=tname;
@@ -779,7 +787,15 @@ async function loadTeachers(){
     saveSheet(false);   // 현재 표시·편집을 그 이름의 새 버전으로 저장
   };
   const lb=document.getElementById('linkBtn');if(lb)lb.onclick=publishSheet;
-  const sel=document.getElementById('tchSel');if(sel)sel.onchange=function(){const v=this.value;const p=new URLSearchParams(location.search);if(v)p.set('teacher',v);else p.delete('teacher');location.search=p.toString();};
+  const nvb=document.getElementById('newVerBtn');
+  if(nvb)nvb.onclick=()=>{
+    const nm=(prompt('새 강사 버전을 새로 만듭니다.\n강사 이름을 입력하세요:','')||'').trim();
+    if(!nm)return;
+    try{localStorage.setItem('sheet_teacher',nm);}catch(e){}
+    const p=new URLSearchParams(location.search);p.set('teacher',nm);
+    location.search=p.toString();   // 그 이름의 (아직 저장 안 된) 새 버전으로 열림 = 0회독 기본 상태에서 시작
+  };
+  const sel=document.getElementById('tchSel');if(sel)sel.onchange=function(){const v=this.value;try{localStorage.setItem('sheet_teacher',v);}catch(e){}const p=new URLSearchParams(location.search);p.set('teacher',v);location.search=p.toString();};
   loadTeachers();
 })();
 setMode((_D&&_D.MODE==='student')?2:0);

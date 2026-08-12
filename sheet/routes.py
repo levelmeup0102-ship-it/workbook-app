@@ -72,6 +72,34 @@ def _load_preclass(cache_key: str) -> dict | None:
     return None
 
 
+def _load_step1(cache_key: str) -> dict | None:
+    """1회독 step1_basic 캐시 로드 — sentences / sentence_translations 를 얻어
+    분석지 문장 분할을 1회독과 동일하게 맞추기 위함."""
+    dd = _DEPS["data_dir"] or Path("data")
+    local = Path(dd) / cache_key / "step1_basic.json"
+    if local.exists():
+        try:
+            return json.loads(local.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    url = _supa_url()
+    if url:
+        try:
+            import httpx
+            ep = (f"{url}/rest/v1/step_cache"
+                  f"?cache_key=eq.{cache_key}&step_name=eq.step1_basic"
+                  f"&select=data&limit=1")
+            with httpx.Client(timeout=10) as c:
+                r = c.get(ep, headers=_supa_headers())
+            if r.status_code == 200:
+                rows = r.json()
+                if rows and isinstance(rows, list):
+                    return rows[0].get("data")
+        except Exception as e:
+            print(f"[sheet] step1 load error: {str(e)[:120]}")
+    return None
+
+
 def _load_sheet(cache_key: str = None, token: str = None, teacher: str = "") -> dict | None:
     url = _supa_url()
     if not url:
@@ -177,16 +205,23 @@ async def sheet_page(request: Request, book: str = "", unit: str = "", pid: str 
     pre = _load_preclass(ck)
     eng, kr = await _get_passage_text(book, unit, pid)
 
+    # ★ 1회독(step1_basic)이 나눈 문장/해석을 그대로 가져와 분할을 1회독과 일치시킴
+    st1 = _load_step1(ck)
+    wb_sents = (st1 or {}).get("sentences") if isinstance(st1, dict) else None
+    wb_kr = (st1 or {}).get("sentence_translations") if isinstance(st1, dict) else None
+
     teacher = (teacher or "").strip()
     saved_row = _load_sheet(cache_key=ck, teacher=teacher)
     saved_sheet = (saved_row or {}).get("sheet") if saved_row else None
 
     if pre:
-        # 0회독(자동 분석)이 있으면 그걸 소스로
-        data = sc.build_sheet_data(pre, translation=kr, saved_sheet=saved_sheet, passage_en=eng)
+        # 0회독(자동 분석)이 있으면 그걸 소스로 (문장 분할은 1회독 결과 우선)
+        data = sc.build_sheet_data(pre, translation=kr, saved_sheet=saved_sheet,
+                                   passage_en=eng, wb_sentences=wb_sents, wb_translations=wb_kr)
     elif (eng or "").strip():
         # ★ 0회독이 없어도 원문만으로 '빈 분석지'를 연다 (선생님이 직접 강조/편집)
-        data = sc.build_blank_sheet_data(eng, translation=kr, saved_sheet=saved_sheet)
+        data = sc.build_blank_sheet_data(eng, translation=kr, saved_sheet=saved_sheet,
+                                         wb_sentences=wb_sents, wb_translations=wb_kr)
     else:
         # 원문조차 없는 경우에만 막는다
         raise HTTPException(404, f"이 지문의 원문이 없습니다. 먼저 지문을 업로드하세요. (key={ck})")
@@ -320,6 +355,9 @@ async def sheet_student(token: str):
     ck = row.get("cache_key")
     book, unit, pid = row.get("book"), row.get("unit"), row.get("pid")
     pre = _load_preclass(ck)
+    st1 = _load_step1(ck)
+    wb_sents = (st1 or {}).get("sentences") if isinstance(st1, dict) else None
+    wb_kr = (st1 or {}).get("sentence_translations") if isinstance(st1, dict) else None
 
     eng, kr = "", ""
     try:
@@ -328,10 +366,12 @@ async def sheet_student(token: str):
         pass
 
     if pre:
-        data = sc.build_sheet_data(pre, translation=kr, saved_sheet=row.get("sheet"), passage_en=eng)
+        data = sc.build_sheet_data(pre, translation=kr, saved_sheet=row.get("sheet"),
+                                   passage_en=eng, wb_sentences=wb_sents, wb_translations=wb_kr)
     elif (eng or "").strip():
         # ★ 0회독 없이 만든 분석지도 학생 공유 가능 (원문 기반 + 강사 저장본 반영)
-        data = sc.build_blank_sheet_data(eng, translation=kr, saved_sheet=row.get("sheet"))
+        data = sc.build_blank_sheet_data(eng, translation=kr, saved_sheet=row.get("sheet"),
+                                         wb_sentences=wb_sents, wb_translations=wb_kr)
     else:
         raise HTTPException(404, "원본 지문이 없습니다.")
     html = _read_template()

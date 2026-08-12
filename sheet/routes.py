@@ -174,16 +174,22 @@ async def sheet_page(request: Request, book: str = "", unit: str = "", pid: str 
 
     ck = _DEPS["ck"](book, unit, pid)
     pre = _load_preclass(ck)
-    if not pre:
-        raise HTTPException(404, f"0회독 분석이 아직 없습니다. 먼저 0회독을 생성하세요. (key={ck})")
-
     eng, kr = await _get_passage_text(book, unit, pid)
 
     teacher = (teacher or "").strip()
     saved_row = _load_sheet(cache_key=ck, teacher=teacher)
     saved_sheet = (saved_row or {}).get("sheet") if saved_row else None
 
-    data = sc.build_sheet_data(pre, translation=kr, saved_sheet=saved_sheet)
+    if pre:
+        # 0회독(자동 분석)이 있으면 그걸 소스로
+        data = sc.build_sheet_data(pre, translation=kr, saved_sheet=saved_sheet)
+    elif (eng or "").strip():
+        # ★ 0회독이 없어도 원문만으로 '빈 분석지'를 연다 (선생님이 직접 강조/편집)
+        data = sc.build_blank_sheet_data(eng, translation=kr, saved_sheet=saved_sheet)
+    else:
+        # 원문조차 없는 경우에만 막는다
+        raise HTTPException(404, f"이 지문의 원문이 없습니다. 먼저 지문을 업로드하세요. (key={ck})")
+
     html = _read_template()
     return _inject(html, data, mode="auth", readonly=False, teacher=teacher)
 
@@ -313,8 +319,6 @@ async def sheet_student(token: str):
     ck = row.get("cache_key")
     book, unit, pid = row.get("book"), row.get("unit"), row.get("pid")
     pre = _load_preclass(ck)
-    if not pre:
-        raise HTTPException(404, "원본 분석 데이터가 없습니다.")
 
     eng, kr = "", ""
     try:
@@ -322,6 +326,12 @@ async def sheet_student(token: str):
     except Exception:
         pass
 
-    data = sc.build_sheet_data(pre, translation=kr, saved_sheet=row.get("sheet"))
+    if pre:
+        data = sc.build_sheet_data(pre, translation=kr, saved_sheet=row.get("sheet"))
+    elif (eng or "").strip():
+        # ★ 0회독 없이 만든 분석지도 학생 공유 가능 (원문 기반 + 강사 저장본 반영)
+        data = sc.build_blank_sheet_data(eng, translation=kr, saved_sheet=row.get("sheet"))
+    else:
+        raise HTTPException(404, "원본 지문이 없습니다.")
     html = _read_template()
     return _inject(html, data, mode="student", readonly=True)

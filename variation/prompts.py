@@ -333,10 +333,23 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
 
 1-9. **★ Q2 IS A TITLE QUESTION — 평가원 제목 유형 (수능 24번)**:
 
+   ## ★★★ 다섯 선지 **전부** 아래 금지 형태로 시작하면 안 된다 — 그 문항은 버려진다
+   실측: 이 오류가 재시도를 세 번 잡아먹어 다른 문제를 못 고치고 관대 모드로 떨어졌다.
+     [X] The Importance of ...      [X] The Role of ...
+     [X] The Necessity of ...       [X] The Significance of ...
+     [X] The Value of ...           [X] The Impact of ...
+     [X] The Effect(s) of ...       [X] How ... Affects ...
+   이건 **주제(topic)** 형식이지 제목이 아니다. Type A 의 Q1 이 그 형식을 쓴다.
+     [O] "Deep Work: The Engine of Genuine Value"        (콜론)
+     [O] "Why Does Constant Busyness Yield So Little?"   (의문)
+     [O] "Escaping the Trap of Shallow Work"             (동명사)
+     [O] "When Small Sparks Set the Pattern"             (When/If 절)
+   ★ 다섯 개를 쓰고 나서 각 선지의 첫 세 단어를 읽어라.
+     'The Importance/Role/Necessity...' 로 시작하는 게 하나라도 있으면 고쳐라.
+
    ## 형태
    ★ Type A (same passage) asks for the 주제 as a noun phrase; Type B asks for the 제목.
      Same argument, different demand — the options must LOOK different.
-     If your Q2 options read like "the importance of ...", you wrote topic options. Rewrite.
    - A real title. 4-10 words. Capitalize the major words.
      Mix AT LEAST TWO shapes across the five:
        (a) COLON     — "Deep Work: The Engine of Genuine Value"
@@ -435,13 +448,30 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
    ★ (A)에 유의어가 셋(overlook·ignorance·disregard), (B)에 둘(marginalized·underserved).
      그래도 짝은 하나다.
 
-   ## 만드는 순서 — 이대로 하라
+   ## ★★★ 다섯 행의 배치표 — 이 표를 그대로 채워라
+
+   정답 행을 제외한 네 행은 **역할이 정해져 있다.** 아무렇게나 다섯 쌍을 만들지 마라.
+
+   | 행 | (A) | (B) | 왜 탈락하는가 |
+   |---|---|---|---|
+   | **정답** | A₁ (맞음) | B₁ (맞음) | — |
+   | 유의어-A ① | A₁의 유의어 | **틀림** | (A)는 맞아 보이지만 (B)가 반대 방향 |
+   | 유의어-A ② | A₁의 다른 유의어 | **틀림** | 위와 같음 |
+   | 유의어-B | **틀림** | B₁의 유의어 | (B)는 맞아 보이지만 (A)가 지문과 무관 |
+   | 둘 다 틀림 | **틀림** | **틀림** | 방향이 반대인 쌍 |
+
+   ★ **(A) 유의어는 정확히 2개, (B) 유의어는 정확히 1개.**
+     실측 실패: (A)에 다섯 개를 전부 유의어로 넣었다 —
+     `demonstrate / suggest / reveal / indicate / reflect`
+     → (A)로는 아무것도 못 걸러 (B) 하나로만 결정되고, 거기도 유의어가 있어 복수정답.
+
+   ★ **유의어를 넣은 행은 반대쪽 칸을 반드시 틀리게 한다.** 이게 핵심이다.
+     기출도 유의어를 쓴다. 다만 그 행의 반대쪽이 틀려서 짝이 안 맞을 뿐이다.
+
+   ## 만드는 순서
    1. 정답 쌍 (A₁, B₁)을 먼저 정한다. 지문 논지를 담은 추상어 두 개다.
-   2. **(A)에 유의어 2개**를 만든다. 그 행들의 (B)는 **반드시 틀리게** 채운다
-      (반대 방향이거나 지문이 말하지 않은 것).
-   3. **(B)에 유의어 1개**를 만든다. 그 행의 (A)는 **반드시 틀리게** 채운다.
-   4. 남은 한 행은 (A)(B) 둘 다 틀리게 — 방향이 반대인 쌍이 좋다.
-   5. 아래 검증을 통과할 때까지 고친다.
+   2. 위 표의 네 행을 순서대로 채운다. **각 행이 어느 역할인지 의식하며 쓴다.**
+   3. 아래 검증을 통과할 때까지 고친다.
 
    ## ★★ 검증 — 다섯 행을 요약문에 실제로 넣어 읽어라
    머리로 "이건 오답이겠지" 하지 마라. **문장으로 완성해서 소리 내어 읽어라.**
@@ -577,8 +607,8 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
   "summary_options": [["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"]],
   "summary_correct": <0-4>,
   "summary_check": [
-    "<①번을 요약문에 넣은 완성 문장 → 왜 틀렸는지 (정답 행은 '정답')>",
-    "<②번 …>", "<③번 …>", "<④번 …>", "<⑤번 …>"
+    "<[역할] ①번을 요약문에 넣은 완성 문장 → 왜 틀렸는지>",
+    "<[역할] ②번 …>", "<[역할] ③번 …>", "<[역할] ④번 …>", "<[역할] ⑤번 …>"
   ],
   "full_summary": "<ONE complete grammatical summary sentence, NO blanks — the code blanks it>",
   "blank_summary_template": "<leave as the full sentence; code overwrites it with (A)/(B)>",
@@ -604,6 +634,13 @@ VERIFY BEFORE OUTPUT:
 - ★★ summary_check 5개를 반드시 채워라. 각 행을 요약문에 넣어 **완성된 문장**으로
   적고, 오답이면 어느 칸이 왜 틀렸는지 한 줄로 쓴다.
   머리로만 판단하지 말고 문장으로 써 봐야 복수정답이 드러난다.
+- ★★ summary_check 각 항목은 **[역할]로 시작**한다. 다섯 개가 정확히 이것들이어야 한다:
+  `[정답]` `[유의어-A]` `[유의어-A]` `[유의어-B]` `[둘다틀림]`
+    예) "[유의어-A] ... reveal ... efficiency → (A)는 맞지만 (B) efficiency 가 지문과 무관"
+        "[정답] ... concentration ... output → 정답"
+- ★★ summary_check 의 [역할] 다섯 개를 세어라.
+  **[정답]1 [유의어-A]2 [유의어-B]1 [둘다틀림]1** 이어야 한다.
+  [유의어-A]가 셋 이상이면 (A) 칸이 통째로 흐려져 복수정답이 된다. 다시 짜라.
 - ★★ summary_check 를 다 쓴 뒤 세어라. **성립하는 행이 정확히 하나인가?**
   둘 이상이면 그 행의 한쪽 칸을 갈고 처음부터 다시 검증하라.
   (실측 실패: disclosure/engagement · revelation/curiosity · presentation/attention
@@ -987,6 +1024,50 @@ def build_core_blank_prompt(first_sentence: str) -> str:
 #   답지의 해석과 정답 영문이 같은 문장이 된다. LLM이 kr 키를 누락하면 이 프롬프트로
 #   번역만 따로 한 번 더 부른다. (렌더러가 kr이 비면 해석 줄 자체를 안 찍는다)
 # ════════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════════
+# B Q3 복수정답 검증 — 별도 호출 (_s121)
+#   지금까지의 검사(summary_check, 역할 라벨)는 전부 **만든 LLM 에게 되묻는** 방식이라
+#   대충 채우면 통과했다. 시험을 낸 사람에게 "이 문제 복수정답 아니죠?" 하고 묻는 셈이다.
+#   → 문항만 떼어 **다른 호출로 풀린다.** 만든 맥락을 모르므로 학생 입장에 가깝다.
+#     답이 정답과 다르거나 "둘 이상 성립"이라고 하면 복수정답이다.
+# ════════════════════════════════════════════════════════════════
+SOLVE_SYS = (
+    "You are a Korean high school student taking an English exam. "
+    "Solve the given 요약문 빈칸 문제 honestly. "
+    "You have NOT seen this problem before and do not know the intended answer. "
+    "Return ONLY JSON."
+)
+
+
+def build_solve_prompt(passage_en: str, summary_template: str, options) -> str:
+    """B Q3 문항을 '푸는' 프롬프트. 정답을 알려주지 않는다."""
+    _opts = "\n".join(
+        f"  {'①②③④⑤'[k]} (A) {o[0]}  …  (B) {o[1]}"
+        for k, o in enumerate(options) if isinstance(o, (list, tuple)) and len(o) >= 2)
+    return (
+        "다음 지문을 읽고 요약문의 빈칸 (A), (B)에 들어갈 말로 가장 적절한 것을 고르시오.\n\n"
+        "[지문]\n" + str(passage_en or "").strip() + "\n\n"
+        "[요약문]\n" + str(summary_template or "").strip() + "\n\n"
+        "[선지]\n" + _opts + "\n\n"
+        "## 어떻게 답하나\n"
+        "1. 다섯 선지를 **하나씩 요약문에 넣어 읽어라.** 머리로 넘기지 마라.\n"
+        "2. 각 선지가 성립하는지 판정한다. (A)와 (B)가 **둘 다** 맞아야 성립이다.\n"
+        "3. 성립하는 선지 번호를 전부 적는다.\n"
+        "\n"
+        "★ 정직하게 답하라. 출제자가 의도한 답을 맞히는 게 목적이 아니다.\n"
+        "  **문제가 잘못 만들어졌는지 찾는 것**이 목적이다.\n"
+        "  두 개 이상 성립하면 두 개 이상 적어라. 억지로 하나로 좁히지 마라.\n"
+        "\n"
+        "[OUTPUT JSON]\n"
+        '{"per_option": [\n'
+        '   {"n": 1, "filled": "<①번을 넣은 완성 문장>", "ok": true/false,\n'
+        '    "why": "<성립하면 왜 맞는지, 아니면 어느 칸이 왜 틀렸는지>"},\n'
+        '   {"n": 2, ...}, {"n": 3, ...}, {"n": 4, ...}, {"n": 5, ...}\n'
+        '],\n'
+        ' "valid": [<성립하는 번호들. 예: [2] 또는 [2,4]>]}'
+    )
+
+
 TRANSLATE_SYS = (
     "You translate one English sentence into natural Korean. "
     "Output ONLY valid JSON, no markdown, no text outside JSON."

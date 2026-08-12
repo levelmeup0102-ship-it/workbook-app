@@ -1109,7 +1109,13 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s122 = B 재시도를 3 → 6회로 늘리고, 사유를 **누적해서** 전달한다.
+    # _s123 = B Q3 출력 형식을 **역할 칸**으로 바꿨다. 다섯 쌍을 자유롭게 나열하게 하니
+    #        (A)에 유의어를 다섯 개 넣는 식으로 설계가 무너졌다(실측 demonstrate/suggest/
+    #        reveal/indicate/reflect). correct / syn_A_1 / syn_A_2 / syn_B / both_wrong
+    #        칸에 직접 채우게 하면 그 배치로만 낼 수 있다 — 정답 말고는 반드시 한 칸이
+    #        틀리므로 복수정답이 구조적으로 안 나온다. 평가원 40번 구조 그대로다
+    #        (양쪽에 유의어를 두되 짝이 안 맞게). 섞기와 정답 번호는 코드가 정한다.
+    # (구) _s122 = B 재시도를 3 → 6회로 늘리고, 사유를 **누적해서** 전달한다.
     #        B 는 검사가 훨씬 많다(제목 형식·절대어·본문베끼기·복수정답·요약문 겹침·
     #        역할 배치·풀이 검증). 3회로는 매번 다른 사유로 소진돼 정작 복수정답을
     #        고칠 기회가 없었고, 마지막 사유만 주니 그것만 고치고 앞서 지적받은 걸
@@ -1352,7 +1358,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s122"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s123"
 
 
 # ============ Supabase 캐시 ============
@@ -2025,6 +2031,56 @@ def generate_variation_b(
 
             raw = call_claude(SYSTEM_PROMPT_B, user_msg)
             data = extract_json_from_response(raw)
+
+            # ★★★ summary_design → summary_options 변환 (_s123)
+            #   LLM 이 다섯 쌍을 자유롭게 나열하면 (A)에 유의어를 다섯 개 넣는 식으로
+            #   설계가 무너진다(실측: demonstrate/suggest/reveal/indicate/reflect).
+            #   출력 형식을 **역할 칸**으로 바꿔 그 배치로만 낼 수 있게 했다.
+            #     correct / syn_A_1 / syn_A_2 / syn_B / both_wrong
+            #   정답 말고는 반드시 한 칸이 틀리므로 복수정답이 구조적으로 안 나온다.
+            #   평가원 40번 구조 그대로다 — 양쪽에 유의어를 두되 짝이 안 맞게.
+            #   섞기와 정답 번호는 코드가 정한다.
+            _dsg = data.get("summary_design")
+            if isinstance(_dsg, dict):
+                _keys = ("correct", "syn_A_1", "syn_A_2", "syn_B", "both_wrong")
+                _miss = [k for k in _keys
+                         if not isinstance(_dsg.get(k), dict)
+                         or not str(_dsg[k].get("A", "")).strip()
+                         or not str(_dsg[k].get("B", "")).strip()]
+                if _miss:
+                    last_errors = [
+                        f"[{pid}] [유형B] Q3 summary_design 칸이 비었다: {_miss} — "
+                        f"correct / syn_A_1 / syn_A_2 / syn_B / both_wrong 다섯 칸을 "
+                        f"모두 (A)(B) 와 함께 채울 것."]
+                    print(f"[VAR][B][{pid}] Q3 summary_design 미완성 {_miss} → 재시도")
+                    if not is_last:
+                        continue
+                else:
+                    _nw = []
+                    if not str(_dsg["syn_A_1"].get("B_why", "")).strip(): _nw.append("syn_A_1.B_why")
+                    if not str(_dsg["syn_A_2"].get("B_why", "")).strip(): _nw.append("syn_A_2.B_why")
+                    if not str(_dsg["syn_B"].get("A_why", "")).strip():   _nw.append("syn_B.A_why")
+                    if _nw and not is_last:
+                        last_errors = [
+                            f"[{pid}] [유형B] Q3 {_nw} 가 비었다 — 그 칸이 왜 틀렸는지 "
+                            f"못 적으면 안 틀린 것이다. 명백히 틀린 말로 갈아라."]
+                        print(f"[VAR][B][{pid}] Q3 _why 누락 {_nw} → 재시도")
+                        continue
+                    _rows = [(_dsg[k]["A"], _dsg[k]["B"]) for k in _keys]
+                    _seq3 = re.findall(r"\d+", str(pid))
+                    _seq3 = int(_seq3[0]) if _seq3 else 0
+                    _st3 = int(hashlib.md5(
+                        (str(book) + "|" + str(unit) + "|q3pos").encode()
+                    ).hexdigest()[:8], 16) % 5
+                    _cpos = (_st3 + _seq3) % 5
+                    _rest = _rows[1:]
+                    random.Random(f"{book}|{unit}|{pid}|q3ord").shuffle(_rest)
+                    _final = _rest[:_cpos] + [_rows[0]] + _rest[_cpos:]
+                    data["summary_options"] = [[str(a).strip(), str(b).strip()]
+                                               for a, b in _final]
+                    data["summary_correct"] = _cpos
+                    print(f"[VAR][B][{pid}] Q3 design → 선지 구성 완료 "
+                          f"(정답 {_cpos + 1}번)")
 
             # ★★ Q1 삽입 정답 위치 코드 정정 (Q4 빈칸뚫기와 같은 원리)
             #   AI가 마커는 박되 "어느 자리에서 문장이 빠졌나"(position_correct)를 자주 틀린다.

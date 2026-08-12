@@ -374,10 +374,11 @@ def build_sheet_data(pre: dict, translation: str = "", saved_sheet: dict = None)
                 S[si].append(chunk)
         S = [s for s in S if s]
     else:
-        # ── 기존 경로: 마커 토큰 단위 청크 + 문장 한글을 첫 청크 밑에 (폴백) ──
-        chunks = []
+        # ── 폴백(토큰) 경로: 마커 토큰 단위 청크.
+        #    ★ 문장 경계를 걸친 토큰(특히 마커 사이 평문)은 경계에서 잘라 각 문장에 배치.
+        #      안 그러면 다음 문장의 앞부분이 앞 문장 칸에 붙어 "한 문장씩" 안 나온다.
+        chunks = []  # (sent_idx, chunk)
         cursor = 0
-        sent_idx = 0
         for tk in tokens:
             seg = tk["text"]
             if not seg:
@@ -385,14 +386,37 @@ def build_sheet_data(pre: dict, translation: str = "", saved_sheet: dict = None)
             start = original.find(seg, cursor)
             if start < 0:
                 start = cursor
-            cursor = start + len(seg)
-            while sent_idx + 1 < len(sent_bounds) and start >= sent_bounds[sent_idx + 1][0]:
-                sent_idx += 1
-            chunk = {"e": seg.strip()}
+            end = start + len(seg)
+            cursor = end
             a = _annot(tk)
-            if a:
-                chunk.update(a)
-            chunks.append((sent_idx, chunk))
+
+            placed = False
+            for si, (bs, be) in enumerate(sent_bounds):
+                if be <= start or bs >= end:
+                    continue
+                piece = original[max(start, bs):min(end, be)].strip()
+                if not piece:
+                    continue
+                chunk = {"e": piece}
+                # 마커(어법/어휘/함축)는 강조어가 이 조각 안에 실제로 들어갈 때만 얹기
+                if a and a.get("h") and a["h"] in piece:
+                    chunk.update(a)
+                chunks.append((si, chunk))
+                placed = True
+
+            if not placed:
+                # 안전장치: 경계 매칭 실패 시 시작 위치 문장에 통째로
+                si = 0
+                for bi, (bs, _be) in enumerate(sent_bounds):
+                    if start >= bs:
+                        si = bi
+                    else:
+                        break
+                chunk = {"e": seg.strip()}
+                if a:
+                    chunk.update(a)
+                chunks.append((si, chunk))
+
         n_sent = max([c[0] for c in chunks], default=-1) + 1
         S = [[] for _ in range(max(n_sent, len(sentences)))]
         for si, ch in chunks:

@@ -15,7 +15,7 @@ from typing import Optional
 
 import httpx
 
-from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt, TRANSLATE_SYS, build_translate_prompt, VOCAB_SYS, build_vocab_prompt, Q5_BLANK_SYS, build_q5_blank_prompt, INSERT_SYS, build_insert_prompt
+from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt, TRANSLATE_SYS, build_translate_prompt, VOCAB_SYS, build_vocab_prompt, Q5_BLANK_SYS, build_q5_blank_prompt, INSERT_SYS, build_insert_prompt, SOLVE_SYS, build_solve_prompt
 from variation.validator import validate_a, validate_b, check_marker_positions, fill_boundary_dup, modal_no_verb
 import variation.validator as _validator
 
@@ -580,6 +580,16 @@ def absolute_word_in_option(opt: str) -> str:
     _raw = str(opt or "")
     # 하이픈으로 이어진 덩어리는 통째로 지우고 본다
     _raw = re.sub(r"\b[A-Za-z]+(?:-[A-Za-z]+)+\b", " ", _raw)
+    # ★ 관용구 안의 절대어도 세지 않는다 (_s120).
+    #   'One Reasoning Fits All' 'The Anchor of All Emergency Communication' 처럼
+    #   'all' 이 문법적으로 필요한 자리다. 절대어로 티내는 것과 다르다.
+    #   실측: 두 지문이 이것 때문에 재시도를 소진하고 관대 모드로 떨어졌다.
+    for _idiom in (r"fits\s+all", r"one\s+size\s+fits\s+all", r"all\s+in\s+one",
+                   r"once\s+and\s+for\s+all", r"all\s+of\s+us", r"above\s+all",
+                   r"after\s+all", r"all\s+the\s+while", r"in\s+all",
+                   r"anchor\s+of\s+all", r"heart\s+of\s+all", r"root\s+of\s+all",
+                   r"know\s+it\s+all", r"end\s+all", r"all\s+but"):
+        _raw = re.sub(_idiom, " ", _raw, flags=re.I)
     t = " " + re.sub(r"[^A-Za-z ]", " ", _raw.lower()) + " "
     t = re.sub(r"\s+", " ", t)
     for w in _ABSOLUTE_WORDS:
@@ -1094,7 +1104,18 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s119 = normalize_llm_vocab 이 반환값에 antonym 을 안 실어서 validate_vocab 이
+    # _s121 = B Q3 를 **별도 호출로 실제로 풀려** 복수정답을 잡는다. 지금까지의 검사
+    #        (summary_check, 역할 라벨, antonym)는 전부 만든 LLM 에게 되묻는 방식이라
+    #        대충 채우면 통과했다 — 낸 사람에게 "복수정답 아니죠?" 하고 묻는 셈이다.
+    #        문항만 떼어 정답을 감추고 풀린다. 둘 이상 성립한다고 하면 재시도,
+    #        마지막 시도면 B 를 만들지 않는다. 정답이 다르게 나와도 재시도한다.
+    #        호출이 지문당 1회 늘지만 B Q3 가 제일 자주 터지는 자리다.
+    # (구) _s120 = B Q3 복수정답을 관대 모드에서도 통과시키지 않는다. 학생이 이의제기하는
+    #        문제라 '일단 내보내기'가 성립하지 않는다 — 실측: 3회 재시도가 제목 형식·
+    #        절대어 같은 다른 사유로 소진돼 복수정답인 채로 나갔다(감지 13건, B 3/3 관대).
+    #        + 절대어 검사에 관용구 예외 — 'One Reasoning Fits All' 'Anchor of All ~' 은
+    #        'all' 이 문법적으로 필요한 자리다. 이 오탐이 재시도를 두 번 잡아먹었다.
+    # (구) _s119 = normalize_llm_vocab 이 반환값에 antonym 을 안 실어서 validate_vocab 이
     #        매번 "antonym 이 비었다"를 냈다. normalize 는 통과했는데 뒤에서 죽는
     #        구조라 A 3/3 이 3회씩 전부 관대 모드로 떨어졌다(실측 40건).
     #        지문 탓도 LLM 탓도 아니었다 — 넘기는 과정에서 필드를 흘린 것이다.
@@ -1320,7 +1341,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s119"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s121"
 
 
 # ============ Supabase 캐시 ============
@@ -2338,15 +2359,91 @@ def generate_variation_b(
                         print(f"[VAR][B][{pid}] Q3 자가검증 누락 → 재시도")
                         continue
                 else:
+                    # ★★ 역할 배치 확인 (_s120) — 순수 문자열 세기라 오탐이 없다.
+                    #   설계: [정답]1 [유의어-A]2 [유의어-B]1 [둘다틀림]1
+                    #   실측 실패: (A) 다섯 개를 전부 유의어로 넣어(demonstrate/suggest/
+                    #   reveal/indicate/reflect) (A)로는 아무것도 못 걸렀다.
+                    _roles = {}
+                    for _t in _chk:
+                        _m = re.match(r"\s*\[([^\]]{1,12})\]", str(_t))
+                        if _m:
+                            _roles[_m.group(1).strip()] = _roles.get(_m.group(1).strip(), 0) + 1
+                    _want = {"정답": 1, "유의어-A": 2, "유의어-B": 1, "둘다틀림": 1}
+                    if _roles and _roles != _want and not is_last:
+                        last_errors = [
+                            f"[{pid}] [유형B] Q3 선지 역할 배치가 어긋남 — "
+                            f"지금 {_roles}, 있어야 할 것 {_want}. "
+                            f"(A) 유의어는 정확히 2개, (B) 유의어는 정확히 1개다. "
+                            f"유의어를 넣은 행은 반대쪽 칸을 반드시 틀리게 채울 것."]
+                        print(f"[VAR][B][{pid}] Q3 역할 배치 어긋남 {_roles} → 재시도")
+                        continue
+
+                    # ★★★ 별도 호출로 실제로 풀려 본다 (_s121).
+                    #   위 검사들(summary_check, 역할 라벨)은 만든 LLM 에게 되묻는
+                    #   방식이라 대충 채우면 통과한다 — 낸 사람에게 "복수정답 아니죠?"
+                    #   하고 묻는 셈이다. 여기서는 문항만 떼어 **다른 호출로 풀린다.**
+                    #   만든 맥락을 모르므로 학생 입장에 가깝다.
+                    try:
+                        _so = data.get("summary_options")
+                        _st2 = str(data.get("summary_template") or "")
+                        if (isinstance(_so, list) and len(_so) == 5 and _st2
+                                and isinstance(_sc, int)):
+                            _sv = extract_json_from_response(call_claude(
+                                SOLVE_SYS, build_solve_prompt(en_text, _st2, _so),
+                                max_tokens=1600))
+                            _valid = _sv.get("valid")
+                            if isinstance(_valid, list) and _valid:
+                                _v0 = [int(x) for x in _valid
+                                       if str(x).strip().isdigit() and 1 <= int(x) <= 5]
+                                if len(_v0) > 1:
+                                    _extra = [n for n in _v0 if n != _sc + 1]
+                                    _why = ""
+                                    for _po in (_sv.get("per_option") or []):
+                                        if _po.get("n") in _extra:
+                                            _why = str(_po.get("why", ""))[:90]
+                                            break
+                                    last_errors = [
+                                        f"[{pid}] [유형B] Q3 복수정답 — 이 문항을 따로 풀렸더니 "
+                                        f"{_v0} 번이 전부 성립했다(정답은 {_sc+1}번). "
+                                        f"{_extra}번의 한쪽 칸을 명백히 틀리게 갈아라. "
+                                        + (f"풀이 근거: {_why}" if _why else "")]
+                                    print(f"[VAR][B][{pid}] Q3 복수정답(풀이 검증) "
+                                          f"{_v0} → 재시도")
+                                    if is_last:
+                                        raise ValueError(last_errors[0])
+                                    continue
+                                if _v0 and _v0[0] != _sc + 1:
+                                    last_errors = [
+                                        f"[{pid}] [유형B] Q3 정답 불일치 — 따로 풀렸더니 "
+                                        f"{_v0[0]}번이 답이라 한다(표시된 정답은 {_sc+1}번). "
+                                        f"요약문과 선지를 다시 맞춰라."]
+                                    print(f"[VAR][B][{pid}] Q3 정답 불일치(풀이 검증) "
+                                          f"{_v0[0]} vs {_sc+1} → 재시도")
+                                    if not is_last:
+                                        continue
+                    except ValueError:
+                        raise
+                    except Exception as _se:
+                        print(f"[VAR][B][{pid}] Q3 풀이 검증 예외({_se}) — 건너뜀")
+
                     # 정답 행 외에 '정답/성립/맞' 이라고 적힌 행이 있으면 복수정답이다
                     _alive = [k for k, t in enumerate(_chk)
                               if k != _sc and re.search(r"정답|성립|맞다|가능", str(t))
                               and not re.search(r"안 |못 |아니|틀렸|탈락|불가", str(t))]
-                    if _alive and not is_last:
+                    if _alive:
+                        # ★★ 복수정답은 관대 모드에서도 안 봐준다 (_s120).
+                        #   학생이 이의제기하는 문제라 '일단 내보내기'가 성립하지 않는다.
+                        #   실측: 3회 재시도가 제목 형식·절대어 같은 다른 사유로 소진돼
+                        #   복수정답인 채로 관대 모드 통과했다(B 3/3, 감지만 13건).
+                        #   마지막 시도에서도 걸리면 그 지문 B 는 만들지 않는다.
                         last_errors = [
                             f"[{pid}] [유형B] Q3 복수정답 — {[k+1 for k in _alive]}번도 성립한다고 "
                             f"스스로 적었다. 그 행의 한쪽 칸을 갈아라. "
                             f"유의어는 (A)(B) 중 한쪽에만 두고, 그 행의 반대쪽 칸은 반드시 틀리게 채울 것."]
+                        if is_last:
+                            print(f"[VAR][B][{pid}] ⚠ Q3 복수정답 {[k+1 for k in _alive]} — "
+                                  f"마지막 시도라 관대 모드로 가야 하지만, 복수정답은 통과시키지 않는다")
+                            raise ValueError(last_errors[0])
                         print(f"[VAR][B][{pid}] Q3 복수정답 감지 {[k+1 for k in _alive]} → 재시도")
                         continue
             except Exception as _ce:

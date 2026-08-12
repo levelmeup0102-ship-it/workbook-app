@@ -1109,7 +1109,14 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s123 = B Q3 출력 형식을 **역할 칸**으로 바꿨다. 다섯 쌍을 자유롭게 나열하게 하니
+    # _s124 = 버그 둘. (1) Q4 요약문 재생성에서 blank_A/B 가 dict 로 오면
+    #        'dict object has no attribute strip' 로 터져 **재생성이 아예 안 돌았다**
+    #        (실측: 매 시도마다 예외 → Q3·Q4 겹침을 못 고치고 재시도 소진).
+    #        (2) summary_design 을 쓰면 코드가 선지 순서와 정답 번호를 새로 정하는데
+    #        summary_check 는 LLM 이 원래 순서로 쓴 것이라 어긋난다 —
+    #        '정답 1번'인데 '복수정답 감지 [1]'이 떴다(정답 행을 복수정답으로 오인).
+    #        design 을 쓴 경우 summary_check 판정은 건너뛰고 풀이 검증(_s121)에 맡긴다.
+    # (구) _s123 = B Q3 출력 형식을 **역할 칸**으로 바꿨다. 다섯 쌍을 자유롭게 나열하게 하니
     #        (A)에 유의어를 다섯 개 넣는 식으로 설계가 무너졌다(실측 demonstrate/suggest/
     #        reveal/indicate/reflect). correct / syn_A_1 / syn_A_2 / syn_B / both_wrong
     #        칸에 직접 채우게 하면 그 배치로만 낼 수 있다 — 정답 말고는 반드시 한 칸이
@@ -1358,7 +1365,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s123"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s124"
 
 
 # ============ Supabase 캐시 ============
@@ -2252,9 +2259,18 @@ def generate_variation_b(
                                  "논리 구조·주어·축이 되는 문장을 전부 바꿔서 다시 써라.")
                     _s_raw = call_claude(SUMMARY_SENTENCE_SYS, _msg, max_tokens=600)
                     _s = extract_json_from_response(_s_raw)
-                    _fs = (_s.get("full_summary") or "").strip()
-                    _ba = (_s.get("blank_A") or "").strip()
-                    _bb = (_s.get("blank_B") or "").strip()
+                    # ★ _s124 — blank_A/B 가 dict 로 오는 경우가 있다
+                    #   ({"text": "...", "unit": "..."} 형태). 그대로 .strip() 하면
+                    #   'dict object has no attribute strip' 로 터져 **Q4 요약문
+                    #   재생성이 아예 안 돌았다**(실측: 매 시도마다 예외).
+                    #   그래서 Q3·Q4 겹침도 못 고치고 재시도만 소진했다.
+                    def _txt(v):
+                        if isinstance(v, dict):
+                            v = v.get("text") or v.get("span") or v.get("phrase") or ""
+                        return str(v or "").strip()
+                    _fs = _txt(_s.get("full_summary"))
+                    _ba = _txt(_s.get("blank_A"))
+                    _bb = _txt(_s.get("blank_B"))
                     if not (_fs and _ba and _bb and _ba in _fs and _bb in _fs and _ba != _bb):
                         break                      # 형식 오류 — 기존(한번에 만든) 요약문 유지
                     _ov = _summary_overlap(_fs, _q3_sum)
@@ -2501,6 +2517,13 @@ def generate_variation_b(
                     except Exception as _se:
                         print(f"[VAR][B][{pid}] Q3 풀이 검증 예외({_se}) — 건너뜀")
 
+                    # ★ _s124 — summary_design 을 쓴 경우 summary_check 는 못 쓴다.
+                    #   코드가 선지 순서를 새로 섞고 정답 번호도 다시 정하는데
+                    #   summary_check 는 LLM 이 **원래 순서**로 쓴 것이라 어긋난다.
+                    #   실측: '정답 1번'인데 '복수정답 감지 [1]' 이 떴다(정답 행을
+                    #   복수정답으로 오인). 이 경우 판정은 풀이 검증(_s121)에 맡긴다.
+                    if isinstance(data.get("summary_design"), dict):
+                        _chk = []
                     # 정답 행 외에 '정답/성립/맞' 이라고 적힌 행이 있으면 복수정답이다
                     _alive = [k for k, t in enumerate(_chk)
                               if k != _sc and re.search(r"정답|성립|맞다|가능", str(t))

@@ -255,7 +255,7 @@ def _vpool_entry(v: dict) -> dict:
 # 메인 변환
 # ════════════════════════════════════════════════════════════════
 def build_sheet_data(pre: dict, translation: str = "", saved_sheet: dict = None,
-                     passage_en: str = "") -> dict:
+                     passage_en: str = "", wb_sentences=None, wb_translations=None) -> dict:
     pre = pre or {}
     marked = pre.get("passage_marked", "") or ""
     original = _strip_markers(marked)
@@ -284,15 +284,26 @@ def build_sheet_data(pre: dict, translation: str = "", saved_sheet: dict = None,
 
     # ── 토큰 → 문장별 청크 ──
     tokens = _parse_marked(marked)
-    # ★ 문장 단위: 업로드된 영어 줄바꿈(한글과 1:1로 올린 그 줄)을 최우선 기준으로.
-    #   split_sentences 로 다시 쪼개면 인용문 등에서 한글 줄 수와 어긋나 해석이 밀린다.
-    up_lines = [l.strip() for l in (passage_en or "").splitlines() if l.strip()]
-    kr_lines = _split_translation(translation)
+    # ★ 문장 단위 우선순위:
+    #   1) 1회독(step1) sentences — 1회독과 완전히 동일한 분할 + 문장별 해석
+    #   2) 업로드된 영어 줄바꿈(한글과 1:1)
+    #   3) split_sentences 폴백
     sentences = None
-    if len(up_lines) > 1 and _lines_match_original(up_lines, original):
-        sentences = up_lines
+    kr_lines = None
+    wb_s = [str(s).strip() for s in (wb_sentences or []) if str(s).strip()]
+    if len(wb_s) > 1 and _lines_match_original(wb_s, original):
+        sentences = wb_s
+        wb_t = [str(t).strip() for t in (wb_translations or [])]
+        if len(wb_t) == len(wb_s):
+            kr_lines = wb_t
+    if sentences is None:
+        up_lines = [l.strip() for l in (passage_en or "").splitlines() if l.strip()]
+        if len(up_lines) > 1 and _lines_match_original(up_lines, original):
+            sentences = up_lines
     if not sentences:
         sentences = split_sentences(original)
+    if kr_lines is None:
+        kr_lines = _split_translation(translation)
     sent_bounds = _sentence_bounds(original, sentences)
 
     def _annot(tk):
@@ -666,17 +677,26 @@ if __name__ == "__main__":
 #     build_sheet_data 가 문장별로 깔끔히 청크를 나눈다(마커/강조 없음).
 #   - 선생님은 저작모드에서 단어를 눌러 직접 강조/어휘를 채운다.
 # ════════════════════════════════════════════════════════════════
-def build_blank_sheet_data(passage_en: str, translation: str = "", saved_sheet: dict = None) -> dict:
+def build_blank_sheet_data(passage_en: str, translation: str = "", saved_sheet: dict = None,
+                           wb_sentences=None, wb_translations=None) -> dict:
     raw = passage_en or ""
     passage_en = raw.strip()
     if not passage_en:
         # 원문조차 없으면 완전 빈 구조 (호출측에서 처리)
         return build_sheet_data({}, translation=translation, saved_sheet=saved_sheet)
 
-    # 업로드 줄바꿈(한글과 1:1) 우선, 없으면 문장 분리기
+    # 1회독 sentences 우선 → 업로드 줄바꿈 → 문장 분리기
+    wb_s = [str(s).strip() for s in (wb_sentences or []) if str(s).strip()]
     up_lines = [l.strip() for l in raw.splitlines() if l.strip()]
-    sents = up_lines if len(up_lines) > 1 else split_sentences(passage_en)
-    kr_lines = _split_translation(translation)
+    if len(wb_s) > 1:
+        sents = wb_s
+    elif len(up_lines) > 1:
+        sents = up_lines
+    else:
+        sents = split_sentences(passage_en)
+
+    wb_t = [str(t).strip() for t in (wb_translations or [])]
+    kr_lines = wb_t if len(wb_t) == len(sents) else _split_translation(translation)
     dt = []
     for i, s in enumerate(sents):
         dt.append({"e": s, "k": (kr_lines[i] if i < len(kr_lines) else "")})
@@ -687,4 +707,6 @@ def build_blank_sheet_data(passage_en: str, translation: str = "", saved_sheet: 
         "direct_translation": dt,       # 문장별 분리 유도 (len>=2일 때 dt 경로)
     }
     return build_sheet_data(pre, translation=translation, saved_sheet=saved_sheet,
-                            passage_en="\n".join(sents))
+                            passage_en="\n".join(sents),
+                            wb_sentences=sents,
+                            wb_translations=(kr_lines if len(kr_lines) == len(sents) else None))

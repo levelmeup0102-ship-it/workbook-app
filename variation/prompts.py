@@ -448,30 +448,41 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
    ★ (A)에 유의어가 셋(overlook·ignorance·disregard), (B)에 둘(marginalized·underserved).
      그래도 짝은 하나다.
 
-   ## ★★★ 다섯 행의 배치표 — 이 표를 그대로 채워라
+   ## ★★★ summary_design 다섯 칸을 채운다 — 다섯 쌍을 나열하는 게 아니다
 
-   정답 행을 제외한 네 행은 **역할이 정해져 있다.** 아무렇게나 다섯 쌍을 만들지 마라.
+   평가원 40번은 **양쪽 칸에 유의어를 둔다.** 한 칸만 봐서는 못 고르고,
+   짝을 맞춰야 하나가 남는 구조다. 그 설계를 칸 이름으로 고정했다.
 
-   | 행 | (A) | (B) | 왜 탈락하는가 |
+   | 칸 | (A) | (B) | 어디서 죽는가 |
    |---|---|---|---|
-   | **정답** | A₁ (맞음) | B₁ (맞음) | — |
-   | 유의어-A ① | A₁의 유의어 | **틀림** | (A)는 맞아 보이지만 (B)가 반대 방향 |
-   | 유의어-A ② | A₁의 다른 유의어 | **틀림** | 위와 같음 |
-   | 유의어-B | **틀림** | B₁의 유의어 | (B)는 맞아 보이지만 (A)가 지문과 무관 |
-   | 둘 다 틀림 | **틀림** | **틀림** | 방향이 반대인 쌍 |
+   | `correct`    | 맞음 | 맞음 | — |
+   | `syn_A_1`    | correct.A 의 **유의어** | **틀림** | (B) |
+   | `syn_A_2`    | correct.A 의 **다른 유의어** | **틀림** | (B) |
+   | `syn_B`      | **틀림** | correct.B 의 **유의어** | (A) |
+   | `both_wrong` | **틀림** | **틀림** | 양쪽 |
 
-   ★ **(A) 유의어는 정확히 2개, (B) 유의어는 정확히 1개.**
-     실측 실패: (A)에 다섯 개를 전부 유의어로 넣었다 —
-     `demonstrate / suggest / reveal / indicate / reflect`
-     → (A)로는 아무것도 못 걸러 (B) 하나로만 결정되고, 거기도 유의어가 있어 복수정답.
+   ★ 정답 말고는 **반드시 한 칸이 틀린다.** 그래서 복수정답이 나올 수 없다.
+   ★ 유의어를 피하지 마라 — 기출도 쓴다. 다만 유의어를 넣은 행은
+     반대쪽 칸을 **명백히** 틀리게 채운다. 그게 이 유형의 설계다.
 
-   ★ **유의어를 넣은 행은 반대쪽 칸을 반드시 틀리게 한다.** 이게 핵심이다.
-     기출도 유의어를 쓴다. 다만 그 행의 반대쪽이 틀려서 짝이 안 맞을 뿐이다.
+   실제 기출 (합성식품, 정답 controllability / challenge)
+   ```
+   correct     controllability … challenge
+   syn_A_1     predictability  … support     (A)유의어인데 (B)가 반대 방향
+   syn_A_2     manageability   … intensify   (A)유의어인데 (B)가 안 맞음
+   syn_B       accessibility   … question    (B)유의어인데 (A)가 지문과 무관
+   both_wrong  affordability   … reverse     둘 다 지문이 말하지 않은 것
+   ```
+   → (A)에 유의어 셋, (B)에 유의어 둘이 있는데도 짝이 맞는 행은 하나뿐이다.
 
-   ## 만드는 순서
-   1. 정답 쌍 (A₁, B₁)을 먼저 정한다. 지문 논지를 담은 추상어 두 개다.
-   2. 위 표의 네 행을 순서대로 채운다. **각 행이 어느 역할인지 의식하며 쓴다.**
-   3. 아래 검증을 통과할 때까지 고친다.
+   ## 채우는 순서
+   1. `correct` 를 먼저 정한다. 지문 논지를 담은 추상어 두 개.
+   2. `syn_A_1` `syn_A_2` — (A)에 유의어를 넣고, **(B)를 틀리게** 채운 뒤
+      `B_why` 에 왜 틀렸는지 적는다. 적을 수 없으면 그 (B)는 안 틀린 것이다. 갈아라.
+   3. `syn_B` — (B)에 유의어를 넣고, **(A)를 틀리게** 채운 뒤 `A_why` 를 적는다.
+   4. `both_wrong` — 방향이 반대인 쌍이 좋다.
+   ★ `_why` 를 적을 수 없는 칸이 있으면 그 칸은 틀리지 않은 것이다. **반드시 다시 채워라.**
+   ★ 선지 순서와 정답 번호는 코드가 정한다. 너는 다섯 칸만 채운다.
 
    ## ★★ 검증 — 다섯 행을 요약문에 실제로 넣어 읽어라
    머리로 "이건 오답이겠지" 하지 마라. **문장으로 완성해서 소리 내어 읽어라.**
@@ -604,12 +615,17 @@ This is exactly how a Korean CSAT #40 summary is built: read the whole text → 
   "topic_correct": <0-4>,
   "summary_template": "<English summary with (A) and (B) placeholders>",
   "summary_template_kr": "<Korean translation of the summary sentence with correct (A)/(B) filled in — use PLAIN declarative style ~한다/~이다, NEVER honorific ~합니다/~입니다>",
-  "summary_options": [["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"], ["<single_word_A>", "<single_word_B>"]],
-  "summary_correct": <0-4>,
-  "summary_check": [
-    "<[역할] ①번을 요약문에 넣은 완성 문장 → 왜 틀렸는지>",
-    "<[역할] ②번 …>", "<[역할] ③번 …>", "<[역할] ④번 …>", "<[역할] ⑤번 …>"
-  ],
+  "summary_design": {
+    "correct":    {"A": "<맞는 말>",   "B": "<맞는 말>"},
+    "syn_A_1":    {"A": "<correct.A 의 유의어>", "B": "<틀린 말>",
+                   "B_why": "<그 B 가 왜 틀렸는지 한 줄>"},
+    "syn_A_2":    {"A": "<correct.A 의 다른 유의어>", "B": "<틀린 말>",
+                   "B_why": "<그 B 가 왜 틀렸는지 한 줄>"},
+    "syn_B":      {"A": "<틀린 말>", "B": "<correct.B 의 유의어>",
+                   "A_why": "<그 A 가 왜 틀렸는지 한 줄>"},
+    "both_wrong": {"A": "<틀린 말>", "B": "<틀린 말>",
+                   "why": "<양쪽이 왜 틀렸는지 한 줄>"}
+  },
   "full_summary": "<ONE complete grammatical summary sentence, NO blanks — the code blanks it>",
   "blank_summary_template": "<leave as the full sentence; code overwrites it with (A)/(B)>",
   "blank_summary_template_kr": "<Korean translation of the Q4 summary with blank_A/blank_B filled in — PLAIN style ~한다/~이다, NOT ~합니다>",

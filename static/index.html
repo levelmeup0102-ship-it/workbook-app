@@ -134,6 +134,8 @@ textarea:focus { border-color: #4A90D9; outline: none; }
 .ext-count-badge { font-size: 11px; color: #666; margin-left: auto; }
 .lst-cat { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; font-size: 12.5px; font-weight: 700; color: #2E4E8F; background: #EBF0FA; border-bottom: 1px solid #d8e2f2; cursor: pointer; user-select: none; }
 .lst-cat:hover { background: #dbe4f5; }
+.lst-subcat { display:flex; align-items:center; justify-content:space-between; padding:7px 12px 7px 24px; font-size:12px; font-weight:600; color:#445; background:#f5f8fc; border-bottom:1px solid #eef2f7; cursor:pointer; user-select:none; }
+.lst-subcat:hover { background:#eaf0f8; }
 
 /* ★ 비밀노트 탭 스타일 */
 .sn-type-btn { flex:1; padding:12px 8px; border:none; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; transition:all 0.2s; }
@@ -911,6 +913,26 @@ function toggleListCat(prefix, cat) {
                 ext: extRenderBookList, vr: vrRenderBookList, ss: ssRenderBookList };
   if (fns[prefix]) fns[prefix]();
 }
+// 목록형 탭(0회독·분석지·비밀노트·원문추출·변형·서술형)에도 하위분류(고1/고2/고3·공통영어1/2) 적용
+// 1회독 드롭다운과 동일한 SUBCAT_ORDER / subCategorizeBook 기준 사용. 기본 펼침, 접은 것만 기록.
+const listClosedSubs = new Set();
+function subGroupCatBooks(cat, catBooks) {
+  const order = SUBCAT_ORDER[cat];
+  if (!order) return [[null, catBooks]];   // 하위분류 없는 카테고리(수능특강·수능연계교재)는 그대로
+  const subs = {};
+  catBooks.forEach(b => { const s = subCategorizeBook(cat, b) || '기타'; (subs[s] = subs[s] || []).push(b); });
+  return order.filter(s => subs[s] && subs[s].length).map(s => [s, subs[s]]);
+}
+function subCatHeader(cat, sub, count, open) {
+  return `<div class="lst-subcat" onclick="event.stopPropagation();toggleListSub('${cat}','${sub}')">
+    <span>${sub} (${count})</span><span>${open ? '▲' : '▼'}</span></div>`;
+}
+function toggleListSub(cat, sub) {
+  const key = cat + '::' + sub;
+  if (listClosedSubs.has(key)) listClosedSubs.delete(key); else listClosedSubs.add(key);
+  [pcRenderBookList, asRenderBookList, snRenderBookList, extRenderBookList, vrRenderBookList, ssRenderBookList]
+    .forEach(fn => { try { fn(); } catch(e) {} });
+}
 
 // 카테고리 안의 2차 분류 (모의고사 → 고1/고2/고3, 교과서 → 공통영어1/2, 영어1/2)
 function subCategorizeBook(cat, name) {
@@ -1434,7 +1456,11 @@ function ssRenderBookList(){
     const __catOpen = listOpenCats.ss.has(__cat);
     html += bookCatHeader('ss', __cat, __catBooks.length, __catOpen);
     if (!__catOpen) continue;
-  for (const book of __catBooks) {
+  for (const [__sub, __subBooks] of subGroupCatBooks(__cat, __catBooks)) {
+    const __subOpen = !__sub || !listClosedSubs.has(__cat + '::' + __sub);
+    if (__sub) html += subCatHeader(__cat, __sub, __subBooks.length, __subOpen);
+    if (__sub && !__subOpen) continue;
+  for (const book of __subBooks) {
     const units = Object.keys(books[book]).sort((a,b)=>(parseInt(a.match(/\d+/)?.[0])||0)-(parseInt(b.match(/\d+/)?.[0])||0)||a.localeCompare(b));
     const all = Object.values(books[book]).flat();
     const sel = all.filter(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
@@ -1462,6 +1488,7 @@ function ssRenderBookList(){
         html += '</div></div>';
       }
     }
+  }
   }
   }
   document.getElementById('ss-book-list').innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
@@ -1568,7 +1595,11 @@ function snRenderBookList() {
     const __catOpen = listOpenCats.sn.has(__cat);
     html += bookCatHeader('sn', __cat, __catBooks.length, __catOpen);
     if (!__catOpen) continue;
-  for (const book of __catBooks) {
+  for (const [__sub, __subBooks] of subGroupCatBooks(__cat, __catBooks)) {
+    const __subOpen = !__sub || !listClosedSubs.has(__cat + '::' + __sub);
+    if (__sub) html += subCatHeader(__cat, __sub, __subBooks.length, __subOpen);
+    if (__sub && !__subOpen) continue;
+  for (const book of __subBooks) {
     const units = Object.keys(books[book]).sort((a,b) => {
       const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
       const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
@@ -1611,6 +1642,7 @@ function snRenderBookList() {
         html += '</div></div>';
       }
     }
+  }
   }
   }
   container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
@@ -1780,7 +1812,11 @@ function pcRenderBookList() {
     const __catOpen = listOpenCats.pc.has(__cat);
     html += bookCatHeader('pc', __cat, __catBooks.length, __catOpen);
     if (!__catOpen) continue;
-  for (const book of __catBooks) {
+  for (const [__sub, __subBooks] of subGroupCatBooks(__cat, __catBooks)) {
+    const __subOpen = !__sub || !listClosedSubs.has(__cat + '::' + __sub);
+    if (__sub) html += subCatHeader(__cat, __sub, __subBooks.length, __subOpen);
+    if (__sub && !__subOpen) continue;
+  for (const book of __subBooks) {
     const units = Object.keys(books[book]).sort((a,b) => {
       const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
       const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
@@ -1823,6 +1859,7 @@ function pcRenderBookList() {
         html += '</div></div>';
       }
     }
+  }
   }
   }
   container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
@@ -2139,7 +2176,11 @@ function extRenderBookList() {
     const __catOpen = listOpenCats.ext.has(__cat);
     html += bookCatHeader('ext', __cat, __catBooks.length, __catOpen);
     if (!__catOpen) continue;
-  for (const book of __catBooks) {
+  for (const [__sub, __subBooks] of subGroupCatBooks(__cat, __catBooks)) {
+    const __subOpen = !__sub || !listClosedSubs.has(__cat + '::' + __sub);
+    if (__sub) html += subCatHeader(__cat, __sub, __subBooks.length, __subOpen);
+    if (__sub && !__subOpen) continue;
+  for (const book of __subBooks) {
     const units = Object.keys(books[book]).sort((a,b) => {
       const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
       const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
@@ -2182,6 +2223,7 @@ function extRenderBookList() {
         html += '</div></div>';
       }
     }
+  }
   }
   }
   container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
@@ -2388,7 +2430,11 @@ function vrRenderBookList() {
     const __catOpen = listOpenCats.vr.has(__cat);
     html += bookCatHeader('vr', __cat, __catBooks.length, __catOpen);
     if (!__catOpen) continue;
-  for (const book of __catBooks) {
+  for (const [__sub, __subBooks] of subGroupCatBooks(__cat, __catBooks)) {
+    const __subOpen = !__sub || !listClosedSubs.has(__cat + '::' + __sub);
+    if (__sub) html += subCatHeader(__cat, __sub, __subBooks.length, __subOpen);
+    if (__sub && !__subOpen) continue;
+  for (const book of __subBooks) {
     const units = Object.keys(books[book]).sort((a,b) => {
       const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
       const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
@@ -2437,6 +2483,7 @@ function vrRenderBookList() {
         html += '</div></div>';
       }
     }
+  }
   }
   }
   container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';
@@ -2658,7 +2705,11 @@ function asRenderBookList() {
     const __catOpen = listOpenCats.as.has(__cat);
     html += bookCatHeader('as', __cat, __catBooks.length, __catOpen);
     if (!__catOpen) continue;
-  for (const book of __catBooks) {
+  for (const [__sub, __subBooks] of subGroupCatBooks(__cat, __catBooks)) {
+    const __subOpen = !__sub || !listClosedSubs.has(__cat + '::' + __sub);
+    if (__sub) html += subCatHeader(__cat, __sub, __subBooks.length, __subOpen);
+    if (__sub && !__subOpen) continue;
+  for (const book of __subBooks) {
     const units = Object.keys(books[book]).sort((a,b) => {
       const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
       const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
@@ -2701,6 +2752,7 @@ function asRenderBookList() {
         html += '</div></div>';
       }
     }
+  }
   }
   }
   container.innerHTML = html || '<div style="padding:20px;text-align:center;color:#999;">지문이 없습니다</div>';

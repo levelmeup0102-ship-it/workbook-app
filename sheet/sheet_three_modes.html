@@ -47,6 +47,7 @@
   .a-side h3{font-size:10px;font-weight:800;letter-spacing:.04em;color:var(--faint);text-transform:uppercase;margin:10px 0 7px}
   .a-side h3:first-child{margin-top:0}
   .sent{padding:7px 0 9px;border-bottom:1px dashed #EAEDF2}
+  .sent .kr{margin:3px 0 0 20px;font-size:11.5px;color:#4A5568;line-height:1.5}
   .sline{display:flex;gap:8px;align-items:flex-start}
   .bul{flex:none;width:18px;height:18px;border-radius:50%;background:var(--ink);color:#fff;font-size:10px;font-weight:800;display:grid;place-items:center;margin-top:3px}
   .en{font-family:var(--serif);font-size:14px;line-height:1.85;color:#1A1A1A}
@@ -399,7 +400,9 @@ function renderAuth(){
     const tg=STAG[si]||{t:"(없음)",c:"none"};
     let dd='';
     if(SEL.openTag===si)dd='<div class="tagdd">'+TAGOPTS.map((o,oi)=>`<span class="tagopt ${o.c} ${tg.t===o.t?'sel':''}" data-tagpick="${si}" data-oi="${oi}">${o.t}</span>`).join('')+'</div>';
-    h+=`<div class="sent">${dd}<div class="en"><span class="snum">${si+1}.</span><span class="atag ${tg.c}" data-tagsi="${si}">${tg.t} ▾</span>${line}</div></div>`;
+    const krLine=chunks.map(c=>c.k).filter(Boolean).join(' ').trim();
+    const krHtml=krLine?`<div class="kr">${esc(krLine)}</div>`:'';
+    h+=`<div class="sent">${dd}<div class="en"><span class="snum">${si+1}.</span><span class="atag ${tg.c}" data-tagsi="${si}">${tg.t} ▾</span>${line}</div>${krHtml}</div>`;
   });
   h+='</div><div class="a-side"><h3>분석 결과 — 후보에서 선택</h3>';
   h+=`<div class="pick"><div class="pl">지문난이도 <span style="color:var(--faint);font-weight:600">클릭해 별 조정 (내신출제 가능성)</span></div><div class="stars-edit">`+[1,2,3,4,5].map(n=>`<span class="stedit ${n<=DIFF?'on':''}" data-diff="${n}">★</span>`).join('')+`</div></div>`;

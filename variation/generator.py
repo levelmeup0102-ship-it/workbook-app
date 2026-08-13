@@ -1109,7 +1109,13 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s125 = summary_design 을 쓰면 summary_check 를 요구하지 않는다. _s123 에서
+    # _s127 = 캐시 버전만 올린다(코드 변경 없음). _s120~_s126 이 실서비스에서 제대로
+    #        돈 적이 없는데 옛 캐시가 그대로 걸려 '캐시 히트'만 났다.
+    #        버전을 올리면 옛 캐시가 무시되고 새 로직으로 다시 만든다.
+    # (구) _s126 = summary_design 도 summary_options 도 없을 때 사유를 정확히 알려준다.
+    #        validator 가 둘을 필수로 요구해 '필수 필드 누락'으로만 죽으면 LLM 이
+    #        무엇을 고쳐야 할지 모른다. + _s125 누적분.
+    # (구) _s125 = summary_design 을 쓰면 summary_check 를 요구하지 않는다. _s123 에서
     #        출력 형식을 역할 칸으로 바꿔 LLM 이 summary_check 를 안 내는데,
     #        코드가 계속 "5개 채워라"를 요구해 매 시도마다 '자가검증 누락'으로
     #        재시도가 통째로 소진됐다(실측: A 1개 + B 2개 누락, 3문항만 나옴).
@@ -1370,7 +1376,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s125"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s127"
 
 
 # ============ Supabase 캐시 ============
@@ -2053,6 +2059,19 @@ def generate_variation_b(
             #   평가원 40번 구조 그대로다 — 양쪽에 유의어를 두되 짝이 안 맞게.
             #   섞기와 정답 번호는 코드가 정한다.
             _dsg = data.get("summary_design")
+            # ★ _s126 — design 도 options 도 없으면 형식을 못 지킨 것이다.
+            #   validator 가 summary_options/summary_correct 를 필수로 요구하므로
+            #   그대로 가면 '필수 필드 누락'으로 죽는다. 사유를 정확히 알려주고 재시도.
+            if not isinstance(_dsg, dict) and not isinstance(data.get("summary_options"), list):
+                last_errors = [
+                    f"[{pid}] [유형B] Q3 summary_design 이 없다 — 출력 JSON 에 "
+                    f'"summary_design": {{"correct": {{...}}, "syn_A_1": {{...}}, '
+                    f'"syn_A_2": {{...}}, "syn_B": {{...}}, "both_wrong": {{...}}}} '
+                    f"다섯 칸을 반드시 넣어라. summary_options 를 직접 만들지 마라 — "
+                    f"선지 순서와 정답 번호는 코드가 정한다."]
+                print(f"[VAR][B][{pid}] Q3 summary_design 없음 → 재시도")
+                if not is_last:
+                    continue
             if isinstance(_dsg, dict):
                 _keys = ("correct", "syn_A_1", "syn_A_2", "syn_B", "both_wrong")
                 _miss = [k for k in _keys

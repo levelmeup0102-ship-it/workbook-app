@@ -116,7 +116,25 @@ Everything you generate must reflect that whole-passage understanding:
      ★ Include ONE or TWO. This is what makes the item hard. Use the list you wrote in STEP 1(c).
  
    ★★ (2) REVERSED FOCUS — 초점을 반대편으로  [6/28 = 21%]
-     ★ 절대어로 티내지 마라. 기출 28개 오답 중 all/always/never/only를 쓴 것은 0개다.
+     ★★ 절대어로 티내지 마라. 기출 28개 오답 중 all/always/never/only 를 쓴 것은 0개다.
+     이유 — 절대어가 있으면 학생이 **지문을 안 읽고 소거한다.**
+       "모든 X는 항상 Y다" → "세상에 '항상'인 게 어디 있어" → 탈락
+     오답이 오답 구실을 못 하고 다섯 선지 중 하나가 그냥 사라진다.
+
+     ★ 다만 **관용구는 절대어가 아니다.** 글자가 아니라 **주장의 세기**를 봐라.
+       [O] "Why One Sensory Pathway Is Never Enough"   'never enough' = 부족하다
+       [O] "When Drawing Lines Creates a Void No One Wants"  'no one wants' = 아무도 원치 않는
+       [O] "The Illness That Defies One-Size-Fits-All Solutions"
+       [O] "Traditional Media: The Anchor of All Emergency Communication"
+           — 위 넷은 전부 자연스러운 제목이다. 소거 단서가 되지 않는다.
+
+       [X] "All Roads Lead to the Same Conclusion"     모든 경우에 참이라고 주장
+       [X] "The Only Way to Secure Peace"              유일한 길이라고 주장
+       [X] "Memory Always Distorts the Past"           예외 없다고 주장
+
+     ★ 판별법 — 그 선지를 읽고 **"예외가 하나라도 있으면 틀리는가?"** 물어라.
+       그렇다면 절대 주장이다. 빼라.
+       관용구는 예외를 따질 대상이 아니다('never enough' 에 예외란 게 없다).
      The passage argues a result; the option frames a difficulty. The passage warns against
      something; the option makes it the theme. Quiet flip of stance, not of vocabulary.
      기출:

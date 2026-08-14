@@ -1109,7 +1109,10 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s131 = 부사 차단을 아예 뺐다. 품사가 아니라 **방향이 기준**이다 —
+    # _s132 = 캐시 버전만 올린다(코드 변경 없음). CLAUDE_MODEL 을 claude-sonnet-5 로
+    #        바꿨는데 캐시 키에 모델명이 없어 옛 결과(Sonnet 4.5)가 계속 나왔다.
+    #        버전을 올려야 새 모델로 다시 만든다.
+    # (구) _s131 = 부사 차단을 아예 뺐다. 품사가 아니라 **방향이 기준**이다 —
     #        rarely↔frequently, willingly↔reluctantly 처럼 방향 있는 부사는 정답이 된다.
     #        방향 없는 부사(mentally/understandably/clearly)는 antonym 대입 검증이
     #        걸러낸다(반대말을 넣어도 정반대 주장이 안 된다).
@@ -1400,7 +1403,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s131"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s132"
 
 
 # ============ Supabase 캐시 ============

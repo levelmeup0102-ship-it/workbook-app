@@ -1109,7 +1109,20 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s127 = 캐시 버전만 올린다(코드 변경 없음). _s120~_s126 이 실서비스에서 제대로
+    # _s129 = Q3어휘 부사(-ly) 차단 + 반대말 대입 검증. 기출 정답에 부사는 0개고
+    #        방향이 약해 빼도 문장이 성립한다(실측 'mentally' 'naturally,').
+    #        + antonym 을 '적기만' 하면 통과하던 것 → 그 자리에 넣어 읽고 원문과
+    #        정반대 주장이 되는지 확인하게 했다. 'role'·'face' 는 추상명사라
+    #        형태로는 안 걸리지만 반대말을 넣으면 문장이 성립하지 않는다.
+    #        ★ 구두점 차단은 넣었다가 뺐다 — 구두점은 본문에만 붙고 선지에는
+    #        shown_clean 이 나가므로 힌트가 되지 않는다. 막을 이유가 없었다.
+    # (구) _s128 = Q3어휘 세 가지 차단. (1) 구두점 붙은 단어 — 선지에 쉼표·마침표가 보이면
+    #        그 자리가 문장 끝이라는 힌트가 된다(실측 'role,' 'pressured,' 'mistaken.').
+    #        (2) 부사(-ly) — 기출 정답에 0개고 방향이 약하다(실측 'mentally' 'naturally,').
+    #        (3) 반대말을 '적기만' 하면 통과하던 것 → 그 자리에 넣어 읽고 원문과 정반대
+    #        주장이 되는지 확인하게 했다. 'role'·'face' 는 추상명사라 형태로는 안 걸리지만
+    #        반대말을 넣으면 문장이 성립하지 않는다 — 그건 LLM 이 판단해야 한다.
+    # (구) _s127 = 캐시 버전만 올린다(코드 변경 없음). _s120~_s126 이 실서비스에서 제대로
     #        돈 적이 없는데 옛 캐시가 그대로 걸려 '캐시 히트'만 났다.
     #        버전을 올리면 옛 캐시가 무시되고 새 로직으로 다시 만든다.
     # (구) _s126 = summary_design 도 summary_options 도 없을 때 사유를 정확히 알려준다.
@@ -1376,7 +1389,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s127"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s129"
 
 
 # ============ Supabase 캐시 ============

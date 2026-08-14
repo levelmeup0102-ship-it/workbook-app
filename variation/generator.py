@@ -1109,7 +1109,18 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s129 = Q3어휘 부사(-ly) 차단 + 반대말 대입 검증. 기출 정답에 부사는 0개고
+    # _s131 = 부사 차단을 아예 뺐다. 품사가 아니라 **방향이 기준**이다 —
+    #        rarely↔frequently, willingly↔reluctantly 처럼 방향 있는 부사는 정답이 된다.
+    #        방향 없는 부사(mentally/understandably/clearly)는 antonym 대입 검증이
+    #        걸러낸다(반대말을 넣어도 정반대 주장이 안 된다).
+    #        품사로 막으니 오답 자리까지 걸려 A 가 죽었다(_s129 실측: 03번 누락).
+    #        + A 어휘 재시도 2 → 3회는 유지.
+    # (구) _s130 = 부사 차단을 **정답 자리에만** 적용한다. 근거가 "기출 정답에 부사 0개"
+    #        였는데 다섯 자리 전부에 걸어 A 가 죽었다 — 'understandably,' 'clearly' 로
+    #        2회 재시도를 소진하고 03번이 누락됐다. 지문에 부사는 흔하고, 오답 자리는
+    #        동의어 치환이라 부사여도 방향을 뒤집지 않는다.
+    #        + A 어휘 재시도를 2 → 3회로. 같은 단어를 두 번 고르면 그걸로 죽었다.
+    # (구) _s129 = Q3어휘 부사(-ly) 차단 + 반대말 대입 검증. 기출 정답에 부사는 0개고
     #        방향이 약해 빼도 문장이 성립한다(실측 'mentally' 'naturally,').
     #        + antonym 을 '적기만' 하면 통과하던 것 → 그 자리에 넣어 읽고 원문과
     #        정반대 주장이 되는지 확인하게 했다. 'role'·'face' 는 추상명사라
@@ -1389,7 +1400,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s129"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s131"
 
 
 # ============ Supabase 캐시 ============
@@ -1806,7 +1817,7 @@ def generate_variation_a(
                     return _items, _v
 
                 _vok = False
-                for _va in range(2):
+                for _va in range(3):   # ★ _s130: 2 → 3회
                     try:
                         _items, _v = _try_vocab(_va)
                         data["vocab_items"] = _items

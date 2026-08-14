@@ -874,23 +874,12 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
         if len(_shown.split()) > 1:
             return _fail(f"{_no}번 제시어가 {len(_shown.split())}단어 '{_shown}' — "
                          f"선지는 한 단어여야 한다")
-        # ★★ 부사(-ly)는 밑줄 자리로 쓰지 않는다 (_s128).
-        #   기출 정답 품사에 부사는 0개다. 방향이 약하고, 빼도 문장이 성립해
-        #   무엇을 묻는 문항인지 흐려진다.
-        #   실측: 'mentally' 'naturally,' 가 선지로 나갔다.
-        #   ★ 형용사에서 온 -ly 만 막는다. 'only' 'family' 처럼 -ly 로 끝나지만
-        #     부사가 아닌 말은 예외 목록으로 뺀다.
-        _ADV_EXCEPT = {"only", "family", "supply", "apply", "reply", "imply",
-                       "multiply", "ally", "rally", "belly", "jolly", "holy",
-                       "early", "likely", "lonely", "friendly", "costly",
-                       "deadly", "lively", "orderly", "ugly", "silly", "daily",
-                       "monthly", "yearly", "weekly", "unlikely", "timely"}
-        _bare_o = re.sub(r"[^A-Za-z-]", "", orig).lower()
-        if (_bare_o.endswith("ly") and len(_bare_o) > 4
-                and _bare_o not in _ADV_EXCEPT):
-            return _fail(f"{_no}번 '{orig}' 는 부사 — 기출 정답에 부사는 0개다. "
-                         f"방향이 약하고 빼도 문장이 성립해 무엇을 묻는지 흐려진다. "
-                         f"형용사·동사·방향 있는 명사에서 고를 것")
+        # ★ 부사 차단은 넣었다가 뺐다 (_s131).
+        #   품사가 아니라 **방향이 기준**이다. 방향 있는 부사는 정답으로 쓸 수 있다 —
+        #     rarely ↔ frequently   willingly ↔ reluctantly   naturally ↔ artificially
+        #   방향 없는 부사(mentally / understandably / clearly)는 antonym 대입 검증이
+        #   걸러낸다 — 반대말을 넣어도 원문과 정반대 주장이 안 되기 때문이다.
+        #   품사로 막으니 오답 자리까지 걸려 A 가 죽었다(_s129 실측).
 
         # ★★ 접속부사·담화표지는 밑줄 대상이 아니다 (_s103)
         #   'Similarly,' 'Conversely,' 는 논리 흐름 표지지 문맥 판단 대상이 아니다.

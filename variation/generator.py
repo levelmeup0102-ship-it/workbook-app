@@ -599,6 +599,8 @@ def absolute_word_in_option(opt: str) -> str:
 
 
 def check_absolute_words(options, correct_idx, label, pid="?"):
+    """★ _s133 부터 생성 경로에서는 호출하지 않는다. 진단·검사기 참고용으로만 남긴다.
+    "이 'never' 가 절대 주장인가 관용구인가"는 의미 판단이라 코드가 못 한다."""
     """A Q1 주제 / B Q2 제목 오답에 절대어가 있는지. 정답은 안 본다
     (정답에 필요한 말이면 쓸 수 있다)."""
     out = []
@@ -1109,7 +1111,19 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s132 = 캐시 버전만 올린다(코드 변경 없음). CLAUDE_MODEL 을 claude-sonnet-5 로
+    # _s134 = Sonnet 5 의 thinking 블록 때문에 A·B 가 전멸했다. 응답에 thinking 이
+    #        먼저 오고 그게 max_tokens 를 다 먹어 정작 JSON(text)이 안 나왔다
+    #        (실측: '텍스트 없음' 50건, stop_reason=max_tokens 32건).
+    #        payload 에 thinking:{"type":"disabled"} 를 넣어 끄고,
+    #        혹시 그 파라미터를 모르는 모델이면 빼고 재시도한다.
+    #        + text 블록을 하나만 보지 않고 전부 모은다.
+    # (구) _s133 = 절대어 코드 검사를 뺐다. "이 'never' 가 절대 주장인가 관용구인가"는
+    #        의미 판단이라 코드가 못 한다. 단어 목록으로 재니 정상 제목이 계속 걸렸다 —
+    #        One-Size-Fits-All → One Reasoning Fits All → Never Enough / No One Wants,
+    #        세 판 연속 새 관용구가 나왔다. 예외를 추가하는 건 audience 때와 같은 실수다.
+    #        B 는 검사가 일곱 개라 재시도 한 자리가 아까워 손해가 더 크다.
+    #        프롬프트에 근거(기출 28개 오답 중 0개)와 판별법을 넣고 LLM 이 판단한다.
+    # (구) _s132 = 캐시 버전만 올린다(코드 변경 없음). CLAUDE_MODEL 을 claude-sonnet-5 로
     #        바꿨는데 캐시 키에 모델명이 없어 옛 결과(Sonnet 4.5)가 계속 나왔다.
     #        버전을 올려야 새 모델로 다시 만든다.
     # (구) _s131 = 부사 차단을 아예 뺐다. 품사가 아니라 **방향이 기준**이다 —
@@ -1403,7 +1417,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s132"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s134"
 
 
 # ============ Supabase 캐시 ============
@@ -1480,18 +1494,35 @@ def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000) -
         "max_tokens": max_tokens,
         "system": system_prompt,
         "messages": [{"role": "user", "content": user_message}],
+        # ★★ thinking 을 끈다 (_s134).
+        #   Sonnet 5 는 응답에 thinking 블록을 먼저 넣는데, 그게 max_tokens 를
+        #   다 먹어 정작 JSON(text 블록)이 안 나온다.
+        #   실측: '텍스트 없음' 50건, stop_reason='max_tokens' 32건 → A·B 전멸.
+        #   우리는 JSON 만 필요하므로 사고 과정을 받을 이유가 없다.
+        "thinking": {"type": "disabled"},
     }
 
     with httpx.Client(timeout=120.0) as client:
         r = client.post(url, headers=headers, json=payload)
         if r.status_code != 200:
-            raise RuntimeError(f"Claude API 오류 {r.status_code}: {r.text[:500]}")
+            # ★ thinking 파라미터를 모르는 모델이면 그것만 빼고 한 번 더 (_s134)
+            if "thinking" in (r.text or ""):
+                payload.pop("thinking", None)
+                r = client.post(url, headers=headers, json=payload)
+            if r.status_code != 200:
+                raise RuntimeError(f"Claude API 오류 {r.status_code}: {r.text[:500]}")
         data = r.json()
         content = data.get("content", [])
-        for block in content:
-            if block.get("type") == "text":
-                return block.get("text", "")
-        raise RuntimeError(f"Claude 응답에 텍스트 없음: {data}")
+        # ★ text 블록을 전부 모은다 — thinking 이 켜져 오더라도 뒤의 text 를 놓치지 않는다
+        _texts = [b.get("text", "") for b in content if b.get("type") == "text"]
+        _joined = "\n".join(t for t in _texts if t).strip()
+        if _joined:
+            return _joined
+        _stop = data.get("stop_reason")
+        _kinds = [b.get("type") for b in content]
+        raise RuntimeError(
+            f"Claude 응답에 텍스트 없음 (stop_reason={_stop}, blocks={_kinds}) — "
+            f"thinking 이 max_tokens 를 다 먹었을 수 있다")
 
 
 def _ensure_kr(en_sentence: str, kr_from_llm: str = "") -> str:
@@ -1940,13 +1971,13 @@ def generate_variation_a(
             except Exception as _ke:
                 print(f"[VAR][A][{pid}] 주제 해석 생성 예외({_ke})")
 
-            # ★ 절대어 오답 차단 (_s108) — 코드 검사가 없어 새어 나갔다.
-            _abs = check_absolute_words(data.get("topic_options"),
-                                        data.get("topic_correct"), "Q1 주제", pid)
-            if _abs and not is_last:
-                last_errors = _abs
-                print(f"[VAR][A][{pid}] 주제 오답에 절대어 → 재시도")
-                continue
+            # ★ 절대어 코드 검사는 뺐다 (_s133).
+            #   "이 'never' 가 절대 주장인가 관용구인가"는 의미 판단이라 코드가 못 한다.
+            #   단어 목록으로 재니 정상 제목이 계속 걸렸다 —
+            #     One-Size-Fits-All / One Reasoning Fits All / The Anchor of All ...
+            #     Never Enough / No One Wants
+            #   걸릴 때마다 예외 목록에 추가하는 건 audience 때와 같은 실수다.
+            #   프롬프트가 지고, 코드는 개입하지 않는다.
 
             errors = validate_a(data, en_text, pid, lenient=is_last)
             if not errors:
@@ -2630,15 +2661,9 @@ def generate_variation_b(
             except Exception as _ke:
                 print(f"[VAR][B][{pid}] 답지 보강 예외({_ke})")
 
-            # ★ 절대어 오답 차단 (_s108)
-            #   실측: 'Why One Sensory Pathway Is Never Enough' — 대문자라 프롬프트 규칙을
-            #   빠져나갔고 코드 검사는 아예 없었다.
-            _abs = check_absolute_words(data.get("topic_options"),
-                                        data.get("topic_correct"), "Q2 제목", pid)
-            if _abs and not is_last:
-                last_errors = _abs
-                print(f"[VAR][B][{pid}] 제목 오답에 절대어 → 재시도")
-                continue
+            # ★ 절대어 코드 검사는 뺐다 (_s133) — 위 A 와 같은 이유.
+            #   B 는 검사가 일곱 개라 재시도 한 자리가 아깝다. 관용구 오탐으로
+            #   그 자리를 까먹으면 정작 Q3 복수정답을 못 고친다.
 
             errors = validate_b(data, en_text, pid, strict=not is_last, a_data=_a_data)
             if not errors:

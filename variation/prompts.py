@@ -1233,6 +1233,8 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0,
         + (("★★ 이 강의 다른 지문에서 **이미 정답으로 쓴 단어**다. 겹치지 마라.\n"
             "   같은 과에서 같은 단어가 두 번 정답이면 학생이 눈치챈다.\n"
             "   원문어(original)와 제시어(shown) 둘 다 이 목록을 피해라.\n"
+            "   ★ **어근이 같아도 안 된다.** 'ignorance' 를 썼으면 'ignoring' 'ignore' 도 못 쓴다.\n"
+            "     학생 눈엔 같은 말이다. 아예 다른 단어를 골라라.\n"
             "   [이미 쓴 것] " + ", ".join(used_words) + "\n"
             "════════════════════════════════════════════════════\n\n")
            if used_words else "")

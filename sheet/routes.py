@@ -257,6 +257,7 @@ async def sheet_data_json(request: Request, book: str = "", unit: str = "", pid:
         "POOL": data.get("POOL", {}),
         "SEL": data.get("_SEL", {}),
         "MARKS": data.get("MARKS", []),
+        "CUSTOM": data.get("CUSTOM", {}),
         "TEACHER": teacher,
         "REF": _fmt_ref(book, unit, pid),
     }

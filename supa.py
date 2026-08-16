@@ -385,3 +385,33 @@ async def get_step_counts_all() -> dict:
     if page > 1:
         print(f"[supa] get_step_counts_all: {page}페이지 / cache_key {len(counts)}개")
     return counts
+
+
+# ========================
+# 공지사항 (notice) — 단일 행(id=1)
+#   Railway 컨테이너는 재배포/재시작 시 파일이 초기화되므로
+#   공지사항은 Supabase에 저장해야 영구 보존된다.
+# ========================
+async def get_notice():
+    """공지사항 조회. 없거나 실패하면 None."""
+    if not _enabled():
+        return None
+    try:
+        rows = await _request("GET", "notice?select=*&id=eq.1&limit=1")
+        if isinstance(rows, list) and rows:
+            return rows[0]
+    except Exception as e:
+        print(f"[supa] get_notice error: {e}")
+    return None
+
+
+async def save_notice(text: str, updated_at: str):
+    """공지사항 저장 (id=1 고정, upsert)."""
+    body = {"id": 1, "text": text, "updated_at": updated_at}
+    return await _request(
+        "POST",
+        "notice?on_conflict=id",
+        body=body,
+        extra_headers={"Prefer": "resolution=merge-duplicates, return=representation"},
+        raise_on_error=True,
+    )

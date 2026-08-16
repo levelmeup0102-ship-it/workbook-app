@@ -60,6 +60,7 @@
   .tool-btn .sw{display:inline-block;width:14px;height:0;border-bottom:2px solid #999}
   .tool-btn .sw-r{border-bottom-color:#CC0000}.tool-btn .sw-b{border-bottom-color:#1155BB}
   .en.marking{cursor:cell;user-select:text}
+  .cnd-edit{color:#2E4E8F;font-weight:700;border-top:1px dashed var(--line)}
   .ref-badge{display:inline-block;margin:0 12px 0 0;padding:8px 14px;background:#2E4E8F;color:#fff;font-size:13px;font-weight:800;border-radius:9px 0 0 0;letter-spacing:.2px;white-space:nowrap}
   .ref-badge:empty{display:none}
   .en.marking .wd{cursor:cell}
@@ -406,6 +407,16 @@ let TYPES=[
  {g:"서술형",t:"요약문 완성",on:true},{g:"서술형",t:"잘라쓰기(배열영작)",on:false},{g:"서술형",t:"어휘 형태 변화",on:true},{g:"서술형",t:"어법 수정",on:true}
 ];
 let SEL=(_D&&_D.SEL&&Object.keys(_D.SEL).length)?{title:_D.SEL.title||0,topic:_D.SEL.topic||0,sum:_D.SEL.sum||0,openPick:null,openTag:null}:{title:0,topic:0,sum:0,openPick:null,openTag:null};
+// 직접 입력 후보를 붙일 수 있게, 원래(0회독) 후보 개수 기록 + 배열 참조
+const NORIG={title:TITLES.length,topic:TOPICS.length,sum:SUMS.length};
+const PICKARR={title:TITLES,topic:TOPICS,sum:SUMS};
+// 저장된 직접입력 값 복원: {title:{k,e}, topic:{k}, sum:{k,e}}
+(function(){
+  const cst=(_D&&_D.CUSTOM)?_D.CUSTOM:null;if(!cst)return;
+  if(cst.title&&(cst.title.k||cst.title.e)){TITLES.push([cst.title.k||'',cst.title.e||'']);SEL.title=TITLES.length-1;}
+  if(cst.topic&&cst.topic.k){TOPICS.push(cst.topic.k);SEL.topic=TOPICS.length-1;}
+  if(cst.sum&&(cst.sum.k||cst.sum.e)){SUMS.push({k:cst.sum.k||'',e:cst.sum.e||''});SEL.sum=SUMS.length-1;}
+})();
 // ★ 강사 자유 강조 — 문장별 단어범위 [{si,from,to,tool}]
 //   tool: ulr(밑줄빨강) ulb(밑줄파랑) hl(형광) box(네모)
 const TOOLS={ulr:'밑줄',ulb:'밑줄',hl:'형광',box:'네모'};
@@ -530,11 +541,12 @@ function renderAuth(){
   bindAuth();
 }
 function pickBlock(label,key,items,sel){
-  let h=`<div class="pick"><div class="pl">${label} <span style="color:var(--faint);font-weight:600">클릭해 후보 선택</span></div>`;
-  const cur=items[sel];
-  h+=`<div class="cur" data-pickopen="${key}">${cur.k}${cur.e?`<span class="e">${cur.e}</span>`:''}</div>`;
+  let h=`<div class="pick"><div class="pl">${label} <span style="color:var(--faint);font-weight:600">클릭해 선택 · 직접 입력 가능</span></div>`;
+  const cur=items[sel]||{k:'(직접 입력)',e:''};
+  h+=`<div class="cur" data-pickopen="${key}">${cur.k||'(직접 입력)'}${cur.e?`<span class="e">${cur.e}</span>`:''}</div>`;
   h+=`<div class="cands ${SEL.openPick===key?'open':''}">`;
   items.forEach((it,i)=>{h+=`<div class="cnd ${i===sel?'sel':''}" data-pick="${key}" data-i="${i}">${it.k}${it.e?`<span class="e">${it.e}</span>`:''}</div>`;});
+  h+=`<div class="cnd cnd-edit" data-pickedit="${key}">✎ 직접 입력${(sel>= (NORIG[key]||0))?' (수정)':''}</div>`;
   h+='</div></div>';return h;
 }
 function tokenize(str,si,ctr){
@@ -569,6 +581,25 @@ function bindAuth(){
   view.querySelectorAll('[data-ti]').forEach(c=>c.addEventListener('click',()=>{TYPES[+c.dataset.ti].on=!TYPES[+c.dataset.ti].on;renderAuth();}));
   view.querySelectorAll('[data-pickopen]').forEach(c=>c.addEventListener('click',()=>{const k=c.dataset.pickopen;SEL.openPick=SEL.openPick===k?null:k;renderAuth();}));
   view.querySelectorAll('[data-pick]').forEach(c=>c.addEventListener('click',()=>{SEL[c.dataset.pick]=+c.dataset.i;SEL.openPick=null;renderAuth();updateHeader();}));
+  view.querySelectorAll('[data-pickedit]').forEach(c=>c.addEventListener('click',()=>{
+    const key=c.dataset.pickedit;const arr=PICKARR[key];const sel=SEL[key];
+    const isCustom=(sel>=(NORIG[key]||0));
+    if(key==='topic'){
+      const prev=isCustom?arr[sel]:'';
+      const v=(prompt('주제를 직접 입력하세요:',prev||'')||'').trim();
+      if(!v)return;
+      if(isCustom)arr[sel]=v;else{arr.push(v);SEL.topic=arr.length-1;}
+    }else{
+      const prevK=isCustom?(arr[sel].k!==undefined?arr[sel].k:arr[sel][0]):'';
+      const prevE=isCustom?(arr[sel].e!==undefined?arr[sel].e:arr[sel][1]):'';
+      const k=(prompt((key==='title'?'제목':'요약')+' (한글)을 입력하세요:',prevK||'')||'').trim();
+      if(!k&&!prevE)return;
+      const e=(prompt((key==='title'?'제목':'요약')+' (영어, 없으면 비워두세요):',prevE||'')||'').trim();
+      const item=(key==='title')?[k,e]:{k:k,e:e};
+      if(isCustom)arr[sel]=item;else{arr.push(item);SEL[key]=arr.length-1;}
+    }
+    SEL.openPick=null;renderAuth();updateHeader();saveSheet(true);
+  }));
 }
 let pickSyn,pickAnt,curVp,curTarget,curSi,curWord;
 // ★ 변경: 브라우저가 Anthropic 을 직접 부르지 않고, 서버 /api/sheet/ai-synonym 을 호출.
@@ -713,10 +744,15 @@ function serializeSheet(){
       marks.push(m);
     }
   }));
+  const custom={};
+  if(SEL.title>=(NORIG.title||0)&&TITLES[SEL.title]){custom.title={k:TITLES[SEL.title][0]||'',e:TITLES[SEL.title][1]||''};}
+  if(SEL.topic>=(NORIG.topic||0)&&TOPICS[SEL.topic]!==undefined){custom.topic={k:TOPICS[SEL.topic]||''};}
+  if(SEL.sum>=(NORIG.sum||0)&&SUMS[SEL.sum]){custom.sum={k:SUMS[SEL.sum].k||'',e:SUMS[SEL.sum].e||''};}
   return {diff:DIFF,marks,
     selTitle:SEL.title||0,selTopic:SEL.topic||0,selSum:SEL.sum||0,
     tags:(typeof STAG!=='undefined'&&STAG)?STAG:{},summary:'',
-    umarks:(typeof MARKS!=='undefined'&&MARKS)?MARKS:[]};
+    umarks:(typeof MARKS!=='undefined'&&MARKS)?MARKS:[],
+    custom:custom};
 }
 async function saveSheet(silent){
   const {book,unit,pid}=_qp();
@@ -821,6 +857,13 @@ async function _gotoTeacher(v){
     DIFF=d.DIFF||3;
     MARKS=(Array.isArray(d.MARKS)?d.MARKS.map(m=>({si:+m.si,from:+m.from,to:+m.to,tool:m.tool||'box'})):[]);
     const s=d.SEL||{};SEL={title:s.title||0,topic:s.topic||0,sum:s.sum||0,openPick:null,openTag:null};
+    // 직접입력 값 재적용 (배열은 위에서 원본으로 리셋됨)
+    const cst=d.CUSTOM||null;
+    if(cst){
+      if(cst.title&&(cst.title.k||cst.title.e)){TITLES.push([cst.title.k||'',cst.title.e||'']);SEL.title=TITLES.length-1;}
+      if(cst.topic&&cst.topic.k){TOPICS.push(cst.topic.k);SEL.topic=TOPICS.length-1;}
+      if(cst.sum&&(cst.sum.k||cst.sum.e)){SUMS.push({k:cst.sum.k||'',e:cst.sum.e||''});SEL.sum=SUMS.length-1;}
+    }
     if(_D){_D.REF=d.REF||_D.REF;_D.TEACHER=v;}
     // 강사명/URL 갱신(새로고침 없이)
     const inp=document.getElementById('tchName');if(inp)inp.value=v;

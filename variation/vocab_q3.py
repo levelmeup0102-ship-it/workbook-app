@@ -505,6 +505,18 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
         errors.append(f"[{pid}] Q3 어휘 밑줄에 같은 단어 반복 {_pairs} — "
                       f"5개는 서로 다른 단어여야 한다 (굴절형도 같은 단어로 본다)")
 
+    # ★★ shown 끼리도 본다 (_s141). 학생이 보는 건 shown 이다.
+    #   실측: 16강 03번에 ② 'relinquishing' 과 ⑤ 'relinquished' 가 같이 나갔다.
+    #   original 은 서로 다른 단어('giving' / 'claimed')라 위 검사를 통과했다.
+    _shs = [_stem(it.get("shown", "")) for it in vocab_items]
+    _sdup = [w for w in set(_shs) if _shs.count(w) > 1 and w]
+    if _sdup:
+        _sp = [str(it.get("shown", "")) for it in vocab_items
+               if _stem(it.get("shown", "")) in _sdup]
+        errors.append(f"[{pid}] Q3 어휘 선지에 같은 단어 반복 {_sp} — "
+                      f"학생이 보는 다섯 선지는 서로 다른 단어여야 한다 "
+                      f"(굴절형도 같은 단어로 본다)")
+
     # shown이 original과 같으면 패러프레이즈가 안 된 것
     #   ★ 폴백(코드가 자리만 잡은 것)은 shown=original이 정상이다. 면제하지 않으면
     #     폴백이 절대 통과할 수 없어 3회 재시도 끝에 항목이 통째로 fallback으로 떨어진다.

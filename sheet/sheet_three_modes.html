@@ -60,7 +60,7 @@
   .tool-btn .sw{display:inline-block;width:14px;height:0;border-bottom:2px solid #999}
   .tool-btn .sw-r{border-bottom-color:#CC0000}.tool-btn .sw-b{border-bottom-color:#1155BB}
   .en.marking{cursor:cell;user-select:text}
-  .ref-badge{display:inline-block;margin:0 0 8px;padding:4px 12px;background:#2E4E8F;color:#fff;font-size:13px;font-weight:800;border-radius:6px;letter-spacing:.2px}
+  .ref-badge{display:inline-block;margin:0 12px 0 0;padding:8px 14px;background:#2E4E8F;color:#fff;font-size:13px;font-weight:800;border-radius:9px 0 0 0;letter-spacing:.2px;white-space:nowrap}
   .ref-badge:empty{display:none}
   .en.marking .wd{cursor:cell}
   .wd.mk-ulr,.wsp.mk-ulr{border-bottom:2px solid #CC0000}
@@ -275,9 +275,8 @@
     <span class="lg-item"><span class="lg-chip lg-corange"></span>어휘 출제예감</span>
   </div>
   <div class="sheet">
-    <div class="ref-badge" id="refBadge"></div>
     <div class="head">
-      <div class="num">02</div><div class="typ">무관한 문장 찾기</div>
+      <div class="ref-badge" id="refBadge">지문</div>
       <div class="tt"><b id="hTitleK">환경과 경제 모두의 지속가능성에 기여하는 바이오 발전의 이점</b><br>
         <span class="en" id="hTitleE">The Benefits of Biopower Contributing to Sustainability in Both the Environment and the Economy</span></div>
       <div class="stars" id="hStars"></div>
@@ -486,7 +485,7 @@ function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g
 function noted(si){return S[si].map((c,ci)=>({c,ci})).filter(x=>x.c.n);}
 function dots(n){return `<span class="imp">${[1,2,3].map(i=>`<i class="${i<=n?'on':''}"></i>`).join('')}<span class="t">중요도</span></span>`;}
 function isKey(c){return c.key!==undefined?c.key:(c.i>=3);}
-function updateHeader(){const rb=document.getElementById('refBadge');if(rb&&_D&&_D.REF)rb.textContent=_D.REF;const t=TITLES[SEL.title];const k=document.getElementById('hTitleK'),e=document.getElementById('hTitleE'),s=document.getElementById('hStars');if(k)k.textContent=t[0];if(e)e.textContent=t[1];if(s){let st='지문난이도 <span class="st">';for(let n=1;n<=5;n++)st+=`<span class="hst" data-d="${n}">${n<=DIFF?'★':'☆'}</span>`;st+='</span>';s.innerHTML=st;}}
+function updateHeader(){const rb=document.getElementById('refBadge');if(rb)rb.textContent=(_D&&_D.REF)?_D.REF:'';const t=TITLES[SEL.title];const k=document.getElementById('hTitleK'),e=document.getElementById('hTitleE'),s=document.getElementById('hStars');if(k)k.textContent=t[0];if(e)e.textContent=t[1];if(s){let st='지문난이도 <span class="st">';for(let n=1;n<=5;n++)st+=`<span class="hst" data-d="${n}">${n<=DIFF?'★':'☆'}</span>`;st+='</span>';s.innerHTML=st;}}
 function ceHtml(c){let e=esc(c.e);if(c.h){let cls=c.f===2?'hl v':'hl';if(isKey(c))cls+=' key';e=e.replace(esc(c.h),`<span class="${cls}">${esc(c.h)}</span>`);}return e;}
 
 /* ---------- 저작 ---------- */
@@ -799,9 +798,43 @@ async function loadTeachers(){
     });
   }catch(e){}
 }
-function _gotoTeacher(v){
+async function _gotoTeacher(v){
   try{localStorage.setItem('sheet_teacher',v);}catch(e){}
-  const p=new URLSearchParams(location.search);p.set('teacher',v);location.search=p.toString();
+  const {book,unit,pid}=_qp();
+  if(!book||!unit||!pid){ // 안전 폴백: 정보 없으면 기존 방식(새로고침)
+    const p=new URLSearchParams(location.search);p.set('teacher',v);location.search=p.toString();return;
+  }
+  const tabs=document.getElementById('tchTabs');
+  if(tabs)tabs.style.opacity='0.5';
+  try{
+    const r=await fetch(`/api/sheet/data?book=${encodeURIComponent(book)}&unit=${encodeURIComponent(unit)}&pid=${encodeURIComponent(pid)}&teacher=${encodeURIComponent(v)}`);
+    if(!r.ok)throw new Error('load fail');
+    const d=await r.json();
+    // const 배열/객체는 '내용만' 교체
+    S.length=0;(d.S||[]).forEach(x=>S.push(x));
+    FLOW.length=0;(d.FLOW||[]).forEach(x=>FLOW.push(x));
+    TITLES.length=0;(d.TITLES||[]).forEach(x=>TITLES.push(x));
+    TOPICS.length=0;(d.TOPICS||[]).map(t=>Array.isArray(t)?t[0]:t).forEach(x=>TOPICS.push(x));
+    Object.keys(VPOOL).forEach(k=>delete VPOOL[k]);Object.assign(VPOOL,d.VPOOL||{});
+    Object.keys(POOL).forEach(k=>delete POOL[k]);Object.assign(POOL,d.POOL||{});
+    // let 변수는 재할당
+    DIFF=d.DIFF||3;
+    MARKS=(Array.isArray(d.MARKS)?d.MARKS.map(m=>({si:+m.si,from:+m.from,to:+m.to,tool:m.tool||'box'})):[]);
+    const s=d.SEL||{};SEL={title:s.title||0,topic:s.topic||0,sum:s.sum||0,openPick:null,openTag:null};
+    if(_D){_D.REF=d.REF||_D.REF;_D.TEACHER=v;}
+    // 강사명/URL 갱신(새로고침 없이)
+    const inp=document.getElementById('tchName');if(inp)inp.value=v;
+    const p=new URLSearchParams(location.search);p.set('teacher',v);
+    history.replaceState(null,'','?'+p.toString());
+    // 현재 모드로 다시 그림
+    if(mode===0)renderAuth();else if(mode===1)renderOut();else renderPost();
+    updateHeader();loadTeachers();
+  }catch(e){
+    // 실패하면 안전하게 기존 방식(새로고침)
+    const p=new URLSearchParams(location.search);p.set('teacher',v);location.search=p.toString();
+  }finally{
+    if(tabs)tabs.style.opacity='';
+  }
 }
 (function initSheetTools(){
   const ro=(_D&&(_D.READONLY||_D.MODE==='student'));

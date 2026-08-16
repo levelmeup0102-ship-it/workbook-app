@@ -566,15 +566,51 @@ def _unit_key(book, unit):
     return (str(book or "").strip(), str(unit or "").strip())
 
 
+def _answer_stem(word):
+    """어근 비교용 — 어미를 넓게 떼어낸다 (_s139).
+
+    ★ 소문자 비교만으로는 'ignorance' 와 'ignoring' 을 다른 단어로 본다.
+      실측: 비상(홍) 1과 2번 정답 'ignorance', 5번 정답 'ignoring' —
+      학생 눈엔 같은 말이다. 어미를 넓게 떼어 둘 다 'ignor' 로 만든다.
+    ★ 파생 접미사까지 떼므로 'trivial'→'trivi' 처럼 과하게 잘리기도 하지만,
+      **다른 단어끼리 우연히 같아지는 일은 드물다**(길이 4 이상만 뗀다).
+    """
+    x = re.sub(r"[^a-z]", "", str(word or "").lower())
+    for suf in ("ationally", "ization", "ational", "fulness", "iveness",
+                "ability", "ibility", "ousness", "lessness", "ance", "ence",
+                "ment", "tion", "sion", "ness", "ship", "hood", "ing", "ies",
+                "ied", "ive", "ous", "ful", "less", "able", "ible", "ally",
+                "ity", "ize", "ise", "ate", "ant", "ent", "ed", "es", "er",
+                "ly", "al", "ic", "y", "s"):
+        if x.endswith(suf) and len(x) - len(suf) >= 4:
+            return x[:-len(suf)]
+    return x
+
+
 def note_answer_word(book, unit, word):
-    """이 강에서 정답으로 쓴 단어를 기록한다."""
+    """이 강에서 정답으로 쓴 단어를 기록한다. 표기와 어근을 함께 담는다."""
     w = re.sub(r"[^a-z]", "", str(word or "").lower())
     if w:
         _USED_ANSWER_WORDS.setdefault(_unit_key(book, unit), set()).add(w)
 
 
 def used_answer_words(book, unit):
+    """프롬프트에 보여줄 목록 — 실제 표기 그대로."""
     return sorted(_USED_ANSWER_WORDS.get(_unit_key(book, unit), set()))
+
+
+def answer_word_clash(book, unit, word):
+    """이미 쓴 정답과 어근이 겹치는가 (_s139). 겹치면 그 단어를 반환."""
+    _st = _answer_stem(word)
+    if not _st or len(_st) < 4:
+        return ""
+    for w in _USED_ANSWER_WORDS.get(_unit_key(book, unit), set()):
+        if _answer_stem(w) == _st:
+            return w
+        # 'advanced' / 'advance' 처럼 어미 처리가 갈리는 경우 — 앞 5글자로 보완
+        if len(_st) >= 5 and len(w) >= 5 and _answer_stem(w)[:5] == _st[:5]:
+            return w
+    return ""
 
 
 # ════════════════════════════════════════════════════════════════
@@ -1176,7 +1212,11 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s138 = 같은 강에서 정답 어휘가 겹치는 것을 막는다. 실측 비상(홍) 1과에서
+    # _s139 = 정답 어휘 중복 판정을 **어근**으로 넓혔다. 소문자 비교만으로는
+    #        'ignorance'(2번 정답)와 'ignoring'(5번 정답)을 다른 단어로 봤다 —
+    #        학생 눈엔 같은 말이다. 파생 접미사까지 떼어 둘 다 'ignor' 로 만든다.
+    #        겹치면 재시도시킨다(관대 모드에서는 통과).
+    # (구) _s138 = 같은 강에서 정답 어휘가 겹치는 것을 막는다. 실측 비상(홍) 1과에서
     #        'trivial' 이 4번·5번 두 지문의 정답으로 나왔다 — 같은 과에서 같은 단어가
     #        반복되면 학생이 눈치챈다. 강 단위로 정답 단어를 기록하고 다음 지문
     #        프롬프트에 '이미 쓴 것'으로 넘긴다(캐시 히트도 기록한다).
@@ -1509,7 +1549,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s138"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s139"
 
 
 # ============ Supabase 캐시 ============
@@ -2090,6 +2130,24 @@ def generate_variation_a(
                 # ★ Q1 주제 정답 자리를 강 단위로 돌린다 (_s136).
                 #   검증을 다 통과한 뒤에 섞어야 안전하다 — 앞서 섞으면
                 #   topic_correct 를 참조하는 검사들과 어긋난다.
+                # ★ 이미 쓴 정답과 어근이 겹치면 재시도 (_s139)
+                try:
+                    _clash = ""
+                    for _vi in (data.get("vocab_items") or []):
+                        if _vi.get("is_answer"):
+                            _clash = (answer_word_clash(book, unit, _vi.get("original"))
+                                      or answer_word_clash(book, unit, _vi.get("shown")))
+                            break
+                    if _clash and not is_last:
+                        last_errors = [
+                            f"[{pid}] [유형A] Q3 어휘 정답이 이 강에서 이미 쓴 "
+                            f"'{_clash}' 와 어근이 같다 — 같은 과에서 같은 말이 두 번 "
+                            f"정답이면 학생이 눈치챈다. 다른 자리를 고를 것."]
+                        print(f"[VAR][A][{pid}] Q3 어휘 정답 어근 중복('{_clash}') → 재시도")
+                        continue
+                except Exception as _ce:
+                    print(f"[VAR][A][{pid}] 어근 중복 확인 예외({_ce})")
+
                 # ★ 이 강에서 쓴 정답 어휘를 기록한다 (_s138) — 다음 지문이 피하게
                 try:
                     for _vi in (data.get("vocab_items") or []):

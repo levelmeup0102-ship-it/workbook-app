@@ -598,6 +598,33 @@ def absolute_word_in_option(opt: str) -> str:
     return ""
 
 
+def shuffle_correct_position(options, correct_idx, book, unit, pid, salt):
+    """선지 순서를 섞고 정답을 강 단위 순환 자리에 놓는다 (_s136).
+
+    ★ 정답 번호를 LLM 이 정하면 한 자리에 몰린다 —
+      실측: 16강 주제 ①에 4/6, YBM 1과 ④에 3/4.
+      어휘(want_n)와 B Q3(summary_design)는 이미 코드가 자리를 정하는데
+      주제·제목만 LLM 에 맡겨 있었다.
+    ★ 같은 강·같은 번호는 항상 같은 자리라 이미 배포한 답지가 안 흔들린다.
+
+    반환: (새 선지 리스트, 새 정답 인덱스). 못 하면 (원본, 원본인덱스).
+    """
+    if not isinstance(options, list) or len(options) != 5:
+        return options, correct_idx
+    if not isinstance(correct_idx, int) or not (0 <= correct_idx < 5):
+        return options, correct_idx
+    _seq = re.findall(r"\d+", str(pid))
+    _seq = int(_seq[0]) if _seq else 0
+    _start = int(hashlib.md5(
+        (str(book) + "|" + str(unit) + "|" + salt).encode()
+    ).hexdigest()[:8], 16) % 5
+    _pos = (_start + _seq) % 5
+    _correct = options[correct_idx]
+    _rest = [o for k, o in enumerate(options) if k != correct_idx]
+    random.Random(f"{book}|{unit}|{pid}|{salt}|ord").shuffle(_rest)
+    return _rest[:_pos] + [_correct] + _rest[_pos:], _pos
+
+
 def check_absolute_words(options, correct_idx, label, pid="?"):
     """★ _s133 부터 생성 경로에서는 호출하지 않는다. 진단·검사기 참고용으로만 남긴다.
     "이 'never' 가 절대 주장인가 관용구인가"는 의미 판단이라 코드가 못 한다."""
@@ -1111,7 +1138,13 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s135 = Q3어휘에서 기능어(관사·전치사·대명사·의문사·조동사) 차단. _VOCAB_STOP 이
+    # _s136 = Q1 주제 / Q2 제목 정답 자리도 코드가 강 단위로 돌린다. LLM 이 정하니
+    #        한 자리에 몰렸다 — 실측 16강 주제 ①에 4/6, YBM 1과 ④에 3/4.
+    #        어휘(want_n)와 B Q3(summary_design)는 이미 코드가 정하는데
+    #        주제·제목만 빠져 있었다. 검증을 다 통과한 뒤 저장 직전에 섞는다
+    #        (앞서 섞으면 topic_correct 를 참조하는 검사들과 어긋난다).
+    #        A 와 B 는 salt 를 달리해 같은 지문에서 같은 번호에 안 몰리게 한다.
+    # (구) _s135 = Q3어휘에서 기능어(관사·전치사·대명사·의문사·조동사) 차단. _VOCAB_STOP 이
     #        코드 픽과 answer_pos_ok 에만 걸려 있었는데 answer_pos_ok 는 _s109 에서
     #        안 쓰게 돼 **LLM 픽을 아무도 안 막았다** — 실측 'why?' 가 선지로 나갔다.
     #        의문사의 반대말이란 없다. 닫힌 목록이라 형태 판정처럼 새지 않는다.
@@ -1421,7 +1454,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s135"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s136"
 
 
 # ============ Supabase 캐시 ============
@@ -1985,6 +2018,19 @@ def generate_variation_a(
 
             errors = validate_a(data, en_text, pid, lenient=is_last)
             if not errors:
+                # ★ Q1 주제 정답 자리를 강 단위로 돌린다 (_s136).
+                #   검증을 다 통과한 뒤에 섞어야 안전하다 — 앞서 섞으면
+                #   topic_correct 를 참조하는 검사들과 어긋난다.
+                try:
+                    _to2, _tc2 = shuffle_correct_position(
+                        data.get("topic_options"), data.get("topic_correct"),
+                        book, unit, pid, "topicpos")
+                    if _tc2 != data.get("topic_correct"):
+                        data["topic_options"], data["topic_correct"] = _to2, _tc2
+                        print(f"[VAR][A][{pid}] Q1 주제 정답 자리 → {_tc2 + 1}번")
+                except Exception as _pe:
+                    print(f"[VAR][A][{pid}] 주제 자리 순환 예외({_pe})")
+
                 save_cached(cache_key, "variation_a", data)
                 mode_str = "관대 모드" if is_last else "엄격 모드"
                 print(f"[VAR][A][{pid}] 생성 완료 (시도 {attempt}, {mode_str})")
@@ -2671,6 +2717,19 @@ def generate_variation_b(
 
             errors = validate_b(data, en_text, pid, strict=not is_last, a_data=_a_data)
             if not errors:
+                # ★ Q2 제목 정답 자리를 강 단위로 돌린다 (_s136).
+                #   A Q1 과 다른 salt 를 써서 같은 지문에서 A·B 가 같은 번호에
+                #   몰리지 않게 한다.
+                try:
+                    _to2, _tc2 = shuffle_correct_position(
+                        data.get("topic_options"), data.get("topic_correct"),
+                        book, unit, pid, "titlepos")
+                    if _tc2 != data.get("topic_correct"):
+                        data["topic_options"], data["topic_correct"] = _to2, _tc2
+                        print(f"[VAR][B][{pid}] Q2 제목 정답 자리 → {_tc2 + 1}번")
+                except Exception as _pe:
+                    print(f"[VAR][B][{pid}] 제목 자리 순환 예외({_pe})")
+
                 save_cached(cache_key, "variation_b", data)
                 mode_str = "관대 모드" if is_last else "엄격 모드"
                 print(f"[VAR][B][{pid}] 생성 완료 (시도 {attempt}, {mode_str})")

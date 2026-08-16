@@ -659,6 +659,10 @@ def _apply_saved(out: dict, saved: dict) -> dict:
     elif isinstance(saved.get("boxes"), list):   # 구버전 호환
         out["MARKS"] = [{"si": b.get("si"), "from": b.get("from"),
                           "to": b.get("to"), "tool": "box"} for b in saved["boxes"]]
+    # ★ 제목/주제/요약 직접입력 값 복원
+    cst = saved.get("custom")
+    if isinstance(cst, dict) and cst:
+        out["CUSTOM"] = cst
     return out
 
 

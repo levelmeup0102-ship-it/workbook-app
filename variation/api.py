@@ -22,6 +22,8 @@ from variation.generator import (
     generate_variation_b,
     fetch_passage_text,
     sb_client,
+    get_variation_cache_status,
+    delete_variation_cache,
 )
 from variation.renderer import (
     render_variation_html,
@@ -74,8 +76,54 @@ class VariationItemRequest(BaseModel):
     type: str  # 'A' or 'B'
 
 
+class PassageListRequest(BaseModel):
+    """캐시 조회·삭제 공용 — 지문 목록만 받는다"""
+    passages: List[PassageRef]
+
+
 # ============ 라우터 ============
 router = APIRouter(prefix="/api", tags=["variation"])
+
+
+@router.post("/variation/cache-status")
+def variation_cache_status(
+    req: PassageListRequest,
+    _token_val: str = Depends(verify_token),
+):
+    """지문별 변형문제 캐시 유무 조회 — 2회독 탭의 '준비됨 / 미생성' 표시용.
+
+    반환: {"ok": True, "status": {"교재|단원|번호": {"a": bool, "b": bool}}}
+    A·B 는 따로 캐시되므로 한쪽만 있는 경우가 실제로 있다.
+    """
+    if not sb_client:
+        return {"ok": False, "status": {}, "error": "Supabase 환경변수 미설정"}
+    try:
+        passages = [p.model_dump() for p in req.passages]
+        return {"ok": True, "status": get_variation_cache_status(passages)}
+    except Exception as e:
+        traceback.print_exc()
+        return {"ok": False, "status": {}, "error": str(e)}
+
+
+@router.post("/variation/clear-cache")
+def variation_clear_cache(
+    req: PassageListRequest,
+    _token_val: str = Depends(verify_token),
+):
+    """선택한 지문의 변형문제 캐시(A·B)를 삭제한다.
+
+    1회독 워크북 캐시(step1~stepN)는 같은 테이블에 있어도 건드리지 않는다.
+    """
+    if not sb_client:
+        raise HTTPException(status_code=500, detail="Supabase 환경변수 미설정")
+    if not req.passages:
+        raise HTTPException(status_code=400, detail="지문이 선택되지 않음")
+    try:
+        result = delete_variation_cache([p.model_dump() for p in req.passages])
+        return {"ok": True, "passages": len(req.passages), **result}
+    except Exception as e:
+        traceback.print_exc()
+        return {"ok": False, "deleted": 0, "error": str(e)}
 
 
 @router.post("/variation/item")

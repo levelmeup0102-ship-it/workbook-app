@@ -554,6 +554,28 @@ def _span_from_marks(paragraphs, mark, pid="?", lab="?") -> Optional[str]:
 #   "다시 골라라"만 하면 LLM은 같은 실수를 반복한다. 무엇이 왜 걸렸는지 알려줘야 한다.
 _Q5_FAIL_REASONS = []
 
+# ★ 강 안에서 이미 정답으로 쓴 어휘 (_s138)
+#   실측: 비상(홍) 1과에서 'trivial' 이 4번·5번 두 지문의 정답으로 나왔다.
+#   같은 과에서 같은 단어가 반복되면 학생이 눈치챈다.
+#   {(book, unit): {소문자 단어, ...}} — 프로세스가 살아 있는 동안만 유지된다.
+#   캐시 히트로 나온 것도 기록해야 하므로 반환 직전에 담는다.
+_USED_ANSWER_WORDS = {}
+
+
+def _unit_key(book, unit):
+    return (str(book or "").strip(), str(unit or "").strip())
+
+
+def note_answer_word(book, unit, word):
+    """이 강에서 정답으로 쓴 단어를 기록한다."""
+    w = re.sub(r"[^a-z]", "", str(word or "").lower())
+    if w:
+        _USED_ANSWER_WORDS.setdefault(_unit_key(book, unit), set()).add(w)
+
+
+def used_answer_words(book, unit):
+    return sorted(_USED_ANSWER_WORDS.get(_unit_key(book, unit), set()))
+
 
 # ════════════════════════════════════════════════════════════════
 # 절대어 오답 차단 (_s108)
@@ -596,6 +618,22 @@ def absolute_word_in_option(opt: str) -> str:
         if f" {w} " in t:
             return w
     return ""
+
+
+def place_vocab_answer(items, want_n):
+    """Q3 어휘 정답 자리 이동 — ★ 쓰지 않는다 (_s137에서 검토 후 보류).
+
+    ★ 왜 못 하나
+      어휘는 주제·제목과 다르다. 주제 선지는 다섯 개가 **서로 독립**이라
+      순서를 섞어도 되지만, 어휘는 각 항목이 **지문의 특정 자리에 묶여 있다.**
+        - n 만 바꾸면 → 본문 밑줄이 지문 앞쪽에 ③, 뒤쪽에 ① 이 붙어 어색하다
+        - 좌표까지 바꾸면 → 정답 단어가 원래 문맥이 아닌 문장에 놓여 뜻이 깨진다
+      결국 **어느 자리를 정답으로 삼을지는 LLM 이 고를 때 정해야 한다.**
+
+    ★ 대신 프롬프트를 고쳤다 — 출력 예시 JSON 이 계속 n:3 을 정답으로 보여준 게
+      앵커였다(실측: 비상 1과 다섯 지문이 ③③③③④). 예시에서 그 앵커를 없앴다.
+    """
+    return items
 
 
 def shuffle_correct_position(options, correct_idx, book, unit, pid, salt):
@@ -1138,7 +1176,24 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s136 = Q1 주제 / Q2 제목 정답 자리도 코드가 강 단위로 돌린다. LLM 이 정하니
+    # _s138 = 같은 강에서 정답 어휘가 겹치는 것을 막는다. 실측 비상(홍) 1과에서
+    #        'trivial' 이 4번·5번 두 지문의 정답으로 나왔다 — 같은 과에서 같은 단어가
+    #        반복되면 학생이 눈치챈다. 강 단위로 정답 단어를 기록하고 다음 지문
+    #        프롬프트에 '이미 쓴 것'으로 넘긴다(캐시 히트도 기록한다).
+    #        + 방향 없는 부사(supposedly) 차단 — antonym 이 원문어와 어근이 같으면
+    #        반대말이 아니라 형태만 바꾼 것이다.
+    # (구) _s137 = Q3 어휘 정답 자리 쏠림 수정. 실측 비상(홍) 1과 다섯 지문이 ③③③③④.
+    #        원인은 출력 예시 JSON 이 계속 3번을 정답처럼 보여준 것 —
+    #        3번에만 evidence/evidence_type 이 붙어 있어 눈에 띄었다(_s96 과 같은 원인).
+    #        예시 다섯 항목을 같은 모양으로 만들고 is_answer 를 <ANSWER_HERE> 로 바꿨다.
+    #        ★ 코드로 자리를 옮기는 건 안 된다 — 어휘는 각 항목이 지문의 특정 자리에
+    #        묶여 있어, n 만 바꾸면 본문 밑줄 순서가 어긋나고 좌표까지 바꾸면
+    #        정답 단어가 엉뚱한 문맥에 놓인다. 주제·제목(_s136)과 성격이 다르다.
+    # (구) _s137 = Q3 어휘 정답 자리도 코드가 옮긴다. want_n 은 프롬프트 지시일 뿐이라
+    #        안 지켜졌다 — 실측 비상 1과 다섯 지문이 ③③③③④. 출력 예시 JSON 이
+    #        계속 n:3 을 정답으로 보여주는 게 앵커다(_s96 에서 확인한 원인).
+    #        n 만 서로 교환하므로 본문 밑줄 위치(para/idx)는 그대로다.
+    # (구) _s136 = Q1 주제 / Q2 제목 정답 자리도 코드가 강 단위로 돌린다. LLM 이 정하니
     #        한 자리에 몰렸다 — 실측 16강 주제 ①에 4/6, YBM 1과 ④에 3/4.
     #        어휘(want_n)와 B Q3(summary_design)는 이미 코드가 정하는데
     #        주제·제목만 빠져 있었다. 검증을 다 통과한 뒤 저장 직전에 섞는다
@@ -1454,7 +1509,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s136"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s138"
 
 
 # ============ Supabase 캐시 ============
@@ -1600,6 +1655,14 @@ def generate_variation_a(
         cached = load_cached(cache_key, "variation_a")
         if cached:
             print(f"[VAR][A][{pid}] 캐시 히트")
+            # ★ 캐시로 나온 것도 이 강의 '이미 쓴 단어'다 (_s138)
+            try:
+                for _vi in (cached.get("vocab_items") or []):
+                    if _vi.get("is_answer"):
+                        note_answer_word(book, unit, _vi.get("original"))
+                        note_answer_word(book, unit, _vi.get("shown"))
+            except Exception:
+                pass
             return cached
 
     # 합치기 단계: 캐시에 없으면 생성하지 않고 None (재생성으로 인한 타임아웃 방지)
@@ -1828,7 +1891,8 @@ def generate_variation_a(
                     _msg = build_vocab_prompt(
                         data["paragraphs"],
                         [data.get("blank_A", ""), data.get("blank_B", "")],
-                        want_n=_want_n)
+                        want_n=_want_n,
+                        used_words=used_answer_words(book, unit))
                     # ★ 재시도에는 앞선 실패 사유를 그대로 붙인다 (_s97).
                     #   "다시 만들어라"만 하면 같은 실수를 반복한다 — Q5 에서 사유를
                     #   돌려주니 성공률이 올랐던 것과 같은 처방이다.
@@ -1868,6 +1932,11 @@ def generate_variation_a(
                     #   ★ 첫 시도만 -ing/-ed 형태까지 본다(_s100). 재시도에서는
                     #     -s 불일치만 막는다 — 'vast'→'overwhelming' 같은 정상 치환을
                     #     형태소로 못 가려 지문이 통째로 누락됐다.
+                    # ★ want_n 은 프롬프트 지시일 뿐 강제력이 없다 (_s137 에서 확인).
+                    #   실측: 비상 1과에서 다섯 지문 정답이 ③③③③④ 로 몰렸다.
+                    #   출력 예시 JSON 이 계속 n:3 을 정답으로 보여주는 게 앵커다
+                    #   (_s96 에서 같은 원인을 확인했는데 예시는 못 고쳤다).
+                    #   → 받은 뒤 코드가 자리를 옮긴다. 아래 _place_answer 참조.
                     _items = normalize_llm_vocab(_v.get("vocab_items"),
                                                  data["paragraphs"], _spans,
                                                  pid=pid, report=_vfail,
@@ -2021,6 +2090,15 @@ def generate_variation_a(
                 # ★ Q1 주제 정답 자리를 강 단위로 돌린다 (_s136).
                 #   검증을 다 통과한 뒤에 섞어야 안전하다 — 앞서 섞으면
                 #   topic_correct 를 참조하는 검사들과 어긋난다.
+                # ★ 이 강에서 쓴 정답 어휘를 기록한다 (_s138) — 다음 지문이 피하게
+                try:
+                    for _vi in (data.get("vocab_items") or []):
+                        if _vi.get("is_answer"):
+                            note_answer_word(book, unit, _vi.get("original"))
+                            note_answer_word(book, unit, _vi.get("shown"))
+                except Exception:
+                    pass
+
                 try:
                     _to2, _tc2 = shuffle_correct_position(
                         data.get("topic_options"), data.get("topic_correct"),

@@ -161,7 +161,20 @@ async def _get_passage_text(book, unit, pid):
     return raw.strip(), ""
 
 
-def _inject(html: str, sheet_data: dict, mode: str = "auth", readonly: bool = False, teacher: str = "") -> str:
+def _fmt_ref(book: str, unit: str, pid: str) -> str:
+    """헤더에 보일 지문 위치 라벨. 예: '수능특강 영어 · 16강 03번'."""
+    b = (book or "").strip()
+    # '26 수특 영어'처럼 교재코드 숫자가 '수특/수능특강/올림포스' 앞에 붙은 경우만 제거
+    b = re.sub(r"^\s*\d+\s+(?=수특|수능특강|올림포스|리딩|올림)", "", b)
+    b = b.replace("수특", "수능특강")
+    tail = " ".join(p for p in [(unit or "").strip(), (pid or "").strip()] if p)
+    if b and tail:
+        return b + " · " + tail
+    return b or tail
+
+
+def _inject(html: str, sheet_data: dict, mode: str = "auth", readonly: bool = False,
+            teacher: str = "", book: str = "", unit: str = "", pid: str = "") -> str:
     payload = {
         "S": sheet_data.get("S", []),
         "FLOW": sheet_data.get("FLOW", []),
@@ -175,6 +188,7 @@ def _inject(html: str, sheet_data: dict, mode: str = "auth", readonly: bool = Fa
         "MODE": mode,
         "READONLY": readonly,
         "TEACHER": teacher,
+        "REF": _fmt_ref(book, unit, pid),
     }
     snippet = (
         "<script>\n"
@@ -196,38 +210,56 @@ def _read_template() -> str:
     return p.read_text(encoding="utf-8")
 
 
+async def _build_sheet_payload(book: str, unit: str, pid: str, teacher: str) -> dict:
+    """분석지 데이터(dict)만 만들어 반환 — HTML 페이지와 JSON API가 공유."""
+    ck = _DEPS["ck"](book, unit, pid)
+    pre = _load_preclass(ck)
+    eng, kr = await _get_passage_text(book, unit, pid)
+    st1 = _load_step1(ck)
+    wb_sents = (st1 or {}).get("sentences") if isinstance(st1, dict) else None
+    wb_kr = (st1 or {}).get("sentence_translations") if isinstance(st1, dict) else None
+    teacher = (teacher or "").strip()
+    saved_row = _load_sheet(cache_key=ck, teacher=teacher)
+    saved_sheet = (saved_row or {}).get("sheet") if saved_row else None
+    if pre:
+        return sc.build_sheet_data(pre, translation=kr, saved_sheet=saved_sheet,
+                                   passage_en=eng, wb_sentences=wb_sents, wb_translations=wb_kr)
+    if (eng or "").strip():
+        return sc.build_blank_sheet_data(eng, translation=kr, saved_sheet=saved_sheet,
+                                         wb_sentences=wb_sents, wb_translations=wb_kr)
+    raise HTTPException(404, f"이 지문의 원문이 없습니다. 먼저 지문을 업로드하세요. (key={ck})")
+
+
 @router.get("/sheet", response_class=HTMLResponse)
 async def sheet_page(request: Request, book: str = "", unit: str = "", pid: str = "", teacher: str = ""):
     if not all([book, unit, pid]):
         raise HTTPException(400, "book, unit, pid 필요")
-
-    ck = _DEPS["ck"](book, unit, pid)
-    pre = _load_preclass(ck)
-    eng, kr = await _get_passage_text(book, unit, pid)
-
-    # ★ 1회독(step1_basic)이 나눈 문장/해석을 그대로 가져와 분할을 1회독과 일치시킴
-    st1 = _load_step1(ck)
-    wb_sents = (st1 or {}).get("sentences") if isinstance(st1, dict) else None
-    wb_kr = (st1 or {}).get("sentence_translations") if isinstance(st1, dict) else None
-
     teacher = (teacher or "").strip()
-    saved_row = _load_sheet(cache_key=ck, teacher=teacher)
-    saved_sheet = (saved_row or {}).get("sheet") if saved_row else None
-
-    if pre:
-        # 0회독(자동 분석)이 있으면 그걸 소스로 (문장 분할은 1회독 결과 우선)
-        data = sc.build_sheet_data(pre, translation=kr, saved_sheet=saved_sheet,
-                                   passage_en=eng, wb_sentences=wb_sents, wb_translations=wb_kr)
-    elif (eng or "").strip():
-        # ★ 0회독이 없어도 원문만으로 '빈 분석지'를 연다 (선생님이 직접 강조/편집)
-        data = sc.build_blank_sheet_data(eng, translation=kr, saved_sheet=saved_sheet,
-                                         wb_sentences=wb_sents, wb_translations=wb_kr)
-    else:
-        # 원문조차 없는 경우에만 막는다
-        raise HTTPException(404, f"이 지문의 원문이 없습니다. 먼저 지문을 업로드하세요. (key={ck})")
-
+    data = await _build_sheet_payload(book, unit, pid, teacher)
     html = _read_template()
-    return _inject(html, data, mode="auth", readonly=False, teacher=teacher)
+    return _inject(html, data, mode="auth", readonly=False, teacher=teacher, book=book, unit=unit, pid=pid)
+
+
+@router.get("/api/sheet/data")
+async def sheet_data_json(request: Request, book: str = "", unit: str = "", pid: str = "", teacher: str = ""):
+    """강사 전환용 — 페이지 새로고침 없이 분석지 데이터(JSON)만 반환."""
+    if not all([book, unit, pid]):
+        raise HTTPException(400, "book, unit, pid 필요")
+    teacher = (teacher or "").strip()
+    data = await _build_sheet_payload(book, unit, pid, teacher)
+    return {
+        "S": data.get("S", []),
+        "FLOW": data.get("FLOW", []),
+        "TITLES": data.get("TITLES", []),
+        "TOPICS": data.get("TOPICS", []),
+        "DIFF": data.get("DIFF", 3),
+        "VPOOL": data.get("VPOOL", {}),
+        "POOL": data.get("POOL", {}),
+        "SEL": data.get("_SEL", {}),
+        "MARKS": data.get("MARKS", []),
+        "TEACHER": teacher,
+        "REF": _fmt_ref(book, unit, pid),
+    }
 
 
 @router.post("/api/sheet/save")
@@ -375,4 +407,4 @@ async def sheet_student(token: str):
     else:
         raise HTTPException(404, "원본 지문이 없습니다.")
     html = _read_template()
-    return _inject(html, data, mode="student", readonly=True)
+    return _inject(html, data, mode="student", readonly=True, book=book, unit=unit, pid=pid)

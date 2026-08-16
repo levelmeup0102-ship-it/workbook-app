@@ -324,6 +324,11 @@ body {
    괘선은 넣지 않는다(자유 필기).
    깨짐 방지: page-break-inside:avoid 로 페이지 경계에서 잘리지 않게 하고
    높이는 고정한다. 여백을 채우려고 늘리면 긴 지문에서 페이지가 넘친다. */
+/* ★ 자리가 모자라면 MEMO 를 통째로 뺀다 (_memo_fit).
+   MEMO 는 남는 여백에 놓는 필기칸이라, 페이지가 꽉 차면 다음 장으로 밀려
+   MEMO 만 찍힌 빈 페이지가 생겼다. 문항은 지울 수 없으니 MEMO 를 뺀다.
+   판단은 문서 끝의 스크립트가 실제 높이를 재서 한다 — CSS 로는 잴 수 없다. */
+.memo-hidden { display: none !important; }
 .memo-box {
   margin-top: auto;          /* ★ 남는 공간을 위로 밀어 MEMO 를 아래쪽에 붙인다 */
   padding-top: 7px;          /* 위 문항과 최소 간격 */
@@ -524,6 +529,60 @@ body {
     </div>
   {% endfor %}
 </div>
+
+
+<script>
+/* ★ MEMO 자동 제거 (_memo_fit)
+   .q-page 는 인쇄영역 높이(272mm)를 min-height 로 잡아 MEMO 를 바닥에 붙인다.
+   그런데 문항이 길어 272mm 를 넘으면 페이지가 갈리고 MEMO 가 다음 장으로
+   밀려 'MEMO 만 있는 빈 장'이 나온다. 그럴 땐 MEMO 를 아예 뺀다.
+   - 문항은 절대 건드리지 않는다(잘리면 시험지가 안 된다).
+   - display:none 으로만 감춰서 여러 번 실행돼도 결과가 같다.
+   - 화면 로드·글꼴 로드·인쇄 직전에 각각 다시 잰다. */
+(function () {
+  function mmToPx() {
+    var probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;visibility:hidden;top:0;left:0;height:272mm;';
+    document.body.appendChild(probe);
+    var h = probe.offsetHeight;
+    probe.parentNode.removeChild(probe);
+    return h;
+  }
+
+  function fitMemos() {
+    var pages = document.querySelectorAll('.q-page');
+    if (!pages.length) return;
+
+    // ① 먼저 전부 되살린다 — 잘못 감춘 게 있으면 여기서 복구된다
+    var memos = [];
+    for (var i = 0; i < pages.length; i++) {
+      var m = pages[i].querySelector('.memo-box');
+      memos.push(m);
+      if (m) m.classList.remove('memo-hidden');
+    }
+
+    // ② 인쇄영역 높이를 px 로 구한다
+    var limit = mmToPx();
+    if (!limit) return;
+
+    // ③ 넘치는 페이지만 MEMO 를 감춘다 (2px 은 반올림 오차 여유)
+    for (var j = 0; j < pages.length; j++) {
+      if (!memos[j]) continue;
+      if (pages[j].scrollHeight > limit + 2) memos[j].classList.add('memo-hidden');
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', fitMemos);
+  } else {
+    fitMemos();
+  }
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(fitMemos).catch(function () {});
+  }
+  window.addEventListener('beforeprint', fitMemos);
+})();
+</script>
 
 </body>
 </html>

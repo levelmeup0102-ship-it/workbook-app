@@ -60,6 +60,8 @@
   .tool-btn .sw{display:inline-block;width:14px;height:0;border-bottom:2px solid #999}
   .tool-btn .sw-r{border-bottom-color:#CC0000}.tool-btn .sw-b{border-bottom-color:#1155BB}
   .en.marking{cursor:cell;user-select:text}
+  .ref-badge{display:inline-block;margin:0 0 8px;padding:4px 12px;background:#2E4E8F;color:#fff;font-size:13px;font-weight:800;border-radius:6px;letter-spacing:.2px}
+  .ref-badge:empty{display:none}
   .en.marking .wd{cursor:cell}
   .wd.mk-ulr,.wsp.mk-ulr{border-bottom:2px solid #CC0000}
   .wd.mk-ulb,.wsp.mk-ulb{border-bottom:2px solid #1155BB}
@@ -211,6 +213,13 @@
   .tch-wrap{display:inline-flex;align-items:center;gap:5px;margin-left:6px}
   .tch-in{width:92px;font-size:12px;padding:3px 7px;border:1px solid var(--line);border-radius:7px}
   .tch-sel{font-size:11.5px;padding:3px 5px;border:1px solid var(--line);border-radius:7px;max-width:160px}
+  .tch-tabs{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:2px 0 10px;padding-bottom:6px;border-bottom:2px solid #E4E9F0}
+  .tch-tabs .tt-lb{font-size:11px;font-weight:800;color:#2E4E8F;margin-right:4px}
+  .tch-tab{padding:5px 13px;border:1.5px solid #C7CFDA;border-bottom:none;background:#F3F6FB;color:#4A5568;font-size:12.5px;font-weight:700;border-radius:8px 8px 0 0;cursor:pointer;position:relative;top:2px}
+  .tch-tab:hover{background:#E9EFF8}
+  .tch-tab.on{background:#2E4E8F;color:#fff;border-color:#2E4E8F}
+  .tch-tab.newt{border-style:dashed;color:#2E4E8F;background:#fff}
+  @media print{.tch-tabs{display:none}}
   .tch-btn{font-size:12px;font-weight:700;padding:4px 11px;border:1px solid var(--green);border-radius:7px;background:var(--green);color:#fff;cursor:pointer}
   .tch-btn.link{background:#2563EB;border-color:#2563EB}
   .tch-btn:disabled{opacity:.6;cursor:default}
@@ -243,8 +252,7 @@
     </span>
     <span class="tch-wrap" id="tchWrap">
       <input id="tchName" class="tch-in" placeholder="강사명" autocomplete="off">
-      <select id="tchSel" class="tch-sel"><option value="">― 저장된 강사 ―</option></select>
-      <button class="tch-btn" id="newVerBtn">＋ 새 버전</button>
+      <select id="tchSel" class="tch-sel" style="display:none"><option value="">― 저장된 강사 ―</option></select>
       <button class="tch-btn" id="saveBtn">저장</button>
       <button class="tch-btn" id="saveAsBtn">새 이름으로 저장</button>
       <button class="tch-btn link" id="linkBtn">학생 링크</button>
@@ -252,6 +260,7 @@
     <span class="note" id="note"></span>
     <button class="print" id="printBtn" onclick="window.print()">인쇄 / PDF</button>
   </div>
+  <div class="tch-tabs" id="tchTabs"></div>
   <div class="linkbar" id="linkbar"></div>
   <div class="legend" id="legend">
     <span class="lg-title">밑줄 색</span>
@@ -266,6 +275,7 @@
     <span class="lg-item"><span class="lg-chip lg-corange"></span>어휘 출제예감</span>
   </div>
   <div class="sheet">
+    <div class="ref-badge" id="refBadge"></div>
     <div class="head">
       <div class="num">02</div><div class="typ">무관한 문장 찾기</div>
       <div class="tt"><b id="hTitleK">환경과 경제 모두의 지속가능성에 기여하는 바이오 발전의 이점</b><br>
@@ -476,7 +486,7 @@ function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g
 function noted(si){return S[si].map((c,ci)=>({c,ci})).filter(x=>x.c.n);}
 function dots(n){return `<span class="imp">${[1,2,3].map(i=>`<i class="${i<=n?'on':''}"></i>`).join('')}<span class="t">중요도</span></span>`;}
 function isKey(c){return c.key!==undefined?c.key:(c.i>=3);}
-function updateHeader(){const t=TITLES[SEL.title];const k=document.getElementById('hTitleK'),e=document.getElementById('hTitleE'),s=document.getElementById('hStars');if(k)k.textContent=t[0];if(e)e.textContent=t[1];if(s){let st='지문난이도 <span class="st">';for(let n=1;n<=5;n++)st+=`<span class="hst" data-d="${n}">${n<=DIFF?'★':'☆'}</span>`;st+='</span>';s.innerHTML=st;}}
+function updateHeader(){const rb=document.getElementById('refBadge');if(rb&&_D&&_D.REF)rb.textContent=_D.REF;const t=TITLES[SEL.title];const k=document.getElementById('hTitleK'),e=document.getElementById('hTitleE'),s=document.getElementById('hStars');if(k)k.textContent=t[0];if(e)e.textContent=t[1];if(s){let st='지문난이도 <span class="st">';for(let n=1;n<=5;n++)st+=`<span class="hst" data-d="${n}">${n<=DIFF?'★':'☆'}</span>`;st+='</span>';s.innerHTML=st;}}
 function ceHtml(c){let e=esc(c.e);if(c.h){let cls=c.f===2?'hl v':'hl';if(isKey(c))cls+=' key';e=e.replace(esc(c.h),`<span class="${cls}">${esc(c.h)}</span>`);}return e;}
 
 /* ---------- 저작 ---------- */
@@ -748,13 +758,50 @@ async function loadTeachers(){
   const {book,unit,pid}=_qp();if(!book||!unit||!pid)return;
   try{
     const r=await fetch(`/api/sheet/teachers?book=${encodeURIComponent(book)}&unit=${encodeURIComponent(unit)}&pid=${encodeURIComponent(pid)}`);
-    if(!r.ok)return;const d=await r.json();const sel=document.getElementById('tchSel');if(!sel)return;
+    if(!r.ok)return;const d=await r.json();
     const cur=(document.getElementById('tchName').value||'').trim();
-    sel.innerHTML='<option value="">― 저장된 강사 ―</option>'+(d.teachers||[]).map(t=>{
+    const list=(d.teachers||[]);
+    // 숨은 드롭다운도 동기화(호환)
+    const sel=document.getElementById('tchSel');
+    if(sel)sel.innerHTML='<option value="">― 저장된 강사 ―</option>'+list.map(t=>{
       const v=(t.teacher||'');const nm=v||'(공용)';const vEsc=v.replace(/"/g,'&quot;');
-      return `<option value="${vEsc}"${v===cur?' selected':''}>${esc(nm)}${t.has_link?' · 링크':''}</option>`;
+      return `<option value="${vEsc}"${v===cur?' selected':''}>${esc(nm)}</option>`;
     }).join('');
+    // ★ 강사 탭 렌더
+    const tabs=document.getElementById('tchTabs');if(!tabs)return;
+    // 기본 강사 명단(항상 탭으로 노출) + 저장된 강사 + 현재 강사 병합(중복 제거, 순서 유지)
+    const DEFAULT_TEACHERS=['태림T','수지T'];
+    const names=[];
+    const _push=v=>{ if(v && !names.includes(v)) names.push(v); };
+    DEFAULT_TEACHERS.forEach(_push);
+    list.forEach(t=>_push(t.teacher||''));
+    _push(cur);
+    if(!names.length)names.push(cur);           // 최소 하나
+    let html='<span class="tt-lb">강사</span>';
+    html+=names.map(v=>{
+      const nm=v||'(공용)';const on=(v===cur)?' on':'';
+      return `<span class="tch-tab${on}" data-tch="${v.replace(/"/g,'&quot;')}">${esc(nm)}</span>`;
+    }).join('');
+    html+='<span class="tch-tab newt" data-newtab="1">＋ 새 강사</span>';
+    tabs.innerHTML=html;
+    tabs.querySelectorAll('.tch-tab').forEach(el=>{
+      el.onclick=()=>{
+        if(el.dataset.newtab){
+          const nm=(prompt('새 강사 이름을 입력하세요:','')||'').trim();
+          if(!nm)return;
+          _gotoTeacher(nm);
+        }else{
+          const v=el.dataset.tch||'';
+          if(v===cur)return;         // 이미 이 강사면 무시
+          _gotoTeacher(v);
+        }
+      };
+    });
   }catch(e){}
+}
+function _gotoTeacher(v){
+  try{localStorage.setItem('sheet_teacher',v);}catch(e){}
+  const p=new URLSearchParams(location.search);p.set('teacher',v);location.search=p.toString();
 }
 (function initSheetTools(){
   const ro=(_D&&(_D.READONLY||_D.MODE==='student'));
@@ -765,7 +812,8 @@ async function loadTeachers(){
   const _sp=new URLSearchParams(location.search);
   if(!_sp.has('teacher')){
     let _last='';try{_last=localStorage.getItem('sheet_teacher')||'';}catch(e){}
-    if(_last){ _sp.set('teacher',_last); location.search=_sp.toString(); return; }
+    if(!_last)_last='태림T';   // 첫 방문 기본 강사
+    _sp.set('teacher',_last); location.search=_sp.toString(); return;
   }
   let tname=(_D&&_D.TEACHER)||'';
   if(!tname){try{tname=localStorage.getItem('sheet_teacher')||'';}catch(e){}}

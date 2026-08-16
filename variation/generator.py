@@ -1212,7 +1212,12 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s140 = Q3어휘에서 방향 없는 구체명사(_CONCRETE) 차단. 목록은 있었는데
+    # _s141 = Q3어휘 선지(shown)끼리도 어근 중복을 본다. original 만 비교해서
+    #        ② 'relinquishing' ⑤ 'relinquished' 가 같이 나갔다 —
+    #        원문어는 달랐지만(giving / claimed) 학생이 보는 건 선지다.
+    #        + 구동사 동사만 바꿔 전치사가 남는 것도 프롬프트에 명시
+    #        (실측 'relinquishing up' — 원문 'giving up').
+    # (구) _s140 = Q3어휘에서 방향 없는 구체명사(_CONCRETE) 차단. 목록은 있었는데
     #        코드 픽(_looks_gradable)에서만 쓰고 LLM 픽은 안 봤다 —
     #        _s109 에서 answer_pos_ok 를 안 쓰게 하면서 같이 빠졌다.
     #        실측: 능률(오) 2과 4번에 'years' 'people' 이 밑줄로 나갔다.
@@ -1554,7 +1559,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s140"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s141"
 
 
 # ============ Supabase 캐시 ============

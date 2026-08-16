@@ -1137,7 +1137,8 @@ VOCAB_SYS = (
 )
 
 
-def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
+def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0,
+                       used_words=None) -> str:
     """paragraphs: [[label, text], ...] 원문 그대로
        blank_phrases: Q5 빈칸으로 이미 쓰인 구절들 (겹치면 안 됨)
        want_n: 정답을 놓을 자리(3/4/5). 0이면 기존처럼 LLM에게 맡긴다.
@@ -1216,12 +1217,26 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
         "       [X] mentally → ???             영역을 가리킬 뿐 뒤집을 게 없다\n"
         "       [X] understandably → ???       같음\n"
         "       [X] clearly → unclearly?       억지스럽고 방향이 약하다\n"
+        "       [X] supposedly → allegedly?    둘 다 '추정컨대'다. 유의어지 반대가 아니다\n"
+        "       [X] apparently / seemingly / presumably / arguably\n"
+        "           — **화자의 확신 정도**를 나타내는 말이다. 논지의 방향이 아니다.\n"
+        "             바꿔도 글의 주장이 뒤집히지 않는다.\n"
+        "     ★★ 시험을 한 번 더 — 반대말을 넣은 문장을 읽고\n"
+        "       **원문과 정반대 주장**이 되는가? 그냥 '뉘앙스가 다른 말'이면 안 된다.\n"
+        "         supposedly harmful → allegedly harmful   여전히 '해롭다'는 주장 (X)\n"
+        "         significant → trivial                    '중요하다' ↔ '사소하다' (O)\n"
         "     ★ 기출 정답에 부사가 0개인 건 부사가 금지라서가 아니라\n"
         "       방향 있는 부사가 드물기 때문이다. 있으면 써도 된다.\n"
         "   ★ 정답 자리 하나만 antonym 을 shown 에 그대로 옮긴다.\n"
         "     나머지 넷은 antonym 을 적어만 두고 shown 에는 **동의어**를 쓴다.\n"
         "════════════════════════════════════════════════════\n\n"
-        "[PASSAGE]\n" + body + avoid + "\n\n"
+        + (("★★ 이 강의 다른 지문에서 **이미 정답으로 쓴 단어**다. 겹치지 마라.\n"
+            "   같은 과에서 같은 단어가 두 번 정답이면 학생이 눈치챈다.\n"
+            "   원문어(original)와 제시어(shown) 둘 다 이 목록을 피해라.\n"
+            "   [이미 쓴 것] " + ", ".join(used_words) + "\n"
+            "════════════════════════════════════════════════════\n\n")
+           if used_words else "")
+        + "[PASSAGE]\n" + body + avoid + "\n\n"
 
         "## 무엇을 만드는가\n"
         "Choose FIVE words in the passage to underline. Four of them keep the meaning the\n"
@@ -1486,27 +1501,29 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0) -> str:
            "     학생이 내용을 안 읽고 그것부터 찍는다.\n")
         + "\n"
 
+        "★★ `<ANSWER_HERE>` 는 **위에서 지정한 자리에만 true**, 나머지 넷은 false 다.\n"
+        "   아래 예시는 다섯 항목이 전부 같은 모양이다 — 어느 자리가 정답인지\n"
+        "   예시가 정하지 않는다. **위에 지정된 번호를 따라라.**\n"
+        "★ is_answer 가 true 인 항목에는 이 둘을 **추가로** 넣는다:\n"
+        '     "evidence_type": "next_sentence | same_sentence | thesis",\n'
+        '     "evidence": "<모순을 증명하는 지문 속 문장을 그대로>"\n'
         "★★ 다섯 항목 **전부** antonym 을 채워라. 하나라도 비면 버려진다.\n"
         "   그 단어의 반대말 한 단어. 못 적으면 그 자리를 쓰지 마라.\n\n"
         '{"vocab_items": [\n'
         '   {"n": 1, "para": 0, "idx": 12, "original": "exciting",\n'
-        '    "antonym": "dull",  "shown": "thrilling", "is_answer": false,\n'
+        '    "antonym": "dull",  "shown": "thrilling", "is_answer": <ANSWER_HERE>,\n'
         '    "why": "도입부의 흡인력을 말하는 자리"},\n'
         '   {"n": 2, "para": 1, "idx": 5,  "original": "internal",\n'
-        '    "antonym": "external", "shown": "intrinsic", "is_answer": false,\n'
+        '    "antonym": "external", "shown": "intrinsic", "is_answer": <ANSWER_HERE>,\n'
         '    "why": "..."},\n'
         '   {"n": 3, "para": 1, "idx": 22, "original": "convince",\n'
-        '    "antonym": "dissuade",\n'
-        '    "shown": "dissuade",\n'
-        '    "is_answer": true,\n'
-        '    "evidence_type": "next_sentence | same_sentence | thesis",\n'
-        '    "evidence": "<quote the exact words that prove the contradiction>",\n'
-        '    "why": "<왜 틀렸는지 한 줄. 40자 이내. 예: \'초반에 주의를 끌면 독자를 설득한다는 인과와 정반대\'>"},\n'
+        '    "antonym": "dissuade", "shown": "dissuade", "is_answer": <ANSWER_HERE>,\n'
+        '    "why": "..."},\n'
         '   {"n": 4, "para": 2, "idx": 8,  "original": "adapted",\n'
-        '    "antonym": "unsuited", "shown": "adjusted", "is_answer": false,\n'
+        '    "antonym": "unsuited", "shown": "adjusted", "is_answer": <ANSWER_HERE>,\n'
         '    "why": "..."},\n'
         '   {"n": 5, "para": 2, "idx": 30, "original": "greater",\n'
-        '    "antonym": "lesser", "shown": "larger", "is_answer": false,\n'
+        '    "antonym": "lesser", "shown": "larger", "is_answer": <ANSWER_HERE>,\n'
         '    "why": "..."}\n'
         '],\n'
         ' "vocab_explain": ""}'

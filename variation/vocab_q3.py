@@ -894,6 +894,18 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
                          f"조동사) — 방향이 없어 반대말을 댈 수 없다. "
                          f"내용어(형용사·동사·명사)에서 고를 것")
 
+        # ★★ 방향 없는 구체명사도 막는다 (_s140).
+        #   _CONCRETE 는 코드 픽(_looks_gradable)에서만 쓰고 LLM 픽은 안 봤다 —
+        #   _s109 에서 answer_pos_ok 를 안 쓰게 하면서 같이 빠졌다.
+        #   실측: 능률(오) 2과 4번에 'years' 'people' 이 밑줄로 나갔다.
+        #   사람·집단·시간·구체사물은 무엇으로 바꿔도 논지가 안 뒤집힌다.
+        #   ★ 닫힌 목록이라 형태 판정처럼 끝없이 새지 않는다.
+        if _bare_o in _CONCRETE:
+            _k = "정답" if it.get("is_answer") else "오답"
+            return _fail(f"{_no}번({_k}) '{orig}' 는 방향 없는 구체명사 — "
+                         f"사람·집단·시간·사물은 무엇으로 바꿔도 논지가 안 뒤집힌다. "
+                         f"반대말을 댈 수 있는 말로 고를 것")
+
         # ★★ 접속부사·담화표지는 밑줄 대상이 아니다 (_s103)
         #   'Similarly,' 'Conversely,' 는 논리 흐름 표지지 문맥 판단 대상이 아니다.
         #   옛 코드는 validate_vocab 에서만 잡아 CRITICAL 을 냈다 — 앞문은 열고

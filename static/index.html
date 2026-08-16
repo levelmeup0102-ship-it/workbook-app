@@ -21,6 +21,13 @@ body { font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f0f
 .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
 .badge-ready { background: #E8F5E9; color: #2E9E5A; }
 .badge-pending { background: #FFF8F0; color: #E8833A; }
+/* 2회독 지문칩의 캐시(생성) 표시 */
+.vr-cs { font-size: 10px; margin-left: 4px; line-height: 1; }
+.vr-cs-ready { color: #2E9E5A; }
+.vr-cs-half { display: inline-block; font-size: 9px; font-weight: 800; color: #B4560F;
+              background: #FFE7CE; border: 1px solid #F0A868; border-radius: 6px;
+              padding: 0 3px; letter-spacing: -0.2px; }
+.vr-cs-none { color: #aeb4bd; font-size: 11px; }
 
 /* 헤더 */
 .header { background: linear-gradient(135deg, #2E4E8F 0%, #1f3766 100%); color: white; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
@@ -400,7 +407,15 @@ textarea:focus { border-color: #4A90D9; outline: none; }
             <button class="btn btn-sm" onclick="vrExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
             <button class="btn btn-sm" onclick="vrCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
             <button class="btn btn-sm" onclick="vrClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
+            <button class="btn btn-sm" onclick="vrClearPassageCache()" style="background:#f3e8ff;color:#6d28d9;border:1px solid #c4b5fd;">🗑️ 선택 캐시 삭제</button>
+            <button class="btn btn-sm" onclick="vrLoadCacheStatus(true)" style="background:#eee;color:#333;" title="생성 여부 다시 확인">↻ 상태 새로고침</button>
             <span style="margin-left:auto;font-size:13px;color:#666;" id="vr-sel-count">0개 선택</span>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;font-size:11px;color:#666;">
+            <span><span class="vr-cs vr-cs-ready">✅</span> A·B 생성됨</span>
+            <span><span class="vr-cs vr-cs-half">A만</span> 한쪽만 생성</span>
+            <span><span class="vr-cs vr-cs-none">○</span> 미생성</span>
+            <span id="vr-cs-note" style="margin-left:auto;color:#999;"></span>
           </div>
           <div id="vr-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
             <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
@@ -2409,9 +2424,86 @@ if (TOKEN) showMain();
 let vrSelectedPassages = new Map();  // Map은 삽입 순서 유지 — 클릭한 순서대로 처리됨
 let vrExpandedBooks = new Set();
 
+// 지문별 변형문제 캐시 유무: {"교재|단원|번호": {a:bool, b:bool}}
+let vrCacheStatus = {};
+let vrCacheLoading = false;
+let vrCacheLoaded = false;   // 한 번이라도 제대로 받아왔는가 (실패를 '미생성'으로 착각하지 않기 위해)
+
 function vrRefreshBooks() {
   if (!PASSAGES_DATA) return;
   vrRenderBookList();
+  vrLoadCacheStatus();
+}
+
+// 변형문제가 이미 만들어져 있는 지문을 서버에서 확인해 칩에 표시한다.
+// force=false 면 이미 받아둔 게 있을 때 다시 부르지 않는다(탭 전환마다 호출되므로).
+async function vrLoadCacheStatus(force) {
+  if (!PASSAGES_DATA || !PASSAGES_DATA.length) return;
+  if (vrCacheLoading) return;
+  if (!force && Object.keys(vrCacheStatus).length) return;
+
+  const note = document.getElementById('vr-cs-note');
+  vrCacheLoading = true;
+  if (note) note.textContent = '생성 여부 확인 중...';
+  try {
+    const body = { passages: PASSAGES_DATA.map(p => ({ book: p.book, unit: p.unit, id: p.id })) };
+    const res = await fetch(API + '/api/variation/cache-status', {
+      method: 'POST', headers: headers(), body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      vrCacheStatus = data.status || {};
+      vrCacheLoaded = true;
+      const ready = Object.values(vrCacheStatus).filter(s => s.a && s.b).length;
+      const half = Object.values(vrCacheStatus).filter(s => (s.a || s.b) && !(s.a && s.b)).length;
+      if (note) note.textContent = `생성됨 ${ready}개${half ? ` · 한쪽만 ${half}개` : ''}`;
+    } else {
+      // 실패했으면 표시를 아예 안 한다 — 전부 '미생성'으로 보이면
+      // 멀쩡한 캐시를 지우고 다시 뽑는 헛수고를 하게 된다
+      if (note) note.textContent = '⚠️ 생성 여부 확인 실패 — 표시 없음 (↻ 로 다시 시도)';
+    }
+  } catch (e) {
+    if (note) note.textContent = '⚠️ 생성 여부 확인 실패 — 표시 없음 (↻ 로 다시 시도)';
+  } finally {
+    vrCacheLoading = false;
+    vrRenderBookList();
+  }
+}
+
+// 칩 안에 들어갈 작은 표시 (✅ A·B / ◐ 한쪽만 / ○ 미생성)
+function vrCacheMark(book, unit, id) {
+  if (!vrCacheLoaded) return '';   // 아직 못 받아왔으면 아무 표시도 안 한다
+  const s = vrCacheStatus[`${book}|${unit}|${id}`];
+  if (!s) return '<span class="vr-cs vr-cs-none" title="미생성">○</span>';
+  if (s.a && s.b) return '<span class="vr-cs vr-cs-ready" title="A·B 생성됨">✅</span>';
+  if (s.a) return '<span class="vr-cs vr-cs-half" title="A만 생성됨 (B는 미생성)">A만</span>';
+  if (s.b) return '<span class="vr-cs vr-cs-half" title="B만 생성됨 (A는 미생성)">B만</span>';
+  return '<span class="vr-cs vr-cs-none" title="미생성">○</span>';
+}
+
+// 선택한 지문의 변형문제 캐시(A·B)만 삭제한다. 1회독 캐시는 건드리지 않는다.
+async function vrClearPassageCache() {
+  const passages = [...vrSelectedPassages.values()];
+  if (!passages.length) { alert('지문을 먼저 선택해주세요.'); return; }
+  if (!confirm(`${passages.length}개 지문의 변형문제(A·B) 캐시를 삭제하시겠습니까?\n\n· 1회독 워크북 캐시는 지워지지 않습니다.\n· 다음 생성 때 처음부터 다시 만듭니다.`)) return;
+
+  const note = document.getElementById('vr-cs-note');
+  if (note) note.textContent = '캐시 삭제 중...';
+  try {
+    const body = { passages: passages.map(p => ({ book: p.book, unit: p.unit, id: p.id })) };
+    const res = await fetch(API + '/api/variation/clear-cache', {
+      method: 'POST', headers: headers(), body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      alert(`✅ 캐시 삭제 완료! ${data.deleted}개 삭제됨.`);
+    } else {
+      alert(`❌ 캐시 삭제 실패: ${data.error || data.detail || '알 수 없는 오류'}`);
+    }
+  } catch (e) {
+    alert(`❌ 캐시 삭제 실패: ${e}`);
+  }
+  await vrLoadCacheStatus(true);
 }
 
 function vrRenderBookList() {
@@ -2477,7 +2569,7 @@ function vrRenderBookList() {
           }
           html += `<label class="ext-pid-chip ${isSelected?'selected':''}" style="${isSelected?'background:#fed7aa;border-color:#fb923c;':''}" data-book="${p.book}" data-unit="${p.unit}" data-pid="${p.id}" ondragover="chipDragOver(event)" ondrop="chipDrop(event)"><span class="chip-handle" draggable="true" ondragstart="chipDragStart(event)" ondragend="chipDragEnd(event)" title="드래그해서 순서 변경">⠿</span>
             <input type="checkbox" ${isSelected?'checked':''} onchange="vrTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
-            ${orderNum}${p.id}
+            ${orderNum}${p.id}${vrCacheMark(p.book, p.unit, p.id)}
           </label>`;
         }
         html += '</div></div>';
@@ -2675,6 +2767,8 @@ async function doVariation() {
     progressText.textContent = '❌ ' + (e.message || '생성 실패');
     toast('생성 실패: ' + (e.message || ''));
   } finally {
+    // 방금 만든 것들이 캐시에 들어갔으니 '생성됨' 표시를 다시 받아온다
+    vrLoadCacheStatus(true);
     setTimeout(() => {
       progress.classList.add('hidden');
       progressFill.style.width = '0%';

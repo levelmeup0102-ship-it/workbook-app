@@ -640,24 +640,60 @@ async def generate(request: Request):
 
 @app.get("/api/notice")
 async def get_notice():
-    """공지사항 조회"""
+    """공지사항 조회 — Supabase 우선, 실패 시 로컬 파일 폴백.
+
+    ★ Railway 컨테이너는 재배포/재시작 시 파일이 초기화되므로
+      Supabase에 저장해야 공지가 사라지지 않는다.
+    """
     import json
+    # 1) Supabase (영구 보존)
+    try:
+        import supa
+        if supa._enabled():
+            row = await supa.get_notice()
+            if row is not None:
+                return {"text": row.get("text", ""), "updated_at": row.get("updated_at", "")}
+    except Exception as e:
+        print(f"[notice] supabase load error: {e}")
+
+    # 2) 로컬 파일 폴백
     notice_file = DATA_DIR / "notice.json"
     if notice_file.exists():
-        return json.loads(notice_file.read_text(encoding="utf-8"))
+        try:
+            return json.loads(notice_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"[notice] local parse error: {e}")
     return {"text": "", "updated_at": ""}
+
 
 @app.post("/api/notice")
 async def set_notice(request: Request):
-    """공지사항 저장"""
+    """공지사항 저장 — 로컬 파일 + Supabase 양쪽에 기록"""
     _verify(request)
     import json
     from datetime import datetime
     body = await request.json()
     text = body.get("text", "").strip()
-    data = {"text": text, "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M")}
-    (DATA_DIR / "notice.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-    return {"ok": True}
+    updated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    data = {"text": text, "updated_at": updated_at}
+
+    # 로컬 (즉시 반영용)
+    try:
+        (DATA_DIR / "notice.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except Exception as e:
+        print(f"[notice] local write error: {e}")
+
+    # Supabase (재배포 후에도 유지)
+    persisted = False
+    try:
+        import supa
+        if supa._enabled():
+            await supa.save_notice(text, updated_at)
+            persisted = True
+    except Exception as e:
+        print(f"[notice] supabase save error: {e}")
+
+    return {"ok": True, "persisted": persisted}
 
 # ============================================================
 # ★ 비밀노트 엔드포인트 - 추가 코드

@@ -881,6 +881,19 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
         #   걸러낸다 — 반대말을 넣어도 원문과 정반대 주장이 안 되기 때문이다.
         #   품사로 막으니 오답 자리까지 걸려 A 가 죽었다(_s129 실측).
 
+        # ★★ 기능어는 밑줄 대상이 아니다 (_s135).
+        #   관사·전치사·대명사·의문사·조동사는 방향이 없어 반대말을 댈 수 없다.
+        #   실측: 'why?' 가 선지로 나갔다 — 의문사라 반의어가 성립하지 않는다.
+        #   _VOCAB_STOP 은 코드 픽(vocab_candidates)과 answer_pos_ok 에만 걸려 있었고,
+        #   answer_pos_ok 는 _s109 에서 안 쓰게 돼 **LLM 픽은 아무도 안 막았다.**
+        #   ★ 이건 닫힌 목록이라 형태 판정처럼 끝없이 새지 않는다.
+        _bare_o = re.sub(r"[^A-Za-z-]", "", orig).lower()
+        if _bare_o in _VOCAB_STOP:
+            _k = "정답" if it.get("is_answer") else "오답"
+            return _fail(f"{_no}번({_k}) '{orig}' 는 기능어(관사·전치사·대명사·의문사·"
+                         f"조동사) — 방향이 없어 반대말을 댈 수 없다. "
+                         f"내용어(형용사·동사·명사)에서 고를 것")
+
         # ★★ 접속부사·담화표지는 밑줄 대상이 아니다 (_s103)
         #   'Similarly,' 'Conversely,' 는 논리 흐름 표지지 문맥 판단 대상이 아니다.
         #   옛 코드는 validate_vocab 에서만 잡아 CRITICAL 을 냈다 — 앞문은 열고

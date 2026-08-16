@@ -1206,12 +1206,49 @@ def _sb_headers() -> dict:
 
 
 # ============ 캐시 키 ============
-def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_type: str) -> str:
-    """캐시 키: {책}_{단원}_{번호}_{md5}_v{유형}"""
-    txt_hash = hashlib.md5(passage_text.encode("utf-8")).hexdigest()[:8]
+# 변형문제 step_cache 의 step_name 은 이 둘뿐이다.
+# 1회독 워크북은 같은 테이블에 step1~stepN 으로 들어가므로,
+# 캐시를 지우거나 셀 때는 반드시 step_name 을 같이 걸어 1회독을 건드리지 않는다.
+VARIATION_STEP_NAMES = ("variation_a", "variation_b")
+
+# cache_key 뒤에 붙는 본문 md5 길이 (make_cache_key 의 txt_hash)
+_TXT_HASH_LEN = 8
+
+
+def make_cache_key_prefix(book: str, unit: str, pid: str) -> str:
+    """캐시 키의 앞부분 '{책}_{단원}_{번호}_' 만 만든다.
+
+    뒤에 붙는 본문 md5·유형·버전(_s141)은 지문 원문과 코드 버전에 따라 달라져서
+    바깥(프런트·삭제 API)에서는 알 수 없다. 캐시 삭제와 '생성됨' 표시는
+    이 앞부분으로 훑는다 — 본문이 바뀌어 남은 옛 캐시까지 같이 잡힌다.
+    """
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
+    return f"{book_safe}_{unit_safe}_{pid_safe}_"
+
+
+def cache_key_to_prefix(cache_key: str) -> Optional[str]:
+    """make_cache_key 가 만든 키에서 앞부분(prefix)만 되돌린다.
+
+    키 구조: {prefix}{md5 8자리}_var{a|b}_s{버전}
+    → 오른쪽 끝의 '_var' 를 찾아 자르고, 그 앞 8자리(md5)를 떼면 prefix 다.
+    구조가 다르면(=변형문제 키가 아니면) None.
+    """
+    idx = cache_key.rfind("_var")
+    if idx <= _TXT_HASH_LEN:
+        return None
+    base = cache_key[:idx]              # {prefix}{md5}
+    prefix = base[:-_TXT_HASH_LEN]      # {prefix}
+    if not prefix.endswith("_"):
+        return None
+    return prefix
+
+
+def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_type: str) -> str:
+    """캐시 키: {책}_{단원}_{번호}_{md5}_v{유형}"""
+    txt_hash = hashlib.md5(passage_text.encode("utf-8")).hexdigest()[:8]
+    prefix = make_cache_key_prefix(book, unit, pid)  # {책}_{단원}_{번호}_ (끝에 _ 포함)
     # _s141 = Q3어휘 선지(shown)끼리도 어근 중복을 본다. original 만 비교해서
     #        ② 'relinquishing' ⑤ 'relinquished' 가 같이 나갔다 —
     #        원문어는 달랐지만(giving / claimed) 학생이 보는 건 선지다.
@@ -1559,7 +1596,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s141"
+    return f"{prefix}{txt_hash}_var{variation_type}_s141"
 
 
 # ============ Supabase 캐시 ============
@@ -1609,6 +1646,125 @@ def save_cached(cache_key: str, step_name: str, data: dict) -> None:
                 client.post(url, headers=_sb_headers(), json=payload)
     except Exception as e:
         print(f"[VAR] cache save error: {e}")
+
+
+# ============ 캐시 관리 (2회독 탭: 생성 여부 표시 · 선택 캐시 삭제) ============
+_CACHE_PAGE = 1000       # step_cache 조회 페이지 크기
+_DELETE_CHUNK = 80       # id=in.(...) 한 번에 넣을 개수 (URL 길이 안전선)
+
+
+def fetch_variation_cache_rows() -> list:
+    """step_cache 에서 변형문제(variation_a / variation_b) 행만 전부 가져온다.
+
+    [{"id":..., "cache_key":..., "step_name":...}, ...]
+
+    book 이름으로 서버쪽 필터를 걸지 않는다 — 교재명에 '(' ')' ',' 같은
+    PostgREST 예약문자가 섞이면(예: '능률(김)') 필터가 깨지기 때문이다.
+    전부 받아서 파이썬에서 맞춘다. 데이터는 문자열 3개짜리 행이라 가볍다.
+    """
+    if not _supabase_enabled():
+        return []
+    url = f"{SB_URL}/rest/v1/step_cache"
+    step_in = "in.(" + ",".join(VARIATION_STEP_NAMES) + ")"
+    rows = []
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            start = 0
+            while True:
+                headers = dict(_sb_headers())
+                headers["Range-Unit"] = "items"
+                headers["Range"] = f"{start}-{start + _CACHE_PAGE - 1}"
+                r = client.get(
+                    url,
+                    headers=headers,
+                    params={
+                        "select": "id,cache_key,step_name",
+                        "step_name": step_in,
+                        "order": "cache_key",
+                    },
+                )
+                r.raise_for_status()
+                page = r.json()
+                if not isinstance(page, list) or not page:
+                    break
+                rows.extend(page)
+                if len(page) < _CACHE_PAGE:
+                    break
+                start += _CACHE_PAGE
+                if start > 200000:      # 무한루프 안전장치
+                    break
+    except Exception as e:
+        print(f"[VAR] cache list error: {e}")
+    return rows
+
+
+def get_variation_cache_status(passages: list) -> dict:
+    """지문별 변형문제 캐시 유무.
+
+    passages: [{"book":..,"unit":..,"id":..}, ...]
+    반환: {"교재|단원|번호": {"a": bool, "b": bool}}
+    """
+    rows = fetch_variation_cache_rows()
+
+    # prefix -> {"a":bool,"b":bool}
+    have = {}
+    for r in rows:
+        prefix = cache_key_to_prefix(r.get("cache_key") or "")
+        if not prefix:
+            continue
+        slot = have.setdefault(prefix, {"a": False, "b": False})
+        if r.get("step_name") == "variation_a":
+            slot["a"] = True
+        elif r.get("step_name") == "variation_b":
+            slot["b"] = True
+
+    out = {}
+    for p in passages:
+        book, unit, pid = p.get("book", ""), p.get("unit", ""), p.get("id", "")
+        prefix = make_cache_key_prefix(book, unit, pid)
+        out[f"{book}|{unit}|{pid}"] = have.get(prefix, {"a": False, "b": False})
+    return out
+
+
+def delete_variation_cache(passages: list) -> dict:
+    """선택한 지문들의 변형문제 캐시(A·B)를 지운다.
+
+    본문이 바뀌거나 버전이 올라 남아 있는 옛 캐시까지 prefix 로 같이 지운다.
+    step_name 을 variation_a/b 로 한정하므로 1회독 step 캐시는 건드리지 않는다.
+
+    반환: {"deleted": 삭제행수, "matched": 대상행수}
+    """
+    if not _supabase_enabled():
+        return {"deleted": 0, "matched": 0}
+
+    wanted = {
+        make_cache_key_prefix(p.get("book", ""), p.get("unit", ""), p.get("id", ""))
+        for p in passages
+    }
+    rows = fetch_variation_cache_rows()
+    target_ids = [
+        r["id"] for r in rows
+        if cache_key_to_prefix(r.get("cache_key") or "") in wanted and r.get("id") is not None
+    ]
+    if not target_ids:
+        return {"deleted": 0, "matched": 0}
+
+    url = f"{SB_URL}/rest/v1/step_cache"
+    deleted = 0
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            for i in range(0, len(target_ids), _DELETE_CHUNK):
+                chunk = target_ids[i:i + _DELETE_CHUNK]
+                id_in = "in.(" + ",".join(str(x) for x in chunk) + ")"
+                r = client.delete(url, headers=_sb_headers(), params={"id": id_in})
+                r.raise_for_status()
+                body = r.json() if r.content else []
+                deleted += len(body) if isinstance(body, list) else len(chunk)
+    except Exception as e:
+        print(f"[VAR] cache delete error: {e}")
+
+    print(f"[VAR] cache deleted {deleted}/{len(target_ids)} rows for {len(wanted)} passages")
+    return {"deleted": deleted, "matched": len(target_ids)}
 
 
 # ============ 지문 분리 ============

@@ -1212,7 +1212,12 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s139 = 정답 어휘 중복 판정을 **어근**으로 넓혔다. 소문자 비교만으로는
+    # _s140 = Q3어휘에서 방향 없는 구체명사(_CONCRETE) 차단. 목록은 있었는데
+    #        코드 픽(_looks_gradable)에서만 쓰고 LLM 픽은 안 봤다 —
+    #        _s109 에서 answer_pos_ok 를 안 쓰게 하면서 같이 빠졌다.
+    #        실측: 능률(오) 2과 4번에 'years' 'people' 이 밑줄로 나갔다.
+    #        _s135(기능어)와 같은 원인이다 — 목록은 있는데 검사할 자리가 없었다.
+    # (구) _s139 = 정답 어휘 중복 판정을 **어근**으로 넓혔다. 소문자 비교만으로는
     #        'ignorance'(2번 정답)와 'ignoring'(5번 정답)을 다른 단어로 봤다 —
     #        학생 눈엔 같은 말이다. 파생 접미사까지 떼어 둘 다 'ignor' 로 만든다.
     #        겹치면 재시도시킨다(관대 모드에서는 통과).
@@ -1549,7 +1554,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s139"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s140"
 
 
 # ============ Supabase 캐시 ============

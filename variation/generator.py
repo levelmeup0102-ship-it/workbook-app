@@ -1111,7 +1111,11 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     book_safe = book[:15].replace(" ", "_").replace("/", "_")
     unit_safe = unit[:8].replace(" ", "_").replace("/", "_")
     pid_safe = pid[:6].replace(" ", "_").replace("/", "_")
-    # _s134 = Sonnet 5 의 thinking 블록 때문에 A·B 가 전멸했다. 응답에 thinking 이
+    # _s135 = Q3어휘에서 기능어(관사·전치사·대명사·의문사·조동사) 차단. _VOCAB_STOP 이
+    #        코드 픽과 answer_pos_ok 에만 걸려 있었는데 answer_pos_ok 는 _s109 에서
+    #        안 쓰게 돼 **LLM 픽을 아무도 안 막았다** — 실측 'why?' 가 선지로 나갔다.
+    #        의문사의 반대말이란 없다. 닫힌 목록이라 형태 판정처럼 새지 않는다.
+    # (구) _s134 = Sonnet 5 의 thinking 블록 때문에 A·B 가 전멸했다. 응답에 thinking 이
     #        먼저 오고 그게 max_tokens 를 다 먹어 정작 JSON(text)이 안 나왔다
     #        (실측: '텍스트 없음' 50건, stop_reason=max_tokens 32건).
     #        payload 에 thinking:{"type":"disabled"} 를 넣어 끄고,
@@ -1417,7 +1421,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s134"
+    return f"{book_safe}_{unit_safe}_{pid_safe}_{txt_hash}_var{variation_type}_s135"
 
 
 # ============ Supabase 캐시 ============

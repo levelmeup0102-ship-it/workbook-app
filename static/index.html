@@ -929,8 +929,13 @@ function toggleListCat(prefix, cat) {
   if (fns[prefix]) fns[prefix]();
 }
 // 목록형 탭(0회독·분석지·비밀노트·원문추출·변형·서술형)에도 하위분류(고1/고2/고3·공통영어1/2) 적용
-// 1회독 드롭다운과 동일한 SUBCAT_ORDER / subCategorizeBook 기준 사용. 기본 펼침, 접은 것만 기록.
-const listClosedSubs = new Set();
+// 1회독 드롭다운과 동일한 SUBCAT_ORDER / subCategorizeBook 기준 사용. 기본 접힘, 연 것만 기록.
+const listOpenSubs = new Set();   // 기본 접힘 — 사용자가 연 하위분류만 기록
+function openAllSubs() {
+  Object.keys(SUBCAT_ORDER).forEach(cat => {
+    SUBCAT_ORDER[cat].forEach(sub => listOpenSubs.add(cat + '::' + sub));
+  });
+}
 function subGroupCatBooks(cat, catBooks) {
   const order = SUBCAT_ORDER[cat];
   if (!order) return [[null, catBooks]];   // 하위분류 없는 카테고리(수능특강·수능연계교재)는 그대로
@@ -944,7 +949,7 @@ function subCatHeader(cat, sub, count, open) {
 }
 function toggleListSub(cat, sub) {
   const key = cat + '::' + sub;
-  if (listClosedSubs.has(key)) listClosedSubs.delete(key); else listClosedSubs.add(key);
+  if (listOpenSubs.has(key)) listOpenSubs.delete(key); else listOpenSubs.add(key);
   [pcRenderBookList, asRenderBookList, snRenderBookList, extRenderBookList, vrRenderBookList, ssRenderBookList]
     .forEach(fn => { try { fn(); } catch(e) {} });
 }
@@ -1472,7 +1477,7 @@ function ssRenderBookList(){
     html += bookCatHeader('ss', __cat, __catBooks.length, __catOpen);
     if (!__catOpen) continue;
   for (const [__sub, __subBooks] of subGroupCatBooks(__cat, __catBooks)) {
-    const __subOpen = !__sub || !listClosedSubs.has(__cat + '::' + __sub);
+    const __subOpen = !__sub || listOpenSubs.has(__cat + '::' + __sub);
     if (__sub) html += subCatHeader(__cat, __sub, __subBooks.length, __subOpen);
     if (__sub && !__subOpen) continue;
   for (const book of __subBooks) {
@@ -1513,8 +1518,8 @@ function ssToggleExpand(b){ ssExpandedBooks.has(b)?ssExpandedBooks.delete(b):ssE
 function ssTogglePassage(book,unit,id){ const k=`${book}|${unit}|${id}`; ssSelectedPassages.has(k)?ssSelectedPassages.delete(k):ssSelectedPassages.set(k,{book,unit,id}); ssRenderBookList(); }
 function ssToggleUnit(book,unit){ const ups=PASSAGES_DATA.filter(p=>p.book===book&&p.unit===unit); const allSel=ups.every(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)); ups.forEach(p=>{const k=`${p.book}|${p.unit}|${p.id}`; allSel?ssSelectedPassages.delete(k):ssSelectedPassages.set(k,{book:p.book,unit:p.unit,id:p.id});}); ssRenderBookList(); }
 function ssToggleBook(book){ const bp=PASSAGES_DATA.filter(p=>p.book===book); const allSel=bp.every(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)); bp.forEach(p=>{const k=`${p.book}|${p.unit}|${p.id}`; allSel?ssSelectedPassages.delete(k):ssSelectedPassages.set(k,{book:p.book,unit:p.unit,id:p.id});}); ssRenderBookList(); }
-function ssExpandAll(){ BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.ss.add(x)); PASSAGES_DATA.forEach(p=>ssExpandedBooks.add(p.book)); ssRenderBookList(); }
-function ssCollapseAll(){ listOpenCats.ss.clear(); ssExpandedBooks.clear(); ssRenderBookList(); }
+function ssExpandAll(){ BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.ss.add(x)); openAllSubs(); PASSAGES_DATA.forEach(p=>ssExpandedBooks.add(p.book)); ssRenderBookList(); }
+function ssCollapseAll(){ listOpenCats.ss.clear(); listOpenSubs.clear(); ssExpandedBooks.clear(); ssRenderBookList(); }
 function ssClearSelection(){ ssSelectedPassages.clear(); ssRenderBookList(); }
 function ssUpdateCount(){ document.getElementById('ss-sel-count').textContent = `${ssSelectedPassages.size}개 선택`; }
 function ssUpdateBtns(){
@@ -1611,7 +1616,7 @@ function snRenderBookList() {
     html += bookCatHeader('sn', __cat, __catBooks.length, __catOpen);
     if (!__catOpen) continue;
   for (const [__sub, __subBooks] of subGroupCatBooks(__cat, __catBooks)) {
-    const __subOpen = !__sub || !listClosedSubs.has(__cat + '::' + __sub);
+    const __subOpen = !__sub || listOpenSubs.has(__cat + '::' + __sub);
     if (__sub) html += subCatHeader(__cat, __sub, __subBooks.length, __subOpen);
     if (__sub && !__subOpen) continue;
   for (const book of __subBooks) {
@@ -1673,6 +1678,7 @@ function snToggleExpand(book) {
 
 function snExpandAll() {
   BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.sn.add(x));
+  openAllSubs();
   const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
   books.forEach(b => snExpandedBooks.add(b));
   snRenderBookList();
@@ -1680,6 +1686,7 @@ function snExpandAll() {
 
 function snCollapseAll() {
   listOpenCats.sn.clear();
+  listOpenSubs.clear();
   snExpandedBooks.clear();
   snRenderBookList();
 }
@@ -1828,7 +1835,7 @@ function pcRenderBookList() {
     html += bookCatHeader('pc', __cat, __catBooks.length, __catOpen);
     if (!__catOpen) continue;
   for (const [__sub, __subBooks] of subGroupCatBooks(__cat, __catBooks)) {
-    const __subOpen = !__sub || !listClosedSubs.has(__cat + '::' + __sub);
+    const __subOpen = !__sub || listOpenSubs.has(__cat + '::' + __sub);
     if (__sub) html += subCatHeader(__cat, __sub, __subBooks.length, __subOpen);
     if (__sub && !__subOpen) continue;
   for (const book of __subBooks) {
@@ -1890,6 +1897,7 @@ function pcToggleExpand(book) {
 
 function pcExpandAll() {
   BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.pc.add(x));
+  openAllSubs();
   const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
   books.forEach(b => pcExpandedBooks.add(b));
   pcRenderBookList();
@@ -1897,6 +1905,7 @@ function pcExpandAll() {
 
 function pcCollapseAll() {
   listOpenCats.pc.clear();
+  listOpenSubs.clear();
   pcExpandedBooks.clear();
   pcRenderBookList();
 }
@@ -2192,7 +2201,7 @@ function extRenderBookList() {
     html += bookCatHeader('ext', __cat, __catBooks.length, __catOpen);
     if (!__catOpen) continue;
   for (const [__sub, __subBooks] of subGroupCatBooks(__cat, __catBooks)) {
-    const __subOpen = !__sub || !listClosedSubs.has(__cat + '::' + __sub);
+    const __subOpen = !__sub || listOpenSubs.has(__cat + '::' + __sub);
     if (__sub) html += subCatHeader(__cat, __sub, __subBooks.length, __subOpen);
     if (__sub && !__subOpen) continue;
   for (const book of __subBooks) {
@@ -2253,6 +2262,7 @@ function extToggleExpand(book) {
 
 function extExpandAll() {
   BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.ext.add(x));
+  openAllSubs();
   const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
   books.forEach(b => extExpandedBooks.add(b));
   extRenderBookList();
@@ -2260,6 +2270,7 @@ function extExpandAll() {
 
 function extCollapseAll() {
   listOpenCats.ext.clear();
+  listOpenSubs.clear();
   extExpandedBooks.clear();
   extRenderBookList();
 }
@@ -2523,7 +2534,7 @@ function vrRenderBookList() {
     html += bookCatHeader('vr', __cat, __catBooks.length, __catOpen);
     if (!__catOpen) continue;
   for (const [__sub, __subBooks] of subGroupCatBooks(__cat, __catBooks)) {
-    const __subOpen = !__sub || !listClosedSubs.has(__cat + '::' + __sub);
+    const __subOpen = !__sub || listOpenSubs.has(__cat + '::' + __sub);
     if (__sub) html += subCatHeader(__cat, __sub, __subBooks.length, __subOpen);
     if (__sub && !__subOpen) continue;
   for (const book of __subBooks) {
@@ -2591,6 +2602,7 @@ function vrToggleExpand(book) {
 
 function vrExpandAll() {
   BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.vr.add(x));
+  openAllSubs();
   const books = [...new Set(PASSAGES_DATA.map(p => p.book))];
   books.forEach(b => vrExpandedBooks.add(b));
   vrRenderBookList();
@@ -2598,6 +2610,7 @@ function vrExpandAll() {
 
 function vrCollapseAll() {
   listOpenCats.vr.clear();
+  listOpenSubs.clear();
   vrExpandedBooks.clear();
   vrRenderBookList();
 }
@@ -2800,7 +2813,7 @@ function asRenderBookList() {
     html += bookCatHeader('as', __cat, __catBooks.length, __catOpen);
     if (!__catOpen) continue;
   for (const [__sub, __subBooks] of subGroupCatBooks(__cat, __catBooks)) {
-    const __subOpen = !__sub || !listClosedSubs.has(__cat + '::' + __sub);
+    const __subOpen = !__sub || listOpenSubs.has(__cat + '::' + __sub);
     if (__sub) html += subCatHeader(__cat, __sub, __subBooks.length, __subOpen);
     if (__sub && !__subOpen) continue;
   for (const book of __subBooks) {
@@ -2861,10 +2874,11 @@ function asToggleExpand(book) {
 }
 function asExpandAll() {
   BOOK_CATEGORY_ORDER.forEach(x => listOpenCats.as.add(x));
+  openAllSubs();
   [...new Set(PASSAGES_DATA.map(p => p.book))].forEach(b => asExpandedBooks.add(b));
   asRenderBookList();
 }
-function asCollapseAll() { listOpenCats.as.clear(); asExpandedBooks.clear(); asRenderBookList(); }
+function asCollapseAll() { listOpenCats.as.clear(); listOpenSubs.clear(); asExpandedBooks.clear(); asRenderBookList(); }
 function asToggleBook(book) {
   const bp = PASSAGES_DATA.filter(p => p.book === book);
   const allSel = bp.every(p => asSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`));

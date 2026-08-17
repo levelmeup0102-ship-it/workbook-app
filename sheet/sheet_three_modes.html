@@ -155,11 +155,11 @@
   .iline{line-height:1.28}
   /* 인쇄물: 영어(좌, 단어마다 위에 주석) / 한글(우) — flow 기반, 겹침 없음 */
   .prow{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:14px;padding:9px 0 8px;border-bottom:1px dashed #E7EBF1;align-items:start}
-  .wline{line-height:1.32}
-  .wchunk{display:inline-flex;flex-direction:column;align-items:flex-start;vertical-align:bottom;margin-right:5px}
+  .wline{line-height:2.7}
+  .wchunk{position:relative;display:inline-block;vertical-align:bottom;margin-right:3px}
   .wchunk.lead{margin-right:2px}
-  .wgn{min-height:13px;display:flex;align-items:flex-end;max-width:160px;margin-bottom:1px}
-  .wgnt{font-size:8px;line-height:1.18;font-weight:700;color:#176A33;border-bottom:1.5px solid #BFE6CB;white-space:normal;text-align:left}
+  .wgn{position:absolute;bottom:100%;left:0;margin-bottom:1px;line-height:1.1}
+  .wgnt{font-size:7px;line-height:1.12;font-weight:700;color:#176A33;border-bottom:1px solid #BFE6CB;white-space:normal;text-align:left;display:inline-block;max-width:120px}
   .wgn.v .wgnt{color:var(--blue);border-bottom-color:#C2D4F2}
   .wgn.key .wgnt{color:#0E5226;border-bottom-color:#2E8B4F;background:#FFF8D6}
   .wce{font-family:var(--serif);font-size:12px;line-height:1.3;color:#161616;white-space:nowrap}

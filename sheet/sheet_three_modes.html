@@ -153,19 +153,21 @@
   .opass{padding:11px 13px 13px;border-right:1px solid var(--lsoft)}
   .psent{position:relative;margin-bottom:9px}
   .iline{line-height:1.28}
-  /* 인쇄물: 영어+주석(좌) / 한글(우) 2단 — 겹침 없음 */
-  .prow{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:14px;padding:7px 0;border-bottom:1px dashed #E7EBF1;align-items:start}
-  .prow .pL .pen{font-size:12px;line-height:1.55;color:#111;font-family:var(--serif)}
-  .prow .pL .pen .pnum{margin-right:3px}
-  .prow .pL .pnotes{margin-top:5px;display:flex;flex-wrap:wrap;gap:4px 14px}
-  .prow .pL .pnote{font-size:9px;line-height:1.35;color:#176A33}
-  .prow .pL .pnote.v{color:var(--blue)}
-  .prow .pL .pnote b{font-weight:800}
-  .prow .pR{font-size:10.5px;line-height:1.55;color:#3f4a5a;border-left:2px solid #EDF1F7;padding-left:12px}
-  .prow .pen .hl{font-weight:700;color:var(--red);border-bottom:1.5px solid var(--red)}
-  .prow .pen .hl.v{color:var(--blue);border-bottom-color:var(--blue)}
-  .prow .pen .hl.key{background:#FFF1A0;border-radius:2px;padding:0 1px}
-  .prow .pen .hl.v.key{background:#DCEAFF}
+  /* 인쇄물: 영어(좌, 단어마다 위에 주석) / 한글(우) — flow 기반, 겹침 없음 */
+  .prow{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:14px;padding:9px 0 8px;border-bottom:1px dashed #E7EBF1;align-items:start}
+  .wline{line-height:1.32}
+  .wchunk{display:inline-flex;flex-direction:column;align-items:flex-start;vertical-align:bottom;margin-right:5px}
+  .wchunk.lead{margin-right:2px}
+  .wgn{min-height:13px;display:flex;align-items:flex-end;max-width:160px;margin-bottom:1px}
+  .wgnt{font-size:8px;line-height:1.18;font-weight:700;color:#176A33;border-bottom:1.5px solid #BFE6CB;white-space:normal;text-align:left}
+  .wgn.v .wgnt{color:var(--blue);border-bottom-color:#C2D4F2}
+  .wgn.key .wgnt{color:#0E5226;border-bottom-color:#2E8B4F;background:#FFF8D6}
+  .wce{font-family:var(--serif);font-size:12px;line-height:1.3;color:#161616;white-space:nowrap}
+  .wce .hl{font-weight:700;color:var(--red);border-bottom:1.5px solid var(--red)}
+  .wce .hl.v{color:var(--blue);border-bottom-color:var(--blue)}
+  .wce .hl.key{background:#FFF1A0;border-radius:2px;padding:0 1px}
+  .wce .hl.v.key{background:#DCEAFF}
+  .prow .pR{font-size:10.5px;line-height:1.6;color:#3f4a5a;border-left:2px solid #EDF1F7;padding-left:12px}
   .psent2{margin-bottom:11px;padding-bottom:9px;border-bottom:1px dashed #E7EBF1}
   .psent2 .pen{font-size:12px;line-height:1.55;color:#111}
   .psent2 .pen .pnum{display:inline-block;min-width:16px;font-weight:800;color:#2E4E8F;margin-right:2px}
@@ -701,13 +703,14 @@ function renderOut(){
   let h='<div class="out"><div class="opass">';
   S.forEach((chunks,si)=>{
     const tg=STAG[si]&&STAG[si].t!=='(없음)'?`<span class="stag ${STAG[si].c}">${STAG[si].t}</span>`:'';
-    const en=chunks.map(c=>ceHtml(c)).join(' ');           // 영어 문장 연속
-    const kr=chunks.map(c=>c.k).filter(Boolean).join(' ');  // 한글 문장 연속(오른쪽)
-    const notes=chunks.filter(c=>c.h&&c.n&&c.i>=2).map(c=>{
-      const v=c.f===2?' v':'';
-      return `<span class="pnote${v}"><b>${esc(c.h)}</b> ${esc(c.n)}</span>`;
-    }).join('');
-    h+=`<div class="prow" data-si="${si}"><div class="pL"><div class="pen"><span class="pnum">${si+1}</span>${tg}${en}</div>${notes?`<div class="pnotes">${notes}</div>`:''}</div><div class="pR">${kr}</div></div>`;
+    const kr=chunks.map(c=>c.k).filter(Boolean).join(' ');  // 한글은 오른쪽에 통째로
+    let en=`<span class="wchunk lead"><span class="wgn"></span><span class="wce"><span class="pnum">${si+1}</span>${tg}</span></span>`;
+    chunks.forEach(c=>{
+      const note=(c.n&&c.i>=2)?c.n:'';
+      const cls=(c.f===2?'v':'')+(isKey(c)?' key':'');
+      en+=`<span class="wchunk"><span class="wgn ${cls}">${note?`<span class="wgnt">${esc(note)}</span>`:''}</span><span class="wce">${ceHtml(c)}</span></span>`;
+    });
+    h+=`<div class="prow" data-si="${si}"><div class="pL"><div class="wline">${en}</div></div><div class="pR">${kr}</div></div>`;
   });
   h+='</div><div class="oflow"><div class="fh">내신출제 · 글의 흐름</div>';
   FLOW.forEach(([s,t,k])=>{h+=`<div class="fstep"><div class="fs">${s}</div><div class="ft" contenteditable="true">${t}<span class="fk">“${k}”</span></div></div>`;});

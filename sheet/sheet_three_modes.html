@@ -152,6 +152,14 @@
   @media(max-width:880px){.out{grid-template-columns:1fr}}
   .opass{padding:11px 13px 13px;border-right:1px solid var(--lsoft)}
   .psent{position:relative;margin-bottom:7px}
+  .psent2{margin-bottom:11px;padding-bottom:9px;border-bottom:1px dashed #E7EBF1}
+  .psent2 .pen{font-size:12px;line-height:1.55;color:#111}
+  .psent2 .pen .pnum{display:inline-block;min-width:16px;font-weight:800;color:#2E4E8F;margin-right:2px}
+  .psent2 .pkr{font-size:11px;line-height:1.5;color:#4A5568;margin:2px 0 0 18px}
+  .psent2 .pnotes{margin:4px 0 0 18px;display:flex;flex-wrap:wrap;gap:5px 12px}
+  .psent2 .pnote{font-size:9.5px;line-height:1.35;color:#176A33}
+  .psent2 .pnote.v{color:var(--blue)}
+  .psent2 .pnote b{font-weight:800}
   .iline{line-height:1.28}
   .stag{display:inline-block;font-size:8.5px;font-weight:800;color:#fff;border-radius:4px;padding:1px 5px;margin-right:4px;vertical-align:2px;letter-spacing:.02em}
   .stag.red{background:#CC2222}.stag.blue{background:#2E4E8F}.stag.purple{background:#6A1B9A}.stag.orange{background:#C2660A}
@@ -680,14 +688,13 @@ function renderOut(){
   let h='<div class="out"><div class="opass">';
   S.forEach((chunks,si)=>{
     const tg=STAG[si]&&STAG[si].t!=='(없음)'?`<span class="stag ${STAG[si].c}">${STAG[si].t}</span>`:'';
-    h+=`<div class="psent" data-si="${si}"><div class="iline"><span class="chunks"><span class="chunk lead"><span class="gn"></span><span class="ce"><span class="pnum">${si+1}</span>${tg}</span><span class="ck"></span></span>`;
-    chunks.forEach((c,ci)=>{
-      const slash=ci<chunks.length-1?'<span class="sl">/</span>':'';
-      const note=(c.n&&c.i>=2)?c.n:'';
-      const cls=(c.f===2?'v':'')+(isKey(c)?' key':'');
-      h+=`<span class="chunk"><span class="gn ${cls}">${note?'<span class="gnt">'+note+'</span>':''}</span><span class="ce">${ceHtml(c)}${slash}</span><span class="ck">${c.k}</span></span>`;
-    });
-    h+=`</span></div></div>`;
+    const en=chunks.map(c=>ceHtml(c)).join(' ');              // 영어 문장 연속
+    const kr=chunks.map(c=>c.k).filter(Boolean).join(' ');     // 한글 문장 연속
+    const notes=chunks.filter(c=>c.h&&c.n&&c.i>=2).map(c=>{
+      const v=c.f===2?' v':'';
+      return `<span class="pnote${v}"><b>${esc(c.h)}</b> ${esc(c.n)}</span>`;
+    }).join('');
+    h+=`<div class="psent2" data-si="${si}"><div class="pen"><span class="pnum">${si+1}</span>${tg}${en}</div><div class="pkr">${kr}</div>${notes?`<div class="pnotes">${notes}</div>`:''}</div>`;
   });
   h+='</div><div class="oflow"><div class="fh">내신출제 · 글의 흐름</div>';
   FLOW.forEach(([s,t,k])=>{h+=`<div class="fstep"><div class="fs">${s}</div><div class="ft" contenteditable="true">${t}<span class="fk">“${k}”</span></div></div>`;});

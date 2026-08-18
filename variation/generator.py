@@ -1249,7 +1249,19 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     """캐시 키: {책}_{단원}_{번호}_{md5}_v{유형}"""
     txt_hash = hashlib.md5(passage_text.encode("utf-8")).hexdigest()[:8]
     prefix = make_cache_key_prefix(book, unit, pid)  # {책}_{단원}_{번호}_ (끝에 _ 포함)
-    # _s141 = Q3어휘 선지(shown)끼리도 어근 중복을 본다. original 만 비교해서
+    # _s142 = Q3어휘 목록 차단을 **관문 한 곳(vocab_q3.blocked_reason)** 으로 모았다.
+    #        밑줄 단어가 정해지는 길이 셋인데(코드 픽 / LLM 픽 / 마지막 확인)
+    #        같은 검사가 셋에 흩어져 있어, 한쪽을 손대면 다른 쪽이 조용히 비었다.
+    #        _s109 에서 answer_pos_ok 를 안 쓰게 하자 LLM 픽 검사가 통째로 사라졌고,
+    #        같은 원인으로 _s135('why?')·_s140('years' 'people')이 다섯 버전을
+    #        사이에 두고 두 번 터졌다. 그때마다 한 항목씩 손으로 옮겨 붙였을 뿐이다.
+    #        마지막 확인(validate_vocab)은 아직도 담화표지 하나만 보고 있었다 —
+    #        옛 캐시·관대모드로 올라온 항목은 여기가 마지막인데 뚫려 있었다.
+    #        이제 셋 다 blocked_reason() 을 지난다. 목록에 단어를 넣으면 세 곳에
+    #        동시에 걸린다. 죽은 검사대(answer_pos_ok)는 철거했다 — 코드를 열면
+    #        막고 있는 것처럼 보이는데 아무도 안 부르는 게 이 사고의 뿌리였다.
+    #        ★ 의미 판단(반대말을 댈 수 있는가)은 관문에 넣지 않는다 — 닫힌 목록만.
+    # (구) _s141 = Q3어휘 선지(shown)끼리도 어근 중복을 본다. original 만 비교해서
     #        ② 'relinquishing' ⑤ 'relinquished' 가 같이 나갔다 —
     #        원문어는 달랐지만(giving / claimed) 학생이 보는 건 선지다.
     #        + 구동사 동사만 바꿔 전치사가 남는 것도 프롬프트에 명시
@@ -1596,7 +1608,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{prefix}{txt_hash}_var{variation_type}_s141"
+    return f"{prefix}{txt_hash}_var{variation_type}_s142"
 
 
 # ============ Supabase 캐시 ============

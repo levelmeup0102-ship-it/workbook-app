@@ -15,7 +15,7 @@
 """
 
 TOPIC_STEP_NAME = "topic_background"
-TOPIC_STEP_VERSION = "v1"
+TOPIC_STEP_VERSION = "v5"   # tb_generate.GEN_VERSION 과 맞춘다
 
 # 폰트 (LevelMeUp 디자인 시스템)
 _FONTS = (
@@ -186,7 +186,13 @@ LEVELMEUP_CSS = r""":root{
 
 # 공통 스크립트 (스크롤 페이드업) — 문서당 1회
 TOPIC_COMMON_JS = r"""const io=new IntersectionObserver((es)=>{es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}})},{threshold:.10});
-  document.querySelectorAll('section').forEach(s=>io.observe(s));"""
+  document.querySelectorAll('section').forEach(s=>io.observe(s));
+  /* 외부 이미지가 죽었을 때 깨진 아이콘 대신 그림 박스를 통째로 없앤다 */
+  document.querySelectorAll('.fig img').forEach(function(img){
+    function drop(){ var f=img.closest('.fig'); if(f) f.remove(); }
+    img.addEventListener('error', drop);
+    if (img.complete && img.naturalWidth === 0) drop();
+  });"""
 
 
 def _hero(school_name, chips_html, n):

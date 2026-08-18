@@ -11,6 +11,9 @@ API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 API_URL = "https://api.anthropic.com/v1/messages"
 MODEL   = "claude-sonnet-4-6"
 
+# 생성 로직을 고칠 때마다 올린다. 이 값이 다르면 예전 캐시를 무시하고 다시 만든다.
+GEN_VERSION = "v5"   # v5: 위키 사진 → 직접 그린 SVG 모식도로 전환
+
 # 이미지 허용 도메인 (위키 계열만)
 _IMG_ALLOW = ("upload.wikimedia.org",)
 
@@ -53,9 +56,17 @@ def call_claude_with_search(system_prompt: str, user_prompt: str,
         content = data.get("content", [])
         messages.append({"role":"assistant","content":content})
         stop = data.get("stop_reason")
-        if stop == "tool_use":
-            messages.append({"role":"user","content":"계속 진행해서 최종 결과만 JSON으로 주세요."})
+        # 서버측 web_search 가 여러 턴에 걸치면 API 는 pause_turn 을 돌려준다.
+        # 이때 아무 말도 덧붙이지 말고 그대로 이어 호출해야 검색이 계속된다.
+        # (예전에는 pause_turn 을 처리하지 않아 검색 도중 끊기고, 불완전한 텍스트가
+        #  반환돼 JSON 파싱 실패 → '검색 없이 재시도' 폴백으로 새는 원인이었다.)
+        if stop == "pause_turn":
             continue
+        if stop == "tool_use":
+            messages.append({"role":"user","content":"이어서 진행하세요."})
+            continue
+        if stop == "max_tokens":
+            print(f"[topic_background] ⚠ max_tokens 도달 — 출력이 잘렸을 수 있음", flush=True)
         texts = [b.get("text","") for b in content if b.get("type")=="text"]
         return "\n".join(t for t in texts if t).strip()
     texts = [b.get("text","") for b in messages[-1]["content"] if isinstance(b,dict) and b.get("type")=="text"]
@@ -70,14 +81,17 @@ def validate_image_url(url: str, timeout=8) -> bool:
         r = subprocess.run(['curl','-s','-I','-L','--max-time',str(timeout),url],
                            capture_output=True, timeout=timeout+3)
         head = r.stdout.decode('utf-8','replace').lower()
-        if ("host_not_allowed" in head) or ("x-deny-reason" in head) or (not head.strip()):
+        # 사내/서버 프록시가 HEAD를 막는 특수 케이스만 통과시킨다.
+        if ("host_not_allowed" in head) or ("x-deny-reason" in head):
             return True
+        if not head.strip():
+            return False          # ★ 응답 자체가 없으면 '살아있다'고 믿지 않는다 (깨진 이미지 원인)
         first = head.split("\n")[0] if head else ""
-        if "404" in first or "410" in first:
+        if any(code in first for code in ("404", "410", "403", "500", "502", "503")):
             return False
         return True
     except Exception:
-        return True
+        return False              # ★ 확인 실패 = 넣지 않는다
 
 def _curl_json(url: str, timeout=10):
     try:
@@ -111,6 +125,49 @@ def _thumb_width(url: str) -> int:
     try: return int(m.group(1)) if m else 9999
     except Exception: return 9999
 
+# 문서 '대표 이미지'로 자주 딸려오는, 설명력이 없는 파일들
+_JUNK_IMG_RE = re.compile(
+    r'(icon|logo|seal[_ ]of|great[_ ]seal|coat[_ ]of[_ ]arms|flag[_ ]of|'
+    r'commons[-_]logo|question[_ ]book|ambox|emblem|crest)', re.I)
+
+def _img_basename(url: str) -> str:
+    """도메인·경로를 뺀 파일명만. (URL 전체로 검사하면 upload.wikimedia.org 때문에 전부 걸린다)"""
+    return (url or "").split("?")[0].rstrip("/").split("/")[-1]
+
+_STOP_TOKENS = {
+    "the","of","a","an","in","on","and","or","for","to","with","by",
+    "diagram","chart","graph","image","photo","picture","illustration",
+    "theory","effect","concept","model","principle","example","crew","group",
+}
+
+def _toks(s: str) -> set:
+    return {t for t in re.findall(r'[a-z0-9]+', (s or "").lower())
+            if t not in _STOP_TOKENS and len(t) > 2}
+
+def is_relevant_result(query: str, title: str) -> bool:
+    """위키 검색이 '단어 하나 겹치는 엉뚱한 문서'를 물어오는 걸 막는다.
+    예) "Self-determination theory diagram" → "Spacetime diagram" 은 걸러짐."""
+    q, t = _toks(query), _toks(title)
+    if not q or not t:
+        return False
+    overlap = len(q & t)
+    if overlap == 0:
+        return False
+    # 결과 제목 토큰의 절반 이상이 질의에 들어 있어야 같은 주제로 본다
+    return overlap >= max(1, (min(len(q), len(t)) + 1) // 2)
+
+def is_usable_image(url: str, query: str, title: str) -> bool:
+    if not url:
+        return False
+    if _JUNK_IMG_RE.search(_img_basename(url)):
+        print(f"[img] 제외(아이콘·로고류): {title} ← {query}", flush=True)
+        return False
+    if not is_relevant_result(query, title):
+        print(f"[img] 제외(주제 불일치): {title} ← {query}", flush=True)
+        return False
+    return validate_image_url(url)
+
+
 def wiki_search_image(query: str, lang: str = "en", n: int = 1) -> list:
     if not query: return []
     import urllib.parse as _u
@@ -122,7 +179,7 @@ def wiki_search_image(query: str, lang: str = "en", n: int = 1) -> list:
         for p in data["pages"]:
             th = (p or {}).get("thumbnail") or {}
             src = _upgrade_thumb(_norm_upload(th.get("url","")), 800)
-            if src and validate_image_url(src):
+            if src and is_usable_image(src, query, p.get("title","")):
                 out.append({"url": src, "alt": p.get("title",""), "credit": "Wikimedia Commons",
                             "title": p.get("title","")})
             if len(out) >= n: break
@@ -137,7 +194,7 @@ def wiki_summary_image(title: str, lang: str = "en") -> dict | None:
     src = ((d.get("originalimage") or {}).get("source")
            or (d.get("thumbnail") or {}).get("source") or "")
     src = _upgrade_thumb(_norm_upload(src), 800)
-    if src and validate_image_url(src):
+    if src and is_usable_image(src, title, d.get("title", title)):
         return {"url": src, "alt": d.get("title", title), "credit": "Wikimedia Commons",
                 "title": d.get("title", title)}
     return None
@@ -154,8 +211,57 @@ def fetch_images_for(queries: list, lang_order=("en","ko"), max_imgs=2) -> list:
 
 
 # =========================================================================
-# ★ 개선된 JSON 파서 (_try_parse v2)
+# ★ 개선된 JSON 파서 (_try_parse v3)
 # =========================================================================
+def _slice_json_object(txt: str, key: str) -> str | None:
+    """txt 안의 "key": { ... } 에서 중괄호 짝을 세어 객체 전체를 잘라낸다.
+    non-greedy 정규식이 중첩 객체의 첫 }에서 끊기는 문제를 해결."""
+    m = re.search(r'"' + re.escape(key) + r'"\s*:\s*\{', txt)
+    if not m:
+        return None
+    start = txt.index("{", m.end() - 1)
+    depth, i, in_str, esc = 0, start, False, False
+    while i < len(txt):
+        ch = txt[i]
+        if in_str:
+            if esc:      esc = False
+            elif ch == "\\": esc = True
+            elif ch == '"': in_str = False
+        else:
+            if   ch == '"': in_str = True
+            elif ch == "{": depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return txt[start:i + 1]
+        i += 1
+    return None
+
+
+def _slice_json_array(txt: str, key: str) -> str | None:
+    """txt 안의 "key": [ ... ] 에서 대괄호 짝을 세어 배열 전체를 잘라낸다."""
+    m = re.search(r'"' + re.escape(key) + r'"\s*:\s*\[', txt)
+    if not m:
+        return None
+    start = txt.index("[", m.end() - 1)
+    depth, i, in_str, esc = 0, start, False, False
+    while i < len(txt):
+        ch = txt[i]
+        if in_str:
+            if esc:            esc = False
+            elif ch == "\\":   esc = True
+            elif ch == '"':    in_str = False
+        else:
+            if   ch == '"': in_str = True
+            elif ch in "[{": depth += 1
+            elif ch in "]}":
+                depth -= 1
+                if depth == 0:
+                    return txt[start:i + 1]
+        i += 1
+    return None
+
+
 def _try_parse(raw: str) -> dict | None:
     """HTML 포함 JSON 파싱 — 5단계 폴백으로 강화"""
     if not raw:
@@ -208,7 +314,7 @@ def _try_parse(raw: str) -> dict | None:
         for key in ("section_html", "overview_html"):
             # "key": "..." 에서 값 추출 — 다음 최상위 키 패턴이 나오기 전까지
             pat = re.compile(
-                r'"' + key + r'"\s*:\s*"([\s\S]*?)"(?=\s*,\s*"(?:anchor|chip|section_html|overview_html|script_js|image_queries|toggle|_step_version)"|\\s*\})',
+                r'"' + key + r'"\s*:\s*"([\s\S]*?)"(?=\s*,\s*"(?:anchor|chip|section_html|overview_html|script_js|image_queries|figures|toggle|_step_version)"|\s*\})',
                 re.S
             )
             m = pat.search(txt)
@@ -230,13 +336,20 @@ def _try_parse(raw: str) -> dict | None:
             except Exception:
                 pass
 
-        # toggle 객체 — 중첩 구조라 간단히 처리
-        tg_m = re.search(r'"toggle"\s*:\s*(\{[\s\S]*?\})\s*(?=,\s*"|}\s*$)', txt)
-        if tg_m:
+        # toggle 객체 — 중첩({"items":[{...}]}) 구조라 중괄호 매칭으로 정확히 잘라낸다.
+        fg_raw = _slice_json_array(txt, "figures")
+        if fg_raw:
             try:
-                result["toggle"] = json.loads(tg_m.group(1))
-            except Exception:
-                pass
+                result["figures"] = json.loads(fg_raw)
+            except Exception as _e:
+                print(f"[_try_parse] figures 파싱 실패: {_e}", flush=True)
+
+        tg_raw = _slice_json_object(txt, "toggle")
+        if tg_raw:
+            try:
+                result["toggle"] = json.loads(tg_raw)
+            except Exception as _e:
+                print(f"[_try_parse] toggle 파싱 실패: {_e}", flush=True)
 
         if result.get("anchor") and (result.get("section_html") or result.get("chip")):
             print(f"[_try_parse] 필드별 추출 성공: anchor={result.get('anchor')}", flush=True)
@@ -264,10 +377,21 @@ GEN_SYSTEM = """너는 한국 고등학교 영어 내신 강사를 위한 '수�
 - 마지막 카드는 .card danger 로 '시험 포인트' 카드를 만든다: 이 소재가 빈칸·순서·요약·어법으로 어떻게 변형 출제될지, 학생이 헷갈릴 함정은 무엇인지.
 - 'theme' 와 'overview' 는 지문의 논리 흐름(주제·전환)을 한 줄로 요약한다.
 
-[이미지 — 텍스트로 직접 넣지 말 것]
-- <img> 태그를 직접 만들지 마라. 대신 출력 JSON 의 "image_queries" 에 위키백과 영문 표제어를 2~3개 넣어라.
-  중요: 인물 사진만 넣지 말 것. 지문 '소재' 자체를 보여주는 대상을 우선한다.
-  반드시 구체적이고 실재하는 영문 위키 표제어로(추상어·일반명사 금지).
+[그림 — 사진이 아니라 직접 그린 SVG 모식도]
+- <img> 태그를 절대 만들지 마라. 외부 이미지 URL도 쓰지 마라.
+- 대신 출력 JSON 의 "figures" 에 인라인 SVG 모식도를 1~2개 직접 그려 넣어라.
+- 무엇을 그리나: 지문 소재의 구조·관계·비교·단계·공간을 보여주는 그림.
+  예) 두 개념의 대비, 단계별 흐름(화살표), 지도·위치 관계, 축이 있는 비교 그래프, 부분-전체 구조.
+  ★ 장식용 그림·아이콘·초상화는 만들지 마라. 설명이 되는 그림만.
+  ★ 글로 한 줄이면 끝나는 단순 정의에는 그림을 만들지 마라(figures 를 빈 배열로 둬라).
+- SVG 작성 규칙:
+  · 반드시 viewBox 기반. width/height 속성 금지. (예: <svg viewBox='0 0 600 260'>)
+  · 속성값은 작은따옴표(') 사용 — JSON 이스케이프를 줄이기 위해서다.
+  · 색은 다음 토큰만 사용: #0f2e2a(ink) #16b89b(teal) #0e8f79(teal-deep) #e6f7f2(mint)
+    #e0922a(amber) #e8493f(danger) #2f7de0(blue) #7a5cd6(purple) #9aa7a3(gray) #ffffff
+  · 한국어 라벨 사용 가능. text 는 font-size 12~15, font-weight='800', text-anchor='middle'.
+  · script·foreignObject·image·외부 href 절대 금지. 순수 도형·선·텍스트만.
+  · 한 그림당 2만 자 이내.
 
 [정형 인터랙티브 1개 — 반드시 포함]
 - 출력 JSON 의 "toggle" 에 핵심 대조/분류를 2~3개 항목으로 넣어라(탭 토글로 렌더된다). 형식:
@@ -283,7 +407,7 @@ GEN_SYSTEM = """너는 한국 고등학교 영어 내신 강사를 위한 '수�
   "chip": "지문번호 + 짧은소재 + 이모지 1개",
   "section_html": "<section id=\\"tb_xxx\\"> ... </section>",
   "overview_html": "<h3>{이모지} {지문번호} — {소재}</h3>...",
-  "image_queries": ["English Wikipedia title 1", "..."],
+  "figures": [ {"title":"그림 제목", "caption":"이 그림이 뭘 보여주는지 한 줄", "svg":"<svg viewBox='0 0 600 260'>...</svg>"} ],
   "toggle": { "title":"...", "items":[ {"label":"...","body":"..."} ] },
   "script_js": ""
 }
@@ -308,8 +432,8 @@ GEN_USER_TMPL = """다음은 분석할 영어 지문이다. 지문 번호: {labe
 {passage}
 </passage>
 
-이 지문의 핵심 소재를 파악하고, web_search로 사실(학자/연도/지명/수치/연구)과
-(인물·장소가 핵심이면) Wikimedia 이미지 URL을 확인한 뒤, 시스템 지시의 JSON을 출력하라.
+이 지문의 핵심 소재를 파악하고, web_search로 사실(학자/연도/지명/수치/연구)을 교차 확인한 뒤,
+시스템 지시의 JSON을 출력하라. 그림이 필요하면 figures 에 SVG 모식도를 직접 그려 넣어라(사진·외부 URL 금지).
 anchor 는 "tb_{anchor_hint}" 형식으로 만들고, 지문 번호는 "{label}"를 사용하라.
 
 ★ JSON 출력 시 반드시 지킬 것:
@@ -338,6 +462,74 @@ def _strip_dangerous(html: str) -> str:
         return tag
     html = _ALLOWED_IMG_RE.sub(_img, html)
     return html
+
+# ─────────────────────────────────────────────────────────────
+# 직접 그린 SVG 모식도 검증·정리
+# ─────────────────────────────────────────────────────────────
+_SVG_ALLOWED_TAGS = {
+    "svg","g","defs","title","desc","path","rect","circle","ellipse","line",
+    "polyline","polygon","text","tspan","marker","linearGradient","radialGradient",
+    "stop","pattern","clipPath","mask","use","symbol",
+}
+_SVG_MAX_LEN = 20000
+
+def sanitize_svg(svg: str) -> str | None:
+    """모델이 만든 인라인 SVG를 안전하고 반응형으로 만든다. 문제가 있으면 None."""
+    if not svg or "<svg" not in svg:
+        return None
+    svg = svg.strip()
+    if len(svg) > _SVG_MAX_LEN:
+        print(f"[svg] 제외(너무 큼 {len(svg)}자)", flush=True)
+        return None
+
+    # 스크립트·외부 참조 제거
+    svg = re.sub(r"<\s*(script|foreignObject|image|iframe)\b[\s\S]*?<\s*/\s*\1\s*>", "", svg, flags=re.I)
+    svg = re.sub(r"<\s*(script|foreignObject|image|iframe)\b[^>]*/?>", "", svg, flags=re.I)
+    svg = re.sub(r"\son\w+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)", "", svg, flags=re.I)
+
+    # 외부 URL 참조 금지 (href/xlink:href/url())
+    if re.search(r"(?:xlink:)?href\s*=\s*[\"']\s*(?:https?:)?//", svg, re.I) or "http" in re.findall(r"url\(([^)]*)\)", svg).__str__():
+        print("[svg] 제외(외부 URL 참조)", flush=True)
+        return None
+
+    # 허용 태그만
+    tags = {t.lower() for t in re.findall(r"<\s*/?\s*([a-zA-Z][a-zA-Z0-9]*)", svg)}
+    bad = tags - _SVG_ALLOWED_TAGS
+    if bad:
+        print(f"[svg] 제외(허용 안 된 태그: {sorted(bad)})", flush=True)
+        return None
+
+    # viewBox 필수 — 없으면 반응형이 안 됨
+    m = re.search(r"<svg\b[^>]*>", svg, re.I)
+    if not m or not re.search(r"viewBox\s*=", m.group(0), re.I):
+        print("[svg] 제외(viewBox 없음)", flush=True)
+        return None
+
+    # 고정 width/height 제거 (CSS가 100%로 처리)
+    head = m.group(0)
+    new_head = re.sub(r"\s(?:width|height)\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)", "", head, flags=re.I)
+    svg = svg.replace(head, new_head, 1)
+    return svg
+
+
+def build_figures(data: dict) -> list:
+    """figures 조각을 검증해 사용 가능한 것만 남긴다."""
+    figs = data.get("figures") or []
+    if isinstance(figs, dict):
+        figs = [figs]
+    out = []
+    for f in figs:
+        if not isinstance(f, dict):
+            continue
+        clean = sanitize_svg(f.get("svg", "") or "")
+        if not clean:
+            continue
+        out.append({"svg": clean,
+                    "caption": (f.get("caption") or f.get("title") or "").strip()})
+        if len(out) >= 3:
+            break
+    return out
+
 
 def _normalize_markup(html: str) -> str:
     if not html: return ""
@@ -387,13 +579,26 @@ def _drop_unverified_images(data: dict) -> dict:
 def generate_topic_background(passage: str, passage_dir, label: str = "",
                               save_step_fn=None, load_step_fn=None,
                               step_name="topic_background", max_uses=5) -> dict:
+    # 지문 1개에서 소재 2~3개를 교차 확인하려면 5회는 빠듯하다. 하한을 두고 env 로 조절 가능.
+    try:
+        max_uses = max(int(max_uses or 5), int(os.environ.get("TB_SEARCH_MAX_USES", "8")))
+    except Exception:
+        max_uses = 8
+
     # 1) 캐시 우선
     if load_step_fn is not None:
         try:
             cached = load_step_fn(passage_dir, step_name)
             if cached and cached.get("section_html"):
-                print(f"[topic_background] {label} 캐시 히트", flush=True)
-                return cached
+                ver = cached.get("_step_version")
+                broken = cached.get("_parse_fallback") and not cached.get("script_js")
+                if ver != GEN_VERSION:
+                    print(f"[topic_background] {label} 캐시 버전 불일치({ver}≠{GEN_VERSION}) → 재생성", flush=True)
+                elif broken:
+                    print(f"[topic_background] {label} 캐시가 토글 유실 상태 → 재생성", flush=True)
+                else:
+                    print(f"[topic_background] {label} 캐시 히트", flush=True)
+                    return cached
         except Exception:
             pass
 
@@ -417,6 +622,8 @@ def generate_topic_background(passage: str, passage_dir, label: str = "",
             fb = _curl_messages(body)
             fbtexts = [b.get("text","") for b in fb.get("content",[]) if b.get("type")=="text"]
             data = _try_parse("\n".join(fbtexts))
+            if data is not None:
+                data["_no_search"] = True   # 웹 검증 없이 만든 자료 — 사실 확인 주의
         except Exception as e:
             print(f"[topic_background] {label} 폴백 호출 에러: {e}", flush=True)
 
@@ -435,48 +642,45 @@ def generate_topic_background(passage: str, passage_dir, label: str = "",
         sec = f'<section id="{anchor}">{sec}</section>'
     data["section_html"] = _normalize_markup(_strip_dangerous(sec))
     data["overview_html"] = _normalize_markup(_strip_dangerous(data.get("overview_html","") or ""))
-    data = _drop_unverified_images(data)
+    # 사진 정책: 외부 이미지는 쓰지 않는다 — <img>가 있으면 무조건 제거
+    data["section_html"] = _ALLOWED_IMG_RE.sub("", data["section_html"])
+    data["overview_html"] = _ALLOWED_IMG_RE.sub("", data["overview_html"])
     data.setdefault("chip", (label or "지문") + " 📘")
     data.setdefault("script_js", "")
-    data["_step_version"] = "v3"
+    data["_step_version"] = GEN_VERSION
 
-    # 4) 이미지 주입
+    # 4) 그림(SVG 모식도) 주입 — 각 카드의 .inpassage 바로 앞에 끼워 넣는다
     try:
-        queries = data.get("image_queries") or []
-        if isinstance(queries, str): queries = [queries]
-        existing = [im for im in (data.get("images") or []) if validate_image_url((im or {}).get("url",""))]
-        fetched = fetch_images_for([q for q in queries if q], max_imgs=2) if queries else []
-        all_imgs, seen = [], set()
-        for im in (existing + fetched):
-            u=(im or {}).get("url","")
-            if u and u not in seen:
-                seen.add(u); all_imgs.append(im)
-        data["images"] = all_imgs[:3]
-        if data["images"] and "class='fig'" not in data["section_html"] and 'class="fig"' not in data["section_html"]:
-            def _figtag(im):
-                return ("<div class=\"fig\"><img src=\"%s\" alt=\"%s\" style=\"width:100%%;border-radius:10px\">"
-                        "<div class=\"figcap\">%s · 출처: Wikimedia Commons</div></div>") % (
-                        im["url"], _html.escape(im.get("alt","")), _html.escape(im.get("alt","")))
+        figs = build_figures(data)
+        data["figures"] = figs
+        data["images"] = []          # 외부 사진은 더 이상 쓰지 않는다
+        already = ("class='fig'" in data["section_html"]) or ('class="fig"' in data["section_html"])
+        if figs and not already:
+            def _figtag(f):
+                cap = ('<div class="figcap">%s</div>' % _html.escape(f["caption"])) if f["caption"] else ""
+                return '<div class="fig">%s%s</div>' % (f["svg"], cap)
+
             sec = data["section_html"]
-            positions = []
-            start = 0
+            positions, start = [], 0
             while True:
                 idx = sec.find('class="inpassage"', start)
                 if idx == -1:
                     idx = sec.find("class='inpassage'", start)
-                if idx == -1: break
+                if idx == -1:
+                    break
                 pre = sec.rfind("<div", 0, idx)
-                if pre != -1: positions.append(pre)
+                if pre != -1:
+                    positions.append(pre)
                 start = idx + 10
             if positions:
-                imgs = data["images"]
-                for i in range(min(len(imgs), len(positions))-1, -1, -1):
-                    sec = sec[:positions[i]] + _figtag(imgs[i]) + sec[positions[i]:]
+                for i in range(min(len(figs), len(positions)) - 1, -1, -1):
+                    sec = sec[:positions[i]] + _figtag(figs[i]) + sec[positions[i]:]
                 data["section_html"] = sec
             else:
-                data["section_html"] = sec.replace("</section>", _figtag(data["images"][0])+"</section>",1)
+                data["section_html"] = sec.replace("</section>", _figtag(figs[0]) + "</section>", 1)
+        print(f"[topic_background] {label} 모식도 {len(figs)}개 삽입", flush=True)
     except Exception as _e:
-        print(f"[topic_background] {label} 이미지 주입 경고: {_e}", flush=True)
+        print(f"[topic_background] {label} 모식도 주입 경고: {_e}", flush=True)
 
     # 5) 토글 인터랙티브 HTML + JS
     try:
@@ -509,7 +713,11 @@ def generate_topic_background(passage: str, passage_dir, label: str = "",
             else:
                 data["section_html"] = data["section_html"].replace("</section>", box+"</section>",1)
             data["script_js"] = (data.get("script_js","") + "\n" + js).strip()
+        else:
+            data["_no_toggle"] = True
+            print(f"[topic_background] {label} ⚠ toggle 항목 부족({len(items)}개) — 인터랙티브 없이 생성됨", flush=True)
     except Exception as _e:
+        data["_no_toggle"] = True
         print(f"[topic_background] {label} 토글 빌드 경고: {_e}", flush=True)
 
     print(f"[topic_background] {label} 생성 완료 (img {len(data.get('images',[]))}개)", flush=True)

@@ -419,6 +419,24 @@ def _fix_article_token(prev_token: str, shown: str) -> str:
 _TRAIL_PUNCT = re.compile(r'[.,;:!?)\]"\u2019\u201d]+$')
 
 
+# ★ 조동사로 바꾸면 뒤의 to 가 남는다 (_s145)
+#   실측: 원문 'Participants need to be…' 에서 need → must 로 바꿔
+#   'Participants must to be…' 가 됐다(25년 고1 9월 28번 ⑤).
+#   조동사 뒤에는 to 가 오지 않는다. ⑤는 오답 자리인데 학생 눈에 명백한
+#   비문이라 "여기가 답"으로 찍게 만든다 — 정답 시비가 나는 자리다.
+#   ★ 원문 대조로는 안 잡힌다. shown 을 original 로 되돌리면 원문과 같아지기
+#     때문이다. 화면에 보이는 문장을 따로 봐야 한다 — 관사(_s143)와 같은 부류다.
+_BARE_MODALS = {"must", "can", "could", "will", "would", "shall", "should",
+                "may", "might"}
+
+
+def modal_before_to(shown: str, next_token: str) -> bool:
+    """shown 이 조동사인데 바로 뒤가 to 면 비문('must to be')."""
+    w = re.sub(r"[^A-Za-z]", "", str(shown or "")).lower()
+    nx = re.sub(r"[^A-Za-z]", "", str(next_token or "")).lower()
+    return w in _BARE_MODALS and nx == "to"
+
+
 def _trailing_punct(token: str) -> str:
     m = _TRAIL_PUNCT.search(str(token or ""))
     return m.group(0) if m else ""
@@ -532,6 +550,11 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
         if i <= 0 or i >= len(toks):
             continue
         shown = it.get("shown") or it.get("original") or ""
+        if i + 1 < len(toks) and modal_before_to(shown, toks[i + 1]):
+            errors.append(
+                f"[{pid}] Q3 어휘 {it.get('n')}번 '{shown} to' — 조동사 뒤에는 to 가 "
+                f"오지 않는다. 원문 '{it.get('original')} to' 를 조동사로 바꾸면 비문이 "
+                f"된다 (have/need 처럼 to 를 받는 말로 고를 것)")
         if article_mismatch(toks[i - 1], shown):
             want = "an" if needs_an(shown) else "a"
             errors.append(
@@ -1062,6 +1085,18 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
         if _blocked:
             _k = "정답" if it.get("is_answer") else "오답"
             return _fail(f"{_no}번({_k}) '{orig}' 는 {_blocked}")
+
+        # ★ 조동사로 바꾸면 뒤의 to 가 남는다 (_s145) — 'need to' → 'must to'.
+        #   여기서 막아야 사유가 재시도 프롬프트로 넘어간다(_s103 의 교훈).
+        try:
+            _tk = paragraphs[int(it.get("para"))][1].split()
+            _ix = int(it.get("idx"))
+            if _ix + 1 < len(_tk) and modal_before_to(it.get("shown"), _tk[_ix + 1]):
+                return _fail(f"{_no}번 '{it.get('shown')} to' — 조동사 뒤에는 to 가 "
+                             f"오지 않는다. 원문이 '{orig} to' 이므로 to 를 받는 말"
+                             f"(have/need/ought 등)로 고르거나 다른 자리를 고를 것")
+        except Exception:
+            pass
 
         # ★★ '반대말을 댈 수 있는가'는 의미 판단이다 — 코드가 못 한다 (_s109).
         #   옛 코드는 answer_pos_ok 로 어미·목록을 보고 되짚어 판정했는데 양쪽으로 틀렸다:

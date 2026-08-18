@@ -81,6 +81,20 @@ class PassageListRequest(BaseModel):
     passages: List[PassageRef]
 
 
+def _passage_label(book: str, unit: str, pid: str) -> str:
+    """시험지·답지에 찍히는 지문 이름.
+
+    ★ 모의고사는 unit 이 "etc" 다 (_s145). main.py 가 "N과"/"N강" 패턴이 없는
+      라벨을 자동으로 etc 로 분류하기 때문인데, 그건 **내부 분류값**이지
+      학생·선생님이 볼 말이 아니다. 실측: '25년 고1 9월 모의고사 · etc 18번'.
+      etc(및 빈 값)면 교재명과 번호만 쓴다 — '25년 고1 9월 모의고사 · 18번'.
+    """
+    u = str(unit or "").strip()
+    if not u or u.lower() == "etc":
+        return f"{book} · {pid}"
+    return f"{book} · {u} {pid}"
+
+
 # ============ 라우터 ============
 router = APIRouter(prefix="/api", tags=["variation"])
 
@@ -199,7 +213,7 @@ def create_variation(
     errors_per_passage = []
     
     for p in req.passages:
-        label = f"{p.book} · {p.unit} {p.id}"
+        label = _passage_label(p.book, p.unit, p.id)
         passage_text = passage_texts[(p.book, p.unit, p.id)]
         
         if "A" in req.types:

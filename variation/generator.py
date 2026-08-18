@@ -1303,7 +1303,15 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     """캐시 키: {책}_{단원}_{번호}_{md5}_v{유형}"""
     txt_hash = hashlib.md5(passage_text.encode("utf-8")).hexdigest()[:8]
     prefix = make_cache_key_prefix(book, unit, pid)  # {책}_{단원}_{번호}_ (끝에 _ 포함)
-    # _s144 = 구두점 셋. (1) A Q5 빈칸이 약어 마침표에서 잘리던 것 —
+    # _s145 = Q3어휘를 조동사로 바꿔 뒤의 to 가 남던 것을 막는다.
+    #        실측: 'Participants need to be…' → 'Participants must to be…'
+    #        (25년 고1 9월 28번 ⑤). 조동사 뒤에는 to 가 오지 않는다.
+    #        ⑤는 오답 자리인데 학생 눈엔 명백한 비문이라 그걸 답으로 찍는다.
+    #        ★ 원문 대조로는 안 잡힌다 — shown 을 original 로 되돌리면 원문과
+    #          같아지기 때문이다. 화면 문장을 따로 봐야 하는 부류다(관사 _s143 과 같다).
+    #        normalize(재시도 사유 전달)와 validate(옛 캐시 백스톱) 양쪽에 둔다.
+    #        + 시험지 라벨에서 내부 분류값 'etc' 제거(variation/api.py, 캐시 무관).
+    # (구) _s144 = 구두점 셋. (1) A Q5 빈칸이 약어 마침표에서 잘리던 것 —
     #        실측 'to 7 p.m.' 을 'p.' 에서 잘라 빈칸이 '… to 7 p' 가 됐다
     #        (본문엔 '.m.' 만 남고 보기엔 'p' 가 단독 토큰. 25년 고1 9월 18번).
     #        _cut_before_punct·_quote_ok 가 약어의 점을 문장 경계로 봤다.
@@ -1687,7 +1695,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{prefix}{txt_hash}_var{variation_type}_s144"
+    return f"{prefix}{txt_hash}_var{variation_type}_s145"
 
 
 # ============ Supabase 캐시 ============

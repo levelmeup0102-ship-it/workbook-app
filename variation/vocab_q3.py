@@ -140,9 +140,11 @@ def _looks_gradable(bare: str, toks: list, i: int) -> bool:
 
     ★ 기준은 품사가 아니라 '이 문맥에서 방향을 뒤집을 수 있는가'다(_s97).
       명사도 방향이 있으면 정답이 된다 — 2015 수능 30번 정답이 'concern' 이다.
-      막아야 할 것은 방향 없는 구체명사(tasks, time, readers)뿐이다."""
-    if bare in _CONCRETE:
-        return False
+      막아야 할 것은 방향 없는 구체명사(tasks, time, readers)뿐이다.
+
+    ★ _CONCRETE 검사는 여기서 뺐다 (_s142). 관문 blocked_reason() 이 먼저 보므로
+      여기서 또 보면 같은 규칙이 두 곳에 생긴다 — 그게 _s135·_s140 의 원인이었다.
+      이 함수는 **목록 차단이 아니라 '방향이 있어 보이는가' 어림짐작만** 한다."""
     if bare in _GRADABLE_HINT or bare in _DIRECTIONAL_NOUN:
         return True
     if bare.endswith(_GRADABLE_SUFFIX):
@@ -247,7 +249,8 @@ def vocab_candidates(paragraphs, blank_spans=None, min_sent_gap=1) -> list:
                 bare = re.sub(r"[^A-Za-z-]", "", toks[i]).lower()
                 if not bare or len(bare) < 5:
                     continue
-                if bare in _VOCAB_STOP or bare in _DISCOURSE_MARKER:
+                # ★ 목록 차단은 관문 한 곳에서만 (_s142) — 기능어·담화표지·구체명사
+                if blocked_reason(bare):
                     continue
                 if toks[i][:1].isupper() and i != s_lo:   # 고유명사 회피
                     continue
@@ -423,14 +426,19 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
                 f"[{pid}] Q3 어휘 {it.get('n')}번 '{it.get('original')}' 의 antonym 이 비었다 — "
                 f"반대말을 못 적을 단어는 밑줄 자리로 쓰지 마라")
 
-    # 문두 접속부사·담화표지는 어휘 문제로 부적절 (기출 정답 품사: 형용사4·동사3, 부사 0)
+    # 밑줄로 쓸 수 없는 단어 — 관문 한 곳에서 본다 (_s142)
+    #   ★ 여기는 백스톱이다. 관대 모드로 통과했거나 옛 캐시에서 올라온 항목은
+    #     normalize 를 안 거치고 여기로 바로 온다. 예전엔 이 자리가 담화표지
+    #     하나만 봐서, 'why?'·'years' 같은 건 여기서도 안 걸렸다.
     for it in vocab_items:
         o = str(it.get("original", ""))
-        if o and is_discourse_marker(o):
+        if not o:
+            continue
+        why = blocked_reason(o)
+        if why:
             kind = "정답" if it.get("is_answer") else "오답"
             errors.append(
-                f"[{pid}] Q3 어휘 {it.get('n')}번({kind}) '{o}'는 접속부사·담화표지 — "
-                f"논리 흐름 표지라 문맥 판단 대상이 아니다. 형용사·동사로 고를 것")
+                f"[{pid}] Q3 어휘 {it.get('n')}번({kind}) '{o}'는 {why}")
 
     # 철자만 비슷한 단어로 바꿔치기 — 독해가 아니라 철자 암기를 묻게 된다
     for it in vocab_items:
@@ -582,8 +590,71 @@ def strip_edge_punct(w: str) -> str:
 
 
 def is_discourse_marker(w: str) -> bool:
-    """문두 접속부사·담화표지인가."""
+    """문두 접속부사·담화표지인가.
+
+    ★ 밑줄 자격 판정에는 이 함수를 직접 쓰지 말 것 (_s142).
+      blocked_reason() 이 담화표지를 포함해 전부 본다. 여기만 따로 부르면
+      검사대가 다시 둘로 갈라진다 — 그게 _s135·_s140 이 새어나간 구조다.
+      (지금은 blocked_reason 안에서만 같은 목록을 본다.)"""
     return strip_edge_punct(w).lower() in _DISCOURSE_MARKER
+
+
+# ════════════════════════════════════════════════════════════════
+# ★★ 밑줄 단어 관문 (_s142) — 목록으로 막는 검사는 전부 여기 한 곳에서만 한다
+#
+# 밑줄 칠 단어가 정해지는 길은 셋이다:
+#   ① 코드가 직접 고르는 길   vocab_candidates / pick_vocab_slots (LLM 실패 시 폴백)
+#   ② LLM 이 골라온 길        normalize_llm_vocab   ← 평소에 쓰는 길
+#   ③ 마지막 확인             validate_vocab        ← 캐시·관대모드 백스톱
+#
+# 예전엔 같은 검사가 이 셋에 흩어져 있었다. 그래서 한쪽을 손대면 다른 쪽이
+# 조용히 비었고, 목록은 파일에 그대로 남아 있어 겉보기엔 막혀 있는 것처럼 보였다:
+#   · _s109 에서 answer_pos_ok 를 안 쓰게 하자 ② 의 목록 검사가 통째로 사라졌다.
+#   · _s135 — 'why?' 가 선지로 나갔다 (_VOCAB_STOP 이 ① 에만 걸려 있었다).
+#   · _s140 — 'years' 'people' 이 밑줄로 나갔다 (_CONCRETE 가 ① 에만 걸려 있었다).
+#   다섯 버전을 사이에 두고 **같은 원인으로 두 번** 터졌고, 그때마다 한 항목씩
+#   손으로 ② 에 옮겨 붙였다. ③ 은 아직도 담화표지 하나만 보고 있었다.
+# → 이제 셋 다 blocked_reason() 을 지나간다. 목록에 단어를 넣으면 세 길에 동시에
+#   걸린다. "어느 검사대에 붙였더라"를 기억할 필요가 없다.
+#
+# ★ 여기 두지 않는 것: '반대말을 댈 수 있는가' 같은 의미 판단 (_s109·_s131).
+#   코드가 어미·품사로 재면 'audience' 는 통과하고(-ence) 'dissuade' 는 거부한다
+#   (-ade) — 양쪽으로 틀린다. 목록에 단어를 넣을수록 새는 곳이 늘어난다.
+#   그건 LLM 이 antonym 칸을 채우게 해서 거른다. 여기는 **닫힌 목록만** 본다.
+# ════════════════════════════════════════════════════════════════
+
+# 밑줄 자리로 쓰기엔 너무 짧은 단어 (a, an, of … 는 _VOCAB_STOP 이 잡지만
+# 목록에 없는 2글자 토큰도 변별력이 없다)
+_MIN_WORD_LEN = 3
+
+
+def blocked_reason(word: str) -> Optional[str]:
+    """밑줄(선지) 자리로 쓸 수 없는 단어면 사유 문자열, 쓸 수 있으면 None.
+
+    사유 문자열은 그대로 LLM 재시도 프롬프트에 넘어간다 — 무엇을 어떻게
+    고쳐야 하는지가 문장에 들어 있어야 한다(사유가 안 넘어가면 같은 단어를
+    다시 골라 재시도가 소진된다. _s103 에서 실제로 그렇게 A 02번이 누락됐다).
+    """
+    bare = re.sub(r"[^A-Za-z-]", "", str(word or "")).lower()
+
+    if not bare or len(bare) < _MIN_WORD_LEN:
+        return ("너무 짧은 말이라 변별력이 없다 — "
+                "방향을 가진 형용사·동사·명사에서 고를 것")
+
+    if bare in _VOCAB_STOP:
+        return ("기능어(관사·전치사·대명사·의문사·조동사) — "
+                "방향이 없어 반대말을 댈 수 없다. "
+                "내용어(형용사·동사·명사)에서 고를 것")
+
+    if bare in _DISCOURSE_MARKER:
+        return ("접속부사·담화표지 — 논리 흐름 표지라 문맥 판단 대상이 아니다. "
+                "밑줄은 방향을 가진 형용사·동사·명사에만 친다")
+
+    if bare in _CONCRETE:
+        return ("방향 없는 구체명사 — 사람·집단·시간·사물은 무엇으로 바꿔도 "
+                "논지가 안 뒤집힌다. 반대말을 댈 수 있는 말로 고를 것")
+
+    return None
 
 
 # 형용사·동사로 보이는 어미. ★ 명사도 방향이 있으면 정답이 된다(_s97) —
@@ -626,35 +697,12 @@ _VERB_BASE = {
 }
 
 
-def answer_pos_ok(word: str) -> bool:
-    """정답 자리에 쓸 수 있는 단어인가.
-
-    ★ 기준은 '품사'가 아니라 '반대말이 있는가'다.
-      명사도 방향이 있으면 정답이 된다 — 기출에 실제로 쓰인다:
-        modesty ↔ arrogance (연성 하천공학) / restrictions (바자르)
-        concern (상황윤리) / necessity / majority ↔ minority
-      쓸 수 없는 건 방향이 없는 구체명사다:
-        story / tasks / readers / line — 반대말 자체가 없다
-    ★ 그런데 'story' 와 'modesty' 는 형태로 구분할 수 없다(둘 다 명사).
-      의미 판단이라 LLM 몫이고, 코드는 확실한 것만 거른다:
-        · 대명사·기능어  (문맥 판단 대상이 아님)
-        · 접속부사       (논리 흐름 표지)
-        · 부사(-ly)      (기출 정답에 없음)
-      반의어를 못 만든 경우는 shown == original 검사가 따로 잡는다."""
-    w = re.sub(r"[^A-Za-z-]", "", str(word or "")).lower()
-    if not w or len(w) < 3:
-        return False
-    if w in _VOCAB_STOP:                             # 관사·전치사·대명사 등 기능어
-        return False
-    if w in _DISCOURSE_MARKER:                       # 접속부사 — 문맥 판단 대상 아님
-        return False
-    # -ly 는 대개 부사. rely/apply 처럼 동사이거나 early/likely 처럼 형용사인 것만 허용
-    _LY_OK = {"rely", "apply", "imply", "comply", "supply", "reply", "multiply",
-              "early", "only", "likely", "costly", "friendly", "lonely",
-              "lively", "timely", "ugly", "holy", "silly", "daily", "deadly"}
-    if w.endswith("ly") and w not in _LY_OK:
-        return False
-    return True
+# ★★ answer_pos_ok() 는 없앴다 (_s142).
+#   _s109 에서 "쓰지 않는다"로 정하고도 함수는 남겨뒀다. 그 안에 _VOCAB_STOP·
+#   _DISCOURSE_MARKER 검사가 들어 있어서, 코드를 열어보면 막고 있는 것처럼 보이는데
+#   실제로는 아무도 부르지 않았다 — 이 '살아 있는 척하는 죽은 검사대'가
+#   _s135·_s140 을 못 알아챈 이유다. 목록 검사는 blocked_reason() 이 전부 한다.
+#   (품사·어미로 정답 자격을 재던 부분은 되살리지 않는다 — _s109·_s131 참조.)
 
 
 _NEG_PREFIX = ("un", "in", "im", "il", "ir", "dis", "non", "anti", "de", "mis")
@@ -893,41 +941,15 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
         #   걸러낸다 — 반대말을 넣어도 원문과 정반대 주장이 안 되기 때문이다.
         #   품사로 막으니 오답 자리까지 걸려 A 가 죽었다(_s129 실측).
 
-        # ★★ 기능어는 밑줄 대상이 아니다 (_s135).
-        #   관사·전치사·대명사·의문사·조동사는 방향이 없어 반대말을 댈 수 없다.
-        #   실측: 'why?' 가 선지로 나갔다 — 의문사라 반의어가 성립하지 않는다.
-        #   _VOCAB_STOP 은 코드 픽(vocab_candidates)과 answer_pos_ok 에만 걸려 있었고,
-        #   answer_pos_ok 는 _s109 에서 안 쓰게 돼 **LLM 픽은 아무도 안 막았다.**
-        #   ★ 이건 닫힌 목록이라 형태 판정처럼 끝없이 새지 않는다.
-        _bare_o = re.sub(r"[^A-Za-z-]", "", orig).lower()
-        if _bare_o in _VOCAB_STOP:
+        # ★★ 목록 차단은 관문 한 곳에서 (_s142).
+        #   예전엔 기능어(_s135)·구체명사(_s140)·담화표지(_s103) 검사가 여기에
+        #   따로따로 붙어 있었다. 코드 픽 쪽과 짝이 안 맞아 한쪽만 비는 일이
+        #   반복됐다 — 'why?'(_s135), 'years' 'people'(_s140) 이 그렇게 새어나갔다.
+        #   이제 blocked_reason() 하나만 부른다. 사유는 그대로 재시도로 넘어간다.
+        _blocked = blocked_reason(orig)
+        if _blocked:
             _k = "정답" if it.get("is_answer") else "오답"
-            return _fail(f"{_no}번({_k}) '{orig}' 는 기능어(관사·전치사·대명사·의문사·"
-                         f"조동사) — 방향이 없어 반대말을 댈 수 없다. "
-                         f"내용어(형용사·동사·명사)에서 고를 것")
-
-        # ★★ 방향 없는 구체명사도 막는다 (_s140).
-        #   _CONCRETE 는 코드 픽(_looks_gradable)에서만 쓰고 LLM 픽은 안 봤다 —
-        #   _s109 에서 answer_pos_ok 를 안 쓰게 하면서 같이 빠졌다.
-        #   실측: 능률(오) 2과 4번에 'years' 'people' 이 밑줄로 나갔다.
-        #   사람·집단·시간·구체사물은 무엇으로 바꿔도 논지가 안 뒤집힌다.
-        #   ★ 닫힌 목록이라 형태 판정처럼 끝없이 새지 않는다.
-        if _bare_o in _CONCRETE:
-            _k = "정답" if it.get("is_answer") else "오답"
-            return _fail(f"{_no}번({_k}) '{orig}' 는 방향 없는 구체명사 — "
-                         f"사람·집단·시간·사물은 무엇으로 바꿔도 논지가 안 뒤집힌다. "
-                         f"반대말을 댈 수 있는 말로 고를 것")
-
-        # ★★ 접속부사·담화표지는 밑줄 대상이 아니다 (_s103)
-        #   'Similarly,' 'Conversely,' 는 논리 흐름 표지지 문맥 판단 대상이 아니다.
-        #   옛 코드는 validate_vocab 에서만 잡아 CRITICAL 을 냈다 — 앞문은 열고
-        #   뒷문을 잠근 꼴이라 사유가 재시도 프롬프트로 안 넘어가 같은 단어를
-        #   두 번 골랐고 A 02번이 통째로 누락됐다. 여기서 막아 사유를 돌려준다.
-        if is_discourse_marker(orig):
-            _k = "정답" if it.get("is_answer") else "오답"
-            return _fail(f"{_no}번({_k}) '{orig}' 는 접속부사·담화표지 — "
-                         f"논리 흐름 표지라 문맥 판단 대상이 아니다. "
-                         f"밑줄은 방향을 가진 형용사·동사·명사에만 친다")
+            return _fail(f"{_no}번({_k}) '{orig}' 는 {_blocked}")
 
         # ★★ '반대말을 댈 수 있는가'는 의미 판단이다 — 코드가 못 한다 (_s109).
         #   옛 코드는 answer_pos_ok 로 어미·목록을 보고 되짚어 판정했는데 양쪽으로 틀렸다:

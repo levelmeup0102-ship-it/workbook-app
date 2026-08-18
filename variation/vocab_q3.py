@@ -347,6 +347,87 @@ def pick_vocab_slots(paragraphs, blank_spans=None, n=5) -> Optional[list]:
             for i, c in enumerate(slots)]
 
 
+# ════════════════════════════════════════════════════════════════
+# ★ 부정관사 a/an 보정 (_s143)
+#   어휘 유형은 본문 단어를 shown 으로 바꿔 보여준다. 앞에 부정관사가 있으면
+#   첫소리가 바뀌면서 관사가 안 맞을 수 있다.
+#   실측: 'an enclosed space' → 'an ⑤ sealed space' (공통영어2 YBM(박) 01과 FR).
+#   학생 눈에 바로 보이는 비문이고, "여기가 바뀐 자리"라는 힌트까지 된다.
+#   ★ a/an 은 철자가 아니라 **소리** 규칙이라 코드가 다 맞힐 수 없다
+#     (an hour / a university). 확실한 것만 고치고 애매하면 손대지 않는다 —
+#     이 코드베이스의 원칙 그대로다(닫힌 목록만 코드가 본다).
+# ════════════════════════════════════════════════════════════════
+
+# 자음자로 시작하지만 'an' 을 쓰는 말 (묵음 h)
+_AN_DESPITE_CONSONANT = {
+    "hour", "hours", "hourly", "honest", "honestly", "honesty",
+    "honor", "honors", "honored", "honorable", "honour", "honours",
+    "heir", "heirs", "heiress",
+}
+# 모음자로 시작하지만 'a' 를 쓰는 말 (반모음 /j/·/w/)
+_A_DESPITE_VOWEL = {
+    "university", "universities", "universal", "universally", "unique", "uniquely",
+    "unit", "units", "united", "union", "unions", "uniform", "unified", "unifying",
+    "useful", "usefully", "user", "users", "usage", "usual", "usually",
+    "utility", "utilities", "european", "europe", "euphemism", "eulogy",
+    "one", "once", "ubiquitous", "unanimous", "unilateral",
+}
+
+
+def needs_an(word: str):
+    """앞에 'an' 이 와야 하면 True, 'a' 면 False, **확신이 없으면 None**.
+
+    None 일 때는 관사를 건드리지 않는다. 잘못 고치면 원래보다 나쁘다.
+    """
+    w = re.sub(r"^[^A-Za-z]+", "", str(word or ""))
+    if not w:
+        return None
+    low = w.lower()
+    if low in _AN_DESPITE_CONSONANT:
+        return True
+    if low in _A_DESPITE_VOWEL:
+        return False
+    # 약어·한 글자는 알파벳 이름으로 읽어서 규칙이 다르다 (an FBI, a UN) — 손대지 않는다
+    if len(w) == 1 or w.isupper():
+        return None
+    return low[0] in "aeiou"
+
+
+def article_mismatch(prev_token: str, shown: str) -> bool:
+    """앞 토큰이 부정관사인데 shown 과 안 맞으면 True."""
+    art = re.sub(r"[^A-Za-z]", "", str(prev_token or "")).lower()
+    if art not in ("a", "an"):
+        return False
+    need = needs_an(shown)
+    if need is None:
+        return False
+    return (art == "an") != need
+
+
+def _fix_article_token(prev_token: str, shown: str) -> str:
+    """앞 토큰(부정관사)을 shown 에 맞게 고쳐 돌려준다. 대문자·구두점 유지."""
+    if not article_mismatch(prev_token, shown):
+        return prev_token
+    want = "an" if needs_an(shown) else "a"
+    def _swap(m):
+        w = m.group(0)
+        return want.capitalize() if w[0].isupper() else want
+    return re.sub(r"[A-Za-z]+", _swap, prev_token, count=1)
+
+
+# 단어 끝에 붙는 구두점 — 밑줄 밖으로 뺀다 (_s144)
+_TRAIL_PUNCT = re.compile(r'[.,;:!?)\]"\u2019\u201d]+$')
+
+
+def _trailing_punct(token: str) -> str:
+    m = _TRAIL_PUNCT.search(str(token or ""))
+    return m.group(0) if m else ""
+
+
+def _strip_trailing_punct(w: str) -> str:
+    return _TRAIL_PUNCT.sub("", str(w or ""))
+
+
 def apply_vocab_items(paragraphs, vocab_items) -> list:
     """렌더링용 — 원문 사본에 ①~⑤ 밑줄 단어를 끼워 넣는다.
     원본 paragraphs는 그대로 두고 새 리스트를 반환한다."""
@@ -361,8 +442,21 @@ def apply_vocab_items(paragraphs, vocab_items) -> list:
             i = it["idx"]
             if 0 <= i < len(toks):
                 shown = it.get("shown") or it["original"]
+                # ★ 앞의 부정관사가 안 맞으면 같이 고친다 (_s143)
+                #   'an enclosed' → 'an sealed' 같은 비문을 막는다.
+                if i > 0 and article_mismatch(toks[i - 1], shown):
+                    toks[i - 1] = _fix_article_token(toks[i - 1], shown)
+                # ★ 원문 토큰의 끝 구두점을 밑줄 **밖**에 붙인다 (_s144).
+                #   (1) 문장 끝 마침표가 사라지던 것을 막는다 —
+                #       실측 'use them to communicate.' → 'use them to interact'
+                #       (25년 고1 9월 26번). 순서대로 이으면 문장이 안 끊겼다.
+                #   (2) shown 에 구두점이 붙어 올 때마다 밑줄이 구두점까지 덮었다
+                #       ('responded.' 'baseless.'). 기출은 단어에만 긋는다.
+                #   구두점은 원문 것을 쓴다 — 문장 구조는 원문이 정한다.
+                tail = _trailing_punct(it["original"])
+                core = _strip_trailing_punct(shown)
                 toks[i] = (f'<span class="vmark">{marks[it["n"] - 1]}</span>'
-                           f'<u class="vword">{shown}</u>')
+                           f'<u class="vword">{core}</u>{tail}')
         out[p_i][1] = " ".join(toks)
     return out
 
@@ -425,6 +519,24 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
             errors.append(
                 f"[{pid}] Q3 어휘 {it.get('n')}번 '{it.get('original')}' 의 antonym 이 비었다 — "
                 f"반대말을 못 적을 단어는 밑줄 자리로 쓰지 마라")
+
+    # 앞의 부정관사와 안 맞는 shown (_s143)
+    #   apply_vocab_items 가 렌더 때 고치지만, 여기서도 본다 — 고쳐지지 않은 채로
+    #   올라온 옛 캐시를 잡아내야 하고, 검사가 렌더 한 곳에만 있으면
+    #   _s135·_s140 과 같은 구조가 다시 생긴다.
+    for it in vocab_items:
+        p_i, i = it.get("para"), it.get("idx")
+        if not isinstance(p_i, int) or not isinstance(i, int) or p_i >= len(paragraphs):
+            continue
+        toks = paragraphs[p_i][1].split()
+        if i <= 0 or i >= len(toks):
+            continue
+        shown = it.get("shown") or it.get("original") or ""
+        if article_mismatch(toks[i - 1], shown):
+            want = "an" if needs_an(shown) else "a"
+            errors.append(
+                f"[{pid}] Q3 어휘 {it.get('n')}번 '{toks[i-1]} {shown}' — "
+                f"부정관사가 안 맞는다. '{want} {shown}' 이어야 한다")
 
     # 밑줄로 쓸 수 없는 단어 — 관문 한 곳에서 본다 (_s142)
     #   ★ 여기는 백스톱이다. 관대 모드로 통과했거나 옛 캐시에서 올라온 항목은

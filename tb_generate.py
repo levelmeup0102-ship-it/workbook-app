@@ -12,10 +12,74 @@ API_URL = "https://api.anthropic.com/v1/messages"
 MODEL   = "claude-sonnet-4-6"
 
 # 생성 로직을 고칠 때마다 올린다. 이 값이 다르면 예전 캐시를 무시하고 다시 만든다.
-GEN_VERSION = "v5"   # v5: 위키 사진 → 직접 그린 SVG 모식도로 전환
+GEN_VERSION = "v6"   # v6: sanitize_svg 그라디언트 태그 버그 수정(+폰트 임베드 렌더러)
 
-# 이미지 허용 도메인 (위키 계열만)
+# 이미지 허용 도메인 (위키 계열만) — v5부터 사진은 쓰지 않지만 세니타이즈용으로 남겨둠
 _IMG_ALLOW = ("upload.wikimedia.org",)
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+_EXAM_CTX_CACHE = None
+
+
+def _supa_get(endpoint: str, timeout: int = 15):
+    """Supabase REST GET (동기). tb_generate 는 curl 기반이라 supa.py(async)를 쓰지 않는다."""
+    if not (SUPABASE_URL and SUPABASE_KEY):
+        return None
+    try:
+        r = subprocess.run(
+            ['curl', '-s', '--max-time', str(timeout),
+             f"{SUPABASE_URL}/rest/v1/{endpoint}",
+             '-H', f'apikey: {SUPABASE_KEY}',
+             '-H', f'Authorization: Bearer {SUPABASE_KEY}'],
+            capture_output=True, timeout=timeout + 5)
+        out = r.stdout.decode('utf-8', 'replace').strip()
+        return json.loads(out) if out else None
+    except Exception as e:
+        print(f"[exam_ctx] supabase 조회 실패: {str(e)[:120]}", flush=True)
+        return None
+
+
+def load_exam_context() -> str:
+    """학원의 실제 출제 체계를 프롬프트에 주입한다.
+    seosul_types = 서술형 5유형(SA~SE) + 어법 출제 전역 원칙(GRAMMAR-RULES)
+    grammar_points = 내신·수능 빈출 어법 화이트리스트
+    (seosul_types 주석: "어느 프로젝트에서든 서술형/어법 출제 시 grammar_points와 함께 참조한다")
+    조회 실패 시 빈 문자열 → 프롬프트는 기존대로 동작한다."""
+    global _EXAM_CTX_CACHE
+    if _EXAM_CTX_CACHE is not None:
+        return _EXAM_CTX_CACHE
+
+    parts = []
+    types = _supa_get("seosul_types?select=code,name,instruction,given_to_student,"
+                      "student_writes,source_schools,notes&active=eq.true&order=id")
+    if isinstance(types, list) and types:
+        lines = ["[우리 학원 서술형 출제 유형 — 시험 포인트 카드에 반드시 반영]"]
+        for t in types:
+            if t.get("code") == "GRAMMAR-RULES":
+                continue
+            lines.append(
+                f"- {t.get('code')} {t.get('name')}: {(t.get('given_to_student') or '')[:90]}"
+                f" → 학생이 쓰는 것: {(t.get('student_writes') or '')[:60]}"
+                f" (출처교: {t.get('source_schools') or '-'})")
+        rules = next((t for t in types if t.get("code") == "GRAMMAR-RULES"), None)
+        if rules and rules.get("notes"):
+            lines.append(f"[어법 출제 원칙] {rules['notes'][:1200]}")
+        parts.append("\n".join(lines))
+
+    gp = _supa_get("grammar_points?select=category,subcategory,name,trap_warning"
+                   "&active=eq.true&exam_frequency=gte.4&order=exam_frequency.desc&limit=40")
+    if isinstance(gp, list) and gp:
+        lines = ["[내신 빈출 어법 포인트 — 어법 언급은 이 목록 안에서만]"]
+        for g in gp:
+            trap = (g.get("trap_warning") or "").strip().replace("\n", " ")
+            lines.append(f"- {g.get('category')}·{g.get('subcategory')}: {g.get('name')}"
+                         + (f" / 함정: {trap[:70]}" if trap else ""))
+        parts.append("\n".join(lines))
+
+    _EXAM_CTX_CACHE = ("\n\n" + "\n\n".join(parts)) if parts else ""
+    print(f"[exam_ctx] 출제 체계 {len(_EXAM_CTX_CACHE)}자 로드", flush=True)
+    return _EXAM_CTX_CACHE
 
 def _curl_messages(body: dict, timeout=180) -> dict:
     """단일 /v1/messages 호출 (curl). web_search tool 포함 가능."""
@@ -374,24 +438,45 @@ GEN_SYSTEM = """너는 한국 고등학교 영어 내신 강사를 위한 '수�
 
 [수업 쓸모 — 반드시 지킬 것]
 - 카드마다 .inpassage 에 "이 배경이 지문 ❶❷ 문장 독해에 어떻게 연결되는지"를 구체적으로 적는다.
-- 마지막 카드는 .card danger 로 '시험 포인트' 카드를 만든다: 이 소재가 빈칸·순서·요약·어법으로 어떻게 변형 출제될지, 학생이 헷갈릴 함정은 무엇인지.
+- 마지막 카드는 .card danger 로 '시험 포인트' 카드를 만든다. 아래 세 축을 반드시 모두 담는다.
+  ① 수능형 객관식: 빈칸·순서·삽입·요약·어휘 중 이 지문에 실제로 붙는 것만. 정답 근거 문장과 오답 함정을 같이 적는다.
+  ② 서술형(내신 배점이 큰 부분): 아래 [우리 학원 서술형 출제 유형]에서 이 지문에 맞는 유형 코드를 골라
+     "어느 절이 뚫릴지 / 요약문 (A)(B)에 무엇이 들어갈지 / 어떤 단어가 품사 변형으로 나올지"를 구체적으로 지목한다.
+     지문에 안 맞는 유형은 억지로 넣지 않는다.
+  ③ 어법: 아래 [내신 빈출 어법 포인트] 목록 안에서만 고른다. 목록에 없으면 어법 얘기를 아예 쓰지 마라.
+     [어법 출제 원칙]의 금지 항목에 걸리는 자리는 언급하지 않는다.
+- 소재를 고를 때 "이 소재가 수능 연계·내신에서 왜 반복해서 나오는지"를 한 번은 짚는다.
 - 'theme' 와 'overview' 는 지문의 논리 흐름(주제·전환)을 한 줄로 요약한다.
 
 [그림 — 사진이 아니라 직접 그린 SVG 모식도]
 - <img> 태그를 절대 만들지 마라. 외부 이미지 URL도 쓰지 마라.
 - 대신 출력 JSON 의 "figures" 에 인라인 SVG 모식도를 1~2개 직접 그려 넣어라.
-- 무엇을 그리나: 지문 소재의 구조·관계·비교·단계·공간을 보여주는 그림.
-  예) 두 개념의 대비, 단계별 흐름(화살표), 지도·위치 관계, 축이 있는 비교 그래프, 부분-전체 구조.
+- 무엇을 그리나 — 아래 레퍼토리에서 지문에 맞는 걸 고른다(원장님 검수본에서 실제로 쓰인 형태):
+  · 두 개념 대비 (예: 내적 동기 ↔ 외적 동기, 안에서 타오름 ↔ 밖에서 당김)
+  · 겹치는 원 3개 (예: 자율성·유능감·관계성이 겹치는 곳 = 내적 동기)
+  · 정상 vs 이상 비교 (예: 자유롭게 굽는 관절 ↔ 굳어 고정된 관절)
+  · 가로 타임라인 (예: 1999 입문 → 2007 창단 → 2009 졸업 → 2010 패럴림픽)
+  · 경로·여정도 (지점을 선으로 잇고 각 지점에 연도·사건)
+  · 누적 계단 (예: 삼진 2,600 · 실험 1,000 · 오디션 탈락이 쌓여 성공 ★)
+  · 전후 대비 (예: 같은 극장, 30년 전 탈락 ✗ → 30년 후 토니상 🏆)
   ★ 장식용 그림·아이콘·초상화는 만들지 마라. 설명이 되는 그림만.
   ★ 글로 한 줄이면 끝나는 단순 정의에는 그림을 만들지 마라(figures 를 빈 배열로 둬라).
 - SVG 작성 규칙:
-  · 반드시 viewBox 기반. width/height 속성 금지. (예: <svg viewBox='0 0 600 260'>)
+  · 반드시 viewBox 기반. width/height 속성 금지. 폭은 600 고정, 높이는 120~260 사이.
+    (예: <svg viewBox='0 0 600 190' role='img' aria-label='내적 동기 대 외적 동기'>)
+  · role='img' 와 aria-label 을 반드시 넣는다.
   · 속성값은 작은따옴표(') 사용 — JSON 이스케이프를 줄이기 위해서다.
-  · 색은 다음 토큰만 사용: #0f2e2a(ink) #16b89b(teal) #0e8f79(teal-deep) #e6f7f2(mint)
-    #e0922a(amber) #e8493f(danger) #2f7de0(blue) #7a5cd6(purple) #9aa7a3(gray) #ffffff
-  · 한국어 라벨 사용 가능. text 는 font-size 12~15, font-weight='800', text-anchor='middle'.
+  · 색은 디자인 토큰을 기본으로 쓴다: #0f2e2a(ink) #16b89b(teal) #0e8f79(teal-deep)
+    #e6f7f2(mint) #e0922a(amber) #e8493f(danger) #2f7de0(blue) #7a5cd6(purple)
+    #9aa7a3(gray) #dbe8e3(line) #ffffff. 명암·배경용 파생 음영은 써도 된다.
+  · 라벨은 한국어로, 학술어는 영어를 작게 병기한다 (예: 자율성 / autonomy).
+  · text 는 font-size 11~15, font-weight='800', text-anchor='middle'.
+  · ✗ ★ 🏆 정도의 기호는 의미 전달에 도움되면 써도 된다.
   · script·foreignObject·image·외부 href 절대 금지. 순수 도형·선·텍스트만.
   · 한 그림당 2만 자 이내.
+- caption 규칙: 그림 설명에서 끝내지 말고 <b>지문과의 연결</b>까지 한 문장에 담는다.
+  (예: "내적 동기 = 안에서 타오르는 불꽃 · 외적 동기 = 밖에서 당기는 보상. 지문 속 인물들은 전자예요.")
+  ★ 실제와 다른 도식(지도 등)이면 "(실제 지리와 다름)"처럼 반드시 밝힌다. 사실처럼 오해되면 안 된다.
 
 [정형 인터랙티브 1개 — 반드시 포함]
 - 출력 JSON 의 "toggle" 에 핵심 대조/분류를 2~3개 항목으로 넣어라(탭 토글로 렌더된다). 형식:
@@ -471,6 +556,7 @@ _SVG_ALLOWED_TAGS = {
     "polyline","polygon","text","tspan","marker","linearGradient","radialGradient",
     "stop","pattern","clipPath","mask","use","symbol",
 }
+_SVG_ALLOWED_LOWER = {t.lower() for t in _SVG_ALLOWED_TAGS}   # ★ 태그 비교는 소문자로 통일
 _SVG_MAX_LEN = 20000
 
 def sanitize_svg(svg: str) -> str | None:
@@ -488,13 +574,15 @@ def sanitize_svg(svg: str) -> str | None:
     svg = re.sub(r"\son\w+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)", "", svg, flags=re.I)
 
     # 외부 URL 참조 금지 (href/xlink:href/url())
-    if re.search(r"(?:xlink:)?href\s*=\s*[\"']\s*(?:https?:)?//", svg, re.I) or "http" in re.findall(r"url\(([^)]*)\)", svg).__str__():
+    has_ext_href = re.search(r"(?:xlink:)?href\s*=\s*[\"']\s*(?:https?:)?//", svg, re.I)
+    has_ext_url  = any("http" in u for u in re.findall(r"url\(([^)]*)\)", svg))
+    if has_ext_href or has_ext_url:
         print("[svg] 제외(외부 URL 참조)", flush=True)
         return None
 
-    # 허용 태그만
+    # 허용 태그만 (대소문자 무시)
     tags = {t.lower() for t in re.findall(r"<\s*/?\s*([a-zA-Z][a-zA-Z0-9]*)", svg)}
-    bad = tags - _SVG_ALLOWED_TAGS
+    bad = tags - _SVG_ALLOWED_LOWER
     if bad:
         print(f"[svg] 제외(허용 안 된 태그: {sorted(bad)})", flush=True)
         return None
@@ -609,7 +697,8 @@ def generate_topic_background(passage: str, passage_dir, label: str = "",
 
     # 1차: web_search 켜고 생성
     print(f"[topic_background] {label} 생성 시작 (web_search, max_uses={max_uses})", flush=True)
-    raw = call_claude_with_search(GEN_SYSTEM, user, max_uses=max_uses, max_tokens=20000)
+    system_prompt = GEN_SYSTEM + load_exam_context()
+    raw = call_claude_with_search(system_prompt, user, max_uses=max_uses, max_tokens=20000)
     data = _try_parse(raw)
 
     # 2차 폴백: 파싱 실패 시 검색 끄고 재시도
@@ -618,7 +707,7 @@ def generate_topic_background(passage: str, passage_dir, label: str = "",
         try:
             fb_user = user + "\n\n[중요] 이번엔 검색하지 말고, 위 지시의 JSON 객체 하나만 즉시 출력하라. 코드블록 금지. 인용 태그 절대 금지. section_html 내 속성은 모두 큰따옴표 사용."
             body = {"model":MODEL,"max_tokens":20000,"temperature":0.2,
-                    "system":GEN_SYSTEM,"messages":[{"role":"user","content":fb_user}]}
+                    "system":system_prompt,"messages":[{"role":"user","content":fb_user}]}
             fb = _curl_messages(body)
             fbtexts = [b.get("text","") for b in fb.get("content",[]) if b.get("type")=="text"]
             data = _try_parse("\n".join(fbtexts))

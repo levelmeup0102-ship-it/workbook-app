@@ -667,11 +667,13 @@ def _drop_unverified_images(data: dict) -> dict:
 def generate_topic_background(passage: str, passage_dir, label: str = "",
                               save_step_fn=None, load_step_fn=None,
                               step_name="topic_background", max_uses=5) -> dict:
-    # 지문 1개에서 소재 2~3개를 교차 확인하려면 5회는 빠듯하다. 하한을 두고 env 로 조절 가능.
+    # web_search 횟수 = 지문당 생성 시간의 핵심 병목. env 로 조절(기본 4).
+    # 값을 낮추면 빨라지고(사실검증은 다소 줄어듦), 높이면 느려진다. 게이트웨이 타임아웃 시 2~3 권장.
     try:
-        max_uses = max(int(max_uses or 5), int(os.environ.get("TB_SEARCH_MAX_USES", "8")))
+        _env = os.environ.get("TB_SEARCH_MAX_USES")
+        max_uses = int(_env) if _env else int(max_uses or 4)
     except Exception:
-        max_uses = 8
+        max_uses = 4
 
     # 1) 캐시 우선
     if load_step_fn is not None:
@@ -698,7 +700,7 @@ def generate_topic_background(passage: str, passage_dir, label: str = "",
     # 1차: web_search 켜고 생성
     print(f"[topic_background] {label} 생성 시작 (web_search, max_uses={max_uses})", flush=True)
     system_prompt = GEN_SYSTEM + load_exam_context()
-    raw = call_claude_with_search(system_prompt, user, max_uses=max_uses, max_tokens=20000)
+    raw = call_claude_with_search(system_prompt, user, max_uses=max_uses, max_tokens=16000)
     data = _try_parse(raw)
 
     # 2차 폴백: 파싱 실패 시 검색 끄고 재시도

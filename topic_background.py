@@ -16,6 +16,7 @@
 
 import os
 import base64
+import logging
 
 TOPIC_STEP_NAME = "topic_background"
 TOPIC_STEP_VERSION = "v5"   # tb_generate.GEN_VERSION 과 맞춘다
@@ -34,6 +35,13 @@ _FONTS = (
 # 하나라도 없으면(폰트 파일·라이브러리 부재) 조용히 기존 외부 <link>로 폴백한다.
 #   · 폰트 파일: google/fonts 저장소의 OFL 폰트 (BlackHanSans / GothicA1)
 #   · 폴더 위치: 환경변수 LEVELMEUP_FONT_DIR, 없으면 이 파일 옆 fonts/
+# fontTools 서브셋은 기본적으로 DEBUG 로그를 수천 줄 쏟아낸다.
+# 서버(Railway 등)의 로그 초당 제한을 초과해 앱이 지연되므로 ERROR 이상만 남긴다.
+logging.getLogger("fontTools").setLevel(logging.ERROR)
+
+# 같은 글자 집합을 매 렌더마다 다시 서브셋하지 않도록 결과를 캐싱한다.
+_FONT_EMBED_CACHE = {}
+
 _EMBED_FONTS = [
     ("Black Han Sans", 400, "BlackHanSans-Regular.ttf"),
     ("Gothic A1", 400, "GothicA1-Regular.ttf"),
@@ -64,6 +72,7 @@ def _embed_fonts_css(*texts):
         import io as _io
     except Exception:
         return None
+    logging.getLogger("fontTools").setLevel(logging.ERROR)  # 로그 폭주 방지(이중 안전장치)
     fdir = _font_dir()
     if not all(os.path.exists(os.path.join(fdir, f)) for _, _, f in _EMBED_FONTS):
         return None
@@ -72,7 +81,10 @@ def _embed_fonts_css(*texts):
         if t:
             chars |= set(t)
     # 폰트에 없는 이모지 등 BMP 밖 문자는 제외(서브셋 대상 아님)
-    unicodes = sorted({ord(c) for c in chars if ord(c) <= 0xFFFF})
+    unicodes = tuple(sorted({ord(c) for c in chars if ord(c) <= 0xFFFF}))
+    cached = _FONT_EMBED_CACHE.get(unicodes)   # 같은 글자 집합이면 재서브셋 생략
+    if cached is not None:
+        return cached
     faces = []
     try:
         for family, weight, fname in _EMBED_FONTS:
@@ -93,8 +105,12 @@ def _embed_fonts_css(*texts):
     except Exception as e:
         print(f"[fonts] 서브셋 실패 → 외부 링크 폴백: {e}", flush=True)
         return None
+    css = "<style>" + "".join(faces) + "</style>"
+    _FONT_EMBED_CACHE[unicodes] = css
+    if len(_FONT_EMBED_CACHE) > 64:            # 메모리 무한증가 방지
+        _FONT_EMBED_CACHE.pop(next(iter(_FONT_EMBED_CACHE)))
     print(f"[fonts] {len(unicodes)}자 서브셋 임베드 ({len(_EMBED_FONTS)}종)", flush=True)
-    return "<style>" + "".join(faces) + "</style>"
+    return css
 
 # 디자인 시스템 CSS (스타터 템플릿과 동일 — 절대 수정 금지 권장)
 LEVELMEUP_CSS = r""":root{

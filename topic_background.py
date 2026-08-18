@@ -14,6 +14,9 @@
     "_step_version": "v1" }
 """
 
+import os
+import base64
+
 TOPIC_STEP_NAME = "topic_background"
 TOPIC_STEP_VERSION = "v5"   # tb_generate.GEN_VERSION 과 맞춘다
 
@@ -23,6 +26,75 @@ _FONTS = (
     '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
     '<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Gothic+A1:wght@400;500;700;800;900&display=swap" rel="stylesheet">'
 )
+
+# ── 폰트 임베드(서브셋) ──────────────────────────────────────────
+# 브라우저 "웹페이지로 저장" 시 구글폰트 <link>가 로컬 경로로 깨지는 문제를 원천 차단한다.
+# fonts/ 폴더에 아래 TTF가 있고 fonttools(+brotli)가 설치돼 있으면,
+# 페이지에 실제 쓰인 글자만 골라 woff2로 서브셋해 <style>에 base64로 심는다.
+# 하나라도 없으면(폰트 파일·라이브러리 부재) 조용히 기존 외부 <link>로 폴백한다.
+#   · 폰트 파일: google/fonts 저장소의 OFL 폰트 (BlackHanSans / GothicA1)
+#   · 폴더 위치: 환경변수 LEVELMEUP_FONT_DIR, 없으면 이 파일 옆 fonts/
+_EMBED_FONTS = [
+    ("Black Han Sans", 400, "BlackHanSans-Regular.ttf"),
+    ("Gothic A1", 400, "GothicA1-Regular.ttf"),
+    ("Gothic A1", 500, "GothicA1-Medium.ttf"),
+    ("Gothic A1", 700, "GothicA1-Bold.ttf"),
+    ("Gothic A1", 800, "GothicA1-ExtraBold.ttf"),
+    ("Gothic A1", 900, "GothicA1-Black.ttf"),
+]
+# 항상 포함할 기본 문자(버튼·영문 라벨·숫자·기호 보호)
+_FONT_BASE_CHARS = (
+    " 0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    ".,!?:;·—…\"\'()[]{}%&/+-→↑↓✓✗★"
+)
+
+
+def _font_dir():
+    return (os.environ.get("LEVELMEUP_FONT_DIR")
+            or os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts"))
+
+
+def _embed_fonts_css(*texts):
+    """페이지에 쓰인 글자만 서브셋해 @font-face(base64 woff2)로 임베드한 <style>을 반환.
+    fonttools/brotli 미설치 또는 폰트 파일 없음 → None(외부 <link> 폴백)."""
+    try:
+        from fontTools import subset as _subset
+        from fontTools.ttLib import TTFont
+        import io as _io
+    except Exception:
+        return None
+    fdir = _font_dir()
+    if not all(os.path.exists(os.path.join(fdir, f)) for _, _, f in _EMBED_FONTS):
+        return None
+    chars = set(_FONT_BASE_CHARS)
+    for t in texts:
+        if t:
+            chars |= set(t)
+    # 폰트에 없는 이모지 등 BMP 밖 문자는 제외(서브셋 대상 아님)
+    unicodes = sorted({ord(c) for c in chars if ord(c) <= 0xFFFF})
+    faces = []
+    try:
+        for family, weight, fname in _EMBED_FONTS:
+            font = TTFont(os.path.join(fdir, fname))
+            opts = _subset.Options(flavor="woff2", desubroutinize=True,
+                                   layout_features=[], notdef_outline=False,
+                                   recalc_bounds=False, recalc_timestamp=False)
+            ss = _subset.Subsetter(options=opts)
+            ss.populate(unicodes=unicodes)
+            ss.subset(font)
+            font.flavor = "woff2"          # ★ 서브셋 후 flavor 지정해야 실제 woff2(brotli)로 저장됨
+            buf = _io.BytesIO(); font.save(buf)
+            b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+            faces.append(
+                "@font-face{font-family:\'%s\';font-style:normal;font-weight:%d;"
+                "font-display:swap;src:url(data:font/woff2;base64,%s) format(\'woff2\')}"
+                % (family, weight, b64))
+    except Exception as e:
+        print(f"[fonts] 서브셋 실패 → 외부 링크 폴백: {e}", flush=True)
+        return None
+    print(f"[fonts] {len(unicodes)}자 서브셋 임베드 ({len(_EMBED_FONTS)}종)", flush=True)
+    return "<style>" + "".join(faces) + "</style>"
 
 # 디자인 시스템 CSS (스타터 템플릿과 동일 — 절대 수정 금지 권장)
 LEVELMEUP_CSS = r""":root{
@@ -225,11 +297,11 @@ def _footer(school_name):
         '<span style="color:var(--teal-deep)">with Claude</span></footer>'
     )
 
-def _doc(body_html, scripts_js, title):
+def _doc(body_html, scripts_js, title, font_head=None):
     return (
         '<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
-        '<title>' + title + '</title>' + _FONTS +
+        '<title>' + title + '</title>' + (font_head or _FONTS) +
         '<style>' + LEVELMEUP_CSS + '</style></head><body><div class="wrap">'
         + body_html +
         '</div><script>' + scripts_js + '</script></body></html>'
@@ -249,7 +321,8 @@ def render_topic_background(passages_data, school_name="레벨미업학원"):
                 '아직 이 지문들의 <b>수업배경자료</b>가 없습니다. '
                 + (("(미생성: " + ", ".join(missing) + ")") if missing else "") +
                 '</div></div></section>' + _footer(school_name))
-        return _doc(body, TOPIC_COMMON_JS, (school_name or "LevelMeUp") + " 수업배경자료")
+        return _doc(body, TOPIC_COMMON_JS, (school_name or "LevelMeUp") + " 수업배경자료",
+                    _embed_fonts_css(body, TOPIC_COMMON_JS))
 
     chips = "".join('<a href="#%s">%s</a>' % (f.get("anchor", ""), f.get("chip", "")) for f in frags)
     sections = "\n".join(f.get("section_html", "") for f in frags)
@@ -266,4 +339,6 @@ def render_topic_background(passages_data, school_name="레벨미업학원"):
             + _overview_section(overviews) + _footer(school_name))
     scripts_all = TOPIC_COMMON_JS + "\n" + scripts
     title = (school_name or "LevelMeUp") + " 수업배경자료"
-    return _doc(body, scripts_all, title)
+    # 폰트 임베드(가능하면). 실패 시 None → _doc 이 외부 <link> 로 폴백.
+    font_head = _embed_fonts_css(body, scripts_all, chips, title)
+    return _doc(body, scripts_all, title, font_head)

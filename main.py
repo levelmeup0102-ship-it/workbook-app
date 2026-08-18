@@ -742,6 +742,7 @@ async def _secret_note_impl(body: dict):
     import tb_generate as tbg          # ★ 수업배경자료 자동 생성(web_search)
 
     passages_data = []
+    _topic_jobs = []   # ★ 수업배경자료 병렬 생성용: (item, passage_text, passage_dir, label)
     for p in passages_in:
         book, unit, pid = p.get("book"), p.get("unit"), p.get("id")
         if not all([book, unit, pid]):
@@ -821,17 +822,37 @@ async def _secret_note_impl(body: dict):
             "data":        (note_data.get("_display") if isinstance(note_data, dict) and note_data.get("_display") else note_data),
         }
         if note_type == "D" and pc_mode == "topic":
-            # 캐시 우선, 없으면 web_search 기반 자동 생성
-            try:
-                item["topic"] = tbg.generate_topic_background(
-                    passage_text, passage_dir, label=label,
+            # ★ 여기서 생성하지 않고 잡으로 모아 뒀다가 루프 뒤에서 '병렬'로 처리한다.
+            #   (순차 생성 시 5개 = 지문당 시간 × 5 → 게이트웨이 타임아웃. 병렬이면 ≈ 가장 느린 1개)
+            _topic_jobs.append((item, passage_text, passage_dir, label))
+        passages_data.append(item)
+
+    # ★ 수업배경자료(topic): 지문별 생성을 '병렬'로 실행 (순차 시 5개=수 분 → 병렬이면 ≈ 가장 느린 1개).
+    #   generate_topic_background 는 블로킹(subprocess/web_search)이라 전용 스레드풀에서 동시에 돌린다.
+    #   동시 실행 수 = TOPIC_CONCURRENCY(기본 6). API 레이트리밋에 걸리면 이 값을 낮추면 된다.
+    if _topic_jobs:
+        from concurrent.futures import ThreadPoolExecutor as _TPE
+        _conc = max(1, int(os.getenv("TOPIC_CONCURRENCY", "6")))
+        _loop = asyncio.get_event_loop()
+        _ex = _TPE(max_workers=_conc)
+
+        async def _gen_topic(item, ptext, pdir, lbl):
+            def _run():
+                return tbg.generate_topic_background(
+                    ptext, pdir, label=lbl,
                     save_step_fn=pl.save_step, load_step_fn=pl.load_step,
                     step_name=tbk.TOPIC_STEP_NAME, max_uses=5,
                 )
+            try:
+                item["topic"] = await _loop.run_in_executor(_ex, _run)
             except Exception as e:
                 item["topic"] = None
                 item["topic_error"] = str(e)[:200]
-        passages_data.append(item)
+
+        try:
+            await asyncio.gather(*[_gen_topic(*job) for job in _topic_jobs])
+        finally:
+            _ex.shutdown(wait=False)
 
     if not passages_data:
         raise HTTPException(404, "처리 가능한 지문 없음")

@@ -287,7 +287,7 @@ def _quote_ok(s: str, allow_comma: bool = False) -> bool:
       ('uses not one, but multiple routes' — not A but B 구문이라 좋은 빈칸인데 버려졌다).
     ★ B Q4(_b_candidates)는 기본값(False) 그대로다. 그쪽 validator 가 아직 쉼표를
       거부하므로 같이 풀면 어긋난다. B는 별도로 결정한다."""
-    if re.search(r'[.!?]', s):
+    if re.search(r'[.!?]', _mask_abbrev_dots(s)):   # 약어의 점은 문장 경계가 아니다 (_s144)
         return False
     if not allow_comma and re.search(r'[,;:]', s):
         return False
@@ -373,7 +373,14 @@ def _clean_boundary_ok(phrase: str, full_text: str, strict: bool = True) -> bool
     #   제자리에 있는 완결된 형태다 — 기출 'the real product being sold is you'.
     #   막아야 하는 건 소유격 한정사(their/its/your...)로 끝나는 것이다. 뒤에
     #   명사가 와야 하므로 잘린 게 맞다.
-    bad_end = _BAD_EDGE - {"they", "we", "he", "she", "it", "you", "i"}
+    # ★★ 주격 전용 대명사로 끝나면 뒤에 동사가 남는다 (_s144).
+    #   _s98 이 대명사를 통째로 풀어준 근거는 기출 'the real product being sold is you'
+    #   였는데, 그건 보어 자리라 문장이 거기서 끝난다. 'knowing I' 는 다르다 —
+    #   주어만 넣고 동사('was in')를 빈칸 밖에 남겼다(실측 25년 고1 9월 19번).
+    #   목적격 형태가 따로 있는 대명사(I/he/she/we/they)는 끝에 오면 절이 잘린 것이고,
+    #   주격·목적격이 같은 you/it 은 문장을 끝맺을 수 있으므로 계속 허용한다.
+    bad_end = (_BAD_EDGE - {"they", "we", "he", "she", "it", "you", "i"}) | {
+        "i", "he", "she", "we", "they"}
     # ★ 하이픈 복합어로 끝나면 잘린 것이다 (_s105).
     #   'twenty-second' 'well-known' 'long-term' 은 뒤에 꾸밀 명사가 따라온다.
     #   실측: 'straight line of the twenty-second' — twenty-second parallel 을 쪼갰다.
@@ -412,6 +419,37 @@ def _clean_boundary_ok(phrase: str, full_text: str, strict: bool = True) -> bool
     return True
 
 
+# 약어·이니셜의 마침표 — 문장 경계가 아니다 (_s144)
+#   자리(인덱스)를 유지해야 하므로 지우지 않고 같은 길이의 '§' 로 가린다.
+_ABBREV_DOT = re.compile(
+    r"\b(?:[ap]\.m|u\.s|u\.k|u\.n|ph\.d|e\.g|i\.e|et\.al|"
+    r"dr|mr|mrs|ms|prof|jr|sr|st|vs|etc|no|vol|fig|inc|ltd|corp|dept|co)\.",
+    re.I)
+_INITIAL_DOT = re.compile(r"\b[A-Za-z]\.")
+# 점을 이미 품고 있어 오인 여지가 없는 약어 — 잘린 끝에서 마지막 점을 되살릴 때 쓴다
+_ABBREV_CUT = re.compile(r"\b(?:[ap]\.m|u\.s|u\.k|u\.n|ph\.d|e\.g|i\.e)$", re.I)
+
+
+def _mask_abbrev_dots(t: str) -> str:
+    """약어·1글자 이니셜의 마침표를 '§' 로 가린 사본. 길이·인덱스는 그대로.
+
+    ★ 약어의 **마지막** 점이 '공백+대문자' 앞이면 문장도 거기서 끝날 수 있다
+      ('… to 7 p.m. This change …'). 그 점은 가리지 않는다 — 가리면 두 문장에
+      걸친 빈칸이 만들어진다. 대신 그 자리에서 자르면 'p.m' 이 남으므로
+      _cut_before_punct 가 점을 되붙인다.
+    """
+    out = list(t)
+    for pat in (_ABBREV_DOT, _INITIAL_DOT):
+        for m in pat.finditer(t):
+            for k in range(m.start(), m.end()):
+                if out[k] != ".":
+                    continue
+                if k == m.end() - 1 and re.match(r'\s+["\u201c(]?[A-Z]', t[k + 1:k + 4]):
+                    continue          # 문장 끝일 수 있다 — 열어둔다
+                out[k] = "§"
+    return "".join(out)
+
+
 def _cut_before_punct(sub: str, min_w: int = 4, sentence_only: bool = False) -> str:
     """구절 안·끝의 구두점 직전까지 자른다. 남은 단어가 min_w 미만이면 빈 문자열.
 
@@ -422,12 +460,28 @@ def _cut_before_punct(sub: str, min_w: int = 4, sentence_only: bool = False) -> 
     t = str(sub or "").strip()
     if not t:
         return ""
-    # ★ sentence_only=True 면 문장 경계(. ! ?)에서만 자른다 (_s94, A Q5 전용).
-    #   쉼표는 빈칸 안에 남고 보기에 'original,' 처럼 붙어 제시된다.
-    m = re.search(r'[.!?]' if sentence_only else r'[.!?,;:]', t)
+    # ★★ 약어 안의 마침표는 문장 경계가 아니다 (_s144).
+    #   실측: 'extend the library's operating hours to 7 p.m.' 를 'p.' 에서 잘라
+    #   빈칸이 '... to 7 p' 가 됐다. 본문엔 '.m.' 만 덜렁 남고 보기엔 'p' 가
+    #   단독 토큰으로 나갔다(25년 고1 9월 18번). 기준 (라)의 'U.S.·100,000'
+    #   구두점 분리와 같은 유형이다.
+    #   → 자를 자리를 찾을 때만 약어의 점을 가려두고, 자르는 것은 원문 t 에서 한다.
+    probe = _mask_abbrev_dots(t)
+    m = re.search(r'[.!?]' if sentence_only else r'[.!?,;:]', probe)
     if m:
         t = t[:m.start()].strip()
-    t = t.rstrip('.,;:!?').strip()          # 끝 구두점은 언제나 떼어낸다
+        # 문장을 끝내는 마침표가 약어의 마지막 점이기도 하면('… 7 p.m. This change')
+        # 자른 자리에 'p.m' 이 남는다. 약어는 온전해야 하므로 점을 되붙인다.
+        if _ABBREV_CUT.search(t):
+            t += "."
+            return t if len(t.split()) >= min_w else ""
+    # ★ 약어로 끝나면 그 마침표는 단어의 일부다 — 떼면 'p.m' 이 된다 (_s144).
+    _tail = t.rstrip()
+    _last = _tail.split()[-1] if _tail.split() else ""
+    if _last and (_ABBREV_DOT.fullmatch(_last) or _INITIAL_DOT.fullmatch(_last)):
+        t = _tail
+    else:
+        t = t.rstrip('.,;:!?').strip()      # 끝 구두점은 잘림의 신호라 떼어낸다
     return t if len(t.split()) >= min_w else ""
 
 
@@ -1249,7 +1303,32 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     """캐시 키: {책}_{단원}_{번호}_{md5}_v{유형}"""
     txt_hash = hashlib.md5(passage_text.encode("utf-8")).hexdigest()[:8]
     prefix = make_cache_key_prefix(book, unit, pid)  # {책}_{단원}_{번호}_ (끝에 _ 포함)
-    # _s142 = Q3어휘 목록 차단을 **관문 한 곳(vocab_q3.blocked_reason)** 으로 모았다.
+    # _s144 = 구두점 셋. (1) A Q5 빈칸이 약어 마침표에서 잘리던 것 —
+    #        실측 'to 7 p.m.' 을 'p.' 에서 잘라 빈칸이 '… to 7 p' 가 됐다
+    #        (본문엔 '.m.' 만 남고 보기엔 'p' 가 단독 토큰. 25년 고1 9월 18번).
+    #        _cut_before_punct·_quote_ok 가 약어의 점을 문장 경계로 봤다.
+    #        약어 점을 가린 사본으로 자를 자리를 찾되, 그 약어가 문장도 끝내는
+    #        경우('p.m. This')는 점을 열어두고 자른 뒤 되붙인다.
+    #        (2) Q3어휘 밑줄에서 원문 끝 구두점이 사라지던 것 —
+    #        'use them to communicate.' → 'interact' 로 마침표가 증발해
+    #        순서대로 이으면 문장이 안 끊겼다(26번). 원문 토큰의 끝 구두점을
+    #        밑줄 **밖**에 붙인다. 덤으로 'responded.' 처럼 밑줄이 구두점까지
+    #        덮던 것도 없어진다 — 기출은 단어에만 긋는다.
+    #        (3) 빈칸이 주격 전용 대명사로 끝나면 거부 — 'knowing I' 는 동사를
+    #        빈칸 밖에 남긴다(19번). _s98 이 근거로 든 'is you' 는 보어라
+    #        문장이 거기서 끝난다. 목적격이 따로 있는 I/he/she/we/they 만 막고
+    #        주격·목적격이 같은 you/it 은 계속 허용한다.
+    #        ★ 후보 소진 측정(실지문 24단락): 후보 0인 단락 0개 — 안 늘어났다.
+    # (구) _s143 = Q3어휘 앞의 부정관사 a/an 을 shown 에 맞춰 고친다.
+    #        어휘는 본문 단어를 바꿔 보여주는데 첫소리가 바뀌면 관사가 어긋난다.
+    #        실측: 'an enclosed space' → 'an ⑤ sealed space' (YBM(박) 01과 FR).
+    #        학생 눈에 바로 보이는 비문이고 "여기가 바뀐 자리"라는 힌트까지 된다.
+    #        paragraphs_render 가 캐시에 들어가므로 버전을 올려야 옛 것이 고쳐진다.
+    #        ★ a/an 은 소리 규칙이라(an hour / a university) 코드가 다 못 맞힌다 —
+    #          확실한 것만 고치고 애매하면 그대로 둔다(needs_an 이 None 을 낸다).
+    #        렌더에서 고치되 validate_vocab 에도 같은 검사를 둔다 — 검사가 한 곳에만
+    #        있으면 _s135·_s140 과 같은 구조가 다시 생긴다.
+    # (구) _s142 = Q3어휘 목록 차단을 **관문 한 곳(vocab_q3.blocked_reason)** 으로 모았다.
     #        밑줄 단어가 정해지는 길이 셋인데(코드 픽 / LLM 픽 / 마지막 확인)
     #        같은 검사가 셋에 흩어져 있어, 한쪽을 손대면 다른 쪽이 조용히 비었다.
     #        _s109 에서 answer_pos_ok 를 안 쓰게 하자 LLM 픽 검사가 통째로 사라졌고,
@@ -1608,7 +1687,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{prefix}{txt_hash}_var{variation_type}_s142"
+    return f"{prefix}{txt_hash}_var{variation_type}_s144"
 
 
 # ============ Supabase 캐시 ============

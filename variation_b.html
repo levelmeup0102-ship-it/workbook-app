@@ -42,12 +42,6 @@ body {
      문항은 다 보인다. 지금 지문 기준 여유가 25mm 쯤이라 실제로는 안 넘친다. */
 }
 .q-page > * { flex-shrink: 0; }
-/* ★ 시험지 머리말의 학교명 (_s149) — 화면에서 입력한 값이 그대로 찍힌다.
-   LEVEL ME UP 줄 바로 위, 왼쪽에 작게. 비어 있으면 줄 자체를 만들지 않는다. */
-.hdr-school {
-  font-size: 8.5pt; font-weight: bold; color: var(--accent);
-  letter-spacing: 0.3px; margin-bottom: 1px; line-height: 1.2;
-}
 .hdr {
   display: flex; justify-content: space-between; align-items: center;
   padding-bottom: 4px; border-bottom: 2px solid var(--purple); margin-bottom: 10px;
@@ -367,11 +361,10 @@ body {
 
 {% for item in passages %}
 <div class="q-page">
-  {% if school_name %}<div class="hdr-school">{{ school_name }}</div>{% endif %}
   <div class="hdr">
     <span class="hdr-title">
       <span class="hdr-logo"></span><span class="hdr-logo-text">LEVEL ME UP</span>
-      변형문제 — 유형 B
+      변형문제 — 유형 B{% if school_name %} · {{ school_name }}{% endif %}
     </span>
     <span class="hdr-right">{{ item.label }}</span>
   </div>
@@ -469,11 +462,10 @@ body {
 {% endfor %}
 
 <div class="ans-start">
-  {% if school_name %}<div class="hdr-school">{{ school_name }}</div>{% endif %}
   <div class="ans-hdr">
     <div class="hdr-title">
       <span class="hdr-logo"></span><span class="hdr-logo-text">LEVEL ME UP</span>
-      변형문제 (유형 B) — 정답·해설
+      변형문제 (유형 B) — 정답·해설{% if school_name %} · {{ school_name }}{% endif %}
     </div>
   </div>
 

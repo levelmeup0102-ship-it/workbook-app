@@ -455,7 +455,11 @@ _BAD_EDGE = {"the","a","an","of","for","to","in","on","at","by","with","from","i
              "both","each","every","either","neither","another","other","such",
              "more","most","less","least","many","much","few","several","some","any",
              "very","own","same","only","just","also","even","rather","instead",
-             "like","there","then"}
+             "like","there","then",
+             # ★ _s154 — 실측(25년 고1 9월 21번): 'later leave your body by various'
+             #   에서 'means' 가 밖에 남아 시험지가 'they ⬜ means.' 가 됐다.
+             #   'various·certain·numerous…' 는 뒤에 명사가 반드시 온다.
+             "various","certain","numerous","countless","multiple","plenty","lots"}
 # 완화 모드에서 시작으로 절대 허용하지 않는 것 (기존 bad_start와 동일)
 # ★ 시작 경계 (_s98) — 기출 23개 정답 빈칸 실측으로 다시 잡았다.
 #   첫 단어가 기능어인 것이 7/23(30%)이다:
@@ -1985,7 +1989,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{prefix}{txt_hash}_var{variation_type}_s153"
+    return f"{prefix}{txt_hash}_var{variation_type}_s154"
 
 
 # ============ Supabase 캐시 ============

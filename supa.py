@@ -348,6 +348,39 @@ async def delete_book(book):
 # ========================
 # ★ Step Cache 일괄 조회 (로딩 속도 최적화)
 # ========================
+async def get_cache_keys_with_step_prefix(prefix: str) -> set:
+    """step_name 이 prefix 로 시작하는 모든 행의 cache_key 집합을 반환.
+    예: prefix='preclass_analysis_v' → 0회독이 생성된 지문들의 cache_key.
+    한 번(페이지네이션)에 긁어와 지문별 왕복을 없앤다. 실패 시 빈 set.
+    """
+    if not _enabled():
+        return set()
+    keys: set = set()
+    start = 0
+    page = 0
+    like = quote(prefix + "%", safe="")
+    while True:
+        end = start + PAGE_SIZE - 1
+        result = await _request(
+            "GET",
+            f"step_cache?select=cache_key&step_name=like.{like}&order=cache_key",
+            extra_headers={"Range-Unit": "items", "Range": f"{start}-{end}"},
+        )
+        if not isinstance(result, list):
+            break
+        for r in result:
+            k = r.get("cache_key")
+            if k:
+                keys.add(k)
+        page += 1
+        if len(result) < PAGE_SIZE:
+            break
+        start += PAGE_SIZE
+        if start >= MAX_ROWS_HARD:
+            break
+    return keys
+
+
 async def get_step_counts_all() -> dict:
     """step_cache의 모든 cache_key를 한 번(페이지네이션)에 받아
     {cache_key: step개수} 딕셔너리로 반환.

@@ -174,6 +174,124 @@ def build_order_blocks_a(en_text: str, pid: str = "?", seed_extra: str = "") -> 
     order_correct = FIXED_ORDER.index(restore)
     return {"intro": intro_text, "paragraphs": paragraphs, "order_correct": order_correct}
 
+# ═══════════════════════════════════════════════════════════════════════
+# 안내문·공고문 판별 (_s152)
+#
+#   수능 27·28번(안내문·공고문)에서 유형 A 는 통째로 죽던 자리다.
+#   Q3 어휘는 '방향을 가진 낱말' 다섯 개가 필요한데 안내문엔 그런 말이 없다
+#   (participation·registration·notice…). Q2 순서배열도 성립하지 않는다 —
+#   항목 나열이라 순서를 바꿔도 논리가 깨지지 않는다.
+#   → 안내문은 주제·일치·빈칸영작 3문항으로 낸다.
+#
+#   판별 기준은 짐작이 아니라 실측으로 맞췄다. passages 전수 1332개 대조:
+#     · 안내문 14개 전부 적중(모의고사 27·28번 11 + 수특 2 + 교과서 1)
+#     · 오탐 0개
+#
+#   ★ 가장 위험한 오탐은 대화문이다. 'Beth:' 'Neil:' 'Host:' 도 머리말이라
+#     머리말 개수만 세면 대화문이 9개까지 나온다(영어1 YBM(박) 02번).
+#     그래서 머리말은 ①안내문 어휘를 담았거나 ②두 단어 이상 전부 대문자일
+#     때만 센다. 사람 이름은 둘 다 아니다.
+#   ★ 그것만으론 모자란다. MYTH:/FACT:(비상(홍) Read More) 같은 대문자
+#     머리말도 있고, VITRA FIRE STATION.(지학사 Read More 2) 같은 소제목도
+#     있다. 그래서 '실무 정보' 다섯 갈래 중 두 갈래 이상이 함께 있어야 한다.
+#     안내문이 아니면 요금과 신청이 같이 나오지 않는다. 실측에서 이 셋 다
+#     실무정보 0갈래였다.
+
+_NOTICE_HEADER_WORDS = frozenset("""
+when where date dates day days time times hour hours place location venue site sites
+schedule program programs course courses class classes session sessions event events
+activity activities highlight highlights offering offerings promotion promotions
+fee fees cost costs price prices payment admission ticket tickets refund discount
+participant participants participation eligibility age ages level levels who
+registration register signup sign-up reservation reservations booking apply application
+deadline submission submit entry entries contact address email phone website
+note notes notice details detail guideline guidelines rule rules requirement requirements
+prize prizes award awards criteria judging benefit benefits theme topic format
+instructor menu duration capacity parking transportation dress food drinks
+information more what how why special offer offers membership members
+""".split())
+
+# 실무 정보 다섯 갈래 — 안내문이면 이 중 둘 이상이 함께 나온다.
+_NOTICE_LOGI_PATTERNS = (
+    ("요금", r"\$\d|\bfees?\b|\bfree\b|\bdiscounts?\b|\bprices?\b|\badmission\b"),
+    ("일시", r"\d{1,2}:\d{2}|\d ?[ap]\.?m\.?\b|"
+             r"\b(?:January|February|March|April|May|June|July|August|September|"
+             r"October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept?|Oct|Nov|Dec)\.? ?\d{1,2}"),
+    ("연락", r"www\.|https?://|[A-Za-z0-9]@[A-Za-z0-9]|visit (?:our|the|us)\b|"
+             r"for more (?:information|details)"),
+    ("신청", r"sign ?-?up|registration|\bregister\b|reservation|\bbooking\b|book now|"
+             r"first-come|submission|\bdeadline\b|\bentries\b|entry per|\bparticipants?\b|\btickets?\b"),
+    ("자격", r"\bages? \d|\d+ years old|per person|\bmaximum\b|limited to|open to (?:all|the)"),
+)
+
+
+def _notice_headers(en_text: str) -> list:
+    """문장 첫머리의 머리말을 (시작위치, 문자열)로 모은다. 같은 자리는 한 번만."""
+    found = {}
+    # ① 콜론형:  'Registration:'  'When & Where:'  'What You'll Learn:'
+    for m in re.finditer(r"(?:^|(?<=[.!?\n]))\s*([A-Z][A-Za-z'&/ ]{0,40}?)\s*:", en_text):
+        found.setdefault(m.start(1), m.group(1).strip())
+    # ② 전부 대문자형:  'PARTICIPATION.'  'ON THE BUS.'  'WHEN AND WHERE.'
+    for m in re.finditer(r"(?:^|(?<=[.!?\n]))\s*([A-Z][A-Z'&/ ]{2,60}?)\s*[.:](?=\s|$)", en_text):
+        found.setdefault(m.start(1), m.group(1).strip())
+    return sorted(found.items())
+
+
+def notice_signals(en_text: str) -> dict:
+    """안내문 판별 신호를 그대로 돌려준다 (로그·테스트용)."""
+    hdrs = []
+    for _pos, h in _notice_headers(en_text):
+        words = [w.strip("'&/.").lower() for w in h.split()]
+        words = [w for w in words if w]
+        if not words:
+            continue
+        if any(w in _NOTICE_HEADER_WORDS for w in words):
+            hdrs.append(h)
+        elif h.isupper() and len(words) >= 2:
+            # 사람 이름 한 단어(MYTH/FACT)는 제외 — 두 단어 이상만
+            hdrs.append(h)
+    logi = [name for name, pat in _NOTICE_LOGI_PATTERNS
+            if re.search(pat, en_text, re.IGNORECASE)]
+    return {"headers": hdrs, "hdr": len(hdrs), "logi": logi, "n_logi": len(logi)}
+
+
+def is_notice(en_text: str, pid: str = "?") -> bool:
+    """안내문·공고문이면 True. 머리말 2개 이상 + 실무정보 2갈래 이상."""
+    sig = notice_signals(en_text or "")
+    ok = sig["hdr"] >= 2 and sig["n_logi"] >= 2
+    print(f"[VAR][A][{pid}] 안내문 판별 {'✔ 안내문' if ok else '— 일반 지문'} "
+          f"(머리말 {sig['hdr']}개 {sig['headers'][:4]} / 실무정보 {sig['logi']})")
+    return ok
+
+
+def build_notice_blocks_a(en_text: str, pid: str = "?") -> Optional[dict]:
+    """
+    안내문용 단락 분할. 순서배열을 내지 않으므로 **섞지 않는다** — 원문 순서 그대로.
+    라벨은 A/B/C 를 유지한다(Q5·검증 기계가 라벨로 단락을 찾는다).
+    화면에서 라벨을 감추는 일은 템플릿이 layout=='notice' 로 처리한다.
+    """
+    sents = split_sentences(en_text)
+    if len(sents) < 4:
+        print(f"[VAR][A][{pid}] 안내문 문장 {len(sents)}개 — 4문장 미만이라 분할 불가")
+        return None
+    intro = sents[0].strip()
+    rest = sents[1:]
+    if len(rest) < 3:
+        return None
+    k = len(rest)
+    sizes = [k // 3, k // 3, k // 3]
+    for i in range(k % 3):
+        sizes[i] += 1
+    blocks, idx = [], 0
+    for s in sizes:
+        blocks.append(" ".join(rest[idx:idx + s]).strip())
+        idx += s
+    return {"intro": intro,
+            "paragraphs": [["A", blocks[0]], ["B", blocks[1]], ["C", blocks[2]]],
+            "order_correct": None,
+            "layout": "notice"}
+
+
 def build_insert_blocks_b(en_text: str, pid: str = "?", preferred: int = None) -> Optional[dict]:
     """원문에서 문장 하나를 떼어 given_sentence로, 나머지에 마커를 균등 배치해
     삽입문제(Q1)를 무손실로 재구성한다. (1회독 pipeline.step2_order 방식 이식)
@@ -895,7 +1013,27 @@ def validate_llm_q5_spans(paragraphs, span_a: str, span_b: str, pid: str = "?") 
     return {"paragraphs": new_paras, "blank_A": a, "blank_B": b}
 
 
-def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?") -> Optional[dict]:
+def _q5_leaks(statements, va, vb) -> bool:
+    """Q4 진술이 이 빈칸 답을 그대로 말해주면 True (_s152).
+
+    ★ 왜 픽커 안으로 들여왔나.
+      이 검사는 원래 바깥 검증 블록에만 있었고 `not is_last` 로 묶여 있었다.
+      마지막 시도에서는 검사가 통째로 꺼지므로, 3회를 다 쓴 지문은 그대로 나갔다.
+      실측(25년 고2 9월 39번 _s151): Q4 '나' = "Paper can be torn easily and
+      accurately along a crease…" 가 Q5(B) 정답과 사실상 같은 문장인데 그대로 배포됐다.
+      재시도로 고치려 하면 시도를 다 쓰면 못 막고, 막으면 지문이 통째로 빠진다.
+      → 애초에 **다른 후보를 고르게** 한다. 픽커에는 후보가 여럿이라 공짜다.
+    """
+    try:
+        from variation.vocab_q3 import statements_leak_blanks
+        return bool(statements_leak_blanks(statements, va, vb))
+    except Exception as _e:
+        print(f"[VAR][A] ⚠ 검사 건너뜀 (_q5_leaks): {_e}")
+        return False
+
+
+def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?",
+                     statements=None) -> Optional[dict]:
     """A Q5 빈칸을 코드가 (A)(B)(C)에서 직접 골라 마킹 (B 빈칸뚫기와 같은 철학).
     LLM이 고른 구절(blank_A/B)이 유효하면 우선 사용, 아니면 코드가 깨끗한 구절 선택.
     fill_boundary_dup None + verbatim 복원 + 서로 다른 단락이 보장되는 조합만 반환. 실패 시 None.
@@ -938,7 +1076,22 @@ def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?
             vv = _valid_llm(llm, k)
             if vv and vv not in lst:
                 lst.append(vv)
-        lst += [c for c in cand[k] if c not in lst]
+        # ★ 코드 후보를 재정렬한다 (_s152) — 거르지 않고 **순서만** 바꾼다.
+        #   목록에서 빼면 짧은 단락에서 후보가 말라 항목이 통째로 빠진다((더) 함정).
+        #   순서만 바꾸면 그 위험이 없다. 뒤로 미루는 것:
+        #     · 담화표지로 시작 ('Indeed, in this state')
+        #     · 4단어짜리 최소 길이 (기출 평균 7.4단어)
+        def _rank(c):
+            w = c.split()
+            head = re.sub(r"[^A-Za-z]", "", w[0]).lower() if w else ""
+            try:
+                from variation.vocab_q3 import is_discourse_marker
+                disc = is_discourse_marker(head)
+            except Exception:
+                disc = head in ("indeed", "however", "moreover", "thus",
+                                "therefore", "furthermore", "nevertheless")
+            return (1 if disc else 0, 1 if len(w) <= 4 else 0)
+        lst += sorted((c for c in cand[k] if c not in lst), key=_rank)
         pool.append((k, lst))
 
     for ai in range(len(pool)):
@@ -960,6 +1113,9 @@ def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?
                     if new[ka][1].replace("<BLANK_A>", va) != texts[ka]:
                         continue
                     if new[kb][1].replace("<BLANK_B>", vb) != texts[kb]:
+                        continue
+                    # ★ Q4 진술이 이 답을 그대로 말해주면 다른 후보로 넘어간다 (_s152)
+                    if statements and _q5_leaks(statements, va, vb):
                         continue
                     # ★ (A)(B) 라벨을 본문 등장 순서로 재배정 — 학생은 (A)→(B) 순으로 쓰는데
                     #   지문이 (B)→(A) 순이면 읽기 흐름이 어긋난다. 마커만 맞바꾸면 되므로
@@ -1759,7 +1915,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{prefix}{txt_hash}_var{variation_type}_s151"
+    return f"{prefix}{txt_hash}_var{variation_type}_s152"
 
 
 # ============ Supabase 캐시 ============
@@ -2039,6 +2195,13 @@ def generate_variation_a(
         print(f"[VAR][A][{pid}] 캐시 없음 — cache_only이므로 생략")
         return None
 
+    # ★★ 안내문·공고문이면 문항 구성을 바꾼다 (_s152).
+    #   수능 27·28번은 Q2 순서배열·Q3 어휘가 성립하지 않는다 —
+    #   항목 나열이라 순서를 섞어도 논리가 안 깨지고, 방향을 가진 낱말이 없다.
+    #   실측: 27번이 3회 연속 생성 실패했고 원인이 전부 Q3 어휘였다.
+    #   → 주제(1) · 일치(2) · 빈칸영작(3) 세 문항으로 낸다.
+    _is_notice = is_notice(en_text, pid)
+
     last_errors = []
     last_data = None
     for attempt in range(1, MAX_RETRIES + 1):
@@ -2048,6 +2211,19 @@ def generate_variation_a(
                 f"Original English passage:\n{en_text}\n\n"
                 "Generate the variation problem (Type A). Return ONLY the JSON object."
             )
+            if _is_notice:
+                # ★ 안내문은 Q2·Q3 를 내지 않는다 — 만들어 보내도 코드가 버린다.
+                #   대신 Q1 주제와 Q4 진술의 성격을 안내문에 맞게 잡아 준다.
+                user_msg += (
+                    "\n\n# ★ THIS PASSAGE IS A NOTICE / ANNOUNCEMENT (CSAT #27-28 style).\n"
+                    "  - Q1 topic options: describe WHAT THE NOTICE IS ANNOUNCING "
+                    "(e.g. 'a one-day glass art workshop for beginners'), not an abstract thesis.\n"
+                    "  - Q4 statements: check concrete facts — date, time, place, fee, eligibility, "
+                    "how to register, what is included. This is the heart of the item.\n"
+                    "  - Q5 blanks: pick from FULL SENTENCES only. NEVER from a header line "
+                    "('Time: ...', 'Registration: ...') or from a list of figures.\n"
+                    "  - Do NOT produce order paragraphs or vocabulary items — they are discarded."
+                )
             if last_errors:
                 user_msg += (
                     "\n\n# ⚠️ PREVIOUS ATTEMPT FAILED — FIX THESE ERRORS:\n"
@@ -2069,13 +2245,17 @@ def generate_variation_a(
 
             # ★★ 순서배열(Q2)을 코드가 원문에서 분할 — LLM 단락을 무시하고 원문 그대로 사용.
             #    원문 무손실이라 복원검증이 깨지지 않는다. LLM은 빈칸 구절만 고른다.
-            ob = build_order_blocks_a(en_text, pid)
+            ob = (build_notice_blocks_a(en_text, pid) if _is_notice
+                  else build_order_blocks_a(en_text, pid))
             print(f"[VAR][A][{pid}] DIAG 문장수={len(split_sentences(en_text))} "
                   f"ob={'None' if not ob else 'OK'} en_len={len(en_text)} en_head={en_text[:60]!r}")
             if ob:
                 data["intro"] = ob["intro"]
                 data["paragraphs"] = [list(p) for p in ob["paragraphs"]]
                 data["order_correct"] = ob["order_correct"]
+                # ★ 안내문은 순서 문항이 없다 — order_correct 는 None 이고
+                #   validate_a 가 layout 을 보고 순서 검사를 건너뛴다 (_s152).
+                data["layout"] = "notice" if _is_notice else "order"
 
                 # ★★ Q3 핵심빈칸은 _s96에서 폐기했다.
                 #   A Q3의 정식 유형은 어휘(수능 30번)다(_s58). 핵심빈칸은 그때 지우지 않고
@@ -2160,6 +2340,16 @@ def generate_variation_a(
                     _sb = _q5_text_of(_rb, _q5paras, pid, "B")
                     _picked = validate_llm_q5_spans(_q5paras, _sa, _sb, pid) \
                         if (_sa and _sb) else None
+                    # ★ 누출은 '거부 사유'로 돌려준다 (_s152). 바로 코드 픽으로 넘기면
+                    #   코드 후보가 어색한 단락에서 품질이 떨어진다. LLM 에게 사유를
+                    #   알려 다시 고르게 하는 편이 낫다 — 재시도 기계는 이미 있다.
+                    if _picked and _q5_leaks(data.get("statements"),
+                                             _picked["blank_A"], _picked["blank_B"]):
+                        _Q5_FAIL_REASONS.append(
+                            "고른 구절이 Q4 진술과 거의 같은 문장이다 — "
+                            "Q4 만 읽어도 영작 답이 보인다. Q4 진술이 다루지 않는 문장에서 고를 것")
+                        print(f"[VAR][A][{pid}] Q5 LLM 픽이 Q4 진술과 겹침 → 사유 알려주고 재시도")
+                        _picked = None
 
                     # ★ 한 번 더 기회를 준다 — 거부 사유를 알려주고 다시 고르게 한다.
                     #   실측: 18단어·쉼표 포함처럼 프롬프트에 이미 적힌 조건을 어긴다.
@@ -2190,6 +2380,10 @@ def generate_variation_a(
                             _sb2 = _q5_text_of(_rb2, _q5paras, pid, "B")
                             if _sa2 and _sb2:
                                 _picked = validate_llm_q5_spans(_q5paras, _sa2, _sb2, pid)
+                                if _picked and _q5_leaks(data.get("statements"),
+                                                         _picked["blank_A"], _picked["blank_B"]):
+                                    print(f"[VAR][A][{pid}] Q5 재시도도 Q4 진술과 겹침 → 코드 픽으로")
+                                    _picked = None
                                 if _picked:
                                     print(f"[VAR][A][{pid}] Q5 재시도 성공")
                         except Exception as _re2:
@@ -2207,7 +2401,8 @@ def generate_variation_a(
                     print(f"[VAR][A][{pid}] Q5 LLM 픽 예외({_qe}) → 코드 픽으로 폴백")
 
                 if not _picked:
-                    _picked = pick_a_q5_blanks(data["paragraphs"], data.get("blank_A", ""), data.get("blank_B", ""), pid)
+                    _picked = pick_a_q5_blanks(data["paragraphs"], data.get("blank_A", ""), data.get("blank_B", ""), pid,
+                                               statements=data.get("statements"))
                 if _picked:
                     data["paragraphs"] = _picked["paragraphs"]
                     data["blank_A"] = _picked["blank_A"]
@@ -2323,10 +2518,37 @@ def generate_variation_a(
                         _as = any(i.get("is_answer") for i in _same)
                         raise ValueError(f"{_ns}번이 원문 단어 그대로"
                                          + (" (정답 자리)" if _as else ""))
+
+                    # ★★ 정답 자리가 Q4 진술의 근거 문장이면 정답이 갈린다 (_s152).
+                    #   Q4 진술은 원문 기준인데 학생이 보는 지문은 그 자리가 뒤집혀 있다.
+                    #   실측(25년 고2 9월 37번 _s151): 지문엔 'much smaller' 인데
+                    #   Q4 '라' 가 "…is smaller than the friction force" 이고 답지는
+                    #   원문 'larger' 를 근거로 (X) 라 했다. 학생이 지문대로 읽으면 (O) 다.
+                    #   ★ 이 검사는 바깥 블록에도 있지만 `not is_last` 로 묶여 있어
+                    #     마지막 시도에서는 꺼진다. 그래서 37번이 그대로 나갔다.
+                    #     여기서 걸면 **어휘만 3회 다시 고르면 되므로** 지문이 안 빠진다.
+                    try:
+                        from variation.vocab_q3 import q4_conflicts_with_answer as _q4c2
+                        _evs = data.get("statements_evidence") or []
+                        if _evs and isinstance(_evs[0], (list, tuple)):
+                            _evs = [e for _, _, e in _evs]
+                        _cf = _q4c2(_items, data["paragraphs"], _evs)
+                        if _cf:
+                            raise ValueError(
+                                f"정답 자리가 Q4 진술 {'·'.join(_cf)} 의 근거 문장이다 — "
+                                f"그 문장은 학생이 보는 지문에서 뒤집혀 있어 Q4 정답이 "
+                                f"갈린다. 다른 문장의 낱말을 정답 자리로 고를 것")
+                    except ValueError:
+                        raise
+                    except Exception as _e:
+                        print(f"[VAR][A][{pid}] ⚠ 검사 건너뜀 (q4_conflicts_with_answer/vocab): {_e}")
+
                     return _items, _v
 
-                _vok = False
-                for _va in range(3):   # ★ _s130: 2 → 3회
+                # ★ 안내문은 Q3 어휘를 아예 시도하지 않는다 (_s152).
+                #   _vok 를 참으로 두어 아래 '2회 실패 → raise' 도 타지 않게 한다.
+                _vok = _is_notice
+                for _va in (() if _is_notice else range(3)):   # ★ _s130: 2 → 3회
                     try:
                         _items, _v = _try_vocab(_va)
                         data["vocab_items"] = _items
@@ -2367,12 +2589,14 @@ def generate_variation_a(
                 _paras_now = [p for p in data.get("paragraphs", []) if isinstance(p, (list, tuple)) and len(p) >= 2]
                 _dup = bool(_probe) and any(_probe in _nz_dup(p[1]) for p in _paras_now)
                 if _dup:
-                    ob2 = build_order_blocks_a(en_text, pid)
+                    ob2 = (build_notice_blocks_a(en_text, pid) if _is_notice
+                           else build_order_blocks_a(en_text, pid))
                     if ob2:
                         data["intro"] = ob2["intro"]
                         data["paragraphs"] = [list(p) for p in ob2["paragraphs"]]
                         data["order_correct"] = ob2["order_correct"]
-                        _pk2 = pick_a_q5_blanks(data["paragraphs"], data.get("blank_A", ""), data.get("blank_B", ""), pid)
+                        _pk2 = pick_a_q5_blanks(data["paragraphs"], data.get("blank_A", ""), data.get("blank_B", ""), pid,
+                                                statements=data.get("statements"))
                         if _pk2:
                             data["paragraphs"] = _pk2["paragraphs"]
                             data["blank_A"] = _pk2["blank_A"]

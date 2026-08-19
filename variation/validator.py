@@ -485,10 +485,18 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
             errors.append(f"[{pid}] 필수 필드 누락: {f}")
             return errors
 
-    # Q2 order_correct: 고정 5선지 인덱스(0-4). (A)-(B)-(C)는 선지에 없어 자동 배제됨.
-    v = data.get("order_correct", -1)
-    if not isinstance(v, int) or not (0 <= v <= 4):
-        errors.append(f"[{pid}] Q2 order_correct 범위 오류(0-4여야 함): {v}")
+    # ★★ 안내문(수능 27·28번)은 순서 문항이 없다 (_s152).
+    #   주제(1)·일치(2)·빈칸영작(3) 세 문항으로 나가므로 order_correct 는 None 이다.
+    #   여기서 걸러 주지 않으면 안내문이 매번 '범위 오류'로 죽는다.
+    is_notice_layout = (data.get("layout") == "notice")
+
+    if not is_notice_layout:
+        # Q2 order_correct: 고정 5선지 인덱스(0-4). (A)-(B)-(C)는 선지에 없어 자동 배제됨.
+        v = data.get("order_correct", -1)
+        if not isinstance(v, int) or not (0 <= v <= 4):
+            errors.append(f"[{pid}] Q2 order_correct 범위 오류(0-4여야 함): {v}")
+    elif data.get("order_correct") is not None:
+        errors.append(f"[{pid}] 안내문인데 order_correct 가 남아 있음: {data.get('order_correct')}")
 
     # Q5 blank_A/B 단어 수 최소 4, 최대 12 (백스톱 — 픽커가 9 초과를 거름. 그래도 새면 여기서 막아 재생성)
     min_bw = 4  # 빈칸은 자연스러운 핵심 구절(4~6단어) 허용 (1회독처럼 하한 완화)
@@ -619,7 +627,16 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
     # ★★★ 순서형 복원 대조를 '먼저' 계산 (이게 순서 정답의 권위 있는 검사다).
     #     intro+(A)(B)(C)를 정답순서로 이으면 원문과 100% 일치해야 함. 일치하면 순서가 증명된 것.
     _recon_ok = None  # None=계산불가, True=원문과 일치, False=불일치
-    if original_passage and isinstance(data.get("order_correct"), int) \
+    # ★ 안내문은 섞지 않는다 — intro+(A)(B)(C)를 그대로 이으면 원문이어야 한다 (_s152).
+    #   순서 문항이 없다고 무손실 검사까지 없애면 안 된다. 지문이 깨져도 아무도 못 잡는다.
+    if is_notice_layout and original_passage and len(para_texts) == 3:
+        restored = (data.get("intro", "") or "")
+        for _t in para_texts:
+            _t = (_t or "").replace("<BLANK_A>", data.get("blank_A", "") or "") \
+                           .replace("<BLANK_B>", data.get("blank_B", "") or "")
+            restored += " " + _t
+        _recon_ok = (_norm(restored) == _norm(original_passage))
+    elif original_passage and isinstance(data.get("order_correct"), int) \
        and 0 <= data["order_correct"] <= 4 and len(para_texts) == 3:
         FIXED = [["A", "C", "B"], ["B", "A", "C"], ["B", "C", "A"], ["C", "A", "B"], ["C", "B", "A"]]
         l2t = {}
@@ -658,7 +675,12 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
             )
 
     # 복원 불일치 — 계산 가능했고(_recon_ok is False) 실제로 안 맞을 때만 (진짜 순서 오류)
-    if _recon_ok is False:
+    if _recon_ok is False and is_notice_layout:
+        errors.append(
+            f"[CRITICAL][{pid}] 안내문 복원 불일치 — intro+(A)(B)(C)를 그대로 이어도 원문과 다름 "
+            f"(문장 누락·병합·빈칸 범위 오류 의심)."
+        )
+    elif _recon_ok is False:
         errors.append(
             f"[CRITICAL][{pid}] 순서형 복원 불일치 — intro+(A)(B)(C)를 정답순서로 이어붙여도 원문과 다름 "
             f"(문장 재배치/병합/누락 또는 Q3 빈칸 위치 오류 의심). (A)(B)(C)는 원문 연속 구간만 담을 것."

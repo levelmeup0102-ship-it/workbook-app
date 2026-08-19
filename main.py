@@ -143,6 +143,22 @@ async def _save_db(d):
 
 
 # ============================================================
+# 지문 라벨 (화면·인쇄물 표시용)
+# ============================================================
+def _passage_label(unit: str, pid: str) -> str:
+    """비밀노트·0회독 인쇄물에 찍히는 지문 이름.
+
+    ★ 모의고사는 unit 이 "etc" 다. upload 시 "N과"/"N강" 패턴이 없는 라벨을
+      자동으로 etc 로 분류하기 때문인데, 그건 **내부 분류값**이지 학생·선생님이
+      볼 말이 아니다. etc(및 빈 값)면 번호만 쓴다 — "etc 18번" → "18번".
+    """
+    u = str(unit or "").strip()
+    if not u or u.lower() == "etc":
+        return f"{pid}"
+    return f"{u} {pid}"
+
+
+# ============================================================
 # Cache Key / Cache Check
 # ============================================================
 def _ck(book: str, unit: str, pid: str) -> str:
@@ -753,7 +769,7 @@ async def _secret_note_impl(body: dict):
             continue
 
         raw_text = pinfo.get("text", "")
-        label = f"{unit} {pid}"
+        label = _passage_label(unit, pid)
         ck = _ck(book, unit, pid)
         passage_dir = DATA_DIR / ck
 

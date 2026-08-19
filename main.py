@@ -512,10 +512,10 @@ async def clear_cache(request: Request):
     if scope == "passage" and all([book, unit, pid]):
         ck = _ck(book, unit, pid)
 
-        # 로컬 step*.json 삭제
+        # 로컬 캐시 json 삭제 (step*.json + preclass*/secret*/topic* 등 모든 캐시)
         cache_dir = DATA_DIR / ck
         if cache_dir.exists():
-            for f in cache_dir.glob("step*.json"):
+            for f in cache_dir.glob("*.json"):
                 try:
                     f.unlink()
                     deleted_local += 1
@@ -539,10 +539,10 @@ async def clear_cache(request: Request):
                 for p in ud.get("passages", {}).keys():
                     ck = _ck(book, u, p)
 
-                    # 로컬 삭제
+                    # 로컬 삭제 (모든 캐시 json)
                     cache_dir = DATA_DIR / ck
                     if cache_dir.exists():
-                        for f in cache_dir.glob("step*.json"):
+                        for f in cache_dir.glob("*.json"):
                             try:
                                 f.unlink()
                                 deleted_local += 1

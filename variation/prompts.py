@@ -178,6 +178,13 @@ Everything you generate must reflect that whole-passage understanding:
    - ★ ABSOLUTE WORDS BANNED: all, always, never, only, entirely, completely, totally,
      exclusively, invariably. 기출 오답 28개 중 사용 0개.
    - ★ Every distractor uses the passage's vocabulary field. Never introduce an alien topic.
+   - ★★ 다섯 선지의 **형태를 통일한다.** 전부 **관사 없는 명사구**로 시작하라 —
+     a / an / the 로 시작하지 말고, how / why / what 같은 절 형태로도 쓰지 마라.
+     위 '기출 실측 문두 명사' 목록을 보라: significance, necessity, importance, role,
+     influence, ways, methods … **35개 선지 중 관사로 시작한 것이 0개다.**
+     정답만 'the ~' 이거나 'how ~' 면 학생은 지문을 안 읽고 형태로 고른다(실측 5건:
+     the paradox that ~ / how Earle's ~ / a lifelong passion ~ / the value of ~ /
+     steps taken by ~). 5지선다가 사실상 4지선다가 된다.
    - ★ Justification test: for (2)(3)(4)(5)(6), name the sentence that refutes it.
      For (1) UNMENTIONED, state what the passage says INSTEAD. If you can do neither,
      the option is unfair — rewrite it.

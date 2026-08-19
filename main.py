@@ -579,6 +579,46 @@ async def clear_cache(request: Request):
     }
 
 
+@app.post("/api/preclass/cache-status")
+async def preclass_cache_status(request: Request):
+    """0회독(preclass) 생성 여부를 지문별로 반환.
+    body: {passages:[{book,unit,id}, ...]}
+    반환: {ok, status:{"book|unit|pid": true/false}}
+    2회독 AB 의 cache-status 와 같은 용도 — 칩에 '생성됨' 표시용.
+    """
+    _verify(request)
+    body = await request.json()
+    passages = body.get("passages", []) or []
+
+    # Supabase 에서 0회독 스텝이 있는 cache_key 집합을 한 번에 조회
+    supa_keys: set = set()
+    try:
+        import supa
+        if supa._enabled():
+            supa_keys = await supa.get_cache_keys_with_step_prefix("preclass_analysis_v")
+    except Exception as e:
+        print(f"[preclass-status] supa 조회 실패: {e}")
+
+    status = {}
+    for p in passages:
+        book = p.get("book", ""); unit = p.get("unit", ""); pid = p.get("id", "")
+        if not (book and unit and pid):
+            continue
+        ck = _ck(book, unit, pid)
+        ready = ck in supa_keys
+        if not ready:
+            # 로컬 폴백: preclass_analysis_v*.json 이 있으면 생성된 것
+            try:
+                d = DATA_DIR / ck
+                if d.exists() and any(d.glob("preclass_analysis_v*.json")):
+                    ready = True
+            except Exception:
+                pass
+        status[f"{book}|{unit}|{pid}"] = ready
+
+    return {"ok": True, "status": status}
+
+
 @app.post("/api/generate")
 async def generate(request: Request):
     _verify(request)

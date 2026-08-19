@@ -1989,7 +1989,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{prefix}{txt_hash}_var{variation_type}_s154"
+    return f"{prefix}{txt_hash}_var{variation_type}_s155"
 
 
 # ============ Supabase 캐시 ============
@@ -2239,6 +2239,10 @@ def _ensure_kr(en_sentence: str, kr_from_llm: str = "") -> str:
 
 
 # ============ 유형 A 생성 ============
+class _SkipCheck(Exception):
+    """검사를 건너뛴다는 뜻의 내부 신호 (_s155). 실패가 아니다."""
+
+
 def generate_variation_a(
     passage_text: str,
     pid: str = "?",
@@ -2534,6 +2538,14 @@ def generate_variation_a(
                     # ★ 재시도에는 앞선 실패 사유를 그대로 붙인다 (_s97).
                     #   "다시 만들어라"만 하면 같은 실수를 반복한다 — Q5 에서 사유를
                     #   돌려주니 성공률이 올랐던 것과 같은 처방이다.
+                    # ★ JSON 을 아예 안 낸 적이 있으면 그 지시부터 앞세운다 (_s155).
+                    #   실측(25년 고1 9월 23번): 두 번 연속 분석 서술만 내고 JSON 이
+                    #   없어 파싱 실패했다. 사유 목록 맨 뒤에 묻히면 안 읽는다.
+                    if _attempt and any("JSON" in x for x in _vfail):
+                        _msg += ("\n\n★★★ 지난 시도에 JSON 이 아예 없었다 ★★★\n"
+                                 "생각 과정·분석·설명을 쓰지 마라. 한 글자도 쓰지 마라.\n"
+                                 "첫 글자가 '{' 이고 마지막 글자가 '}' 여야 한다.\n"
+                                 "코드블록 표시(```)도 붙이지 마라.")
                     if _attempt and _vfail:
                         _msg += ("\n\n★★★ [이전 시도가 거부됐다] ★★★\n"
                                  "가장 흔한 이유는 **antonym 칸을 안 채운 것**이다.\n"
@@ -2601,7 +2613,16 @@ def generate_variation_a(
                     #   ★ 이 검사는 바깥 블록에도 있지만 `not is_last` 로 묶여 있어
                     #     마지막 시도에서는 꺼진다. 그래서 37번이 그대로 나갔다.
                     #     여기서 걸면 **어휘만 3회 다시 고르면 되므로** 지문이 안 빠진다.
+                    #   ★ 마지막 시도에서는 이 조건을 뺀다 (_s155).
+                    #     실측(25년 고1 9월 23번): 지문이 5문장인데 Q4 진술이 5개라
+                    #     **모든 문장이 어느 진술의 근거**다. 어느 낱말을 골라도 걸리므로
+                    #     통과할 방법이 없었다 — 9번 시도 중 3번을 이 검사가 잡아먹고
+                    #     지문이 통째로 빠졌다. 조건이 아니라 함정이 된 것이다.
+                    #     1·2차에서만 걸어 좋은 자리를 유도하고, 그래도 안 되면 통과시킨다.
+                    #     바깥 검증 블록의 같은 검사가 (is_last 가 아닐 때) Q4 를 다시 받게 한다.
                     try:
+                        if _attempt >= 2:
+                            raise _SkipCheck
                         from variation.vocab_q3 import q4_conflicts_with_answer as _q4c2
                         _evs = data.get("statements_evidence") or []
                         if _evs and isinstance(_evs[0], (list, tuple)):
@@ -2612,6 +2633,8 @@ def generate_variation_a(
                                 f"정답 자리가 Q4 진술 {'·'.join(_cf)} 의 근거 문장이다 — "
                                 f"그 문장은 학생이 보는 지문에서 뒤집혀 있어 Q4 정답이 "
                                 f"갈린다. 다른 문장의 낱말을 정답 자리로 고를 것")
+                    except _SkipCheck:
+                        print(f"[VAR][A][{pid}] Q3어휘 마지막 시도 — Q4 근거 겹침 검사 생략 (_s155)")
                     except ValueError:
                         raise
                     except Exception as _e:
@@ -2637,6 +2660,11 @@ def generate_variation_a(
                         _vok = True
                         break
                     except Exception as _ve:
+                        # ★ 사유를 반드시 남긴다 (_s155). normalize 실패만 담다 보니
+                        #   JSON 미출력·겹침 검사 실패는 기록이 없어 'Q3어휘 2회 실패 —
+                        #   사유 미기록' 이 찍혔다(실측 23번). 재시도 프롬프트도 비어 간다.
+                        if str(_ve) not in _vfail:
+                            _vfail.append(str(_ve))
                         print(f"[VAR][A][{pid}] Q3어휘 시도 {_va + 1} 실패 — {_ve}")
                 if not _vok:
                     # ★ 4문항 시험지는 만들지 않는다 (_s97).
@@ -2645,8 +2673,8 @@ def generate_variation_a(
                     data.pop("vocab_items", None)
                     data.pop("vocab_explain", None)
                     raise ValueError(
-                        "Q3어휘 2회 실패 — "
-                        + (_vfail[-1] if _vfail else "사유 미기록"))
+                        "Q3어휘 3회 실패 — "
+                        + " / ".join(_vfail[-3:] or ["사유 미기록"]))
 
             if "mismatch_count" not in data and "statements" in data:
                 data["mismatch_count"] = sum(1 for _, _, ok in data["statements"] if not ok)

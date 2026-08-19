@@ -1303,7 +1303,43 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     """캐시 키: {책}_{단원}_{번호}_{md5}_v{유형}"""
     txt_hash = hashlib.md5(passage_text.encode("utf-8")).hexdigest()[:8]
     prefix = make_cache_key_prefix(book, unit, pid)  # {책}_{단원}_{번호}_ (끝에 _ 포함)
-    # _s148 = 문항끼리 답을 흘리는 것 둘. 오늘 검수에서 제일 자주 났다.
+    # _s151 = 검사가 **조용히 꺼지는 것**을 막는다. 오늘 가장 뼈아픈 발견이다.
+    #        실측(25년 고2 9월 37·39번): 캐시 키가 _s148 이라 새 코드로 만든 게
+    #        분명한데 _s148 의 두 검사(Q5 정답 노출·Q3 정답이 빈칸 문장)가
+    #        하나도 안 걸렸다. 원인은 그 검사들이
+    #            try: from variation.vocab_q3 import ...
+    #            except Exception: pass
+    #        로 감싸여 있었던 것. generator.py 는 새 것이고 vocab_q3.py 가 옛
+    #        것이면 import 가 실패하는데, pass 가 그걸 삼켜 **검사가 통째로
+    #        안 돈 채 아무 일도 없는 것처럼** 배포된다.
+    #        → 전부 `except Exception as _e: print("⚠ 검사 건너뜀 (이름): …")` 로
+    #          바꿨다. 로그만 보면 어느 검사가 왜 안 돌았는지 바로 보인다.
+    #        ★ 교훈은 _s135·_s140 과 같다 — "검사대가 있는 줄 알았는데 없었다".
+    #          그때는 목록만 있고 부르는 자리가 없었고, 이번엔 부르다 실패한 걸
+    #          삼켰다. 실패는 시끄러워야 한다.
+    #        ★ 운영: generator.py 와 vocab_q3.py 는 **항상 같이** 올려야 한다.
+    # (구) _s150 = 내부 마커가 산출물로 새는 것을 막는다.
+    #        프롬프트는 Q5 자리를 [[[여기는 Q5 빈칸 …]]] 로 가리고 지문에는
+    #        <BLANK_A>/<BLANK_B> 를 심는다. 전부 코드 내부용이다.
+    #        실측(25년 고2 9월 37·39번): LLM 이 그 가림 문자열을 근거 인용문에
+    #        그대로 베껴 답지에 찍혔다 — 근거 “… too large for the nail, or [[[...]]]”.
+    #        선생님·학생이 보는 답지에 내부 문자열이 나온다.
+    #        지문(paragraphs)은 마커를 담는 게 정상이라 검사에서 뺀다.
+    #        닫힌 목록이라 오탐이 없다 — 정상 산출물엔 나올 수 없는 문자열이다.
+    # (구) _s149 = Q4 근거 인용문이 지문에 실제로 있어야 한다.
+    #        Q4 의 O/X 판정이 틀리는 사고가 실제로 있었다(사용자 보고).
+    #        판정 자체는 의미 판단이라 코드가 못 본다. 그런데 그 앞 단계 —
+    #        근거로 든 문장이 지문에 있기는 한가 — 는 볼 수 있고, 지어낸 근거는
+    #        판정도 대개 틀린다. 오늘 산출물 75개 근거 전수 통과(오탐 0),
+    #        일부러 지어낸 근거는 정확히 걸린다.
+    #        ★ 글자 그대로 비교하지 않는다 — 'and eventually' → 'he eventually'
+    #          처럼 살짝 바꾼 인용이 실제로 있다(2건, 둘 다 정상). 내용어 4연속
+    #          일치로 본다. 지어낸 것은 어느 4연속도 안 맞는다.
+    #        + 시험지 머리말에 학교명 출력(variation.html, 캐시 무관).
+    #        ★ 남은 층: O/X 판정이 맞는가는 여전히 코드 밖이다. _s121(B Q3
+    #          복수정답)처럼 지문과 진술만 주고 답지를 감춘 채 다시 풀려
+    #          대조하는 방법이 있다 — 호출이 지문당 1회 는다.
+    # (구) _s148 = 문항끼리 답을 흘리는 것 둘. 오늘 검수에서 제일 자주 났다.
     #        (1) Q4 진술이 Q5 빈칸 정답을 그대로 담는다 — 16지문 중 6건.
     #        실측: 진술 "Ocean Alliance was founded to protect whales and the
     #        oceans" ↔ Q5(A) 'founded Ocean Alliance to protect whales and the
@@ -1723,7 +1759,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{prefix}{txt_hash}_var{variation_type}_s148"
+    return f"{prefix}{txt_hash}_var{variation_type}_s151"
 
 
 # ============ Supabase 캐시 ============
@@ -2425,6 +2461,38 @@ def generate_variation_a(
             #   실측(능률(민) 04과 01번): 지문엔 'seems easy' 인데 Q4 '라'가
             #   "…seems easy" 이고 해설은 원문 'difficult' 를 근거로 (X) 라 했다.
             #   학생이 지문대로 읽으면 참이다. 재시도로 Q4 진술을 다시 받게 한다.
+            # ★★ 내부 마커가 답지·문항으로 새어나가면 안 된다 (_s150).
+            #   실측(25년 고2 9월 37·39번): 프롬프트가 Q5 자리를 가릴 때 쓰는
+            #   [[[여기는 Q5 빈칸 …]]] 를 LLM 이 근거 인용문에 그대로 베껴
+            #   답지에 찍혔다. 닫힌 목록이라 오탐이 없다.
+            try:
+                from variation.vocab_q3 import internal_marker_leaks as _leaks
+                _lk = _leaks(data)
+                if _lk and not is_last:
+                    _w = ", ".join(f"{p2}:{m}" for p2, m in _lk[:4])
+                    errors = list(errors) + [
+                        f"[{pid}] [CRITICAL] 내부 마커가 산출물에 남았다 ({_w}) — "
+                        f"지문을 인용할 때 [[[...]]] 같은 표시는 빼고 실제 문장만 쓸 것"]
+            except Exception as _e:
+                # ★ 조용히 넘기지 않는다 (_s151) — 아래 주석 참조
+                print(f"[VAR][A][{pid}] ⚠ 검사 건너뜀 (evidence_not_in_passage): {_e}")
+
+            # ★★ Q4 근거 인용문이 지문에 실제로 있어야 한다 (_s149).
+            #   O/X 판정이 맞는지는 코드가 못 본다. 그 앞 단계 — 근거로 든 문장이
+            #   지문에 있기는 한가 — 는 볼 수 있고, 지어낸 근거는 판정도 대개 틀린다.
+            try:
+                from variation.vocab_q3 import evidence_not_in_passage as _evc
+                _miss = _evc(data.get("statements"),
+                             data.get("statements_evidence"), en_text)
+                if _miss and not is_last:
+                    _t = "; ".join(f"{l} «{e}»" for l, e in _miss)
+                    errors = list(errors) + [
+                        f"[{pid}] [CRITICAL] Q4 근거가 지문에 없다 ({_t}) — "
+                        f"지문에 있는 문장을 그대로 인용할 것"]
+            except Exception as _e:
+                # ★ 조용히 넘기지 않는다 (_s151) — 아래 주석 참조
+                print(f"[VAR][A][{pid}] ⚠ 검사 건너뜀 (statements_leak_blanks): {_e}")
+
             # ★★ Q4 진술이 Q5 빈칸 정답을 그대로 말해주면 안 된다 (_s148).
             #   실측: 진술 "Ocean Alliance was founded to protect whales and the
             #   oceans" ↔ Q5(A) 'founded Ocean Alliance to protect whales and the
@@ -2440,8 +2508,9 @@ def generate_variation_a(
                         f"[{pid}] [CRITICAL] Q4 진술이 Q5 빈칸 정답을 그대로 담고 "
                         f"있다 ({_txt}) — 학생이 Q4 만 보고 영작 답을 안다. "
                         f"빈칸 밖 문장을 근거로 진술을 만들 것"]
-            except Exception:
-                pass
+            except Exception as _e:
+                # ★ 조용히 넘기지 않는다 (_s151) — 아래 주석 참조
+                print(f"[VAR][A][{pid}] ⚠ 검사 건너뜀 (answer_in_blank_sentence): {_e}")
 
             # ★★ Q3 정답 자리가 Q5 빈칸이 든 문장이면 판단 근거가 비어 있다 (_s148).
             try:
@@ -2451,8 +2520,9 @@ def generate_variation_a(
                         f"[{pid}] [CRITICAL] Q3 어휘 정답 단어가 Q5 빈칸과 같은 "
                         f"문장에 있다 — 그 문장의 술부가 빈칸이라 정답을 판단할 "
                         f"근거가 지문에 없다. 다른 문장에서 고를 것"]
-            except Exception:
-                pass
+            except Exception as _e:
+                # ★ 조용히 넘기지 않는다 (_s151) — 아래 주석 참조
+                print(f"[VAR][A][{pid}] ⚠ 검사 건너뜀 (q4_conflicts_with_answer): {_e}")
 
             try:
                 from variation.vocab_q3 import q4_conflicts_with_answer as _q4c
@@ -2466,8 +2536,9 @@ def generate_variation_a(
                         f"[{pid}] [CRITICAL] Q4 진술 {'·'.join(_hit)} 이(가) Q3 어휘 "
                         f"정답 문장을 근거로 삼는다 — 학생이 보는 지문은 그 자리가 "
                         f"뒤집혀 있어 정답이 갈린다. 다른 문장으로 진술을 만들 것"]
-            except Exception:
-                pass
+            except Exception as _e:
+                # ★ 조용히 넘기지 않는다 (_s151) — 아래 주석 참조
+                print(f"[VAR][A][{pid}] ⚠ 검사 건너뜀 (q4_conflicts_with_answer): {_e}")
 
             if not errors:
                 # ★ Q1 주제 정답 자리를 강 단위로 돌린다 (_s136).
@@ -2497,8 +2568,12 @@ def generate_variation_a(
                         if _vi.get("is_answer"):
                             note_answer_word(book, unit, _vi.get("original"))
                             note_answer_word(book, unit, _vi.get("shown"))
-                except Exception:
-                    pass
+                except Exception as _e:
+                    # ★ 조용히 넘기지 않는다 (_s151). vocab_q3.py 가 옛 버전이면
+                    #   import 가 실패하는데, pass 로 삼키면 검사가 통째로 안 돈 걸
+                    #   아무도 모른다. 실측: generator 만 올리고 vocab_q3 를 안 올려
+                    #   _s148 의 두 검사가 조용히 꺼진 채 배포됐다.
+                    print(f"[VAR][A][{pid}] ⚠ 검사 건너뜀 (internal_marker_leaks): {_e}")
 
                 try:
                     _to2, _tc2 = shuffle_correct_position(

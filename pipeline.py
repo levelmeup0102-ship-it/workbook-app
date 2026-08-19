@@ -4166,6 +4166,12 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     _r = _safe_post("_reconcile_vocab_pagea", lambda: _reconcile_vocab_pagea(data))
     if _r is not None: data = _r
 
+    # ★ 후처리 4.95 — 모든 마커 조작(더미it·IMPL·VOCAB보정·sync·reconcile)이 끝난 뒤
+    #   본문 번호를 최종적으로 읽는 순서대로 재정렬(①②③/ⓐⓑⓒ) + 박스 동기화.
+    #   (후처리 0의 재번호가 이후 단계들에 의해 다시 흐트러지는 문제를 여기서 최종 교정)
+    _r = _safe_post("_renumber_by_reading_order(final)", lambda: _renumber_by_reading_order(data))
+    if _r is not None: data = _r
+
     # 후처리 5 — passage_marked → passage_html 변환
     try:
         data["passage_html"] = _passage_marked_to_html(data.get("passage_marked", ""), passage)

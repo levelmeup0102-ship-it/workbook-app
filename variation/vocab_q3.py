@@ -1354,3 +1354,71 @@ def statements_leak_blanks(statements, blank_a: str, blank_b: str) -> list:
                 out.append((lab, tag))
                 break
     return out
+
+# ════════════════════════════════════════════════════════════════
+# ★ Q4 근거 인용문이 지문에 실제로 있는가 (_s149)
+#   Q4 의 O/X 판정이 틀리는 사고가 있었다. 판정 자체("이 진술이 지문과 맞나")는
+#   의미 판단이라 코드가 못 한다. 그런데 그 앞 단계는 잡힌다 —
+#   **근거로 든 문장이 지문에 있기는 한가.** 지어낸 근거는 판정도 대개 틀린다.
+#   ★ 글자 그대로 비교하지 않는다. LLM 이 인용할 때 'and eventually' →
+#     'he eventually' 처럼 살짝 바꾸거나 따옴표 종류를 바꾼다(실측 2건, 둘 다
+#     정상 인용이었다). 내용어 4연속 일치로 본다 — 지어낸 근거는 어느 4연속도
+#     안 맞고, 살짝 바꾼 인용은 다른 자리에서 맞는다.
+# ════════════════════════════════════════════════════════════════
+
+def evidence_not_in_passage(statements, evidences, passage_text) -> list:
+    """지문에 없는 근거를 든 진술의 라벨 목록."""
+    pool = _content_grams(passage_text)
+    if not pool:
+        return []
+    out = []
+    for i, ev in enumerate(evidences or []):
+        if not isinstance(ev, str) or len(ev.split()) < 5:
+            continue
+        if not (_content_grams(ev) & pool):
+            lab = ""
+            try:
+                lab = str(statements[i][0])
+            except Exception:
+                lab = "가나다라마"[i] if i < 5 else str(i + 1)
+            out.append((lab, ev.strip()[:70]))
+    return out
+
+# ════════════════════════════════════════════════════════════════
+# ★ 내부 마커가 산출물로 새어나가면 안 된다 (_s150)
+#   프롬프트는 Q5 빈칸 자리를 [[[여기는 Q5 빈칸 …]]] 로 가리고, 지문에는
+#   <BLANK_A>/<BLANK_B> 마커를 심는다. 전부 **코드 내부용**이다.
+#   실측(25년 고2 9월 37·39번): LLM 이 그 가림 문자열을 근거 인용문에 그대로
+#   베껴 답지에 찍혔다 — 근거 “… the tension force is too large for the nail,
+#   or [[[...]]]”. 선생님·학생이 보는 답지에 내부 문자열이 나온다.
+#   ★ 닫힌 목록이라 오탐이 없다. 정상 산출물에는 절대 나올 수 없는 문자열이다.
+# ════════════════════════════════════════════════════════════════
+
+_INTERNAL_MARKS = ("[[[", "]]]", "<BLANK_A>", "<BLANK_B>", "<CORE_BLANK>")
+
+
+def internal_marker_leaks(data) -> list:
+    """산출 데이터 안에 내부 마커가 남은 자리 목록 [(경로, 마커), ...].
+
+    지문(paragraphs)은 마커를 담고 있는 게 정상이므로 제외한다.
+    """
+    SKIP = {"paragraphs", "paragraphs_render", "paragraphs_marked"}
+    found = []
+
+    def walk(node, path):
+        if isinstance(node, str):
+            for m in _INTERNAL_MARKS:
+                if m in node:
+                    found.append((path, m))
+                    return
+        elif isinstance(node, dict):
+            for k, v in node.items():
+                if k in SKIP:
+                    continue
+                walk(v, f"{path}.{k}" if path else str(k))
+        elif isinstance(node, (list, tuple)):
+            for i, v in enumerate(node):
+                walk(v, f"{path}[{i}]")
+
+    walk(data, "")
+    return found

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- deploy: 최종통합 2026-08-17 (2회독캐시+etc라벨+0회독캐시버튼+활용가이드) -->
+<!-- deploy: 0회독 생성표시 추가 2026-08-17d -->
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
@@ -212,7 +212,13 @@ textarea:focus { border-color: #4A90D9; outline: none; }
             <button class="btn btn-sm" onclick="pcCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
             <button class="btn btn-sm" onclick="pcClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
             <button class="btn btn-sm" onclick="pcClearCache()" style="background:#f3e8ff;color:#6d28d9;border:1px solid #c4b5fd;">🗑️ 선택 캐시 삭제</button>
+            <button class="btn btn-sm" onclick="pcLoadCacheStatus(true)" style="background:#eee;color:#333;" title="0회독 생성 여부 다시 확인">↻ 상태 새로고침</button>
             <span style="margin-left:auto;font-size:13px;color:#666;" id="pc-sel-count">0개 선택</span>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;font-size:11px;color:#666;">
+            <span><span class="vr-cs vr-cs-ready">✅</span> 0회독 생성됨</span>
+            <span><span class="vr-cs vr-cs-none">○</span> 미생성</span>
+            <span id="pc-cs-note" style="margin-left:auto;color:#999;"></span>
           </div>
           <div id="pc-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
             <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
@@ -1835,9 +1841,55 @@ function snDownloadMerged(type, schoolName) {
 let pcSelectedPassages = new Map();
 let pcExpandedBooks = new Set();
 
+// 지문별 0회독 생성 유무: {"교재|단원|번호": true/false}
+let pcCacheStatus = {};
+let pcCacheLoading = false;
+let pcCacheLoaded = false;
+
 function pcRefreshBooks() {
   if (!PASSAGES_DATA) return;
   pcRenderBookList();
+  pcLoadCacheStatus();
+}
+
+// 0회독이 이미 생성된 지문을 서버에서 확인해 칩에 표시한다.
+async function pcLoadCacheStatus(force) {
+  if (!PASSAGES_DATA || !PASSAGES_DATA.length) return;
+  if (pcCacheLoading) return;
+  if (!force && Object.keys(pcCacheStatus).length) return;
+
+  const note = document.getElementById('pc-cs-note');
+  pcCacheLoading = true;
+  if (note) note.textContent = '생성 여부 확인 중...';
+  try {
+    const body = { passages: PASSAGES_DATA.map(p => ({ book: p.book, unit: p.unit, id: p.id })) };
+    const res = await fetch(API + '/api/preclass/cache-status', {
+      method: 'POST', headers: headers(), body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      pcCacheStatus = data.status || {};
+      pcCacheLoaded = true;
+      const ready = Object.values(pcCacheStatus).filter(Boolean).length;
+      if (note) note.textContent = `생성됨 ${ready}개`;
+    } else {
+      if (note) note.textContent = '⚠️ 생성 여부 확인 실패 (↻ 로 다시 시도)';
+    }
+  } catch (e) {
+    if (note) note.textContent = '⚠️ 생성 여부 확인 실패 (↻ 로 다시 시도)';
+  } finally {
+    pcCacheLoading = false;
+    pcRenderBookList();
+  }
+}
+
+// 칩 안에 들어갈 작은 표시 (✅ 생성됨 / ○ 미생성)
+function pcCacheMark(book, unit, id) {
+  if (!pcCacheLoaded) return '';
+  const ok = pcCacheStatus[`${book}|${unit}|${id}`];
+  return ok
+    ? '<span class="vr-cs vr-cs-ready" title="0회독 생성됨">✅</span>'
+    : '<span class="vr-cs vr-cs-none" title="0회독 미생성">○</span>';
 }
 
 function pcRenderBookList() {
@@ -1897,7 +1949,7 @@ function pcRenderBookList() {
           const isSelected = pcSelectedPassages.has(key);
           html += `<label class="ext-pid-chip ${isSelected?'selected':''}" data-book="${p.book}" data-unit="${p.unit}" data-pid="${p.id}" ondragover="chipDragOver(event)" ondrop="chipDrop(event)"><span class="chip-handle" draggable="true" ondragstart="chipDragStart(event)" ondragend="chipDragEnd(event)" title="드래그해서 순서 변경">⠿</span>
             <input type="checkbox" ${isSelected?'checked':''} onchange="pcTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">
-            ${p.id}
+            ${p.id}${pcCacheMark(p.book, p.unit, p.id)}
           </label>`;
         }
         html += '</div></div>';
@@ -1999,6 +2051,7 @@ async function pcClearCache() {
     } catch(e){}
   }
   alert(`✅ 캐시 삭제 완료! ${total}개 삭제됨.\n이제 0회독 자료 생성을 다시 누르면 새로 만들어집니다.`);
+  pcLoadCacheStatus(true);
 }
 
 async function doPreclass() {
@@ -2092,6 +2145,8 @@ async function doPreclass() {
   ).join('');
 
   btn.disabled = false;
+  // 방금 만든 지문의 '생성됨' 표시를 다시 받아온다
+  pcLoadCacheStatus(true);
 }
 
 function pcUpdateButtonLabel() {

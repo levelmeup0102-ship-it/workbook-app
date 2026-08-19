@@ -252,6 +252,9 @@ def vocab_candidates(paragraphs, blank_spans=None, min_sent_gap=1) -> list:
                 # ★ 목록 차단은 관문 한 곳에서만 (_s142) — 기능어·담화표지·구체명사
                 if blocked_reason(bare):
                     continue
+                # ★ 구동사 자리는 쓰지 않는다 (_s146) — 동사만 바꾸면 불변화사가 남는다
+                if i + 1 <= s_hi and i + 1 < len(toks) and particle_follows(toks[i + 1]):
+                    continue
                 if toks[i][:1].isupper() and i != s_lo:   # 고유명사 회피
                     continue
                 # ★ 반의어를 만들 수 있는 단어만 — 기출 정답은 전부 형용사 아니면 동사다.
@@ -430,6 +433,22 @@ _BARE_MODALS = {"must", "can", "could", "will", "would", "shall", "should",
                 "may", "might"}
 
 
+# ★ 구동사 불변화사 — 동사만 바꾸면 이게 남아 비문이 된다 (_s146)
+#   실측: 원문 'These bacteria can break down plastic.' 에서 break → decompose 로
+#   바꿔 'can decompose down plastic' 이 됐다(능률(민) 04과 02번 ④).
+#   같은 사고가 _s141 에도 있다 — 'giving up' → 'relinquishing up'.
+#   그때는 프롬프트에만 적고 검사 코드를 안 넣어서 또 샜다.
+#   ★ up/down/off/out/away/back 만 본다. in/on/over/about 은 평범한 전치사로
+#     쓰이는 일이 훨씬 많아 넣으면 멀쩡한 자리까지 걷어낸다.
+#   ★ 실측(실지문 12개 220후보): 2개(0.9%)만 줄고 5개 미만이 되는 지문은 없다.
+_PARTICLES = {"up", "down", "off", "out", "away", "back"}
+
+
+def particle_follows(next_token: str) -> bool:
+    """바로 뒤 단어가 구동사 불변화사인가."""
+    return re.sub(r"[^A-Za-z]", "", str(next_token or "")).lower() in _PARTICLES
+
+
 def modal_before_to(shown: str, next_token: str) -> bool:
     """shown 이 조동사인데 바로 뒤가 to 면 비문('must to be')."""
     w = re.sub(r"[^A-Za-z]", "", str(shown or "")).lower()
@@ -550,6 +569,11 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
         if i <= 0 or i >= len(toks):
             continue
         shown = it.get("shown") or it.get("original") or ""
+        if i + 1 < len(toks) and particle_follows(toks[i + 1]):
+            errors.append(
+                f"[{pid}] Q3 어휘 {it.get('n')}번 '{shown} {toks[i+1]}' — 원문 "
+                f"'{it.get('original')} {toks[i+1]}' 는 구동사다. 동사만 바꾸면 "
+                f"불변화사가 남아 비문이 된다")
         if i + 1 < len(toks) and modal_before_to(shown, toks[i + 1]):
             errors.append(
                 f"[{pid}] Q3 어휘 {it.get('n')}번 '{shown} to' — 조동사 뒤에는 to 가 "
@@ -674,6 +698,27 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
                       + (" (정답 자리라 치명적)" if _ans_same else ""))
 
     return errors
+
+
+def _sentence_bounds(toks) -> list:
+    """토큰 리스트를 문장 단위 (시작, 끝) 구간으로 나눈다 (_s148).
+
+    약어의 마침표는 문장 끝으로 보지 않는다 — 'p.m.' 'Ph.D.' 'U.S.' 등.
+    """
+    out, lo = [], 0
+    for i, w in enumerate(toks):
+        bare = re.sub(r'[")\]\u2019\u201d]+$', "", w)
+        if not re.search(r'[.!?]$', bare):
+            continue
+        if re.search(r'\b(?:[ap]\.m|u\.s|u\.k|u\.n|ph\.d|e\.g|i\.e|'
+                     r'dr|mr|mrs|ms|prof|jr|sr|st|vs|etc|no|vol|fig)\.$', bare, re.I):
+            continue
+        if re.fullmatch(r'[A-Za-z]\.', bare):      # 1글자 이니셜
+            continue
+        out.append((lo, i)); lo = i + 1
+    if lo < len(toks):
+        out.append((lo, len(toks) - 1))
+    return out
 
 
 def blank_token_spans(paragraphs) -> dict:
@@ -1091,6 +1136,10 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
         try:
             _tk = paragraphs[int(it.get("para"))][1].split()
             _ix = int(it.get("idx"))
+            if _ix + 1 < len(_tk) and particle_follows(_tk[_ix + 1]):
+                return _fail(f"{_no}번 '{orig} {_tk[_ix + 1]}' 는 구동사다 — 동사만 바꾸면 "
+                             f"'{it.get('shown')} {_tk[_ix + 1]}' 처럼 불변화사가 남아 비문이 된다. "
+                             f"다른 자리를 고를 것")
             if _ix + 1 < len(_tk) and modal_before_to(it.get("shown"), _tk[_ix + 1]):
                 return _fail(f"{_no}번 '{it.get('shown')} to' — 조동사 뒤에는 to 가 "
                              f"오지 않는다. 원문이 '{orig} to' 이므로 to 를 받는 말"
@@ -1193,3 +1242,115 @@ def build_vocab_fallback(paragraphs, blank_spans=None) -> Optional[list]:
     이런 걸 배포하느니 None 을 돌려주고 Q3 를 기존 핵심빈칸으로 두는 편이 낫다.
     호출부는 None 을 받으면 vocab_items 를 세팅하지 않고, 템플릿이 core_blank 로 분기한다."""
     return None
+
+# ════════════════════════════════════════════════════════════════
+# ★ Q3 정답 자리와 Q4 진술이 겹치면 정답이 갈린다 (_s147)
+#   Q4 진술·해설은 **원문 기준**으로 만들어지는데, 학생이 보는 지문은
+#   Q3 어휘로 바뀐 것이다. 동의어로 바뀐 자리는 판정이 안 갈리지만
+#   **Q3 정답 자리(반의어로 뒤집힌 곳)** 가 Q4 근거와 같으면 정반대가 된다.
+#   실측(능률(민) 04과 01번): 지문에 'Achieving these goals seems easy' 로
+#   찍혀 있는데 Q4 진술 '라'가 "…seems easy" 이고 해설은 원문 'difficult' 를
+#   근거로 (X) 거짓이라 했다. 학생이 지문대로 읽으면 참이다 — 정답 시비.
+#   덤으로 Q3 정답을 Q4 쪽에서 역산할 수도 있다(두 문항이 서로 답을 흘린다).
+# ════════════════════════════════════════════════════════════════
+
+def _key_words(sent: str) -> set:
+    """비교용 내용어 집합 (기능어·구두점 제거)."""
+    ws = re.sub(r"[^A-Za-z\s]", " ", str(sent or "")).lower().split()
+    return {w for w in ws if len(w) > 3 and w not in _VOCAB_STOP}
+
+
+def q4_conflicts_with_answer(vocab_items, paragraphs, statements_evidence) -> list:
+    """Q3 정답 자리 문장을 근거로 삼은 Q4 진술이 있으면 그 라벨 목록.
+
+    statements_evidence: Q4 각 진술의 근거 문장 리스트(원문 문장).
+    """
+    ans = next((it for it in vocab_items or [] if it.get("is_answer")), None)
+    if not ans:
+        return []
+    try:
+        toks = paragraphs[int(ans["para"])][1].split()
+        i = int(ans["idx"])
+    except Exception:
+        return []
+    # 정답 단어가 든 문장을 원문에서 떼어낸다
+    lo = i
+    while lo > 0 and not re.search(r"[.!?]$", toks[lo - 1]):
+        lo -= 1
+    hi = i
+    while hi < len(toks) - 1 and not re.search(r"[.!?]$", toks[hi]):
+        hi += 1
+    sent = " ".join(toks[lo:hi + 1])
+    key = _key_words(sent)
+    if len(key) < 3:
+        return []
+    hits = []
+    for n, ev in enumerate(statements_evidence or []):
+        ek = _key_words(ev)
+        if not ek:
+            continue
+        # 근거 문장이 정답 문장과 사실상 같은가 (내용어 70% 이상 겹침)
+        if len(key & ek) / max(1, min(len(key), len(ek))) >= 0.7:
+            hits.append("가나다라마"[n] if n < 5 else str(n + 1))
+    return hits
+
+# ════════════════════════════════════════════════════════════════
+# ★ Q3 정답 자리는 Q5 빈칸이 든 문장을 피한다 (_s148)
+#   실측(영어2 능률(오) 01과 03번):
+#     'To ③hinder them, local doctors and nurses <BLANK_B>.'
+#   밑줄과 마커가 다른 토큰이라 _s112 규칙은 안 어겼다. 그런데 술부가 통째로
+#   빈칸이라 hinder 가 틀렸는지 판단할 근거가 그 문장에 없다.
+#   ★ 금지 구역을 문장 단위로 넓히면 후보가 33% 줄어든다(실측 12지문).
+#     그건 _s112 가 되돌린 실수를 반복하는 것이다. 그래서 **정답 자리에만**
+#     건다 — 오답 넷은 동의어라 판단할 게 없으므로 빈칸 문장에 있어도 무해하다.
+# ════════════════════════════════════════════════════════════════
+
+def answer_in_blank_sentence(vocab_items, paragraphs) -> bool:
+    """Q3 정답 단어가 Q5 빈칸 마커와 같은 문장에 있으면 True."""
+    ans = next((it for it in vocab_items or [] if it.get("is_answer")), None)
+    if not ans:
+        return False
+    try:
+        toks = paragraphs[int(ans["para"])][1].split()
+        i = int(ans["idx"])
+    except Exception:
+        return False
+    for lo, hi in _sentence_bounds(toks):
+        if lo <= i <= hi:
+            return any("<BLANK_A>" in toks[k] or "<BLANK_B>" in toks[k]
+                       for k in range(lo, hi + 1))
+    return False
+
+# ════════════════════════════════════════════════════════════════
+# ★ Q4 진술이 Q5 빈칸 정답을 그대로 말해주면 안 된다 (_s148)
+#   오늘 검수에서 제일 자주 난 유형이다(16지문 중 6건).
+#     진술 "Ocean Alliance was founded to protect whales and the oceans"
+#     ↔ Q5(A) 정답 'founded Ocean Alliance to protect whales and the earth's oceans'
+#   Q4 를 먼저 읽으면 Q5 영작 답이 보인다. 배점 하나가 공짜가 된다.
+#   ★ 판정은 **내용어 4연속 일치** 로 한다. 낱말 몇 개 겹치는 것은 같은 지문이니
+#     당연하고, 그걸로 막으면 멀쩡한 진술까지 걷어낸다.
+# ════════════════════════════════════════════════════════════════
+
+def _content_grams(text: str, k: int = 4) -> set:
+    ws = [w for w in re.findall(r"[A-Za-z']+", str(text or "").lower())]
+    return {tuple(ws[i:i + k]) for i in range(len(ws) - k + 1)}
+
+
+def statements_leak_blanks(statements, blank_a: str, blank_b: str) -> list:
+    """Q5 정답을 4단어 이상 그대로 담은 Q4 진술의 라벨 목록.
+
+    statements: [(라벨, 문장, 참/거짓), ...] 또는 문자열 리스트
+    """
+    out = []
+    grams = [( "A", _content_grams(blank_a)), ("B", _content_grams(blank_b))]
+    for n, st in enumerate(statements or []):
+        txt = st[1] if isinstance(st, (list, tuple)) and len(st) > 1 else st
+        g = _content_grams(txt)
+        if not g:
+            continue
+        for tag, bg in grams:
+            if bg and (g & bg):
+                lab = "가나다라마"[n] if n < 5 else str(n + 1)
+                out.append((lab, tag))
+                break
+    return out

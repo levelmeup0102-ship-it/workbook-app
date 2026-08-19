@@ -1303,7 +1303,35 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     """캐시 키: {책}_{단원}_{번호}_{md5}_v{유형}"""
     txt_hash = hashlib.md5(passage_text.encode("utf-8")).hexdigest()[:8]
     prefix = make_cache_key_prefix(book, unit, pid)  # {책}_{단원}_{번호}_ (끝에 _ 포함)
-    # _s145 = Q3어휘를 조동사로 바꿔 뒤의 to 가 남던 것을 막는다.
+    # _s148 = 문항끼리 답을 흘리는 것 둘. 오늘 검수에서 제일 자주 났다.
+    #        (1) Q4 진술이 Q5 빈칸 정답을 그대로 담는다 — 16지문 중 6건.
+    #        실측: 진술 "Ocean Alliance was founded to protect whales and the
+    #        oceans" ↔ Q5(A) 'founded Ocean Alliance to protect whales and the
+    #        earth's oceans'. Q4 만 읽어도 영작 답이 나온다. 내용어 4연속이
+    #        겹치면 재시도 — 낱말 몇 개 겹치는 건 같은 지문이니 당연해서 안 본다.
+    #        (2) Q3 정답 단어가 Q5 빈칸과 같은 문장에 있다 — 실측 능률(오) 03번
+    #        'To ③hinder them, local doctors and nurses <BLANK_B>.' 술부가 통째로
+    #        빈칸이라 hinder 가 틀렸는지 판단할 근거가 그 문장에 없다.
+    #        ★ 금지 구역을 문장 단위로 넓히는 방법은 버렸다 — 후보가 33% 줄어
+    #          _s112 가 되돌린 실수를 반복한다(실측 12지문). **정답 자리에만** 건다.
+    #          오답 넷은 동의어라 판단할 게 없으니 빈칸 문장에 있어도 무해하다.
+    #        둘 다 관대 모드(마지막 시도)에서는 통과 — 지문을 버리는 게 더 손해다.
+    # (구) _s147 = Q4 진술이 Q3 어휘 정답 문장을 근거로 삼는 것을 막는다.
+    #        Q4 진술·해설은 원문 기준인데 학생이 보는 지문은 Q3 로 뒤집혀 있다.
+    #        실측(능률(민) 04과 01번): 지문엔 'Achieving these goals seems easy'
+    #        인데 Q4 '라'가 "…seems easy" 이고 해설은 원문 'difficult' 를 근거로
+    #        (X) 거짓이라 했다. 학생이 지문대로 읽으면 참이다 — 정답 시비가 난다.
+    #        덤으로 Q4 쪽에서 Q3 정답을 역산할 수도 있다(두 문항이 답을 흘린다).
+    #        정답 단어가 든 문장과 각 진술의 근거 문장을 내용어로 대조해 70% 이상
+    #        겹치면 재시도시킨다. 관대 모드(마지막 시도)에서는 통과시킨다 —
+    #        지문을 통째로 버리는 편이 더 손해다.
+    # (구) _s146 = Q3어휘 구동사 자리 차단. 동사만 바꾸면 불변화사가 남는다.
+    #        실측: 'These bacteria can break down plastic.' → 'can decompose down
+    #        plastic'(능률(민) 04과 02번 ④). _s141 의 'giving up' → 'relinquishing up'
+    #        과 같은 사고인데, 그때는 프롬프트에만 적고 검사 코드를 안 넣어 또 샜다.
+    #        up/down/off/out/away/back 뒤따르는 자리를 세 경로 모두에서 뺀다.
+    #        실측(실지문 12개 220후보): 2개(0.9%)만 줄고 5개 미만 지문 없음.
+    # (구) _s145 = Q3어휘를 조동사로 바꿔 뒤의 to 가 남던 것을 막는다.
     #        실측: 'Participants need to be…' → 'Participants must to be…'
     #        (25년 고1 9월 28번 ⑤). 조동사 뒤에는 to 가 오지 않는다.
     #        ⑤는 오답 자리인데 학생 눈엔 명백한 비문이라 그걸 답으로 찍는다.
@@ -1695,7 +1723,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{prefix}{txt_hash}_var{variation_type}_s145"
+    return f"{prefix}{txt_hash}_var{variation_type}_s148"
 
 
 # ============ Supabase 캐시 ============
@@ -2391,6 +2419,56 @@ def generate_variation_a(
             #   프롬프트가 지고, 코드는 개입하지 않는다.
 
             errors = validate_a(data, en_text, pid, lenient=is_last)
+
+            # ★★ Q3 정답 자리 문장을 Q4 진술이 근거로 삼으면 정답이 갈린다 (_s147).
+            #   Q4 진술·해설은 원문 기준인데 학생이 보는 지문은 Q3 로 뒤집혀 있다.
+            #   실측(능률(민) 04과 01번): 지문엔 'seems easy' 인데 Q4 '라'가
+            #   "…seems easy" 이고 해설은 원문 'difficult' 를 근거로 (X) 라 했다.
+            #   학생이 지문대로 읽으면 참이다. 재시도로 Q4 진술을 다시 받게 한다.
+            # ★★ Q4 진술이 Q5 빈칸 정답을 그대로 말해주면 안 된다 (_s148).
+            #   실측: 진술 "Ocean Alliance was founded to protect whales and the
+            #   oceans" ↔ Q5(A) 'founded Ocean Alliance to protect whales and the
+            #   earth's oceans'. Q4 를 먼저 읽으면 영작 답이 보인다.
+            try:
+                from variation.vocab_q3 import statements_leak_blanks as _leak
+                _hits = _leak(data.get("statements"),
+                              str(data.get("blank_A") or ""),
+                              str(data.get("blank_B") or ""))
+                if _hits and not is_last:
+                    _txt = ", ".join(f"{l}→Q5({t})" for l, t in _hits)
+                    errors = list(errors) + [
+                        f"[{pid}] [CRITICAL] Q4 진술이 Q5 빈칸 정답을 그대로 담고 "
+                        f"있다 ({_txt}) — 학생이 Q4 만 보고 영작 답을 안다. "
+                        f"빈칸 밖 문장을 근거로 진술을 만들 것"]
+            except Exception:
+                pass
+
+            # ★★ Q3 정답 자리가 Q5 빈칸이 든 문장이면 판단 근거가 비어 있다 (_s148).
+            try:
+                from variation.vocab_q3 import answer_in_blank_sentence as _abs
+                if _abs(data.get("vocab_items"), data.get("paragraphs")) and not is_last:
+                    errors = list(errors) + [
+                        f"[{pid}] [CRITICAL] Q3 어휘 정답 단어가 Q5 빈칸과 같은 "
+                        f"문장에 있다 — 그 문장의 술부가 빈칸이라 정답을 판단할 "
+                        f"근거가 지문에 없다. 다른 문장에서 고를 것"]
+            except Exception:
+                pass
+
+            try:
+                from variation.vocab_q3 import q4_conflicts_with_answer as _q4c
+                _ev = [e for _, _, e in (data.get("statements_evidence") or [])] \
+                    if data.get("statements_evidence") and isinstance(
+                        (data.get("statements_evidence") or [None])[0], (list, tuple)) \
+                    else (data.get("statements_evidence") or [])
+                _hit = _q4c(data.get("vocab_items"), data.get("paragraphs"), _ev)
+                if _hit and not is_last:
+                    errors = list(errors) + [
+                        f"[{pid}] [CRITICAL] Q4 진술 {'·'.join(_hit)} 이(가) Q3 어휘 "
+                        f"정답 문장을 근거로 삼는다 — 학생이 보는 지문은 그 자리가 "
+                        f"뒤집혀 있어 정답이 갈린다. 다른 문장으로 진술을 만들 것"]
+            except Exception:
+                pass
+
             if not errors:
                 # ★ Q1 주제 정답 자리를 강 단위로 돌린다 (_s136).
                 #   검증을 다 통과한 뒤에 섞어야 안전하다 — 앞서 섞으면

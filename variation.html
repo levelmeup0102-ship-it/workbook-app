@@ -367,6 +367,8 @@ body {
 <body>
 
 {% for item in passages %}
+{# ★ 안내문(수능 27·28번)은 주제·일치·빈칸 3문항 (_s152) #}
+{% set _notice = (item.data.layout == 'notice') %}
 <div class="q-page">
   <div class="hdr">
     <span class="hdr-title">
@@ -384,7 +386,7 @@ body {
     {% set _paras = item.data.paragraphs_render or item.data.paragraphs %}
     {% for para in _paras %}
       <div class="psg-chunk">
-        <span class="chunk-label">{{ para[0] }}</span>{{ para[1] | replace("<BLANK_A>", '<span class="ublank">(A)</span>') | replace("<BLANK_B>", '<span class="ublank">(B)</span>') | safe }}
+        {% if not _notice %}<span class="chunk-label">{{ para[0] }}</span>{% endif %}{{ para[1] | replace("<BLANK_A>", '<span class="ublank">(A)</span>') | replace("<BLANK_B>", '<span class="ublank">(B)</span>') | safe }}
       </div>
     {% endfor %}
   </div>
@@ -392,7 +394,7 @@ body {
   <div class="two-col">
 
     <div class="col-left">
-      <div class="col-header col-l-hdr">[ 객관식 — 내용 이해 ]</div>
+      <div class="col-header col-l-hdr">[ {{ '안내문 — 주제 파악' if _notice else '객관식 — 내용 이해' }} ]</div>
 
       <div class="q-title"><span class="q-num">1</span> 다음 글의 주제로 가장 적절한 것은?</div>
       <div>
@@ -401,6 +403,7 @@ body {
         {% endfor %}
       </div>
 
+      {% if not _notice %}
       <div class="q-title"><span class="q-num">2</span> 주어진 글 다음에 이어질 순서로 가장 적절한 것은?</div>
       <div class="opts-order">
         <div class="opt"><span class="opt-num">①</span> (A)-(C)-(B)</div>
@@ -409,6 +412,7 @@ body {
         <div class="opt"><span class="opt-num">④</span> (C)-(A)-(B)</div>
         <div class="opt"><span class="opt-num">⑤</span> (C)-(B)-(A)</div>
       </div>
+      {% endif %}
 
       {% if item.data.vocab_items %}
       <div class="q-title"><span class="q-num core">3</span> 다음 글의 밑줄 친 부분 중, 문맥상 낱말의 쓰임이 적절하지 <span style="color:var(--red); text-decoration:underline; font-weight:bold;">않은</span> 것은?</div>
@@ -430,7 +434,7 @@ body {
     <div class="col-right">
       <div class="col-header col-r-hdr">[ 일치판단 / 빈칸 서술 ]</div>
 
-      <div class="q-title"><span class="q-num">4</span> 다음 글의 내용과 일치하지 <span style="color:var(--red); text-decoration:underline; font-weight:bold;">않는</span> 진술의 개수는?</div>
+      <div class="q-title"><span class="q-num">{{ 2 if _notice else 4 }}</span> {{ '다음 안내문의' if _notice else '다음 글의' }} 내용과 일치하지 <span style="color:var(--red); text-decoration:underline; font-weight:bold;">않는</span> 진술의 개수는?</div>
       <div class="statements">
         {% for stmt in item.data.statements %}
         <div class="stmt-item"><span class="stmt-label">{{ stmt[0] }}.</span> {{ stmt[1] }}</div>
@@ -444,7 +448,7 @@ body {
         <div class="opt"><span class="opt-num">⑤</span> 5개</div>
       </div>
 
-      <div class="q-title"><span class="q-num write">5</span> 빈칸 (A), (B)에 들어갈 말을 &lt;보기&gt;의 단어를 모두 사용하여 완성하시오.</div>
+      <div class="q-title"><span class="q-num write">{{ 3 if _notice else 5 }}</span> 빈칸 (A), (B)에 들어갈 말을 &lt;보기&gt;의 단어를 모두 사용하여 완성하시오.</div>
       <div class="bogi">
         <span class="bogi-label">&lt;보기&gt;</span>{{ item.data.bogi | join(' / ') }}
       </div>
@@ -470,6 +474,7 @@ body {
   </div>
 
   {% for item in passages %}
+    {% set _notice = (item.data.layout == 'notice') %}
     <div class="ans-block">
       <div class="ans-block-title">▶ {{ item.label }}</div>
 
@@ -482,10 +487,12 @@ body {
         {% endif %}
       </div>
 
+      {% if not _notice %}
       <div class="ans-row-c">
         <b class="q-name">Q2.순서</b>
         <span class="ans-val" style="background:none; padding-left:0;">{{ ['①','②','③','④','⑤'][item.data.order_correct] }} <span style="white-space:nowrap;">{{ ['(A)-(C)-(B)','(B)-(A)-(C)','(B)-(C)-(A)','(C)-(A)-(B)','(C)-(B)-(A)'][item.data.order_correct] }}</span></span>
       </div>
+      {% endif %}
 
       {% if item.data.vocab_items %}
       {% set _va = (item.data.vocab_items | selectattr('is_answer') | list | first) %}
@@ -513,17 +520,17 @@ body {
       {% endif %}
 
       <div class="ans-row-c">
-        <b class="q-name">Q4.불일치</b>
+        <b class="q-name">{{ 'Q2.불일치' if _notice else 'Q4.불일치' }}</b>
        <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.mismatch_count - 1] if (item.data.mismatch_count is number and 1 <= item.data.mismatch_count <= 5) else '-' }}</span>
 <span class="ans-text">{{ item.data.mismatch_count }}개 — {% for s in item.data.statements if not s[2] %}{{ s[0] }}{% if not loop.last %}, {% endif %}{% endfor %}</span>        <span class="ans-note">{% for stmt in item.data.statements %}{% set kr = item.data.statements_kr[loop.index0] if item.data.statements_kr and (item.data.statements_kr|length > loop.index0) else ['',''] %}{% set ev = item.data.statements_evidence[loop.index0] if item.data.statements_evidence and (item.data.statements_evidence|length > loop.index0) else '' %}<b>{{ stmt[0] }}</b>({{ 'O' if stmt[2] else 'X' }}){% if ev %} 근거: "{{ ev }}"{% endif %}{% if kr[1] %} — {{ kr[1] }}{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</span>
       </div>
 
       <div class="ans-row-c">
-        <b class="q-name">Q5(A)</b>
+        <b class="q-name">{{ 'Q3(A)' if _notice else 'Q5(A)' }}</b>
         <span class="ans-text"><span class="ans-write">{{ item.data.blank_A }}</span></span>
       </div>
       <div class="ans-row-c">
-        <b class="q-name">Q5(B)</b>
+        <b class="q-name">{{ 'Q3(B)' if _notice else 'Q5(B)' }}</b>
         <span class="ans-text"><span class="ans-write">{{ item.data.blank_B }}</span></span>
       </div>
     </div>

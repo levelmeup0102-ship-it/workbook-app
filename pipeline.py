@@ -4004,9 +4004,9 @@ def _apply_marked_trim(data: dict, passage: str) -> dict:
 def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str = "") -> dict:
     """0회독 — 수업 전 4페이지 완전 분석 (선생님 본인 수업 준비용)."""
     # v21: 캐시 로드 후 어휘 마커 보정 마이그레이션 추가
-    cached = load_step(passage_dir, "preclass_analysis_v24")
+    cached = load_step(passage_dir, "preclass_analysis_v25")
     if cached:
-        _safe_print("  ✅ preclass_analysis_v24 캐시 사용")
+        _safe_print("  ✅ preclass_analysis_v25 캐시 사용")
         # ★ v24 마이그레이션 — 캐시도 항상 지문↔상세 동기화 실행
         # 옛 캐시에 지문 마커 3개 / 상세 12개 같은 불일치 있을 수 있음
         try:
@@ -4026,11 +4026,18 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
             cached = _sync_grammar_boxes_with_passage(cached)
             cached = _sync_vocab_with_passage(cached)
 
+            # ★ v25 — 본문 번호를 읽는 순서대로 재번호(①②③/ⓐⓑⓒ) + 박스 동기화
+            #   (옛 캐시도 여기서 자동 보정 — 캐시 삭제/버전업 없이 재생성만으로 고쳐짐)
+            try:
+                cached = _renumber_by_reading_order(cached)
+            except Exception as _e_rn:
+                _safe_print(f"  ⚠️ 재번호 스킵(캐시): {_e_rn}")
+
             # 원본(병합 전)을 먼저 저장 — step_cache 는 AI 원본만 보관 (오염 방지)
             cached["passage_html"] = _passage_marked_to_html(
                 cached.get("passage_marked", ""), passage
             )
-            save_step(passage_dir, "preclass_analysis_v24", cached)
+            save_step(passage_dir, "preclass_analysis_v25", cached)
 
             # ★ 강사 분석지(sheet) 병합 — 화면용만 병합, passage_html 을 병합본으로 교체
             _disp = _merge_teacher_sheet(cached, passage_dir.name, passage)
@@ -4078,6 +4085,11 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     #   전부 깨끗한(원문 경계) 본문 위에서 동작한다.
     _r = _safe_post("_apply_marked_trim", lambda: _apply_marked_trim(data, passage))
     if _r is not None: data = _r
+
+    # ★ 후처리 0 — 본문 마커를 읽는 순서대로 재번호(①②③ / ⓐⓑⓒ) + 박스/노트 동기화
+    #   (AI가 본문 번호를 뒤죽박죽/중복으로 매겨 설명과 어긋나는 문제 교정)
+    _r0 = _safe_post("_renumber_by_reading_order", lambda: _renumber_by_reading_order(data))
+    if _r0 is not None: data = _r0
 
     # 후처리 1 — 박스 균형 자동 보정
     _r = _safe_post("_rebalance_grammar_boxes", lambda: _rebalance_grammar_boxes(data))
@@ -4175,7 +4187,7 @@ def generate_preclass_analysis(passage: str, passage_dir: Path, translation: str
     if _r is not None: data = _r
 
     # 원본(병합 전)을 step_cache 에 저장 — AI 원본만 보관 (오염 방지)
-    save_step(passage_dir, "preclass_analysis_v24", data)
+    save_step(passage_dir, "preclass_analysis_v25", data)
 
     # ★ 강사 분석지(sheet) 병합 — 화면용만 병합, passage_html 을 병합본으로 교체
     _disp = _merge_teacher_sheet(data, passage_dir.name, passage)
@@ -4615,6 +4627,111 @@ def _sync_vocab_with_passage(data: dict) -> dict:
     어휘 마커 추가는 _ensure_vocab_markers 가 이미 처리(word 로 본문 검색).
     따라서 여기서는 노트를 자르지 않고 그대로 보존만 한다.
     """
+    return data
+
+
+def _renumber_by_reading_order(data: dict) -> dict:
+    """본문(passage_marked)에서 GRAMMAR/VOCAB 마커를 '나오는 순서'대로
+    ①②③… / ⓐⓑⓒ… 로 다시 번호 매기고, 그 매핑을 grammar_notes·grammar_p1/p2·
+    vocab_notes·vocab 박스에도 똑같이 적용해 본문 번호와 설명을 일치시킨다.
+
+    - AI가 본문에 번호를 순서 없이/중복으로 붙여도, 최종 출력은 항상 읽는 순서.
+    - 매핑 키 = AI가 붙인 원래 번호(old). old→new 로 양쪽을 동시에 갱신 → 짝 유지.
+    - 어떤 이유로든 실패하면 예외를 던져 상위에서 원본 유지(폴백).
+    """
+    import re as _re
+    marked = data.get("passage_marked", "") or ""
+    if not marked:
+        return data
+
+    CN = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
+    CA = "ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞ"
+
+    def _num_to_circle(s):
+        s = (s or "").strip()
+        if s and s[0] in CN: return s[0]
+        try:
+            n = int(s)
+            if 1 <= n <= 20: return CN[n-1]
+        except (ValueError, TypeError):
+            pass
+        return s
+
+    def _alpha_to_circle(s):
+        s = (s or "").strip()
+        if s and s[0] in CA: return s[0]
+        if len(s) == 1 and 'a' <= s.lower() <= 'o':
+            return CA[ord(s.lower()) - ord('a')]
+        return s
+
+    # 1) 본문에서 마커를 등장 순서대로 수집하며 old→new 매핑 구성
+    gpat = _re.compile(r'\[\[GRAMMAR:n=([0-9]+|[' + CN + r'])((?:,split=\d+)?)\]\]')
+    vpat = _re.compile(r'\[\[VOCAB:l=([a-oA-O]|[' + CA + r'])\]\]')
+
+    g_map = {}   # old_circle -> new_circle
+    g_seq = 0
+    def _g_sub(m):
+        nonlocal g_seq
+        old = _num_to_circle(m.group(1)); extra = m.group(2) or ""
+        if old not in g_map:
+            g_seq += 1
+            g_map[old] = CN[g_seq-1] if g_seq-1 < len(CN) else old
+        return f'[[GRAMMAR:n={g_map[old]}{extra}]]'
+    new_marked = gpat.sub(_g_sub, marked)
+
+    v_map = {}
+    v_seq = 0
+    def _v_sub(m):
+        nonlocal v_seq
+        old = _alpha_to_circle(m.group(1))
+        if old not in v_map:
+            v_seq += 1
+            v_map[old] = CA[v_seq-1] if v_seq-1 < len(CA) else old
+        return f'[[VOCAB:l={v_map[old]}]]'
+    new_marked = vpat.sub(_v_sub, new_marked)
+
+    # 변경 없으면(이미 순서대로) 그대로
+    if not g_map and not v_map:
+        return data
+
+    data["passage_marked"] = new_marked
+
+    # 2) grammar 쪽 num 갱신 (grammar_notes + grammar_p1/p2 박스)
+    def _remap_num(box):
+        if isinstance(box, dict):
+            old = _num_to_circle(box.get("num"))
+            if old in g_map:
+                box = dict(box); box["num"] = g_map[old]
+        return box
+
+    if isinstance(data.get("grammar_notes"), list):
+        data["grammar_notes"] = [_remap_num(b) for b in data["grammar_notes"]]
+        data["grammar_notes"].sort(key=lambda b: CN.find(_num_to_circle(b.get("num"))) if isinstance(b, dict) and _num_to_circle(b.get("num")) in CN else 999)
+    for pg in ("grammar_p1", "grammar_p2"):
+        blk = data.get(pg)
+        if isinstance(blk, dict):
+            for side in ("left", "right"):
+                if isinstance(blk.get(side), list):
+                    blk[side] = [_remap_num(b) for b in blk[side]]
+
+    # 3) vocab 쪽 letter 갱신 (vocab_notes + vocab 박스)
+    def _remap_letter(box):
+        if isinstance(box, dict):
+            old = _alpha_to_circle(box.get("letter"))
+            if old in v_map:
+                box = dict(box); box["letter"] = v_map[old]
+        return box
+
+    if isinstance(data.get("vocab_notes"), list):
+        data["vocab_notes"] = [_remap_letter(b) for b in data["vocab_notes"]]
+        data["vocab_notes"].sort(key=lambda b: CA.find(_alpha_to_circle(b.get("letter"))) if isinstance(b, dict) and _alpha_to_circle(b.get("letter")) in CA else 999)
+    for pg in ("vocab_p1", "vocab_p2", "vocab"):
+        blk = data.get(pg)
+        if isinstance(blk, dict):
+            for side in ("left", "right"):
+                if isinstance(blk.get(side), list):
+                    blk[side] = [_remap_letter(b) for b in blk[side]]
+
     return data
 
 

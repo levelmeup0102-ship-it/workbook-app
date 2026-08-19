@@ -603,6 +603,61 @@ def _cut_before_punct(sub: str, min_w: int = 4, sentence_only: bool = False) -> 
     return t if len(t.split()) >= min_w else ""
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# 빈칸이 절 경계를 넘는가 (_s153)
+#
+#   실측(공통영어2 비상(홍) 1과 6번) — 한 지문에서 두 빈칸이 다 이랬다:
+#     (A) "map, each gap you fill and dot you"
+#         원문: Since you've designed your own [map], [each gap you fill and dot you] make …
+#         종속절의 목적어부터 시작해 주절 주어까지 먹고 동사 make 만 밖에 남겼다.
+#         학생이 보는 것: "your own ⬜ make" — 뼈대가 안 남아 복원 불가.
+#     (B) "up to you, but your dot map"
+#         원문: … is [up to you], but [your dot map] should show …
+#         등위접속사 but 이 빈칸 안에 숨어 문장이 둘이라는 것조차 안 보인다.
+#
+#   기출 23문항 115선지 실측: **두 절에 걸친 빈칸이 하나도 없다.** 전부 성분 하나다.
+#
+#   ★ 쉼표 자체를 막지 않는다. 그건 _s94·_s95 에서 되돌린 실수다 —
+#     'claimed the original, straight border of 1899' 나
+#     'uses not one, but multiple routes' 는 좋은 빈칸이다.
+#     막는 것은 **쉼표 뒤에서 새 절이 시작되는 경우**뿐이다.
+
+_CLAUSE_COORD = {"but", "so", "yet", "nor"}
+_CLAUSE_SUBORD = {"because", "although", "though", "while", "since", "when",
+                  "whenever", "if", "unless", "whereas", "which", "who", "whom",
+                  "whose", "that", "where"}
+# 쉼표 바로 뒤의 한정사·대명사는 거의 언제나 새 절(또는 동격절)의 시작이다.
+_CLAUSE_HEAD = {"i", "you", "he", "she", "it", "we", "they",
+                "each", "every", "this", "these", "those",
+                "my", "your", "his", "her", "its", "our", "their"}
+# not A but B / either A or B 는 상관접속이지 절 접속이 아니다.
+_CORRELATIVE = {"not", "either", "neither", "both"}
+
+
+def crosses_clause(span: str) -> bool:
+    """빈칸 구절이 절 경계를 넘으면 True (_s153)."""
+    toks = str(span or "").split()
+    for i, t in enumerate(toks[:-1]):
+        if not t.endswith(","):
+            continue
+        nxt = re.sub(r"[^A-Za-z']", "", toks[i + 1]).lower()
+        if not nxt:
+            continue
+        before = {re.sub(r"[^A-Za-z']", "", w).lower() for w in toks[:i + 1]}
+        if nxt in _CLAUSE_COORD and not (before & _CORRELATIVE):
+            return True
+        if nxt in _CLAUSE_SUBORD:
+            return True
+        if nxt in _CLAUSE_HEAD:
+            return True
+        if nxt in ("and", "or") and not (before & _CORRELATIVE):
+            # ', and she eventually became' 처럼 뒤에 주어+동사가 오면 절 접속이다.
+            tail = [re.sub(r"[^A-Za-z']", "", w).lower() for w in toks[i + 2:i + 4]]
+            if tail and tail[0] in _CLAUSE_HEAD:
+                return True
+    return False
+
+
 def _q5_candidates(ptext: str, min_w: int = 4, max_w: int = 8) -> list:
     """단락에서 '문장 중간 연속 구절'(verbatim) 후보 생성. 가운데 우선.
     문장경계/따옴표 포함 제외, 조동사 시작 제외, 단락 내 유일 등장만.
@@ -628,6 +683,10 @@ def _q5_candidates(ptext: str, min_w: int = 4, max_w: int = 8) -> list:
                 if not sub:
                     continue
                 if not _quote_ok(sub, allow_comma=True):
+                    continue
+                # ★ 절 경계를 넘는 구절은 뺀다 (_s153). 실측: 후보 8.3% 감소,
+                #   후보 0 단락 0개 — 소진 위험 없이 품질만 오른다.
+                if crosses_clause(sub):
                     continue
                 if not _clean_boundary_ok(sub, ptext, strict=strict):
                     continue
@@ -936,6 +995,15 @@ def validate_llm_q5_spans(paragraphs, span_a: str, span_b: str, pid: str = "?") 
     a = _cut_before_punct(a, 4, sentence_only=True) or a
     b = _cut_before_punct(b, 4, sentence_only=True) or b
 
+    # ★ 절 경계를 넘는 구절 거부 (_s153). LLM 픽이 유효하면 코드 픽보다 먼저
+    #   채택되므로 여기서 안 걸면 _q5_candidates 에 넣은 규칙이 통째로 우회된다.
+    #   실측(공통영어2 비상(홍) 1과 6번): 두 빈칸이 다 절을 걸쳐 'your own ⬜ make',
+    #   'is ⬜ should show' 가 나갔다. 거부 사유는 재시도 프롬프트로 돌아간다.
+    for v, lab in ((a, "A"), (b, "B")):
+        if crosses_clause(v):
+            return _fail(f"({lab}) '{v[:45]}' 가 절 경계를 넘는다 — "
+                         f"쉼표 뒤에서 새 절이 시작된다. 성분 하나만 고를 것")
+
     # 단어 중간에서 잘린 구절 거부 ('arbitrarily' → 'arily')
     def _word_bounded(v, whole):
         k = whole.find(v)
@@ -1065,6 +1133,8 @@ def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?
         #   _clean_boundary_ok가 통째로 우회돼, 코드 픽에만 걸린 경계 규칙이 무의미해진다.
         #   (거부되면 아래에서 코드 픽 후보가 대신 쓰이므로 항목 누락은 안 생긴다)
         if not _clean_boundary_ok(v, texts[idx], strict=True):
+            return None
+        if crosses_clause(v):          # ★ _s153
             return None
         return v
 
@@ -1915,7 +1985,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{prefix}{txt_hash}_var{variation_type}_s152"
+    return f"{prefix}{txt_hash}_var{variation_type}_s153"
 
 
 # ============ Supabase 캐시 ============
@@ -2648,6 +2718,25 @@ def generate_variation_a(
                 else:
                     print(f"[VAR][A][{pid}] SHUF {_tag}(loop): SKIP "
                           f"(opt={type(data.get(_ok)).__name__}, cor={type(data.get(_ck)).__name__})")
+
+            # ★★ Q1 주제 선지의 관사를 통일한다 (_s153).
+            #   기출 35개 선지 중 관사로 시작한 것은 0개다(프롬프트 3-0 문두 명사 목록).
+            #   다섯 중 하나만 'the ~' 면 학생은 지문을 안 읽고 그것을 고른다 — 실측 5건.
+            #   ★ **소수파일 때만** 뗀다. 다섯 개가 다 관사로 시작하면 그건 통일된 것이니
+            #     건드리지 않는다. 거르는 게 아니라 맞추는 것이므로 항목이 빠질 일이 없다.
+            try:
+                _to = data.get("topic_options")
+                if isinstance(_to, list) and len(_to) == 5:
+                    _art = [i for i, o in enumerate(_to)
+                            if re.match(r"^\s*(?:a|an|the)\s+\S", str(o), re.I)]
+                    if 1 <= len(_art) <= 2:
+                        for i in _art:
+                            _new = re.sub(r"^\s*(?:a|an|the)\s+", "", str(_to[i]), flags=re.I)
+                            print(f"[VAR][A][{pid}] Q1 선지 관사 통일: "
+                                  f"'{str(_to[i])[:40]}' → '{_new[:40]}'")
+                            _to[i] = _new
+            except Exception as _ae:
+                print(f"[VAR][A][{pid}] ⚠ 검사 건너뜀 (Q1 선지 관사 통일): {_ae}")
 
             # ★ 렌더링용 단락 — 원본 paragraphs는 그대로 두고 밑줄만 얹은 사본을 만든다.
             #   검증은 원본으로 하고 화면에는 이걸 쓴다. (Q2 복원 검증 무영향)

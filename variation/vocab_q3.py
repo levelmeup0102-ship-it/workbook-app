@@ -1136,6 +1136,20 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
         try:
             _tk = paragraphs[int(it.get("para"))][1].split()
             _ix = int(it.get("idx"))
+            # ★★ idx 는 LLM 이 스스로 적은 값이라 틀릴 수 있다 (_s156).
+            #   실측(25년 고1 9월 23번): original='clear'(단락 안 21번째)인데 LLM 이
+            #   27을 적었다. 27 뒤는 'away' 라 코드가 'clear away 는 구동사다'로
+            #   거부했다 — 지문엔 'clear view' 다. 멀쩡한 자리가 세 번 버려졌다.
+            #   → 그 자리 낱말이 original 과 다르면, 단락에서 찾아 바로잡는다.
+            #     유일하게 못 찾으면 이 검사는 건너뛴다(틀린 자리로 거부하지 않는다).
+            def _bare(w):
+                return re.sub(r"[^A-Za-z']", "", str(w or "")).lower()
+            if not (0 <= _ix < len(_tk)) or _bare(_tk[_ix]) != _bare(orig):
+                _hits = [k for k, w in enumerate(_tk) if _bare(w) == _bare(orig)]
+                if len(_hits) == 1:
+                    _ix = _hits[0]
+                else:
+                    raise _IdxUnknown
             if _ix + 1 < len(_tk) and particle_follows(_tk[_ix + 1]):
                 return _fail(f"{_no}번 '{orig} {_tk[_ix + 1]}' 는 구동사다 — 동사만 바꾸면 "
                              f"'{it.get('shown')} {_tk[_ix + 1]}' 처럼 불변화사가 남아 비문이 된다. "
@@ -1144,6 +1158,8 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
                 return _fail(f"{_no}번 '{it.get('shown')} to' — 조동사 뒤에는 to 가 "
                              f"오지 않는다. 원문이 '{orig} to' 이므로 to 를 받는 말"
                              f"(have/need/ought 등)로 고르거나 다른 자리를 고를 것")
+        except _IdxUnknown:
+            pass          # 자리를 못 정하면 이 검사만 건너뛴다 (_s156)
         except Exception:
             pass
 
@@ -1422,3 +1438,37 @@ def internal_marker_leaks(data) -> list:
 
     walk(data, "")
     return found
+
+
+class _IdxUnknown(Exception):
+    """LLM 이 준 idx 를 신뢰할 수 없어 위치 기반 검사를 건너뛴다는 신호 (_s156)."""
+
+
+def q4_conflict_unsatisfiable(paragraphs, statements_evidence) -> bool:
+    """Q4 근거가 지문의 **모든 문장**을 덮으면 True (_s156).
+
+    q4_conflicts_with_answer 는 '정답 자리를 Q4 근거 문장 밖에서 고르라'는 조건이다.
+    그런데 짧은 지문에서는 그럴 자리가 아예 없다.
+    실측(25년 고1 9월 23번): 지문 5문장 / Q4 진술 5개 → 다섯 문장이 다 근거다.
+    어느 낱말을 골라도 걸리므로 조건이 아니라 함정이 된다. 어휘 9번, 바깥 3번을
+    통째로 잡아먹고 지문이 빠졌다.
+    → 덮이지 않은 문장이 하나도 없으면 이 검사를 아예 걸지 않는다.
+    """
+    evs = [ _key_words(e) for e in (statements_evidence or []) if e ]
+    if not evs:
+        return False
+    free = 0
+    for p in (paragraphs or []):
+        try:
+            toks = p[1].split()
+        except Exception:
+            continue
+        for lo, hi in _sentence_bounds(toks):
+            key = _key_words(" ".join(toks[lo:hi + 1]))
+            if len(key) < 3:
+                continue
+            covered = any(
+                len(key & ek) / max(1, min(len(key), len(ek))) >= 0.7 for ek in evs if ek)
+            if not covered:
+                free += 1
+    return free == 0

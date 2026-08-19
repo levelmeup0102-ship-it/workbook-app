@@ -29,7 +29,10 @@ src = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 tree = ast.parse(src)
 LISTS = {"_VOCAB_STOP", "_CONCRETE", "_DISCOURSE_MARKER"}
 for node in ast.walk(tree):
-    if isinstance(node, ast.FunctionDef) and node.name not in ("blocked_reason", "is_discourse_marker"):
+    # _key_words 는 밑줄 자격을 정하지 않는다 — 문장끼리 비교할 때 기능어를 걷어낼 뿐이라
+    # 관문과 목적이 다르다 (_s147). 자격 판정 함수가 아니므로 예외.
+    _EXEMPT = ("blocked_reason", "is_discourse_marker", "_key_words")
+    if isinstance(node, ast.FunctionDef) and node.name not in _EXEMPT:
         used = {n.id for n in ast.walk(node) if isinstance(n, ast.Name)} & LISTS
         check(not used, f"{node.name}() 이 관문을 안 거치고 {sorted(used)} 를 직접 본다")
 
@@ -136,6 +139,48 @@ for ph, want_ok in [("got a little rush of excitement, knowing I", False),
                     ("makes the whole thing work for it", True)]:
     ok = G._clean_boundary_ok(ph, ph + " was there", strict=False)
     check(ok == want_ok, f"경계 판정 '{ph}' → {'허용' if ok else '거부'} (기대 {'허용' if want_ok else '거부'})")
+
+
+# ── 8. 구동사 불변화사 (_s146) ───────────────────────────────
+_pt = "These bacteria can break down plastic quickly and safely every single day"
+_tk = _pt.split(); _ix = _tk.index("break")
+_items = [dict(n=k+1, para=0, idx=_ix if k == 0 else 6+k,
+               original=_tk[_ix] if k == 0 else _tk[6+k],
+               shown="decompose" if k == 0 else f"z{k}word",
+               antonym=f"a{k}", is_answer=(k == 0)) for k in range(5)]
+check(any("구동사" in e for e in V.validate_vocab(_items, [("A", _pt)], pid="T")),
+      "validate_vocab 이 'decompose down' 을 안 잡았다")
+check(V.particle_follows("down") and V.particle_follows("up.") and not V.particle_follows("the"),
+      "particle_follows 판정이 이상하다")
+# 코드 픽도 구동사 자리를 안 낸다
+_c = V.vocab_candidates([("A", "Intro sentence here for padding. " + _pt + ".")])
+check(all(x["bare"] != "break" for x in _c), "코드 픽이 구동사 자리를 후보로 냈다")
+
+
+# ── 9. 문항끼리 답 흘리기 (_s148) ────────────────────────────
+_st = [("가", "Roger Payne earned his Ph.D. from Harvard University.", False),
+       ("나", "Payne discovered whale songs in 1967.", True),
+       ("다", "The album was a commercial failure.", False),
+       ("라", "Ocean Alliance was founded to protect whales and the oceans.", True),
+       ("마", "The global ban began in 1986.", True)]
+check(V.statements_leak_blanks(_st, "founded Ocean Alliance to protect whales and the earth's oceans",
+                               "led more than 100 research trips worldwide") == [("라", "A")],
+      "Q5 정답 노출 진술을 못 잡았다")
+check(V.statements_leak_blanks(_st, "were facing a severe lack of funds",
+                               "provided cough plates from their patients") == [],
+      "노출이 없는데 잡았다 — 오탐")
+
+_bp = [("A", "They found the answer. To hinder them, local doctors and nurses <BLANK_B>. The patients coughed.")]
+_bt = _bp[0][1].split()
+for _w, _want in [("hinder", True), ("found", False), ("coughed.", False)]:
+    _it = [dict(n=1, para=0, idx=_bt.index(_w), original=_w, shown="x",
+                antonym="y", is_answer=True)]
+    check(V.answer_in_blank_sentence(_it, _bp) == _want,
+          f"정답 '{_w}' 의 빈칸 문장 판정이 틀렸다")
+
+# 약어 마침표를 문장 끝으로 보지 않는다
+check(len(V._sentence_bounds("It closes at 5 p.m. every day today.".split())) == 1,
+      "약어 마침표를 문장 끝으로 봤다")
 
 print("\n".join("❌ " + f for f in fails) if fails else "✅ 전부 통과")
 sys.exit(1 if fails else 0)

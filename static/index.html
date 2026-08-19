@@ -821,6 +821,12 @@ async function saveNotice() {
 async function clearNotice() { document.getElementById('notice-input').value = ''; await saveNotice(); }
 
 // ============================================================
+// unit 표시 헬퍼 — 모의고사(unit='etc')는 내부 분류값이라 화면에 안 띄운다
+// ============================================================
+function unitText(u)   { const v = (u || '').trim(); return v.toLowerCase() === 'etc' ? '' : v; }
+function unitPrefix(u) { const v = unitText(u); return v ? v + ' ' : ''; }
+
+// ============================================================
 // Book / Passage
 // ============================================================
 // 선택된 지문을 해당 탭 목록의 화면 순서(드래그로 바꾼 순서)대로 정렬
@@ -1189,7 +1195,7 @@ function onBookChange() {
   let html = '';
   for (const unit of units) {
     const up = passages.filter(p => p.unit === unit);
-    html += `<div class="unit-header" onclick="toggleUnit('${book}','${unit}')">📁 ${unit} (${up.length}개)<span class="unit-select">단원 전체선택</span></div>`;
+    html += `<div class="unit-header" onclick="toggleUnit('${book}','${unit}')">📁 ${unitText(unit) || '전체'} (${up.length}개)<span class="unit-select">단원 전체선택</span></div>`;
     for (const p of up) {
       const key = `${p.book}|${p.unit}|${p.id}`;
       html += `<div class="passage-item" style="position:relative;" draggable="true" data-unit="${unit}" data-pid="${p.id}"
@@ -1295,14 +1301,14 @@ async function doGenerate() {
   resultsSection.classList.add('hidden'); resultsList.innerHTML='';
   let completed=0; const results=[];
   for (const p of passages) {
-    progressText.textContent = `생성 중... ${completed+1}/${passages.length} — ${p.unit} ${p.id}`;
+    progressText.textContent = `생성 중... ${completed+1}/${passages.length} — ${unitPrefix(p.unit)}${p.id}`;
     progressFill.style.width = `${(completed/passages.length)*100}%`;
     try {
       const res = await fetch(API+'/api/generate', { method:'POST', headers:headers(), body:JSON.stringify({book:p.book,unit:p.unit,passage_id:p.id,levels:levels.length===11?null:levels}) });
       const data = await res.json();
-      if (data.ok) results.push({id:`${p.unit} ${p.id}`,status:'success',html:data.html,filename:data.filename});
-      else results.push({id:`${p.unit} ${p.id}`,status:'error',error:data.detail});
-    } catch(e) { results.push({id:`${p.unit} ${p.id}`,status:'error',error:e.message}); }
+      if (data.ok) results.push({id:`${unitPrefix(p.unit)}${p.id}`,status:'success',html:data.html,filename:data.filename});
+      else results.push({id:`${unitPrefix(p.unit)}${p.id}`,status:'error',error:data.detail});
+    } catch(e) { results.push({id:`${unitPrefix(p.unit)}${p.id}`,status:'error',error:e.message}); }
     completed++;
     progressFill.style.width = `${(completed/passages.length)*100}%`;
   }
@@ -1491,7 +1497,7 @@ function ssRenderBookList(){
         const usel = ups.filter(p=>ssSelectedPassages.has(`${p.book}|${p.unit}|${p.id}`)).length;
         html += `<div class="ext-unit-row"><div class="ext-unit-header">
           <input type="checkbox" ${usel===ups.length?'checked':''} onclick="ssToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
-          <span style="font-size:13px;font-weight:600;color:#1d4ed8;">${unit}</span>
+          <span style="font-size:13px;font-weight:600;color:#1d4ed8;">${unitText(unit) || '전체'}</span>
           <span style="font-size:11px;color:#999;">(${usel}/${ups.length})</span></div><div class="ext-pid-list">`;
         for(const p of ups){
           const key = `${p.book}|${p.unit}|${p.id}`;
@@ -1641,7 +1647,7 @@ function snRenderBookList() {
         html += `<div class="ext-unit-row">
           <div class="ext-unit-header">
             <input type="checkbox" ${unitAllSelected?'checked':''} onclick="snToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
-            <span style="font-size:13px;font-weight:600;color:#6d28d9;">${unit}</span>
+            <span style="font-size:13px;font-weight:600;color:#6d28d9;">${unitText(unit) || '전체'}</span>
             <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
           </div>
           <div class="ext-pid-list">`;
@@ -1753,7 +1759,7 @@ async function doSecretNote(type) {
 
   let completed = 0; const results = [];
   for (const p of passages) {
-    progressText.textContent = `생성 중... ${completed+1}/${passages.length} — ${p.unit} ${p.id}`;
+    progressText.textContent = `생성 중... ${completed+1}/${passages.length} — ${unitPrefix(p.unit)}${p.id}`;
     progressFill.style.width = `${(completed/passages.length)*100}%`;
     try {
       const res = await fetch(API+'/api/secret-note', {
@@ -1761,9 +1767,9 @@ async function doSecretNote(type) {
         body: JSON.stringify({type, school_name: schoolName, teacher_name: teacherName, passages:[{book:p.book,unit:p.unit,id:p.id}]})
       });
       const data = await res.json();
-      if (data.ok) results.push({id:`${p.unit} ${p.id}`,status:'success',html:data.html,filename:data.filename});
-      else results.push({id:`${p.unit} ${p.id}`,status:'error',error:data.detail});
-    } catch(e) { results.push({id:`${p.unit} ${p.id}`,status:'error',error:e.message}); }
+      if (data.ok) results.push({id:`${unitPrefix(p.unit)}${p.id}`,status:'success',html:data.html,filename:data.filename});
+      else results.push({id:`${unitPrefix(p.unit)}${p.id}`,status:'error',error:data.detail});
+    } catch(e) { results.push({id:`${unitPrefix(p.unit)}${p.id}`,status:'error',error:e.message}); }
     completed++;
     progressFill.style.width = `${(completed/passages.length)*100}%`;
   }
@@ -1858,7 +1864,7 @@ function pcRenderBookList() {
         html += `<div class="ext-unit-row">
           <div class="ext-unit-header">
             <input type="checkbox" ${unitAllSelected?'checked':''} onclick="pcToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
-            <span style="font-size:13px;font-weight:600;color:#2E4E8F;">${unit}</span>
+            <span style="font-size:13px;font-weight:600;color:#2E4E8F;">${unitText(unit) || '전체'}</span>
             <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
           </div>
           <div class="ext-pid-list">`;
@@ -2010,7 +2016,7 @@ async function doPreclass() {
 
   let completed = 0; const results = [];
   for (const p of passages) {
-    progressText.textContent = `생성 중... ${completed+1}/${passages.length} — ${p.unit} ${p.id}  (40~60초 소요)`;
+    progressText.textContent = `생성 중... ${completed+1}/${passages.length} — ${unitPrefix(p.unit)}${p.id}  (40~60초 소요)`;
     progressFill.style.width = `${(completed/passages.length)*100}%`;
     try {
       // 백엔드는 /api/secret-note 라우트에서 type=D + mode 분기 처리
@@ -2020,9 +2026,9 @@ async function doPreclass() {
         body: JSON.stringify({type:'D', mode: pcMode, school_name: schoolName, passages:[{book:p.book,unit:p.unit,id:p.id}]})
       });
       const data = await res.json();
-      if (data.ok) results.push({id:`${p.unit} ${p.id}`,status:'success',html:data.html,filename:data.filename});
-      else results.push({id:`${p.unit} ${p.id}`,status:'error',error:data.detail});
-    } catch(e) { results.push({id:`${p.unit} ${p.id}`,status:'error',error:e.message}); }
+      if (data.ok) results.push({id:`${unitPrefix(p.unit)}${p.id}`,status:'success',html:data.html,filename:data.filename});
+      else results.push({id:`${unitPrefix(p.unit)}${p.id}`,status:'error',error:data.detail});
+    } catch(e) { results.push({id:`${unitPrefix(p.unit)}${p.id}`,status:'error',error:e.message}); }
     completed++;
     progressFill.style.width = `${(completed/passages.length)*100}%`;
   }
@@ -2222,7 +2228,7 @@ function extRenderBookList() {
         html += `<div class="ext-unit-row">
           <div class="ext-unit-header">
             <input type="checkbox" ${unitAllSelected?'checked':''} onclick="extToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
-            <span style="font-size:13px;font-weight:600;color:#4A90D9;">${unit}</span>
+            <span style="font-size:13px;font-weight:600;color:#4A90D9;">${unitText(unit) || '전체'}</span>
             <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
           </div>
           <div class="ext-pid-list">`;
@@ -2321,7 +2327,7 @@ function extExtractHTML() {
 
   let content = '';
   for (const p of selectedList) {
-    const label = `${p.book} ${p.unit} ${p.id}`;
+    const label = `${p.book} ${unitPrefix(p.unit)}${p.id}`;
     let rawText = p.text || '';
     
     // ###해석### 기준으로 영문/한글 분리
@@ -2553,7 +2559,7 @@ function vrRenderBookList() {
         html += `<div class="ext-unit-row">
           <div class="ext-unit-header">
             <input type="checkbox" ${unitAllSelected?'checked':''} onclick="vrToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
-            <span style="font-size:13px;font-weight:600;color:#c2410c;">${unit}</span>
+            <span style="font-size:13px;font-weight:600;color:#c2410c;">${unitText(unit) || '전체'}</span>
             <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
           </div>
           <div class="ext-pid-list">`;
@@ -2827,7 +2833,7 @@ function asRenderBookList() {
         html += `<div class="ext-unit-row">
           <div class="ext-unit-header">
             <input type="checkbox" ${unitAllSelected?'checked':''} onclick="asToggleUnit('${book}','${unit}')" style="width:14px;height:14px;">
-            <span style="font-size:13px;font-weight:600;color:#2E4E8F;">${unit}</span>
+            <span style="font-size:13px;font-weight:600;color:#2E4E8F;">${unitText(unit) || '전체'}</span>
             <span style="font-size:11px;color:#999;">(${unitSelectedCount}/${unitPassages.length})</span>
           </div>
           <div class="ext-pid-list">`;

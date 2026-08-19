@@ -143,24 +143,16 @@ async def _save_db(d):
 
 
 # ============================================================
-# 지문 라벨 (화면·인쇄물 표시용)
-# ============================================================
-def _passage_label(unit: str, pid: str) -> str:
-    """비밀노트·0회독 인쇄물에 찍히는 지문 이름.
-
-    ★ 모의고사는 unit 이 "etc" 다. upload 시 "N과"/"N강" 패턴이 없는 라벨을
-      자동으로 etc 로 분류하기 때문인데, 그건 **내부 분류값**이지 학생·선생님이
-      볼 말이 아니다. etc(및 빈 값)면 번호만 쓴다 — "etc 18번" → "18번".
-    """
-    u = str(unit or "").strip()
-    if not u or u.lower() == "etc":
-        return f"{pid}"
-    return f"{u} {pid}"
-
-
-# ============================================================
 # Cache Key / Cache Check
 # ============================================================
+def _passage_label(unit: str, pid: str) -> str:
+    """지문 라벨. 모의고사(unit='etc')는 'etc 18번' 대신 '18번'으로."""
+    u = (unit or "").strip()
+    if u in ("", "etc"):
+        return (pid or "").strip()
+    return f"{u} {pid}".strip()
+
+
 def _ck(book: str, unit: str, pid: str) -> str:
     """캐시 키: 책이름_과_번호_hash (한국어 포함, 가독성 우선)
     예: 공통영어1비상홈_1과_01번_26c81a4e

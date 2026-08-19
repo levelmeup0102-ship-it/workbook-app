@@ -1989,7 +1989,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{prefix}{txt_hash}_var{variation_type}_s155"
+    return f"{prefix}{txt_hash}_var{variation_type}_s156"
 
 
 # ============ Supabase 캐시 ============
@@ -2621,12 +2621,19 @@ def generate_variation_a(
                     #     1·2차에서만 걸어 좋은 자리를 유도하고, 그래도 안 되면 통과시킨다.
                     #     바깥 검증 블록의 같은 검사가 (is_last 가 아닐 때) Q4 를 다시 받게 한다.
                     try:
-                        if _attempt >= 2:
-                            raise _SkipCheck
-                        from variation.vocab_q3 import q4_conflicts_with_answer as _q4c2
+                        from variation.vocab_q3 import (q4_conflicts_with_answer as _q4c2,
+                                                        q4_conflict_unsatisfiable as _q4u)
                         _evs = data.get("statements_evidence") or []
                         if _evs and isinstance(_evs[0], (list, tuple)):
                             _evs = [e for _, _, e in _evs]
+                        # ★ 통과할 수 있는 조건인지 먼저 본다 (_s156).
+                        #   Q4 근거가 모든 문장을 덮으면 어느 자리를 골라도 걸린다.
+                        if _q4u(data["paragraphs"], _evs):
+                            print(f"[VAR][A][{pid}] Q4 근거가 지문의 모든 문장을 덮는다 "
+                                  f"— 겹침 검사 생략 (_s156)")
+                            raise _SkipCheck
+                        if _attempt >= 2:
+                            raise _SkipCheck
                         _cf = _q4c2(_items, data["paragraphs"], _evs)
                         if _cf:
                             raise ValueError(
@@ -2870,12 +2877,19 @@ def generate_variation_a(
                 print(f"[VAR][A][{pid}] ⚠ 검사 건너뜀 (q4_conflicts_with_answer): {_e}")
 
             try:
-                from variation.vocab_q3 import q4_conflicts_with_answer as _q4c
+                from variation.vocab_q3 import (q4_conflicts_with_answer as _q4c,
+                                                q4_conflict_unsatisfiable as _q4u2)
                 _ev = [e for _, _, e in (data.get("statements_evidence") or [])] \
                     if data.get("statements_evidence") and isinstance(
                         (data.get("statements_evidence") or [None])[0], (list, tuple)) \
                     else (data.get("statements_evidence") or [])
-                _hit = _q4c(data.get("vocab_items"), data.get("paragraphs"), _ev)
+                # ★ 통과 불가능한 조건이면 걸지 않는다 (_s156). 어휘 루프에서 풀어 줘도
+                #   여기서 다시 잡으면 함정이 한 층 위로 옮겨갈 뿐이다 — 실측으로 그랬다.
+                _unsat = _q4u2(data.get("paragraphs"), _ev)
+                if _unsat:
+                    print(f"[VAR][A][{pid}] Q4 근거가 모든 문장을 덮는다 "
+                          f"— 바깥 겹침 검사도 생략 (_s156)")
+                _hit = [] if _unsat else _q4c(data.get("vocab_items"), data.get("paragraphs"), _ev)
                 if _hit and not is_last:
                     errors = list(errors) + [
                         f"[{pid}] [CRITICAL] Q4 진술 {'·'.join(_hit)} 이(가) Q3 어휘 "

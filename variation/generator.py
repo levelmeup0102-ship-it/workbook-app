@@ -2008,7 +2008,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{prefix}{txt_hash}_var{variation_type}_s158"
+    return f"{prefix}{txt_hash}_var{variation_type}_s159"
 
 
 # ============ Supabase 캐시 ============
@@ -2656,7 +2656,8 @@ def generate_variation_a(
                             raise _SkipCheck
                         if _attempt >= 2:
                             raise _SkipCheck
-                        _cf = _q4c2(_items, data["paragraphs"], _evs)
+                        _cf = _q4c2(_items, data["paragraphs"], _evs,
+                                    statements=data.get("statements"))
                         if _cf:
                             raise ValueError(
                                 f"정답 자리가 Q4 진술 {'·'.join(_cf)} 의 근거 문장이다 — "
@@ -2945,7 +2946,8 @@ def generate_variation_a(
                 if _unsat:
                     print(f"[VAR][A][{pid}] Q4 근거가 모든 문장을 덮는다 "
                           f"— 바깥 겹침 검사도 생략 (_s156)")
-                _hit = [] if _unsat else _q4c(data.get("vocab_items"), data.get("paragraphs"), _ev)
+                _hit = [] if _unsat else _q4c(data.get("vocab_items"), data.get("paragraphs"), _ev,
+                                              statements=data.get("statements"))
                 if _hit and not is_last:
                     errors = list(errors) + [
                         f"[{pid}] [CRITICAL] Q4 진술 {'·'.join(_hit)} 이(가) Q3 어휘 "

@@ -3496,6 +3496,14 @@ def generate_variation_b(
                     if _gerr:
                         print(f"[VAR][B][{pid}] Q4 어법 자리 거부 — {_gerr}")
                         continue
+                    # ★ 심기 전 지문을 남긴다 (_s161 회귀 수정)
+                    #   validate_b 의 Q1 삽입 위치 검증은 "정답 마커 자리에 주어진 문장을
+                    #   도로 넣으면 원문이 복원되는가" 를 본다. 어법 오류를 심으면 그 한
+                    #   낱말 때문에 복원이 영원히 실패한다 — 실측: B 5개 지문 전부 6회
+                    #   재시도 끝에 죽고 /api/variation 이 500 을 냈다.
+                    #   위치 정정 뒤에 심는 것만으로는 부족했다. 검증이 그 뒤에 또 돈다.
+                    #   → 검증용 사본을 따로 넘긴다. 산출물에 나가는 것은 심은 쪽이다.
+                    data["_pwm_pregrammar"] = _pwm
                     # 지문에 오류를 심는다 (딱 한 곳)
                     data["passage_with_marks"] = grammar_replace_once(_pwm, _cor, _wrg)
                     data["grammar_q4"] = {

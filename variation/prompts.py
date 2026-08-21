@@ -1866,3 +1866,218 @@ def build_insert_prompt(sentences) -> str:
         ' "refers_to": "<what in the preceding sentence it points to>",\n'
         ' "why_unique": "<why no other gap works>"}'
     )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# B Q4 — 어법 오류 찾아 고치기 (_s161)
+#   요약영작(SC)이 Q3 요약빈칸과 구조적으로 겹쳐 재시도를 태우고 지문이 누락됐다.
+#   Q3·Q4 가 둘 다 '지문을 한 문장으로 요약'이라 논지가 하나뿐인 이상 피할 수 없었다.
+#   → Q4 를 완전히 다른 능력(어법)으로 바꾼다. 겹침 검사 자체가 필요 없어진다.
+# ═══════════════════════════════════════════════════════════════════
+GRAMMAR_ERROR_SYS = (
+    "You are a Korean high-school English exam writer. You plant ONE grammar error "
+    "in a passage so that students must find it, correct it, and explain why. "
+    "You follow the 수능 어법 (Korean CSAT grammar) item-writing conventions strictly. "
+    "Output JSON only — no markdown, no text outside the JSON object."
+)
+
+
+# ── 어법 출제 관점 (1회독 Lv.8-1 어법 괄호형 프롬프트에서 가져옴, _s161) ────────
+#   형식은 다르다(저쪽은 괄호쌍 여러 개, 여기는 심는 오류 하나).
+#   가져온 건 "어떤 자리를 출제하고 어떤 자리를 버리는가" 하는 관점이다.
+#   등급 S > A > B, 금지 필터 C1~C5, 거리 규칙까지 그대로 쓴다.
+# ─────────────────────────────────────────────────────────────────────────
+_GRAMMAR_PATTERNS = """
+<patterns>
+<intro>지문을 훑어 아래 trigger 에 걸리는 자리를 후보로 모은다. 등급 S 가 가장 좋은 자리다.</intro>
+
+<grade name="S" priority="highest">
+<pattern id="S1">"in/on/by/for/at/of/to + which" 또는 명사 + which 직후 → 전치사+which vs which (뒤 절 완전성)</pattern>
+<pattern id="S2">think/believe/say/know/feel/find/realize/show/suggest + that절 → that vs what (선행사 무 + 뒤 절 완전 → that)</pattern>
+<pattern id="S3">fact/idea/belief/news/opinion/notion/claim + that절 → 동격 that vs which (추상명사 + 완전 절)</pattern>
+<pattern id="S4">so + 형/부 + that 또는 such + 명 + that → 결과절 that (which 불가)</pattern>
+<pattern id="S5">본동사 자리 → 본동사 vs 준동사 (V vs V-ing / V-ed)</pattern>
+<pattern id="S6">문장 첫머리 "V-ing, S+V" 또는 "V-ed, S+V" → 분사구문의 태</pattern>
+<pattern id="S7">주격관계대명사 who/which/that + 동사 (선행사가 5단어 이상 떨어진 경우만)</pattern>
+</grade>
+
+<grade name="A">
+<pattern id="A1">명사 + V-ing / V-ed 후치수식 → 능동/수동</pattern>
+<pattern id="A2">같은 어근 형용사/부사 쌍 (accurate/accurately, clear/clearly, careful/carefully)</pattern>
+<pattern id="A3">1형식 동사(matter/function/work/exist/happen/occur/appear) + 부사</pattern>
+<pattern id="A4">2형식 동사(be/become/seem/look/feel/sound/taste) + 형용사 보어</pattern>
+<pattern id="A5">decide/agree/hope/want/plan/promise/refuse/expect/manage/fail/choose/learn/offer + to V</pattern>
+<pattern id="A6">enjoy/finish/mind/avoid/suggest/deny/postpone/consider/admit/recommend + V-ing</pattern>
+<pattern id="A7">couldn't help but + 동사원형</pattern>
+<pattern id="A8">one of + 복수명사</pattern>
+</grade>
+
+<grade name="B">
+<pattern id="B1">주어 ↔ 동사 사이 5단어 이상 수식어구가 끼인 수일치</pattern>
+<pattern id="B2">학문명 -ics(mathematics/physics/economics/politics/statistics/ethics/linguistics) + 단수동사</pattern>
+<pattern id="B3">A number of + 복수동사 / The number of + 단수동사</pattern>
+<pattern id="B4">Either A or B / Neither A nor B / Not only A but also B 의 동사 일치 (B에 일치)</pattern>
+</grade>
+</patterns>
+
+<forbidden>
+<intro>아래 서명 중 하나라도 걸리면 그 자리는 즉시 버린다. 다른 장점이 아무리 많아도 예외 없다.</intro>
+
+<filter id="C1" name="심어도 틀린 게 아닌 자리 — 문제가 성립하지 않음">
+아래는 두 형태가 모두 맞는 자리다. 여기에 심으면 정답이 두 개가 되어 문항이 깨진다.
+- start/continue/begin/love/like/hate + to V ↔ V-ing
+- 주어 자리 To V ↔ V-ing
+- help (+ 목적어) + V ↔ to V
+- see/watch/hear/feel/notice + 목적어 + V ↔ V-ing
+- 사역동사 make/let/have + 목적어 + 원형 (have 만 p.p. 가능)
+- and/or 병렬에서 to 생략 (to A and B ↔ to A and to B)
+- 목적격 관계대명사 who ↔ whom, 생략 ↔ 사용
+- 주격/목적격 자리 that ↔ which
+- 관계부사 why/where/when 교차, those/these 위치 변경
+</filter>
+
+<filter id="C2" name="어휘·의미 차이 — 어법이 아님">
+- 시제 바꾸기: is↔was, has↔had, do↔did, goes↔went
+- 진행 ↔ 단순: is studying ↔ studies
+- 부정 ↔ 긍정: can↔cannot, is↔isn't
+- 동의어 형/부 교체: varied↔various, big↔large, many↔numerous
+- 접두사 어휘: accurate↔inaccurate, possible↔impossible, legal↔illegal
+- 추상·불가산명사에 s 붙이기: advice↔advices, information↔informations
+- 고유명사에 s 붙이기
+- 철자 틀리게 만들기 (recieve) — 어법이 아니라 오타다
+- 관사 하나 빼기 — 원어민도 흔들리는 자리다
+</filter>
+
+<filter id="C3" name="바로 옆 힌트 — 거리 ≤ 1 토큰, 1초 컷">
+- 조동사 + V ↔ V-ing / V-ed
+- have/has/had + p.p. ↔ V
+- be동사 + V-ing ↔ V, be동사 + p.p. ↔ V
+- by 행위자 바로 앞의 능동/수동
+- 주어 명사·대명사 바로 뒤의 수일치 (this causes↔causing, Harold confirms↔confirm 금지)
+- until/when/if + 주어 + 동사 수일치
+- be + 부사 + 분사 (명백한 분사 자리)
+</filter>
+
+<filter id="C4" name="원문에 없는 자리">
+- 지문에 글자 그대로 존재하지 않는 표현을 correct 로 내놓는 것 금지
+- 지문을 고쳐 쓴 뒤 그 자리에 심는 것 금지 — 오류 한 곳 말고는 원문 그대로여야 한다
+</filter>
+
+<filter id="C5" name="성별 불명확 대명사">
+- 인물의 성별을 지문에서 특정할 수 없으면 his ↔ her, him ↔ her 금지
+</filter>
+</forbidden>
+
+<distance_check>
+<formula>거리 = (오류를 심는 자리) ↔ (정답을 결정하는 가장 가까운 근거 단어) 사이 토큰 수.</formula>
+<note>부사·관사·전치사도 토큰으로 센다. 부사 하나만 끼어도 "바로 옆"으로 본다.</note>
+<rule>거리 &lt; 2 인 자리는 아래 예외에만 허용한다. 그 외에는 버린다.</rule>
+<exceptions>
+- S5 본동사 vs 준동사
+- S6 분사구문
+- A1 분사 후치수식 능/수동
+- S2 / S3 / S4 (절 완전성으로 판단하는 자리)
+- A2~A4 형용사 vs 부사 (1형식·2형식 식별)
+- B2 학문명 -ics
+- A7 couldn't help but
+</exceptions>
+</distance_check>
+
+<no_candidate_sentences>
+<intro>아래 문장은 후보 스캔 대상이 아니다. 여기서 자리를 찾으려 하지 마라.</intro>
+<case>본동사·절이 없는 문장 (예: "A shark? A lion? Or, maybe a bear?")</case>
+<case>6단어 이하의 단문</case>
+<case>절이 하나뿐이고 주어-동사가 붙어 있어 C3 밖에 안 되는 문장</case>
+<case>&lt;patterns&gt; S/A/B 어느 trigger 에도 걸리지 않는 문장</case>
+</no_candidate_sentences>
+"""
+
+_GRAMMAR_EXAMPLES = """
+<good_examples>
+<example pattern="S1"><sentence>The house in which he lives is old.</sentence>
+<correct>in which</correct><wrong>which</wrong>
+<why>lives 는 자동사라 뒤 절이 완전하므로 전치사 in 이 붙은 in which 를 써야 한다</why></example>
+
+<example pattern="S5"><sentence>The animation, displayed on the wall, creates vivid images of war.</sentence>
+<correct>creates</correct><wrong>creating</wrong>
+<why>displayed 이하는 삽입된 분사구이고 이 자리가 주절의 본동사 자리이므로 creates 를 써야 한다</why></example>
+
+<example pattern="A1"><sentence>I ordered the dish called kibbeling at the stand.</sentence>
+<correct>called</correct><wrong>calling</wrong>
+<why>dish 는 불리는 대상이므로 수동의 과거분사 called 로 수식한다</why></example>
+
+<example pattern="B2"><sentence>The aesthetics of a new project is too often considered irrelevant.</sentence>
+<correct>is</correct><wrong>are</wrong>
+<why>aesthetics 는 -ics 로 끝나는 학문명이라 단수 취급하므로 is 를 쓴다</why></example>
+</good_examples>
+
+<bad_examples>
+<example violation="C3"><at>He helps her study.</at><reason>주어 바로 뒤 수일치 — 1초 컷</reason></example>
+<example violation="C1"><at>We started studying hard.</at><reason>start 는 to V 도 V-ing 도 맞아 정답이 둘</reason></example>
+<example violation="C2"><at>It is famous in the 1960s.</at><reason>시제 차이는 어휘·의미 문제지 어법이 아니다</reason></example>
+<example violation="C1"><at>the museums that attract visitors</at><reason>주격 관계대명사 자리에서 that = which</reason></example>
+<example violation="C3"><at>is too often considered irrelevant</at><reason>be + 부사 + 분사, 형태만 보고 풀린다</reason></example>
+</bad_examples>
+"""
+
+
+def build_grammar_error_prompt(passage_text: str, avoid_sentence: str = "") -> str:
+    """지문에 어법 오류 하나를 심을 자리를 고르게 한다.
+
+    난이도는 **수능 영어 29번** 수준. 눈에 확 띄는 철자·단수복수가 아니라
+    구조를 읽어야 보이는 자리다. 출제 관점(등급 S/A/B, 금지 필터 C1~C5, 거리 규칙)은
+    1회독 Lv.8-1 어법 괄호형 프롬프트와 동일한 기준을 쓴다.
+
+    avoid_sentence: B Q1 의 주어진 문장. 여기에 오류를 심으면 문장위치 문항이 깨진다.
+    """
+    avoid = str(avoid_sentence or "").strip()
+    return (
+        "아래 지문에서 **어법 오류를 심을 자리 한 곳**을 골라라.\n"
+        "난이도는 수능 영어 29번 수준이다 — 구조를 읽어야 보이는 자리라야 한다.\n\n"
+        "── 지문 ──\n" + str(passage_text or "").strip() + "\n\n"
+        + (("── 이 문장에는 절대 심지 마라 (다른 문항이 쓴다) ──\n"
+            + avoid + "\n\n") if avoid else "")
+        + _GRAMMAR_PATTERNS
+        + """
+<selection_procedure>
+<step n="1">&lt;patterns&gt; 의 trigger 를 스캔해 후보 자리를 모은다.</step>
+<step n="2">(등급 S&gt;A&gt;B) → (거리 큰 순) → (수능형 난이도 높은 순) 으로 정렬한다.</step>
+<step n="3">&lt;forbidden&gt; C1~C5 와 &lt;distance_check&gt; 를 통과하는 자리만 남긴다.</step>
+<step n="4">그 표현이 지문 전체에서 ★단 한 번만★ 등장하는지 확인한다. 두 번 이상이면 다음 후보로 넘어간다.</step>
+<step n="5">가장 위의 후보 하나를 채택한다. 오류는 정확히 한 곳이다.</step>
+
+<priority>
+★ 매우 중요
+- 좋은 자리가 없다고 아무 자리나 채택하지 마라. **잘못된 어법 출제보다 차라리 쉬운 S/A 자리**가 낫다.
+- 어휘 차이·의미 차이·바로 옆 힌트·둘 다 정답인 자리로 문항을 만드는 것은 절대 금지.
+- 등급 B 자리밖에 없으면 B 로 낸다. 금지 필터에 걸리는 자리를 쓰는 것보다 낫다.
+</priority>
+</selection_procedure>
+"""
+        + _GRAMMAR_EXAMPLES
+        + """
+<final_verification>
+<intro>출력 직전 전부 점검한다. 하나라도 실패하면 그 자리를 버리고 다음 후보로 교체한다.</intro>
+<check>correct 가 지문에 글자 그대로, ★단 한 번만★ 등장한다</check>
+<check>correct 를 wrong 으로 바꾼 것 말고는 지문이 원문과 100% 동일하다 (한 낱말 또는 한 어구만 바뀐다)</check>
+<check>wrong 은 그 문맥에서 ★절대 정답이 될 수 없다★ (C1 재확인)</check>
+<check>correct 가 맞는 이유를 문법적 근거 한 개 이상으로 댈 수 있다 (절 완전성, 수식 관계, 동사 성질, 태, 수일치 등)</check>
+<check>형태만 보고 1초 만에 풀리는 자리가 아니다</check>
+<check>&lt;forbidden&gt; C1~C5 어디에도 걸리지 않는다</check>
+<check>거리 ≥ 2 (또는 &lt;distance_check&gt; 예외에 해당)</check>
+<check>&lt;patterns&gt; S/A/B trigger 중 정확히 하나에 해당한다</check>
+"""
+        + ("<check>오류 자리가 위의 '절대 심지 마라' 문장 안이 아니다</check>\n"
+           if avoid else "")
+        + """</final_verification>
+
+## 출력 (JSON only)
+{
+  "correct": "<지문에 있는 바른 표현 — 글자 그대로, 지문 전체에서 한 번만 나오는 것>",
+  "wrong": "<그 자리에 심을 틀린 표현>",
+  "sentence": "<그 표현이 든 문장 전체 — 원문 그대로>",
+  "point": "<어법 이름. 예: 분사 / 수일치 / 관계대명사 / 병렬 / 태 / 준동사 / 비교 / 접속사>",
+  "why": "<모범답안. 한국어 한 문장. 왜 그 형태라야 하는지 근거를 댄다. 예: dish는 불리는 대상이므로 수동의 과거분사 called를 써야 한다>"
+}
+"""
+    )

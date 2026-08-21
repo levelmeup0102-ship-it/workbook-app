@@ -413,24 +413,24 @@ body {
     <div class="col-writing">
       <div class="col-header col-wri-hdr">[ 서술형 ]</div>
 
-      <div class="q-title"><span class="q-num write">4</span> 다음 요약문의 빈칸 (A), (B)에 들어갈 말을 &lt;보기&gt;의 단어를 모두 사용하여 완성하시오.</div>
-      <div class="summary-template">{{ item.data.blank_summary_template | replace('(A)', '<span class="ublank">(A)</span>') | replace('(B)', '<span class="ublank">(B)</span>') | safe }}</div>
-      <div class="bogi">
-        <span class="bogi-label">&lt;보기&gt;</span>{{ item.data.blank_summary_bogi | join(' / ') }}
-      </div>
+      <div class="q-title"><span class="q-num write">4</span> 윗글에는 어법상 틀린 부분이 <b>한 군데</b> 있습니다. 그 부분을 찾아 바르게 고치고, 그렇게 고친 이유를 쓰시오.</div>
       <div class="condition">
         <span class="condition-title">조건</span>
         <div class="condition-list">
-          ○ &lt;보기&gt;에 주어진 단어를 모두 한 번씩만 사용할 것<br>
-          ○ 변형 및 추가하지 말 것
+          ○ 틀린 부분은 윗글에서 찾아 그대로 옮겨 쓸 것<br>
+          ○ 이유는 어법 근거를 들어 한 문장으로 쓸 것
         </div>
       </div>
       <div class="write-ans-row">
-        <div class="write-ans-prefix">(A) 정답:</div>
+        <div class="write-ans-prefix">틀린 표현:</div>
         <div class="write-ans-line"></div>
       </div>
       <div class="write-ans-row">
-        <div class="write-ans-prefix">(B) 정답:</div>
+        <div class="write-ans-prefix">바르게 고친 것:</div>
+        <div class="write-ans-line"></div>
+      </div>
+      <div class="write-ans-row">
+        <div class="write-ans-prefix">이유:</div>
         <div class="write-ans-line"></div>
       </div>
 
@@ -488,18 +488,15 @@ body {
         <span class="ans-detail">(A) {{ item.data.summary_options[item.data.summary_correct][0] }} &nbsp;·&nbsp; (B) {{ item.data.summary_options[item.data.summary_correct][1] }}{% if item.data.summary_template_en %}<br><span style="color:#555;">{{ item.data.summary_template_en }}</span>{% endif %}{% if item.data.summary_template_kr %}<br><span style="color:#777;">{{ item.data.summary_template_kr }}</span>{% endif %}</span>
       </div>
       <div class="ans-row">
-        <b class="q-name">Q4. (A)</b>
-        <span class="ans-write">{{ item.data.blank_A }}</span>
+        <b class="q-name">Q4. 어법</b>
+        <span class="ans-write">{{ item.data.grammar_q4.wrong }}</span>
+        <span class="ans-detail">&nbsp;→&nbsp; <b style="color:var(--purple);">{{ item.data.grammar_q4.correct }}</b>{% if item.data.grammar_q4.point %}&nbsp;&nbsp;<span style="color:#777;">[{{ item.data.grammar_q4.point }}]</span>{% endif %}</span>
       </div>
+      {% if item.data.grammar_q4.why %}
       <div class="ans-row">
-        <b class="q-name">(B)</b>
-        <span class="ans-write">{{ item.data.blank_B }}</span>
+        <b class="q-name">이유(모범답안)</b>
+        <span class="ans-detail" style="color:#555;">{{ item.data.grammar_q4.why }}</span>
       </div>
-      {% if item.data.blank_summary_template_en %}
-      <div class="ans-row"><b class="q-name"></b><span class="ans-detail" style="color:#555;">{{ item.data.blank_summary_template_en }}</span></div>
-      {% endif %}
-      {% if item.data.blank_summary_template_kr %}
-      <div class="ans-row"><b class="q-name"></b><span class="ans-detail" style="color:#777;">{{ item.data.blank_summary_template_kr }}</span></div>
       {% endif %}
       <div class="ans-row">
         <b class="q-name">Q5. 주제영작</b>

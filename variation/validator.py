@@ -843,7 +843,10 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
     if original_passage and data.get("passage_with_marks") and data.get("given_sentence"):
         pcorr = data.get("position_correct")
         if isinstance(pcorr, int) and 0 <= pcorr <= 4:
-            pwm = str(data["passage_with_marks"])
+            # ★ Q4 어법 오류를 심기 전의 지문으로 본다 (_s161)
+            #   심은 뒤 지문으로 대조하면 그 한 낱말 때문에 복원이 항상 실패한다.
+            #   이 검사가 보려는 것은 "정답 마커가 실제로 빠진 자리인가" 뿐이다.
+            pwm = str(data.get("_pwm_pregrammar") or data["passage_with_marks"])
             gs = str(data["given_sentence"]).strip()
             correct_mark = f"<MARK{pcorr + 1}>"
             def _alnum(t):

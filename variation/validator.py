@@ -569,13 +569,6 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
                 )
 
     # ★ A Q5 영작 정답에 구두점이 들어갔는지 — 보기엔 구두점이 없어 학생이 복원 불가 (CRITICAL)
-    for key in ("blank_A", "blank_B"):
-        v = data.get(key)
-        if v and blank_has_punct(v):
-            errors.append(
-                f"[{pid}] [CRITICAL] Q5 {key}에 구두점 포함 — 보기엔 구두점이 없어 학생이 복원 불가 "
-                f"('{v}'). 구두점 사이의 깨끗한 구절로 다시 고를 것.")
-
     # ★ A Q5 (A)(B)가 본문 등장 순서와 어긋나는지
     _joined_ab = " ".join(p[1] for p in data.get("paragraphs", [])
                           if isinstance(p, (list, tuple)) and len(p) > 1)
@@ -585,12 +578,6 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
             f"라벨을 등장 순서에 맞게 바꿀 것")
 
     # ★ A Q5 영작 정답(blank_A/B) 비문/중복 검사 — lenient(마지막 시도)에서도 실행 (CRITICAL은 끝까지 막아야 함)
-    for key in ("blank_A", "blank_B"):
-        v = data.get(key)
-        # blank은 원문에서 떼온 '구절'이라 동사로 시작/전치사로 끝나는 게 정상.
-        # 구절에서도 명백한 비문인 '조동사+형용사'(can controllable)만 검사한다.
-        if v and modal_no_verb(v):
-            errors.append(f"[{pid}] [CRITICAL] Q5 {key} 비문 — 조동사 뒤에 동사원형이 아닌 형용사가 옴 ('{v}')")
     # ★ A Q5 빈칸에 정답을 넣었을 때 경계 단어/구절이 중복되는지 (빈칸이 앞/뒤 단어를 먹음)
     if data.get("blank_A") and data.get("blank_B"):
         dup = fill_boundary_dup(
@@ -769,6 +756,34 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
 
 
 # ====================== 유형 B 검증 (완화) ======================
+# ── Q4 어법: 표현 하나를 낱말 경계까지 보고 찾는다 (_s161) ────────────────
+#   correct 가 'is' 같은 한 낱말일 때 단순 `in` / `.count()` 는 'this' 안의 is 까지
+#   세어버린다. 그러면 "지문에 두 번 나온다"고 잘못 거부하거나, 엉뚱한 자리에
+#   오류를 심는다. 양끝이 낱말 문자면 경계를 붙여 찾는다.
+def grammar_span_re(expr: str):
+    e = str(expr or "")
+    if not e:
+        return None
+    pat = re.escape(e)
+    if re.match(r"\w", e[0]):
+        pat = r"(?<!\w)" + pat
+    if re.search(r"\w$", e):
+        pat = pat + r"(?!\w)"
+    return re.compile(pat)
+
+
+def grammar_count(expr: str, text: str) -> int:
+    rx = grammar_span_re(expr)
+    return len(rx.findall(str(text or ""))) if rx else 0
+
+
+def grammar_replace_once(text: str, old: str, new: str) -> str:
+    rx = grammar_span_re(old)
+    if not rx:
+        return text
+    return rx.sub(lambda _m: new, str(text or ""), count=1)
+
+
 def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict: bool = True,
                a_data: dict = None) -> list:
     """유형 B 검증 - 핵심만 체크
@@ -780,7 +795,7 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
     # 필수 필드 존재
     required = ["given_sentence", "passage_with_marks", "position_correct",
                 "topic_options", "topic_correct", "summary_options", "summary_correct",
-                "blank_summary_bogi", "blank_A", "blank_B",
+                "grammar_q4",
                 "topic_writing_bogi", "topic_writing_answer"]
     for f in required:
         if f not in data:
@@ -844,34 +859,45 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
                         f"주어진 문장을 넣어도 원문이 복원되지 않음 (주어진 문장이 실제로 빠진 위치를 정답으로 표시할 것)"
                     )
 
-    # ★ Q4 요약문 / Q3 요약문에 (A)(B) 빈칸 표시가 반드시 있어야 함 (완성문 금지)
-    #   strict/soft 무관 필수 — 빈칸이 없으면 문제 자체가 성립하지 않음
-    bst = str(data.get("blank_summary_template", "") or "")
-    if "(A)" not in bst or "(B)" not in bst:
-        errors.append(f"[{pid}] Q4 blank_summary_template에 (A)/(B) 빈칸이 없음 — 완성문 말고 (A)(B) placeholder를 남길 것")
+    # ★ Q3 요약문에 (A)(B) 빈칸 표시가 반드시 있어야 함 (완성문 금지)
     sst = str(data.get("summary_template", "") or "")
     if "(A)" not in sst or "(B)" not in sst:
         errors.append(f"[{pid}] Q3 summary_template에 (A)/(B) 빈칸이 없음 — (A)(B) placeholder를 남길 것")
 
-    # ★ Q4 blank_A, blank_B 단어 수 (최소 4, 최대 12 백스톱)
-    # ★ 하한 3 — generator(pick_b_q4_blanks min_w=3)·프롬프트(3~9단어)와 맞춘다.
-    #   학교 기출 실측도 3~9단어다('a disordered array' 3단어). 4로 두면 정상 문항이
-    #   3회 재시도 끝에 관대 모드로 떨어진다(실측).
-    min_blank_words = 3
-    max_blank_words = 12
-    try:
-        wa = len(data["blank_A"].split())
-        wb = len(data["blank_B"].split())
-        if wa < min_blank_words:
-            errors.append(f"[{pid}] [CRITICAL] Q4 blank_A 단어 수 부족 ({wa}개 < {min_blank_words}개) — 3단어 이상 필수")
-        if wb < min_blank_words:
-            errors.append(f"[{pid}] [CRITICAL] Q4 blank_B 단어 수 부족 ({wb}개 < {min_blank_words}개) — 3단어 이상 필수")
-        if wa > max_blank_words:
-            errors.append(f"[{pid}] [CRITICAL] Q4 blank_A 단어 수 과다 ({wa}개 > {max_blank_words}개) — 영작 빈칸으로 너무 김, 5~7단어로 줄일 것")
-        if wb > max_blank_words:
-            errors.append(f"[{pid}] [CRITICAL] Q4 blank_B 단어 수 과다 ({wb}개 > {max_blank_words}개) — 영작 빈칸으로 너무 김, 5~7단어로 줄일 것")
-    except (KeyError, AttributeError) as e:
-        errors.append(f"[{pid}] B blank_A/B 형식 오류: {e}")
+    # ★ Q4 — 어법 오류 찾아 고치기 (_s161)
+    #   옛 Q4(요약영작)는 Q3 와 구조적으로 겹쳐 폐기했다. 여기서 보는 것은 셋이다:
+    #     · 고친 형태(correct)가 원문에 실재하는가
+    #     · 지문에 틀린 형태(wrong)가 실제로 심겼는가
+    #     · 그 자리가 지문에서 한 번만 나오는가 — 여러 번이면 학생이 어디를 고칠지 모른다
+    _gq = data.get("grammar_q4")
+    if not isinstance(_gq, dict):
+        errors.append(f"[{pid}] [CRITICAL] Q4 grammar_q4 가 없다 — 어법 오류를 심지 못했다")
+    else:
+        _cor = str(_gq.get("correct") or "").strip()
+        _wrg = str(_gq.get("wrong") or "").strip()
+        _pwm = str(data.get("passage_with_marks") or "")
+        if not _cor or not _wrg:
+            errors.append(f"[{pid}] [CRITICAL] Q4 어법 — correct/wrong 이 비었다")
+        elif _cor == _wrg:
+            errors.append(f"[{pid}] [CRITICAL] Q4 어법 — correct 와 wrong 이 같다 ('{_cor}')")
+        else:
+            _nw = grammar_count(_wrg, _pwm)
+            if _nw == 0:
+                errors.append(
+                    f"[{pid}] [CRITICAL] Q4 어법 — 틀린 표현 '{_wrg}' 가 지문에 안 심겼다 "
+                    f"(학생이 고칠 자리가 없다)")
+            elif _nw != 1:
+                errors.append(
+                    f"[{pid}] [CRITICAL] Q4 어법 — 틀린 표현 '{_wrg}' 가 지문에 "
+                    f"{_nw}번 나온다 — 어디를 고칠지 갈린다")
+            if grammar_count(_cor, _pwm):
+                errors.append(
+                    f"[{pid}] [CRITICAL] Q4 어법 — 바른 형태 '{_cor}' 가 지문에 그대로 남아 있다 "
+                    f"(정답이 이미 보인다)")
+        if not str(_gq.get("why") or "").strip():
+            errors.append(f"[{pid}] Q4 어법 — 모범답안(why)이 비었다. 답지에 이유를 못 적는다")
+        if not str(_gq.get("point") or "").strip():
+            errors.append(f"[{pid}] Q4 어법 — 어법 이름(point)이 비었다")
 
     # ★ Q5 topic_writing_answer 단어 수 (strict 14개, soft 3개)
     min_topic_words = 10  # 너무 짧은 것만 차단 (자연스러움 우선)
@@ -894,59 +920,8 @@ def validate_b(data: dict, original_passage: str = None, pid: str = "?", strict:
         )
     for flaw in grammar_flaws(tw):
         errors.append(f"[{pid}] [CRITICAL] Q5 주제문 비문 — {flaw} ('{tw}')")
-    for key in ("blank_A", "blank_B"):
-        v = data.get(key)
-        # blank은 원문에서 떼온 '구절'이라 동사로 시작/전치사로 끝나는 게 정상.
-        # 구절에서도 명백한 비문인 '조동사+형용사'(can controllable)만 검사한다.
-        if v and modal_no_verb(v):
-            errors.append(f"[{pid}] [CRITICAL] Q4 {key} 비문 — 조동사 뒤에 동사원형이 아닌 형용사가 옴 ('{v}')")
-    # ★ B Q4 영작 정답에 구두점이 들어갔는지 (A Q5와 동일 사유, CRITICAL)
-    for key in ("blank_A", "blank_B"):
-        v = data.get(key)
-        if v and blank_has_punct(v):
-            errors.append(
-                f"[{pid}] [CRITICAL] Q4 {key}에 구두점 포함 — 보기엔 구두점이 없어 학생이 복원 불가 "
-                f"('{v}'). 구두점 사이의 깨끗한 구절로 다시 고를 것.")
-
-    # ★ B Q4 (A)(B) 등장 순서 + 두 빈칸 간격
-    _bst = str(data.get("blank_summary_template", "") or "")
-    if blank_order_wrong(_bst, "(A)", "(B)"):
-        errors.append(
-            f"[{pid}] Q4 요약문에서 (B) 빈칸이 (A)보다 먼저 나옴 — 라벨을 등장 순서에 맞게 바꿀 것")
-    if "(A)" in _bst and "(B)" in _bst:
-        _ia, _ib = _bst.find("(A)"), _bst.find("(B)")
-        _lo, _hi = (_ia, _ib) if _ia < _ib else (_ib, _ia)
-        _between = _bst[_lo + 3:_hi].strip()
-        _wc = len(_between.split()) if _between else 0
-        # ★ 최소 1단어 — generator 와 맞춘다. 기출 'Depression (A), so the complexity of (B)'
-        #   처럼 연결어 하나만 사이에 두는 것이 정상이다. 3단어를 요구하면 그런 조합이
-        #   전부 거부돼 LLM 지목이 버려진다(실측 CRITICAL 3회).
-        if _wc < 1:
-            errors.append(
-                f"[{pid}] [CRITICAL] Q4 (A)와 (B) 빈칸이 붙어 있음 — 사실상 빈칸 하나다. "
-                f"사이에 최소 1단어(연결어)를 남길 것")
-
-    # ★ B Q4 빈칸에 정답을 넣었을 때 경계 단어/구절 중복 (빈칸이 앞/뒤 단어를 먹음)
-    if data.get("blank_A") and data.get("blank_B") and data.get("blank_summary_template"):
-        dup = fill_boundary_dup(
-            data["blank_summary_template"],
-            [("(A)", data["blank_A"]), ("(B)", data["blank_B"])])
-        if dup:
-            errors.append(
-                f"[{pid}] [CRITICAL] Q4 요약문 빈칸에 정답을 넣으면 '{dup}'이(가) 중복됨 "
-                f"— 빈칸 범위가 앞/뒤 단어를 먹었음 (정답 구절을 빈칸 자리에 맞게 다시 고를 것)."
-            )
-
-    # Q4 잘라쓰기 (요약 영작) - strict일 때만 필수, soft는 통과
-    if strict:
-        try:
-            errors += check_cutout_match(
-                data["blank_summary_bogi"],
-                [data["blank_A"], data["blank_B"]],
-                pid, "Q4(요약영작)"
-            )
-        except Exception as e:
-            errors.append(f"[{pid}] Q4 보기 검증 예외: {e}")
+    # (_s161) Q4 요약영작 관련 검사를 전부 걷어냈다 — Q4 가 어법 오류 찾기로 바뀌었다.
+    #   (빈칸 순서·간격·경계중복·보기대조는 요약문이 있을 때만 의미가 있다)
 
     # Q5 잘라쓰기 (주제 영작) - strict일 때만 필수, soft는 통과
     if strict:

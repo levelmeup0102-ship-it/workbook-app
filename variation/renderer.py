@@ -160,11 +160,8 @@ def to_plain_style(t: str) -> str:
 def prepare_b_passage(data: dict, label: str) -> dict:
     new_data = {**data, "passage_rendered": render_marks(data["passage_with_marks"])}
     
-    # Q4 보기: 답지(blank_A + blank_B)에서 직접 생성 → 누락/잉여 0
-    new_data["blank_summary_bogi"] = shuffle_bogi(
-        bogi_words(data.get("blank_A", "") + " " + data.get("blank_B", "")),
-        seed_str=(data.get("blank_A", "") + data.get("blank_B", ""))
-    )
+    # Q4 는 _s161 부터 어법 오류 찾아 고치기다 — 보기(bogi)가 없는 문항이라
+    # 옛 blank_summary_bogi 생성은 제거했다. (옛 요약영작 잔재)
     # Q5 보기: 답지(topic_writing_answer)에서 직접 생성 → 누락/잉여 0
     new_data["topic_writing_bogi"] = shuffle_bogi(
         bogi_words(data.get("topic_writing_answer", "")),
@@ -395,7 +392,10 @@ def _extract_body_content(html: str) -> str:
 
 # ============ B 보기 셔플 (_s161) ============
 def _shuffle_b_bogi(b_items: List[dict]) -> None:
-    """B Q4·Q5 보기를 정답 순서 그대로 내보내지 않는다 (_s161).
+    """B Q5 보기를 정답 순서 그대로 내보내지 않는다 (_s161).
+
+    ★ 옛 Q4(요약영작)도 같은 문제였고 같이 고쳤다. _s161 에서 Q4 가 어법으로
+      바뀌어 보기가 없어졌으므로 지금 섞는 것은 Q5 하나다.
 
     generator._bogi_from() 은 토큰화만 하고 섞지 않는다 — A 는 바로 옆
     (generator 2845~2853) 에서 시드 셔플을 하는데 B 에는 그 단계가 없었다.
@@ -420,7 +420,6 @@ def _shuffle_b_bogi(b_items: List[dict]) -> None:
         pid = str(d.get("id", ""))
         touched = False
         for key, seed_src in (
-            ("blank_summary_bogi", str(d.get("blank_A", "")) + " " + str(d.get("blank_B", ""))),
             ("topic_writing_bogi", str(d.get("topic_writing_answer", ""))),
         ):
             words = d.get(key)

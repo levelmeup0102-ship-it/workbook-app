@@ -365,14 +365,7 @@ def title_form_flaw(s: str) -> str:
         return f"{n}단어 — 제목으로 너무 짧음 (4~10단어)"
     if n > 12:
         return f"{n}단어 — 제목으로 너무 김 (4~10단어)"
-    # ★ 상투구만 보고 튕기면 멀쩡한 제목이 죽는다 (_s161 오탐 수정).
-    #   'The Importance of Verifying Online Information' 은 평가원 제목 선지에
-    #   실제로 나오는 형태다. 주제 명사구와 형태가 같고, 가르는 것은 대문자화뿐이다.
-    #   옛 검사는 re.I 라 둘을 구분하지 못하고 대문자 제목까지 전부 튕겼다 —
-    #   실측: B 5개 지문이 지문마다 이 검사에 걸려 재시도를 태웠다.
-    #   → 상투구의 **핵심 명사가 소문자일 때만** 주제 형식으로 본다.
-    _om = _TOPIC_OPENERS.match(t)
-    if _om and _om.group(2)[:1].islower():
+    if _TOPIC_OPENERS.match(t):
         return "주제 형식('the importance of ~')으로 시작 — 제목이 아님"
     # 대문자화: 콜론 뒤·첫 단어를 뺀 '내용어' 중 대문자로 시작한 비율
     content = [w for w in ws[1:]

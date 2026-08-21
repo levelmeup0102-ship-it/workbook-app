@@ -393,6 +393,52 @@ def _extract_body_content(html: str) -> str:
     return html
 
 
+# ============ B 보기 셔플 (_s161) ============
+def _shuffle_b_bogi(b_items: List[dict]) -> None:
+    """B Q4·Q5 보기를 정답 순서 그대로 내보내지 않는다 (_s161).
+
+    generator._bogi_from() 은 토큰화만 하고 섞지 않는다 — A 는 바로 옆
+    (generator 2845~2853) 에서 시드 셔플을 하는데 B 에는 그 단계가 없었다.
+    실측(step_cache 전수): Q4 보기가 정답 순서와 같은 것 740/831건(89%),
+    Q5 756/831건(91%). 같은 방식으로 잰 A 는 899건 중 59건(6.6%) 이다.
+    → 학생이 보기를 왼쪽부터 옮겨 적으면 정답이 된다. 서술형 두 문항이 무력화된다.
+
+    ★ generator 가 아니라 renderer 에서 섞는 이유:
+      이미 쌓인 B 캐시 831건을 재생성 없이 그대로 고칠 수 있다. 캐시 버전을
+      올리면 A 까지 무효화돼 1,700여 건이 다시 생성된다 — 크레딧 소진 사고를
+      되풀이할 이유가 없다. A 는 이미 정상이다.
+
+    시드는 pid + 문항 + 정답으로 고정한다. 같은 문항은 몇 번을 렌더해도 같은
+    배열이 나온다 — 시험지와 답지가 어긋나지 않고 재출력해도 순서가 안 바뀐다.
+    ★ 한 번 섞은 데이터는 표시해 두고 건너뛴다. 두 번 섞으면 입력 순서가 달라져
+      결과도 달라진다 — 같은 시험지를 두 번 뽑았을 때 보기 순서가 바뀐다.
+    """
+    for it in b_items or []:
+        d = (it or {}).get("data") or {}
+        if d.get("_bogi_shuffled"):
+            continue
+        pid = str(d.get("id", ""))
+        touched = False
+        for key, seed_src in (
+            ("blank_summary_bogi", str(d.get("blank_A", "")) + " " + str(d.get("blank_B", ""))),
+            ("topic_writing_bogi", str(d.get("topic_writing_answer", ""))),
+        ):
+            words = d.get(key)
+            if not isinstance(words, list) or len(words) < 2:
+                continue                      # 한 단어면 섞을 수 없다
+            seed = int(hashlib.md5((pid + key + seed_src).encode("utf-8")).hexdigest()[:8], 16)
+            rng = random.Random(seed)
+            out = list(words)
+            for _ in range(5):                # 원본과 같으면 다시 섞는다 (A 와 동일)
+                rng.shuffle(out)
+                if out != words:
+                    break
+            d[key] = out
+            touched = True
+        if touched:
+            d["_bogi_shuffled"] = True
+
+
 # ============ 메인 렌더링 ============
 def render_variation_html(
     a_items: List[dict],
@@ -408,6 +454,8 @@ def render_variation_html(
     """
     env = get_jinja_env()
     logo_url = get_logo_data_uri()
+
+    _shuffle_b_bogi(b_items)   # ★ _s161 — B 보기가 정답 순서 그대로 나가는 것을 막는다
     
     try:
         tmpl_a = env.get_template("variation.html")

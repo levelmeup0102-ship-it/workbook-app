@@ -15,8 +15,8 @@ from typing import Optional
 
 import httpx
 
-from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt, TRANSLATE_SYS, build_translate_prompt, VOCAB_SYS, build_vocab_prompt, Q5_BLANK_SYS, build_q5_blank_prompt, INSERT_SYS, build_insert_prompt, SOLVE_SYS, build_solve_prompt
-from variation.validator import validate_a, validate_b, check_marker_positions, fill_boundary_dup, modal_no_verb
+from variation.prompts import SYSTEM_PROMPT_A, SYSTEM_PROMPT_B, extract_json_from_response, TOPIC_SENTENCE_SYS, build_topic_sentence_prompt, SUMMARY_SENTENCE_SYS, build_summary_sentence_prompt, TRANSLATE_SYS, build_translate_prompt, VOCAB_SYS, build_vocab_prompt, Q5_BLANK_SYS, build_q5_blank_prompt, INSERT_SYS, build_insert_prompt, SOLVE_SYS, build_solve_prompt, GRAMMAR_ERROR_SYS, build_grammar_error_prompt
+from variation.validator import validate_a, validate_b, check_marker_positions, fill_boundary_dup, modal_no_verb, grammar_count, grammar_replace_once
 import variation.validator as _validator
 
 
@@ -1615,6 +1615,11 @@ def cache_key_to_prefix(cache_key: str) -> Optional[str]:
     return prefix
 
 
+# 캐시 버전 — 유형별로 따로 움직인다 (_s161)
+_A_VER = "s160"
+_B_VER = "s161"
+
+
 def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_type: str) -> str:
     """캐시 키: {책}_{단원}_{번호}_{md5}_v{유형}"""
     txt_hash = hashlib.md5(passage_text.encode("utf-8")).hexdigest()[:8]
@@ -2075,7 +2080,15 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{prefix}{txt_hash}_var{variation_type}_s160"
+    # ★ _s161 = B Q4 를 요약영작 → 어법 오류 찾아 고치기로 바꿨다.
+    #        옛 B 캐시(실측 831건)에는 blank_A/blank_B 만 있고 grammar_q4 가 없다.
+    #        새 variation_b.html 로 렌더하면 4번 답란과 답지 어법행이 통째로 빈다 —
+    #        무효화하지 않으면 빈 문항이 그대로 인쇄돼 나간다.
+    #        ★ 버전을 유형별로 나눈다. 통짜로 올리면 이번 수정과 무관한 A 캐시
+    #          899건까지 같이 날아가 재생성 크레딧을 태운다. A 는 _s160 그대로 둔다.
+    #        ★ 다음에 A 를 고칠 때는 _A_VER 만 올린다. 두 줄이 따로 움직인다.
+    _ver = _B_VER if str(variation_type).lower() == "b" else _A_VER
+    return f"{prefix}{txt_hash}_var{variation_type}_{_ver}"
 
 
 # ============ Supabase 캐시 ============
@@ -3443,114 +3456,59 @@ def generate_variation_b(
                     _t = _t.replace("(A)", str(_o[_c][0]), 1).replace("(B)", str(_o[_c][1]), 1)
                 return _t.replace("(A)", " ").replace("(B)", " ")
 
-            _q3_sum = _filled_q3()
+            # ════════════════════════════════════════════════════════════
+            # Q4 — 어법 오류 찾아 고치기 (_s161)
+            #   옛 Q4(요약영작)는 Q3(요약빈칸)와 둘 다 '지문을 한 문장으로 요약'이라
+            #   논지가 하나뿐인 이상 구조적으로 겹쳤다. 프롬프트로 아무리 지시해도
+            #   재시도만 태우고(실측 11회) 지문이 통째로 누락됐다.
+            #   → 완전히 다른 능력으로 바꾼다. 난이도는 수능 영어 29번 수준.
+            #
+            #   ★ 반드시 위치 정정(원문 복원 검증)이 끝난 **뒤에** 심어야 한다.
+            #     먼저 심으면 passage_with_marks 가 원문과 달라져 Q1 정답 계산이 깨진다.
+            # ════════════════════════════════════════════════════════════
+            data.pop("grammar_q4", None)
             try:
-                for _sa in range(2):
-                    _msg = build_summary_sentence_prompt(en_text, q3_summary=_q3_sum)
-                    if _sa:
-                        _msg += ("\n\n[이전 시도가 Q3 요약문과 겹쳤다]\n"
-                                 "  겹친 어구: " + ", ".join(sorted(_ov)[:4]) + "\n"
-                                 "논리 구조·주어·축이 되는 문장을 전부 바꿔서 다시 써라.")
-                    _s_raw = call_claude(SUMMARY_SENTENCE_SYS, _msg, max_tokens=600)
-                    _s = extract_json_from_response(_s_raw)
-                    # ★ _s124 — blank_A/B 가 dict 로 오는 경우가 있다
-                    #   ({"text": "...", "unit": "..."} 형태). 그대로 .strip() 하면
-                    #   'dict object has no attribute strip' 로 터져 **Q4 요약문
-                    #   재생성이 아예 안 돌았다**(실측: 매 시도마다 예외).
-                    #   그래서 Q3·Q4 겹침도 못 고치고 재시도만 소진했다.
-                    def _txt(v):
-                        if isinstance(v, dict):
-                            v = v.get("text") or v.get("span") or v.get("phrase") or ""
-                        return str(v or "").strip()
-                    _fs = _txt(_s.get("full_summary"))
-                    _ba = _txt(_s.get("blank_A"))
-                    _bb = _txt(_s.get("blank_B"))
-                    if not (_fs and _ba and _bb and _ba in _fs and _bb in _fs and _ba != _bb):
-                        break                      # 형식 오류 — 기존(한번에 만든) 요약문 유지
-                    _ov = _summary_overlap(_fs, _q3_sum)
-                    if _ov and _sa == 0:
-                        print(f"[VAR][B][{pid}] Q4 요약문이 Q3 와 겹침 {sorted(_ov)[:3]} → 재생성")
+                _pwm = str(data.get("passage_with_marks") or "")
+                _gs_avoid = str(data.get("given_sentence") or "")
+                _plain = re.sub(r"<MARK\d>", " ", _pwm)
+                _plain = re.sub(r"\s+", " ", _plain).strip()
+                for _ga in range(2):
+                    _gmsg = build_grammar_error_prompt(_plain, avoid_sentence=_gs_avoid)
+                    if _ga:
+                        _gmsg += ("\n\n[이전 시도가 거부됐다]\n  " + _gerr +
+                                  "\n지문에 글자 그대로 있는 표현을 골라 다시 답하라.")
+                    _graw = call_claude(GRAMMAR_ERROR_SYS, _gmsg, max_tokens=700)
+                    _gj = extract_json_from_response(_graw) or {}
+                    _cor = str(_gj.get("correct") or "").strip()
+                    _wrg = str(_gj.get("wrong") or "").strip()
+                    _gerr = ""
+                    if not _cor or not _wrg:
+                        _gerr = "correct/wrong 이 비었다"
+                    elif _cor == _wrg:
+                        _gerr = "correct 와 wrong 이 같다"
+                    elif grammar_count(_cor, _pwm) == 0:
+                        _gerr = f"'{_cor}' 가 지문에 글자 그대로 없다"
+                    elif grammar_count(_cor, _pwm) != 1:
+                        _gerr = (f"'{_cor}' 가 지문에 {grammar_count(_cor, _pwm)}번 나온다 "
+                                 f"— 한 번만 나오는 표현을 골라라")
+                    elif _gs_avoid and grammar_count(_cor, _gs_avoid):
+                        _gerr = "주어진 문장(Q1)에 있는 표현이다 — 다른 자리를 골라라"
+                    if _gerr:
+                        print(f"[VAR][B][{pid}] Q4 어법 자리 거부 — {_gerr}")
                         continue
-                    if _ov:
-                        print(f"[VAR][B][{pid}] ⚠ Q4 요약문이 Q3 와 여전히 겹침 {sorted(_ov)[:3]}")
-                    data["full_summary"] = _fs
-                    data["blank_A"] = _ba
-                    data["blank_B"] = _bb
-                    # ★ 요약문 해석도 같은 문장의 번역으로 함께 교체 (topic과 동일 이유).
-                    data["blank_summary_template_kr"] = _ensure_kr(_fs, _s.get("full_summary_kr"))
+                    # 지문에 오류를 심는다 (딱 한 곳)
+                    data["passage_with_marks"] = grammar_replace_once(_pwm, _cor, _wrg)
+                    data["grammar_q4"] = {
+                        "correct": _cor, "wrong": _wrg,
+                        "point": str(_gj.get("point") or "").strip(),
+                        "why": str(_gj.get("why") or "").strip(),
+                        "sentence": str(_gj.get("sentence") or "").strip(),
+                    }
+                    print(f"[VAR][B][{pid}] Q4 어법 — '{_wrg}' → '{_cor}' ({_gj.get('point')})")
                     break
-            except Exception as _se:
-                print(f"[VAR][B][{pid}] Q4 요약문 재생성 예외({_se})")
+            except Exception as _ge:
+                print(f"[VAR][B][{pid}] ⚠ Q4 어법 생성 건너뜀: {_ge}")
 
-            # ★★ Q4 빈칸을 코드가 요약문에서 직접 골라 4단어+ 보장 (A Q5와 같은 철학).
-            #   LLM이 짧게/비verbatim으로 뽑아도 코드가 깨끗한 4단어 구절로 대체 → 누락 차단.
-            try:
-                _fulls = data.get("full_summary") or data.get("summary_full") or ""
-                _ra4, _rb4 = data.get("blank_A"), data.get("blank_B")
-                # 새 형식: {starts_with, ends_with} 지목 → 코드가 요약문에서 잘라냄
-                if isinstance(_ra4, dict) or isinstance(_rb4, dict):
-                    _sa4 = _span_from_marks_summary(_fulls, _ra4, pid, "A")
-                    _sb4 = _span_from_marks_summary(_fulls, _rb4, pid, "B")
-                    if _sa4 and _sb4:
-                        print(f"[VAR][B][{pid}] Q4 LLM 지목 — (A)'{_sa4}' (B)'{_sb4}'")
-                    else:
-                        print(f"[VAR][B][{pid}] Q4 지목 실패 → 코드 픽으로 폴백")
-                    _sa4, _sb4 = _sa4 or "", _sb4 or ""
-                else:                                    # 구 형식(문자열) 하위호환
-                    _sa4, _sb4 = str(_ra4 or ""), str(_rb4 or "")
-                _bp = pick_b_q4_blanks(_fulls, _sa4, _sb4)
-                if _bp:
-                    data["blank_A"] = _bp["blank_A"]
-                    data["blank_B"] = _bp["blank_B"]
-            except Exception as _q4e:
-                print(f"[VAR][B][{pid}] Q4 빈칸 처리 예외({_q4e})")
-
-            # ★★ 코드가 빈칸 뚫기 (우리가 정한 방식: 완성문장 먼저 → 코드가 뚫기)
-            #   LLM이 준 full_summary(빈칸 없는 완성문장)에서 blank_A/blank_B를 찾아
-            #   (A)/(B)로 코드가 직접 치환 → blank_summary_template 생성.
-            #   이렇게 하면 "되넣으면 복원"이 코드로 보장 → 빈칸범위/중복/마킹 오류 원천 차단.
-            def _punch_blanks(full, a, b):
-                """full에서 a→(A), b→(B)로 치환. 대소문자/공백 차이 흡수. 성공 시 (template, True)."""
-                import re as _re
-                if not full or not a or not b:
-                    return None, False
-                def _find(hay, needle):
-                    # 1) 그대로  2) 공백 정규화 후 토큰시퀀스 매칭
-                    i = hay.find(needle)
-                    if i >= 0:
-                        return i, i + len(needle)
-                    hn = _re.sub(r'\s+', ' ', hay)
-                    nn = _re.sub(r'\s+', ' ', needle).strip()
-                    j = hn.find(nn)
-                    if j >= 0:
-                        # 원본 인덱스 보정이 복잡하므로, 정규화 문자열에서 작업
-                        return None
-                    return None
-                # 단순/정규화 치환을 정규화 평면에서 수행
-                hn = _re.sub(r'\s+', ' ', full).strip()
-                an = _re.sub(r'\s+', ' ', a).strip()
-                bn = _re.sub(r'\s+', ' ', b).strip()
-                if an not in hn or bn not in hn:
-                    return None, False
-                # A를 먼저 치환하되, B가 A의 부분문자열이면 충돌 → 더 긴 것부터
-                first, fk, second, sk = (an, "(A)", bn, "(B)")
-                if len(bn) > len(an):
-                    first, fk, second, sk = (bn, "(B)", an, "(A)")
-                t = hn.replace(first, fk, 1)
-                if second not in t:  # 치환 후 두 번째 구절이 사라졌으면(겹침) 실패
-                    return None, False
-                t = t.replace(second, sk, 1)
-                if "(A)" not in t or "(B)" not in t:
-                    return None, False
-                return t, True
-
-            try:
-                _full = data.get("full_summary") or data.get("summary_full") or ""
-                _tmpl, _ok = _punch_blanks(_full, data.get("blank_A", ""), data.get("blank_B", ""))
-                if _ok:
-                    data["blank_summary_template"] = _tmpl  # 코드가 만든 빈칸 버전으로 덮어쓰기
-            except Exception:
-                pass
 
             # ★ Q4/Q5 보기(bogi) 자동 생성: 답지 단어를 그대로 소문자·구두점제거하여 보기로 사용.
             #   모델이 만든 보기는 무시 → 누락/잉여(예: 'for')/중복오류를 원천 차단.
@@ -3577,10 +3535,7 @@ def generate_variation_b(
                         out.append(w)
                 return out
             try:
-                # Q4: blank_A + blank_B
-                q4 = _bogi_from(str(data.get("blank_A", "")) + " " + str(data.get("blank_B", "")))
-                if q4:
-                    data["blank_summary_bogi"] = q4
+                # (_s161) Q4 는 어법 오류 찾기라 보기가 없다. Q5 만 만든다.
                 # Q5: topic_writing_answer
                 q5 = _bogi_from(data.get("topic_writing_answer", ""))
                 if q5:
@@ -3599,31 +3554,10 @@ def generate_variation_b(
                     data[_ok], data[_ck] = _shuffle_choices(
                         data[_ok], data[_ck], _choice_seed(pid, _tag, data.get(_ok)))
 
-            # ★★ Q3·Q4 요약문 겹침 최종 확인 (_s99)
-            #   재생성 2회가 다 실패해도 여기서 막는다. 같은 문장이면 Q3 를 푼 학생이
-            #   Q4 를 그냥 베껴 쓴다 — 두 문항이 사실상 하나가 된다.
-            try:
-                # ★ 양쪽 다 '정답을 채운 완성 문장'으로 비교한다 (_s100).
-                #   Q4 는 full_summary 가 곧 완성 문장이고, Q3 는 정답을 끼워 넣어 만든다.
-                _q3t = _filled_q3()
-                _q4t = str(data.get("full_summary") or "")
-                if not _q4t:
-                    _q4t = str(data.get("blank_summary_template") or "")
-                    _ba2, _bb2 = data.get("blank_A"), data.get("blank_B")
-                    if _ba2 and _bb2:
-                        _q4t = _q4t.replace("(A)", str(_ba2), 1).replace("(B)", str(_bb2), 1)
-                    _q4t = _q4t.replace("(A)", " ").replace("(B)", " ")
-                _ov2 = _summary_overlap(_q4t, _q3t)
-                if _ov2 and not is_last:
-                    last_errors = [
-                        f"[{pid}] [유형B] Q3 요약문과 Q4 요약문이 겹침 {sorted(_ov2)[:4]} — "
-                        f"두 문항은 별개다. Q3 를 푼 학생이 Q4 를 베껴 쓰게 된다. "
-                        f"논리 구조(속성→결과 / 조건→귀결 / 대비)와 주어와 축이 되는 문장을 "
-                        f"전부 다르게 잡아 Q4 요약문을 새로 쓸 것."]
-                    print(f"[VAR][B][{pid}] Q3·Q4 요약문 겹침 {sorted(_ov2)[:3]} → 재시도")
-                    continue
-            except Exception as _oe:
-                print(f"[VAR][B][{pid}] Q3·Q4 겹침 확인 예외({_oe})")
+            # (_s161) Q3·Q4 요약문 겹침 검사를 걷어냈다.
+            #   Q4 가 요약영작에서 어법 오류 찾기로 바뀌어 겹칠 수가 없다.
+            #   옛 검사는 같은 논지를 다르게 써도 개념어가 겹쳐 계속 걸렸고,
+            #   실측(Further Reading)에서 재시도 4회를 태우고 지문을 통째로 날렸다.
 
             # ★★ B Q3 복수정답 방지 (_s99) — 자가검증을 실제로 했는지 확인한다.
             #   프롬프트만으론 세 번 연속 복수정답이 새어나갔다
@@ -3762,14 +3696,7 @@ def generate_variation_b(
                         _st.replace("(A)", str(_so[_sc][0]), 1)
                            .replace("(B)", str(_so[_sc][1]), 1))
 
-                # Q4 요약문 — 정답 구절을 채운 완성 영문
-                _bt = str(data.get("blank_summary_template") or "")
-                _ba, _bb = data.get("blank_A"), data.get("blank_B")
-                if _bt and _ba and _bb:
-                    data["blank_summary_template_en"] = (
-                        _bt.replace("(A)", str(_ba), 1).replace("(B)", str(_bb), 1))
-                elif data.get("full_summary"):
-                    data["blank_summary_template_en"] = str(data["full_summary"])
+                # (_s161) Q4 요약문 영문은 없앴다 — Q4 가 어법 오류 찾기로 바뀌었다.
             except Exception as _ke:
                 print(f"[VAR][B][{pid}] 답지 보강 예외({_ke})")
 
@@ -3814,7 +3741,7 @@ def generate_variation_b(
     # ★ 5회 모두 실패해도 마지막 데이터가 있으면 그거라도 사용 (불완전한 B라도 없는 것보단 나음)
     if last_data is not None:
         # 필수 필드만 있으면 저장하고 반환
-        required_minimum = ["given_sentence", "passage_with_marks", "blank_A", "blank_B",
+        required_minimum = ["given_sentence", "passage_with_marks", "grammar_q4",
                             "topic_writing_answer", "summary_options"]
         if all(k in last_data for k in required_minimum):
             save_cached(cache_key, "variation_b", last_data)

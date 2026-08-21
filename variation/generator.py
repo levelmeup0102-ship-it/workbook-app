@@ -633,7 +633,12 @@ _CLAUSE_SUBORD = {"because", "although", "though", "while", "since", "when",
 # 쉼표 바로 뒤의 한정사·대명사는 거의 언제나 새 절(또는 동격절)의 시작이다.
 _CLAUSE_HEAD = {"i", "you", "he", "she", "it", "we", "they",
                 "each", "every", "this", "these", "those",
-                "my", "your", "his", "her", "its", "our", "their"}
+                "my", "your", "his", "her", "its", "our", "their",
+                # ★ 관사도 넣는다 (_s157). 실측(24년 고1 9월 22번):
+                #   'evolutionary perspective, an emotion is a kind' 가 뽑혀
+                #   전치사구 끝 + 주절 시작을 한 빈칸으로 물었다. 쉼표 뒤가
+                #   'an' 이라 _CLAUSE_HEAD 에 없어 통과했다.
+                "a", "an", "the"}
 # not A but B / either A or B 는 상관접속이지 절 접속이 아니다.
 _CORRELATIVE = {"not", "either", "neither", "both"}
 
@@ -1105,7 +1110,7 @@ def _q5_leaks(statements, va, vb) -> bool:
 
 
 def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?",
-                     statements=None) -> Optional[dict]:
+                     statements=None, avoid=None) -> Optional[dict]:
     """A Q5 빈칸을 코드가 (A)(B)(C)에서 직접 골라 마킹 (B 빈칸뚫기와 같은 철학).
     LLM이 고른 구절(blank_A/B)이 유효하면 우선 사용, 아니면 코드가 깨끗한 구절 선택.
     fill_boundary_dup None + verbatim 복원 + 서로 다른 단락이 보장되는 조합만 반환. 실패 시 None.
@@ -1165,7 +1170,13 @@ def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?
                 disc = head in ("indeed", "however", "moreover", "thus",
                                 "therefore", "furthermore", "nevertheless")
             return (1 if disc else 0, 1 if len(w) <= 4 else 0)
-        lst += sorted((c for c in cand[k] if c not in lst), key=_rank)
+        # ★ 중복 제거 (_s158) — cand[k] 안에 같은 구절이 여러 번 들어 있어
+        #   `c not in lst` 가 못 걸렀다(sorted 중에는 lst 가 안 늘어나므로).
+        #   그래서 아래 [:N] 슬라이스가 같은 후보로 채워져 실질 후보가 2~3개뿐이었다.
+        _seen = set(lst)
+        for _c in sorted((c for c in cand[k] if c not in lst), key=_rank):
+            if _c not in _seen:
+                _seen.add(_c); lst.append(_c)
         pool.append((k, lst))
 
     for ai in range(len(pool)):
@@ -1174,8 +1185,11 @@ def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?
             if bi == ai:
                 continue
             kb, lb = pool[bi]
-            for va in la[:6]:
-                for vb in lb[:6]:
+            # ★ 회피 조건이 걸리면 후보를 더 넓게 본다 (_s158). 좁게 보면
+            #   대체 자리를 못 찾아 결국 겹친 채로 나간다.
+            _N = 18 if avoid else 6
+            for va in la[:_N]:
+                for vb in lb[:_N]:
                     new = [list(p) for p in paragraphs]
                     new[ka][1] = texts[ka].replace(va, "<BLANK_A>", 1)
                     new[kb][1] = texts[kb].replace(vb, "<BLANK_B>", 1)
@@ -1190,6 +1204,11 @@ def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?
                         continue
                     # ★ Q4 진술이 이 답을 그대로 말해주면 다른 후보로 넘어간다 (_s152)
                     if statements and _q5_leaks(statements, va, vb):
+                        continue
+                    # ★ Q3 정답이 든 문장은 빈칸으로 뚫지 않는다 (_s158)
+                    #   실측(업로드 22개 파일 58문항): Q3 정답과 Q5 빈칸이 **같은 문장**
+                    #   인 것이 7건. 두 문항이 한 판단을 공유해 출제 포인트가 겹친다.
+                    if avoid and any(va in _s or vb in _s for _s in avoid):
                         continue
                     # ★ (A)(B) 라벨을 본문 등장 순서로 재배정 — 학생은 (A)→(B) 순으로 쓰는데
                     #   지문이 (B)→(A) 순이면 읽기 흐름이 어긋난다. 마커만 맞바꾸면 되므로
@@ -1989,7 +2008,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{prefix}{txt_hash}_var{variation_type}_s156"
+    return f"{prefix}{txt_hash}_var{variation_type}_s158"
 
 
 # ============ Supabase 캐시 ============
@@ -2482,6 +2501,9 @@ def generate_variation_a(
                     _picked = pick_a_q5_blanks(data["paragraphs"], data.get("blank_A", ""), data.get("blank_B", ""), pid,
                                                statements=data.get("statements"))
                 if _picked:
+                    # ★ 빈칸 뚫기 **전** 단락을 남겨 둔다 (_s158) — Q3 정답이 정해진 뒤
+                    #   겹치면 여기서 다시 뚫는다. API 호출이 필요 없다.
+                    data["_paras_preblank"] = [list(_p) for _p in data["paragraphs"]]
                     data["paragraphs"] = _picked["paragraphs"]
                     data["blank_A"] = _picked["blank_A"]
                     data["blank_B"] = _picked["blank_B"]
@@ -2714,6 +2736,40 @@ def generate_variation_a(
             except Exception:
                 pass
 
+            # ════════════════════════════════════════════════════════════
+            # ★ Q3 정답과 Q5 빈칸이 같은 문장이면 **빈칸을 옮긴다** (_s158)
+            #   왜 여기냐: 빈칸은 어휘보다 먼저 뽑히므로 뚫을 때는 Q3 정답을
+            #   알 수 없다. 어휘가 확정된 지금이 유일하게 둘 다 아는 시점이고,
+            #   보기(bogi)를 만들기 **전**이라 빈칸을 바꿔도 보기가 어긋나지 않는다.
+            #   ★ 재시도가 아니라 코드 재선정이다 — API 호출 0회, 크레딧 0.
+            #   이 자리를 놓치면 바깥 검사(answer_in_blank_sentence)로 넘어가는데
+            #   그건 `not is_last` 로 묶여 있어 **마지막 시도에서는 그냥 통과**한다.
+            #   실측(업로드 22파일 58문항): 같은 문장 7건이 그렇게 나갔다.
+            # ════════════════════════════════════════════════════════════
+            try:
+                from variation.vocab_q3 import answer_sentence_span as _asp
+                _ap, _asent = _asp(data.get("vocab_items"), data.get("paragraphs"))
+                if _asent and ("<BLANK_A>" in _asent or "<BLANK_B>" in _asent):
+                    _orig_sent = (_asent.replace("<BLANK_A>", data.get("blank_A", ""))
+                                        .replace("<BLANK_B>", data.get("blank_B", "")))
+                    _pre = data.get("_paras_preblank")
+                    _alt = (pick_a_q5_blanks(_pre, "", "", pid,
+                                             statements=data.get("statements"),
+                                             avoid=[_orig_sent])
+                            if _pre else None)
+                    if _alt:
+                        data["paragraphs"] = _alt["paragraphs"]
+                        data["blank_A"] = _alt["blank_A"]
+                        data["blank_B"] = _alt["blank_B"]
+                        print(f"[VAR][A][{pid}] Q3 정답이 Q5 빈칸과 같은 문장 → "
+                              f"빈칸 재선정 (A)'{_alt['blank_A'][:35]}' "
+                              f"(B)'{_alt['blank_B'][:35]}' (_s158)")
+                    else:
+                        print(f"[VAR][A][{pid}] ⚠ Q3 정답이 Q5 빈칸과 같은 문장인데 "
+                              f"대체 빈칸을 못 찾음 — 바깥 검사로 넘김 (_s158)")
+            except Exception as _bse:
+                print(f"[VAR][A][{pid}] ⚠ 검사 건너뜀 (Q3↔Q5 빈칸 재선정): {_bse}")
+
             # ★ Q5 보기(bogi) 자동 생성: blank_A + blank_B의 모든 단어를 셔플해서 사용.
             #   모델이 만든 bogi는 무시 → 보기 누락/변형으로 인한 불일치를 원천 차단.
             try:
@@ -2943,6 +2999,30 @@ def generate_variation_a(
                         print(f"[VAR][A][{pid}] Q1 주제 정답 자리 → {_tc2 + 1}번")
                 except Exception as _pe:
                     print(f"[VAR][A][{pid}] 주제 자리 순환 예외({_pe})")
+
+                # ★ 관대 모드로 나가는 것에는 반드시 이유를 남긴다 (_s158)
+                #   `not is_last` 로 묶인 검사가 여섯 개인데, 마지막 시도에서는
+                #   전부 조용히 꺼진다. 무엇을 봐주고 내보냈는지 로그에 없으면
+                #   산출물에 결함이 있어도 아무도 모른다 — 실측으로 그랬다.
+                if is_last:
+                    _passed = []
+                    try:
+                        from variation.vocab_q3 import (
+                            answer_in_blank_sentence as _c1,
+                            statements_leak_blanks as _c2,
+                            evidence_not_in_passage as _c3)
+                        if _c1(data.get("vocab_items"), data.get("paragraphs")):
+                            _passed.append("Q3 정답이 Q5 빈칸과 같은 문장")
+                        if _c2(data.get("statements"), data.get("blank_A", ""),
+                               data.get("blank_B", "")):
+                            _passed.append("Q4 진술이 Q5 정답을 누출")
+                        if _c3(data.get("statements_evidence"), data.get("paragraphs")):
+                            _passed.append("Q4 근거가 지문에 없음")
+                    except Exception as _ae:
+                        _passed.append(f"감사 실패({_ae})")
+                    if _passed:
+                        print(f"[VAR][A][{pid}] ⚠⚠ 관대 모드로 내보냄 — "
+                              f"봐준 결함: {' / '.join(_passed)} (_s158)")
 
                 save_cached(cache_key, "variation_a", data)
                 mode_str = "관대 모드" if is_last else "엄격 모드"

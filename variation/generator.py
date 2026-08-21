@@ -667,6 +667,65 @@ def crosses_clause(span: str) -> bool:
     return False
 
 
+# ── 절 꼬리만 물고 술부를 밖에 두는 빈칸 (_s160) ────────────────────
+#   crosses_clause 는 **쉼표가 있을 때만** 본다. 쉼표 없이 두 절이 이어지면
+#   그대로 통과했다.
+#     원문: … is up to you but [your dot map] should show …
+#     쉼표를 빼면 'up to you but your dot map' 이 후보로 살아남는다.
+#     학생이 보는 것: "is ⬜ should show" — 둘째 절의 주어만 빈칸 안이고
+#     술부는 밖이라, 무엇을 넣어야 문장이 되는지 단서가 없다.
+#   ★ 등위 명사구(soil and water pollution)와 구별하는 열쇠는 **빈칸 밖**이다.
+#     명사구 등위는 뒤에 동사가 안 오고, 절이 잘린 경우는 반드시 동사가 온다.
+#     그래서 span 만으로는 못 본다 — 지문을 같이 받아야 한다.
+_CLAUSE_JOIN = {"but", "and", "or", "so", "yet", "because", "although", "though",
+                "while", "since", "unless", "whereas", "that", "which", "who", "when"}
+_SUBJ_HEAD = {"i", "you", "he", "she", "it", "we", "they", "this", "these", "those",
+              "the", "a", "an", "my", "your", "his", "her", "its", "our", "their"}
+_AUXV = {"is", "are", "was", "were", "be", "been", "am", "do", "does", "did",
+         "have", "has", "had", "can", "could", "will", "would", "may", "might",
+         "must", "should", "shall", "need", "seems", "seem", "becomes", "become",
+         # ★ 불규칙 과거형 (_s160) — 어미 규칙(-ed/-ing/-s)으로는 안 잡힌다.
+         #   실측: 'was tired and the whole team' 뒤의 'knew' 를 못 봤다.
+         #   현재형 원형(break/show/make)은 넣지 않는다 — 명사로도 흔히 쓰여
+         #   등위 명사구까지 절로 오인한다.
+         "knew", "said", "made", "took", "saw", "came", "went", "got", "gave",
+         "found", "thought", "told", "felt", "left", "kept", "brought", "began",
+         "grew", "held", "meant", "met", "ran", "sat", "stood", "won", "wrote",
+         "spoke", "broke", "chose", "drove", "fell", "forgot", "heard", "led",
+         "lost", "paid", "sent", "sold", "taught", "understood", "built",
+         "spent", "drew", "threw", "rose", "drank", "ate", "knew", "wore"}
+
+
+def _verbish(w: str) -> bool:
+    w = re.sub(r"[^A-Za-z']", "", w).lower()
+    return bool(w) and (w in _AUXV or re.search(r"(ed|ing|es|s)$", w) is not None)
+
+
+def clause_tail_cut(span: str, ptext: str) -> bool:
+    """빈칸이 둘째 절의 주어까지만 물고 술부를 밖에 두면 True (_s160)."""
+    toks = str(span or "").split()
+    if len(toks) < 4:
+        return False
+    ks = [k for k, t in enumerate(toks)
+          if 1 <= k <= len(toks) - 2
+          and re.sub(r"[^A-Za-z']", "", t).lower() in _CLAUSE_JOIN]
+    if not ks:
+        return False
+    k = ks[-1]
+    tail = toks[k + 1:]
+    head = re.sub(r"[^A-Za-z']", "", tail[0]).lower()
+    if head not in _SUBJ_HEAD:          # 접속사 뒤가 주어류가 아니면 절이 아니다
+        return False
+    if any(_verbish(t) for t in tail[1:]):
+        return False                    # 술부가 빈칸 안에 있다 — 온전한 절
+    # 빈칸 **밖** 첫 낱말이 동사면 그 절의 술부가 잘린 것이다
+    i = ptext.find(span)
+    if i < 0:
+        return False
+    nxt = ptext[i + len(span):].split()
+    return bool(nxt) and _verbish(nxt[0])
+
+
 def _q5_candidates(ptext: str, min_w: int = 4, max_w: int = 8) -> list:
     """단락에서 '문장 중간 연속 구절'(verbatim) 후보 생성. 가운데 우선.
     문장경계/따옴표 포함 제외, 조동사 시작 제외, 단락 내 유일 등장만.
@@ -696,6 +755,8 @@ def _q5_candidates(ptext: str, min_w: int = 4, max_w: int = 8) -> list:
                 # ★ 절 경계를 넘는 구절은 뺀다 (_s153). 실측: 후보 8.3% 감소,
                 #   후보 0 단락 0개 — 소진 위험 없이 품질만 오른다.
                 if crosses_clause(sub):
+                    continue
+                if clause_tail_cut(sub, ptext):      # ★ _s160
                     continue
                 if not _clean_boundary_ok(sub, ptext, strict=strict):
                     continue
@@ -1009,6 +1070,10 @@ def validate_llm_q5_spans(paragraphs, span_a: str, span_b: str, pid: str = "?") 
     #   실측(공통영어2 비상(홍) 1과 6번): 두 빈칸이 다 절을 걸쳐 'your own ⬜ make',
     #   'is ⬜ should show' 가 나갔다. 거부 사유는 재시도 프롬프트로 돌아간다.
     for v, lab in ((a, "A"), (b, "B")):
+        if clause_tail_cut(v, " ".join(texts)):      # ★ _s160
+            return _fail(f"({lab}) '{v[:45]}' 가 둘째 절의 주어까지만 물고 "
+                         f"술부를 빈칸 밖에 두었다 — 접속사 뒤 절을 통째로 "
+                         f"넣거나 접속사 앞에서 끊을 것")
         if crosses_clause(v):
             return _fail(f"({lab}) '{v[:45]}' 가 절 경계를 넘는다 — "
                          f"쉼표 뒤에서 새 절이 시작된다. 성분 하나만 고를 것")
@@ -1144,6 +1209,8 @@ def pick_a_q5_blanks(paragraphs, llm_a: str = "", llm_b: str = "", pid: str = "?
         if not _clean_boundary_ok(v, texts[idx], strict=True):
             return None
         if crosses_clause(v):          # ★ _s153
+            return None
+        if clause_tail_cut(v, texts[idx]):   # ★ _s160
             return None
         return v
 
@@ -2008,7 +2075,7 @@ def make_cache_key(book: str, unit: str, pid: str, passage_text: str, variation_
     # (구) _s59 = 어휘 폴백 5자리 보장 + 문장당1개 경고가 재시도 유발하던 것 제거 + 인용문 문장분리. _s58 누적분 포함.
     # (구) _s58 = A Q3를 어휘 유형(수능 30번)으로 전환 — 원문 무손실(자리만 기록), Q5 빈칸 회피, 정답 ③④⑤ 강제, 오답 4자리도 동의어 치환. _s57 누적분 포함.
     # (구) _s57 = 정답선지 패러프레이즈 5방식(문두명사 신조·사례 상위어화·대비축 유지·품사전환·부정→긍정) + 오답은 지문어휘 유지 후 한 단어만 삽입. _s56 누적분 포함.
-    return f"{prefix}{txt_hash}_var{variation_type}_s159"
+    return f"{prefix}{txt_hash}_var{variation_type}_s160"
 
 
 # ============ Supabase 캐시 ============

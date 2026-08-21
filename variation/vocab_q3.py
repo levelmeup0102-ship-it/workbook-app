@@ -1293,10 +1293,53 @@ def _key_words(sent: str) -> set:
     return {w for w in ws if len(w) > 3 and w not in _VOCAB_STOP}
 
 
-def q4_conflicts_with_answer(vocab_items, paragraphs, statements_evidence) -> list:
-    """Q3 정답 자리 문장을 근거로 삼은 Q4 진술이 있으면 그 라벨 목록.
+def _norm_w(w: str) -> str:
+    return re.sub(r"[^A-Za-z]", "", str(w or "")).lower()
+
+
+def _kin_word(a: str, b: str) -> bool:
+    """두 낱말이 같은 어족인가 (_s159).
+
+    어미 목록으로 자르는 방식은 못 쓴다 — 'difficulty' 의 끝 두 글자가 'ly' 라
+    부사 취급되어 'difficult' 와 안 맞았다(실측). 앞에서부터 겹치는 길이로 본다.
+    """
+    a, b = _norm_w(a), _norm_w(b)
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    n = 0
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        n += 1
+    return n >= min(5, len(a), len(b)) and min(len(a), len(b)) >= 4
+
+
+def _stmt_text(st) -> str:
+    if isinstance(st, (list, tuple)):
+        for v in st:
+            if isinstance(v, str) and len(v.split()) > 2:
+                return v
+        return ""
+    return str(st or "")
+
+
+def q4_conflicts_with_answer(vocab_items, paragraphs, statements_evidence,
+                             statements=None) -> list:
+    """Q3 정답 자리 문장을 근거로 삼은 **그리고 그 낱말에 기대는** Q4 진술의 라벨.
 
     statements_evidence: Q4 각 진술의 근거 문장 리스트(원문 문장).
+    statements: Q4 진술 본문. 주면 판정이 좁아진다(_s159).
+
+    ★ _s159 — 문장이 같다는 것만으로 튕기면 안 된다.
+      정답이 갈리는 건 **진술이 뒤집힌 낱말에 기댈 때**뿐이다. 같은 문장이라도
+      진술이 그 문장의 다른 부분을 말하고 있으면 학생 판단은 안 흔들린다.
+        지문 'Achieving these goals seems ②easy'  (원문 difficult)
+          진술 "…goals seem easy to achieve"        → 갈린다 (easy 에 기댐)
+          진술 "The goals were set by the council"  → 안 갈린다 (다른 부분)
+      옛 판정(문장 70% 겹침)은 둘을 구분 못 해 매 지문마다 재시도를 한두 번씩
+      더 돌렸고, 그 재시도가 API 크레딧을 태웠다(실측 로그: 39번 2회 낭비).
     """
     ans = next((it for it in vocab_items or [] if it.get("is_answer")), None)
     if not ans:
@@ -1317,14 +1360,24 @@ def q4_conflicts_with_answer(vocab_items, paragraphs, statements_evidence) -> li
     key = _key_words(sent)
     if len(key) < 3:
         return []
+    # 뒤집힌 낱말 — 원문·제시 양쪽 (학생은 제시형을 본다)
+    _keys = [w for w in (_norm_w(ans.get("original", "")), _norm_w(ans.get("shown", ""))) if w]
+    _sts = list(statements or [])
+
     hits = []
     for n, ev in enumerate(statements_evidence or []):
         ek = _key_words(ev)
         if not ek:
             continue
         # 근거 문장이 정답 문장과 사실상 같은가 (내용어 70% 이상 겹침)
-        if len(key & ek) / max(1, min(len(key), len(ek))) >= 0.7:
-            hits.append("가나다라마"[n] if n < 5 else str(n + 1))
+        if len(key & ek) / max(1, min(len(key), len(ek))) < 0.7:
+            continue
+        # ★ 같은 문장이어도 진술이 그 낱말에 기대지 않으면 통과 (_s159)
+        if _keys and n < len(_sts):
+            _tw = re.findall(r"[A-Za-z]+", _stmt_text(_sts[n]))
+            if not any(_kin_word(_w, _k) for _w in _tw for _k in _keys):
+                continue
+        hits.append("가나다라마"[n] if n < 5 else str(n + 1))
     return hits
 
 # ════════════════════════════════════════════════════════════════

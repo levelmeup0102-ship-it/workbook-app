@@ -1089,6 +1089,23 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
             elif len(hits) > 1 and isinstance(i, int):
                 found = min(hits, key=lambda j: abs(j - i))
         if found is None:
+            # ★ 단락을 건너뛴 좌표 (_s158)
+            #   실측(소명1 01·04·05번): LLM 이 para 를 0/1 로 헷갈려 적었을 뿐,
+            #   낱말은 **다른 단락에** 멀쩡히 있다. 같은 낱말이 다음 시도에서는
+            #   그대로 통과한 것이 증거다('common' 'recovered,' 'valuable').
+            #   여기서 튕기면 재시도가 한 번 더 돌고, 그 재시도가 API 크레딧을
+            #   태우다가 결국 400(크레딧 소진)으로 생성 자체가 죽는다.
+            #   → 전 단락에서 유일하게 찾히면 para 까지 고쳐서 살린다.
+            lo = _loose(orig)
+            cross = [(q, j) for q in range(len(paragraphs))
+                     for j, w in enumerate(paragraphs[q][1].split())
+                     if _loose(w) == lo]
+            if len(cross) == 1:
+                p, found = cross[0]
+                toks = paragraphs[p][1].split()
+                print(f"[VAR][A][{pid}] Q3어휘 normalize — {_no}번 '{orig}' 를 "
+                      f"para={it.get('para')}→{p} idx={found} 로 재배치 (_s158)")
+        if found is None:
             _near = " ".join(toks[max(0, (i or 0) - 2):(i or 0) + 3]) if toks else ""
             return _fail(f"{_no}번 '{orig}' 를 para={p} 에서 못 찾음 (idx={i} 근처: '{_near}')")
         i = found
@@ -1336,6 +1353,29 @@ def answer_in_blank_sentence(vocab_items, paragraphs) -> bool:
             return any("<BLANK_A>" in toks[k] or "<BLANK_B>" in toks[k]
                        for k in range(lo, hi + 1))
     return False
+
+def answer_sentence_span(vocab_items, paragraphs):
+    """Q3 정답 낱말이 든 **문장**을 (단락번호, 문장문자열) 로 돌려준다 (_s158).
+
+    문장 문자열에는 <BLANK_A>/<BLANK_B> 마커가 그대로 들어 있다. 호출부가
+    마커를 원래 구절로 되돌리면 원문 문장이 된다.
+    → 이 문장을 Q5 빈칸 후보에서 빼면 Q3 와 Q5 가 같은 자리를 묻는 일이 없다.
+    못 찾으면 (None, "").
+    """
+    ans = next((it for it in vocab_items or [] if it.get("is_answer")), None)
+    if not ans:
+        return None, ""
+    try:
+        p = int(ans["para"])
+        toks = paragraphs[p][1].split()
+        i = int(ans["idx"])
+    except Exception:
+        return None, ""
+    for lo, hi in _sentence_bounds(toks):
+        if lo <= i <= hi:
+            return p, " ".join(toks[lo:hi + 1])
+    return None, ""
+
 
 # ════════════════════════════════════════════════════════════════
 # ★ Q4 진술이 Q5 빈칸 정답을 그대로 말해주면 안 된다 (_s148)

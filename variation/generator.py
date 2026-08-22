@@ -2978,6 +2978,23 @@ def generate_variation_a(
             #   걸릴 때마다 예외 목록에 추가하는 건 audience 때와 같은 실수다.
             #   프롬프트가 지고, 코드는 개입하지 않는다.
 
+            # ★★ 내부 가림 문자열은 검증 **전에** 코드가 되돌린다 (_s162)
+            #   아래 internal_marker_leaks 검사는 `not is_last` 로 묶여 있어
+            #   마지막 시도에서는 꺼진다. 실측(25년 고2 9월 22번): 3회 시도 끝에
+            #   답지 근거가 “… predicted the wrong [[[빈칸]]] quite how powerful …”
+            #   로 그대로 나갔다. 선생님이 보는 답지에 코드 내부 문자열이 찍힌다.
+            #   → 재시도로 못 막는 것은 코드가 고친다(_s158 과 같은 방침).
+            #     인용문 앞뒤를 원문에서 찾아 그 사이 문구를 도로 끼워 넣는다.
+            #     복원 못 하면 지운다 — 내부 문자열을 인쇄하느니 낫다.
+            try:
+                from variation.vocab_q3 import repair_internal_marks as _rim
+                _rf = _rim(data, en_text)
+                if _rf:
+                    print(f"[VAR][A][{pid}] 내부 마커 {len(_rf)}곳 복원 (_s162) — "
+                          + "; ".join(f"{k}" for k, _ in _rf[:4]))
+            except Exception as _rie:
+                print(f"[VAR][A][{pid}] ⚠ 검사 건너뜀 (내부 마커 복원): {_rie}")
+
             errors = validate_a(data, en_text, pid, lenient=is_last)
 
             # ★★ Q3 정답 자리 문장을 Q4 진술이 근거로 삼으면 정답이 갈린다 (_s147).

@@ -1533,6 +1533,127 @@ def internal_marker_leaks(data) -> list:
     return found
 
 
+# ── 내부 마커를 **되돌린다** (_s162) ──────────────────────────────
+#   위 internal_marker_leaks 는 '검사'다. 그런데 generator 의 호출부가
+#   `not is_last` 로 묶여 있어 **마지막 시도에서는 그냥 통과**한다.
+#   실측(25년 고2 9월 22번): 3회 시도 끝에 답지 근거가
+#     “our ancestors had predicted the wrong [[[빈칸]]] quite how powerful …”
+#   로 나갔다. 선생님이 보는 답지에 코드 내부 문자열이 찍힌 것이다.
+#   ★ 재시도로 못 막는 것은 코드가 고쳐야 한다 (_s158 과 같은 방침).
+#     인용문은 원문에서 떠온 것이므로, 가림 문자열 **앞뒤를 원문에서 찾아**
+#     그 사이에 실제로 있던 문구를 도로 끼워 넣으면 복원된다.
+_MASK_RE = re.compile(r"\[\[\[.*?\]\]\]", re.S)
+
+
+def _norm_ws(t: str) -> str:
+    return re.sub(r"\s+", " ", str(t or "")).strip()
+
+
+def unmask_quote(text: str, original: str, blank_a: str = "", blank_b: str = "") -> str:
+    """인용문에 낀 내부 가림 문자열을 원문 문구로 되돌린다.
+
+    복원 못 하면 **지우고** 공백을 정리한다 — 내부 문자열을 그대로 인쇄하느니 낫다.
+    """
+    t = str(text or "")
+    if blank_a:
+        t = t.replace("<BLANK_A>", blank_a)
+    if blank_b:
+        t = t.replace("<BLANK_B>", blank_b)
+    t = t.replace("<BLANK_A>", "").replace("<BLANK_B>", "").replace("<CORE_BLANK>", "")
+    if "[[[" not in t:
+        return _norm_ws(t)
+
+    src = _norm_ws(original)
+    while True:
+        m = _MASK_RE.search(t)
+        if not m:
+            break
+        left = _norm_ws(t[:m.start()])
+        right = _norm_ws(t[m.end():])
+        lw = left.split()[-8:]
+        rw = right.split()[:8]
+        filled = None
+        while lw and filled is None:               # 왼쪽 단서를 줄여 가며 찾는다
+            li = src.find(" ".join(lw))
+            if li != -1:
+                lend = li + len(" ".join(lw))
+                rw2 = list(rw)
+                while rw2:
+                    ri = src.find(" ".join(rw2), lend)
+                    if ri != -1:
+                        filled = src[lend:ri].strip()
+                        break
+                    rw2 = rw2[:-1]
+                if filled is None and not rw:      # 오른쪽 단서가 없으면 문장 끝까지
+                    tail = src[lend:]
+                    cut = re.search(r"[.!?]", tail)
+                    filled = tail[:cut.end()].strip() if cut else tail.strip()
+                break
+            lw = lw[1:]
+        if filled is None:
+            filled = ""                            # 못 찾으면 지운다
+        t = t[:m.start()] + (" " + filled + " " if filled else " ") + t[m.end():]
+    return _norm_ws(t)
+
+
+def repair_internal_marks(data, original: str) -> list:
+    """산출 데이터를 훑어 내부 마커가 낀 문자열을 전부 되돌린다.
+
+    돌려주는 것은 고친 자리 목록 [(경로, 고치기 전 조각), ...] — 로그로 남긴다.
+    지문(paragraphs)은 마커를 담는 게 정상이므로 건드리지 않는다.
+    """
+    SKIP = {"paragraphs", "paragraphs_render", "paragraphs_marked", "_paras_preblank"}
+    ba = str((data or {}).get("blank_A") or "")
+    bb = str((data or {}).get("blank_B") or "")
+    fixed = []
+
+    def has_mark(x):
+        return isinstance(x, str) and any(m in x for m in _INTERNAL_MARKS)
+
+    def walk(node, path):
+        if isinstance(node, dict):
+            for k, v in list(node.items()):
+                if k in SKIP:
+                    continue
+                sub = f"{path}.{k}" if path else str(k)
+                if has_mark(v):
+                    new = unmask_quote(v, original, ba, bb)
+                    if new != v:
+                        node[k] = new
+                        fixed.append((sub, v[:60]))
+                else:
+                    walk(v, sub)
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                sub = f"{path}[{i}]"
+                if has_mark(v):
+                    new = unmask_quote(v, original, ba, bb)
+                    if new != v:
+                        node[i] = new
+                        fixed.append((sub, v[:60]))
+                else:
+                    walk(v, sub)
+        elif isinstance(node, tuple):
+            # 튜플은 제자리 수정이 안 된다 — 부모가 리스트면 통째로 갈아 끼운다
+            if any(has_mark(x) for x in node):
+                return [unmask_quote(x, original, ba, bb) if has_mark(x) else x
+                        for x in node]
+        return None
+
+    # statements_evidence 처럼 튜플이 든 리스트는 따로 처리한다
+    for key in ("statements", "statements_evidence", "statements_kr"):
+        seq = (data or {}).get(key)
+        if isinstance(seq, list):
+            for i, row in enumerate(seq):
+                if isinstance(row, tuple):
+                    rep = walk(row, f"{key}[{i}]")
+                    if rep is not None:
+                        seq[i] = tuple(rep)
+                        fixed.append((f"{key}[{i}]", str(row)[:60]))
+    walk(data, "")
+    return fixed
+
+
 class _IdxUnknown(Exception):
     """LLM 이 준 idx 를 신뢰할 수 없어 위치 기반 검사를 건너뛴다는 신호 (_s156)."""
 

@@ -369,6 +369,8 @@ body {
 {% for item in passages %}
 {# ★ 안내문(수능 27·28번)은 주제·일치·빈칸 3문항 (_s152) #}
 {% set _notice = (item.data.layout == 'notice') %}
+    {# _s163: 도표도 같은 3문항 경로를 탄다. 화면 문구만 갈라 쓴다. #}
+    {% set _kind = '도표' if item.data.layout_kind == 'chart' else '안내문' %}
 <div class="q-page">
   <div class="hdr">
     <span class="hdr-title">
@@ -394,9 +396,9 @@ body {
   <div class="two-col">
 
     <div class="col-left">
-      <div class="col-header col-l-hdr">[ {{ '안내문 — 주제 파악' if _notice else '객관식 — 내용 이해' }} ]</div>
+      <div class="col-header col-l-hdr">[ {{ _kind ~ ' — 주제 파악' if _notice else '객관식 — 내용 이해' }} ]</div>
 
-      <div class="q-title"><span class="q-num">1</span> 다음 글의 주제로 가장 적절한 것은?</div>
+      <div class="q-title"><span class="q-num">1</span> {{ '다음 도표가 나타내는 내용으로' if item.data.layout_kind == 'chart' else '다음 글의 주제로' }} 가장 적절한 것은?</div>
       <div>
         {% for opt in item.data.topic_options %}
         <div class="opt"><span class="opt-num">{{ ['①','②','③','④','⑤'][loop.index0] }}</span> {{ opt }}</div>
@@ -434,7 +436,7 @@ body {
     <div class="col-right">
       <div class="col-header col-r-hdr">[ 일치판단 / 빈칸 서술 ]</div>
 
-      <div class="q-title"><span class="q-num">{{ 2 if _notice else 4 }}</span> {{ '다음 안내문의' if _notice else '다음 글의' }} 내용과 일치하지 <span style="color:var(--red); text-decoration:underline; font-weight:bold;">않는</span> 진술의 개수는?</div>
+      <div class="q-title"><span class="q-num">{{ 2 if _notice else 4 }}</span> {{ '다음 ' ~ _kind ~ '의' if _notice else '다음 글의' }} 내용과 일치하지 <span style="color:var(--red); text-decoration:underline; font-weight:bold;">않는</span> 진술의 개수는?</div>
       <div class="statements">
         {% for stmt in item.data.statements %}
         <div class="stmt-item"><span class="stmt-label">{{ stmt[0] }}.</span> {{ stmt[1] }}</div>
@@ -475,6 +477,8 @@ body {
 
   {% for item in passages %}
     {% set _notice = (item.data.layout == 'notice') %}
+    {# _s163: 도표도 같은 3문항 경로를 탄다. 화면 문구만 갈라 쓴다. #}
+    {% set _kind = '도표' if item.data.layout_kind == 'chart' else '안내문' %}
     <div class="ans-block">
       <div class="ans-block-title">▶ {{ item.label }}</div>
 

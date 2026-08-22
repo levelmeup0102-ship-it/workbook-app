@@ -244,6 +244,24 @@ body {
   font-size: 8.3pt; color: var(--accent); font-weight: bold;
   margin-bottom: 2px;
 }
+/* 4번 어법 — '틀린 표현: ___ → 바르게 고친 것: ___' 을 한 줄에 */
+.fix-row {
+  display: flex; align-items: flex-end; gap: 3px;
+  margin: 5px 0 7px; font-size: 8pt;
+}
+.fix-row .fix-label {
+  color: var(--accent); font-weight: bold; white-space: nowrap;
+  line-height: 1.2;
+}
+.fix-row .fix-blank {
+  flex: 1 1 0; min-width: 17mm;
+  border-bottom: 1px solid #999; height: 6.5mm;
+}
+.fix-row .fix-arrow {
+  color: var(--accent); font-weight: bold; padding: 0 1px;
+}
+/* 4번 답란(마지막 fix-row) 바로 뒤에 5번 발문이 붙지 않도록 */
+.fix-row + .q-title { margin-top: 15px; }
 
 .ans-start { page-break-before: always; }
 .ans-hdr {
@@ -413,25 +431,17 @@ body {
     <div class="col-writing">
       <div class="col-header col-wri-hdr">[ 서술형 ]</div>
 
-      <div class="q-title"><span class="q-num write">4</span> 윗글에는 어법상 틀린 부분이 <b>한 군데</b> 있습니다. 그 부분을 찾아 바르게 고치고, 그렇게 고친 이유를 쓰시오.</div>
-      <div class="condition">
-        <span class="condition-title">조건</span>
-        <div class="condition-list">
-          ○ 틀린 부분은 윗글에서 찾아 그대로 옮겨 쓸 것<br>
-          ○ 이유는 어법 근거를 들어 한 문장으로 쓸 것
-        </div>
+      <div class="q-title"><span class="q-num write">4</span> 윗글에는 어법상 틀린 부분이 <b>한 군데</b> 있다. 그 부분을 찾아 바르게 고치고, 그렇게 고친 이유를 쓰시오.</div>
+      <div class="fix-row">
+        <span class="fix-label">틀린 표현:</span>
+        <span class="fix-blank"></span>
+        <span class="fix-arrow">&rarr;</span>
+        <span class="fix-label">바르게 고친 것:</span>
+        <span class="fix-blank"></span>
       </div>
-      <div class="write-ans-row">
-        <div class="write-ans-prefix">틀린 표현:</div>
-        <div class="write-ans-line"></div>
-      </div>
-      <div class="write-ans-row">
-        <div class="write-ans-prefix">바르게 고친 것:</div>
-        <div class="write-ans-line"></div>
-      </div>
-      <div class="write-ans-row">
-        <div class="write-ans-prefix">이유:</div>
-        <div class="write-ans-line"></div>
+      <div class="fix-row">
+        <span class="fix-label">이유:</span>
+        <span class="fix-blank"></span>
       </div>
 
       {# Q5 - 주제문 영작 (이전 Q3이 Q5로 밀림) #}

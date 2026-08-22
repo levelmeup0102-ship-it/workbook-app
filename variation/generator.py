@@ -2309,10 +2309,27 @@ def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000) -
         "anthropic-version": ANTHROPIC_VERSION,
         "Content-Type": "application/json",
     }
+    # ★★ 지시문을 캐싱한다 (_s164).
+    #   SYSTEM_PROMPT_A 는 약 6,000 토큰, B 는 약 7,400 토큰이고 **한 글자도 안 바뀐다.**
+    #   그런데 지문마다·재시도마다 통째로 다시 보내고 있었다.
+    #   실측(25년 고1 9월 부천고1 8지문): 유형 A 본 호출 13회 × 6,000 = 77,874 토큰.
+    #   캐시를 걸면 처음 한 번만 저장(1.25배 또는 1시간짜리는 2배)하고
+    #   그다음부터는 10분의 1 값이라 이 항목만 80% 넘게 줄어든다.
+    #   ★ 캐시는 **앞부분이 글자 단위로 같아야** 맞는다. system 을 먼저 보내고
+    #     지문이 든 user 메시지를 뒤에 두는 지금 구조가 그대로 맞다 — 순서를 바꾸지 말 것.
+    #   ★ TTL 을 1시간으로 잡은 이유: 기본값은 5분인데 지문 하나에 30초~1분씩 걸려
+    #     8지문 배치가 5분을 넘긴다. 그러면 중간에 캐시가 식어 다시 저장하게 된다.
+    #     저장 비용이 1.25배→2배로 오르지만 배치 내내 살아 있어 우리 쓰임에는 이쪽이 싸다.
+    #   ★ 1,024 토큰 미만은 캐시가 안 걸린다 — 작은 보조 지시문들은 표시해도 그냥 무시된다.
+    _sys_block = [{
+        "type": "text",
+        "text": system_prompt,
+        "cache_control": {"type": "ephemeral", "ttl": "1h"},
+    }]
     payload = {
         "model": CLAUDE_MODEL,
         "max_tokens": max_tokens,
-        "system": system_prompt,
+        "system": _sys_block,
         "messages": [{"role": "user", "content": user_message}],
         # ★★ thinking 을 끈다 (_s134).
         #   Sonnet 5 는 응답에 thinking 블록을 먼저 넣는데, 그게 max_tokens 를
@@ -2329,9 +2346,27 @@ def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000) -
             if "thinking" in (r.text or ""):
                 payload.pop("thinking", None)
                 r = client.post(url, headers=headers, json=payload)
+            # ★ 1시간 캐시를 안 받아 주는 환경이면 5분짜리로, 그래도 안 되면
+            #   캐시 없이 (옛 방식대로 평문 system) 한 번 더 (_s164).
+            #   캐싱은 돈을 아끼자는 것이지 생성을 죽일 이유가 아니다.
+            if r.status_code != 200 and ("cache_control" in (r.text or "")
+                                         or "ttl" in (r.text or "")):
+                _sys_block[0]["cache_control"] = {"type": "ephemeral"}
+                r = client.post(url, headers=headers, json=payload)
+                if r.status_code != 200:
+                    payload["system"] = system_prompt
+                    r = client.post(url, headers=headers, json=payload)
+                    print("[VAR] ⚠ 지시문 캐싱을 못 썼다 — 캐시 없이 진행 (_s164)")
             if r.status_code != 200:
                 raise RuntimeError(f"Claude API 오류 {r.status_code}: {r.text[:500]}")
         data = r.json()
+        # ★ 캐시가 실제로 맞았는지 남긴다 (_s164).
+        #   0 만 계속 찍히면 앞부분이 매번 달라진다는 뜻이다 — 그때 원인을 찾는다.
+        _u = data.get("usage") or {}
+        _wr = _u.get("cache_creation_input_tokens") or 0
+        _rd = _u.get("cache_read_input_tokens") or 0
+        if _wr or _rd:
+            print(f"[VAR] 캐시 — 저장 {_wr:,} / 재사용 {_rd:,} 토큰")
         content = data.get("content", [])
         # ★ text 블록을 전부 모은다 — thinking 이 켜져 오더라도 뒤의 text 를 놓치지 않는다
         _texts = [b.get("text", "") for b in content if b.get("type") == "text"]

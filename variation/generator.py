@@ -3195,18 +3195,31 @@ def generate_variation_a(
                 #   산출물에 결함이 있어도 아무도 모른다 — 실측으로 그랬다.
                 if is_last:
                     _passed = []
+                    # ★ 검사마다 따로 감싼다 (_s163).
+                    #   실측(부천고1 20번): `evidence_not_in_passage` 를 인자 두 개로
+                    #   부르고 있어 TypeError 가 났고, 검사 셋이 한 try 에 묶여 있던 탓에
+                    #   **그 뒤 검사가 전부 안 돌았다.** 로그에는 '감사 실패' 한 줄만 남아
+                    #   무엇을 못 봤는지도 알 수 없었다. 감사가 감사를 못 한 셈이다.
+                    def _audit(name, fn):
+                        try:
+                            if fn():
+                                _passed.append(name)
+                        except Exception as _ae:
+                            _passed.append(f"{name} 감사 실패({_ae})")
                     try:
                         from variation.vocab_q3 import (
                             answer_in_blank_sentence as _c1,
                             statements_leak_blanks as _c2,
                             evidence_not_in_passage as _c3)
-                        if _c1(data.get("vocab_items"), data.get("paragraphs")):
-                            _passed.append("Q3 정답이 Q5 빈칸과 같은 문장")
-                        if _c2(data.get("statements"), data.get("blank_A", ""),
-                               data.get("blank_B", "")):
-                            _passed.append("Q4 진술이 Q5 정답을 누출")
-                        if _c3(data.get("statements_evidence"), data.get("paragraphs")):
-                            _passed.append("Q4 근거가 지문에 없음")
+                        _audit("Q3 정답이 Q5 빈칸과 같은 문장",
+                               lambda: _c1(data.get("vocab_items"), data.get("paragraphs")))
+                        _audit("Q4 진술이 Q5 정답을 누출",
+                               lambda: _c2(data.get("statements"), data.get("blank_A", ""),
+                                           data.get("blank_B", "")))
+                        #   ★ 인자 셋이다 — (진술, 근거, 원문). 둘만 넘기면 TypeError.
+                        _audit("Q4 근거가 지문에 없음",
+                               lambda: _c3(data.get("statements"),
+                                           data.get("statements_evidence"), en_text))
                         # ★ 이 검사가 감사 목록에서 빠져 있었다 (_s163).
                         #   `not is_last` 로 꺼지는 여섯 검사 중 하나인데 여기 없어서,
                         #   마지막 시도로 나간 산출물에 이 결함이 있어도 로그에 흔적이
@@ -3220,15 +3233,17 @@ def generate_variation_a(
                                 and isinstance((data.get("statements_evidence") or [None])[0],
                                                (list, tuple))) \
                             else (data.get("statements_evidence") or [])
-                        if not _c4u(data.get("paragraphs"), _ev4):
+                        def _conflict():
+                            if _c4u(data.get("paragraphs"), _ev4):
+                                return None
                             _h4 = _c4(data.get("vocab_items"), data.get("paragraphs"), _ev4,
                                       statements=data.get("statements"))
-                            if _h4:
-                                _passed.append(
-                                    f"Q4 진술 {'·'.join(_h4)} 이(가) Q3 정답 자리에 기댐 "
-                                    f"— 학생 판정이 답지와 갈린다")
+                            return ("Q4 진술 " + "·".join(_h4) + " 이(가) Q3 정답 자리에 기댐"
+                                    ) if _h4 else None
+                        _audit("Q4 진술이 Q3 정답 자리에 기댐 — 학생 판정이 답지와 갈린다",
+                               _conflict)
                     except Exception as _ae:
-                        _passed.append(f"감사 실패({_ae})")
+                        _passed.append(f"감사 자체 실패({_ae})")
                     if _passed:
                         print(f"[VAR][A][{pid}] ⚠⚠ 관대 모드로 내보냄 — "
                               f"봐준 결함: {' / '.join(_passed)} (_s158)")

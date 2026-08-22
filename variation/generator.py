@@ -3207,6 +3207,26 @@ def generate_variation_a(
                             _passed.append("Q4 진술이 Q5 정답을 누출")
                         if _c3(data.get("statements_evidence"), data.get("paragraphs")):
                             _passed.append("Q4 근거가 지문에 없음")
+                        # ★ 이 검사가 감사 목록에서 빠져 있었다 (_s163).
+                        #   `not is_last` 로 꺼지는 여섯 검사 중 하나인데 여기 없어서,
+                        #   마지막 시도로 나간 산출물에 이 결함이 있어도 로그에 흔적이
+                        #   없었다. 실측(25년 고1 9월 부천고1): 8지문 중 3지문이
+                        #   이 결함을 달고 나갔고(22·23·24번) 아무 기록도 없었다.
+                        from variation.vocab_q3 import (
+                            q4_conflicts_with_answer as _c4,
+                            q4_conflict_unsatisfiable as _c4u)
+                        _ev4 = [e for _, _, e in (data.get("statements_evidence") or [])] \
+                            if (data.get("statements_evidence")
+                                and isinstance((data.get("statements_evidence") or [None])[0],
+                                               (list, tuple))) \
+                            else (data.get("statements_evidence") or [])
+                        if not _c4u(data.get("paragraphs"), _ev4):
+                            _h4 = _c4(data.get("vocab_items"), data.get("paragraphs"), _ev4,
+                                      statements=data.get("statements"))
+                            if _h4:
+                                _passed.append(
+                                    f"Q4 진술 {'·'.join(_h4)} 이(가) Q3 정답 자리에 기댐 "
+                                    f"— 학생 판정이 답지와 갈린다")
                     except Exception as _ae:
                         _passed.append(f"감사 실패({_ae})")
                     if _passed:

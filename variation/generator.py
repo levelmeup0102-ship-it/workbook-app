@@ -255,6 +255,36 @@ def notice_signals(en_text: str) -> dict:
     return {"headers": hdrs, "hdr": len(hdrs), "logi": logi, "n_logi": len(logi)}
 
 
+# ════════════════════════════════════════════════════════════════
+# ★ 도표 지문도 순서·어휘가 성립하지 않는다 (_s163)
+#   수능 도표형(25번)은 "The graph above shows …" 로 시작해 수치를 비교한다.
+#   · 순서배열 — 항목 나열이라 섞어도 논리가 안 깨진다
+#   · 어휘 — 방향을 가진 내용어가 거의 없다. 최상급·수치 표현뿐이라
+#     모델이 계속 'most' 같은 기능어를 정답으로 고른다.
+#   실측(25년 고1 9월 25번): Q3 어휘가 세 번 다 'most' 를 골라 3회 실패,
+#   그 재시도가 크레딧을 태우다 400(잔액 부족)으로 26번까지 통째로 못 만들었다.
+#   → 안내문과 **같은 3문항 경로**로 보낸다 (주제·불일치·빈칸영작).
+#   ★ 판별은 '도표 자기 언급' 한 줄이면 충분하다. 도표 지문은 예외 없이
+#     그 문장으로 시작하고, 일반 지문에는 나올 수 없는 표현이라 오탐이 없다.
+# ════════════════════════════════════════════════════════════════
+_CHART_RE = re.compile(
+    r"\b(?:the\s+)?(?:above\s+)?(?:graph|chart|table|figure|diagram)s?\s+"
+    r"(?:above\s+)?(?:shows?|illustrates?|presents?|displays?|compares?|"
+    r"indicates?|represents?)\b"
+    r"|\b(?:graph|chart|table|figure)s?\s+above\b"
+    r"|\bshown\s+in\s+the\s+(?:graph|chart|table|figure)\b"
+    r"|\baccording\s+to\s+the\s+(?:graph|chart|table|figure)\b",
+    re.IGNORECASE)
+
+
+def is_chart(en_text: str, pid: str = "?") -> bool:
+    """도표·표 지문이면 True. 도표를 가리키는 자기 언급 한 곳이면 확정."""
+    m = _CHART_RE.search(en_text or "")
+    print(f"[VAR][A][{pid}] 도표 판별 {'✔ 도표' if m else '— 도표 아님'}"
+          + (f" ({m.group(0)!r})" if m else ""))
+    return bool(m)
+
+
 def is_notice(en_text: str, pid: str = "?") -> bool:
     """안내문·공고문이면 True. 머리말 2개 이상 + 실무정보 2갈래 이상."""
     sig = notice_signals(en_text or "")
@@ -2378,6 +2408,10 @@ def generate_variation_a(
     #   실측: 27번이 3회 연속 생성 실패했고 원인이 전부 Q3 어휘였다.
     #   → 주제(1) · 일치(2) · 빈칸영작(3) 세 문항으로 낸다.
     _is_notice = is_notice(en_text, pid)
+    # ★ 도표도 같은 3문항 경로를 탄다 (_s163). 안내문 판정이 우선.
+    _is_chart = (not _is_notice) and is_chart(en_text, pid)
+    #   _short = '순서·어휘를 내지 않는 지문'. 아래 분기는 전부 이 값을 본다.
+    _short = _is_notice or _is_chart
 
     last_errors = []
     last_data = None
@@ -2388,6 +2422,20 @@ def generate_variation_a(
                 f"Original English passage:\n{en_text}\n\n"
                 "Generate the variation problem (Type A). Return ONLY the JSON object."
             )
+            if _is_chart:
+                # ★ 도표도 Q2·Q3 를 내지 않는다 (_s163). 묻는 결이 안내문과 다르다.
+                user_msg += (
+                    "\n\n# ★ THIS PASSAGE DESCRIBES A GRAPH / CHART (CSAT #25 style).\n"
+                    "  - Q1 topic options: describe WHAT THE GRAPH SHOWS "
+                    "(e.g. 'online news consumption preferences across six countries'), "
+                    "not an abstract thesis or a lesson.\n"
+                    "  - Q4 statements: check the NUMBERS and COMPARISONS — which country is "
+                    "highest/lowest, ratios ('three times as high as'), thresholds "
+                    "('over 60 percent'), and which way was preferred most.\n"
+                    "  - Q5 blanks: pick from FULL SENTENCES only. Do NOT pick a span that is "
+                    "just a number or a bare superlative — the student must be able to restore it.\n"
+                    "  - Do NOT produce Q2 (order) or Q3 (vocabulary). They are discarded.\n"
+                )
             if _is_notice:
                 # ★ 안내문은 Q2·Q3 를 내지 않는다 — 만들어 보내도 코드가 버린다.
                 #   대신 Q1 주제와 Q4 진술의 성격을 안내문에 맞게 잡아 준다.
@@ -2422,7 +2470,7 @@ def generate_variation_a(
 
             # ★★ 순서배열(Q2)을 코드가 원문에서 분할 — LLM 단락을 무시하고 원문 그대로 사용.
             #    원문 무손실이라 복원검증이 깨지지 않는다. LLM은 빈칸 구절만 고른다.
-            ob = (build_notice_blocks_a(en_text, pid) if _is_notice
+            ob = (build_notice_blocks_a(en_text, pid) if _short
                   else build_order_blocks_a(en_text, pid))
             print(f"[VAR][A][{pid}] DIAG 문장수={len(split_sentences(en_text))} "
                   f"ob={'None' if not ob else 'OK'} en_len={len(en_text)} en_head={en_text[:60]!r}")
@@ -2432,7 +2480,14 @@ def generate_variation_a(
                 data["order_correct"] = ob["order_correct"]
                 # ★ 안내문은 순서 문항이 없다 — order_correct 는 None 이고
                 #   validate_a 가 layout 을 보고 순서 검사를 건너뛴다 (_s152).
-                data["layout"] = "notice" if _is_notice else "order"
+                #   ★ 도표도 layout 값은 "notice" 로 둔다 (_s163).
+                #     검증기·검사기가 전부 이 값으로 순서 검사를 건너뛴다.
+                #     새 값을 만들면 그 코드를 다 고쳐야 하고, 하나라도 빠지면
+                #     도표가 순서 검사에 걸려 통째로 죽는다.
+                #     화면에 '안내문/도표' 중 무엇으로 쓸지는 layout_kind 가 정한다.
+                data["layout"] = "notice" if _short else "order"
+                if _short:
+                    data["layout_kind"] = "chart" if _is_chart else "notice"
 
                 # ★★ Q3 핵심빈칸은 _s96에서 폐기했다.
                 #   A Q3의 정식 유형은 어휘(수능 30번)다(_s58). 핵심빈칸은 그때 지우지 않고
@@ -2754,8 +2809,8 @@ def generate_variation_a(
 
                 # ★ 안내문은 Q3 어휘를 아예 시도하지 않는다 (_s152).
                 #   _vok 를 참으로 두어 아래 '2회 실패 → raise' 도 타지 않게 한다.
-                _vok = _is_notice
-                for _va in (() if _is_notice else range(3)):   # ★ _s130: 2 → 3회
+                _vok = _short
+                for _va in (() if _short else range(3)):   # ★ _s130: 2 → 3회
                     try:
                         _items, _v = _try_vocab(_va)
                         data["vocab_items"] = _items
@@ -2801,7 +2856,7 @@ def generate_variation_a(
                 _paras_now = [p for p in data.get("paragraphs", []) if isinstance(p, (list, tuple)) and len(p) >= 2]
                 _dup = bool(_probe) and any(_probe in _nz_dup(p[1]) for p in _paras_now)
                 if _dup:
-                    ob2 = (build_notice_blocks_a(en_text, pid) if _is_notice
+                    ob2 = (build_notice_blocks_a(en_text, pid) if _short
                            else build_order_blocks_a(en_text, pid))
                     if ob2:
                         data["intro"] = ob2["intro"]

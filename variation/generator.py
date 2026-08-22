@@ -2813,6 +2813,19 @@ def generate_variation_a(
                             data["paragraphs"] = _pk2["paragraphs"]
                             data["blank_A"] = _pk2["blank_A"]
                             data["blank_B"] = _pk2["blank_B"]
+                        # ★ 여기도 단락을 통째로 갈아끼운다 — 어휘가 이미 잡혀 있으면
+                        #   좌표가 어긋난다. 같은 이유로 재정렬한다 (_s162).
+                        if data.get("vocab_items"):
+                            _rerr2 = []
+                            _ri2 = normalize_llm_vocab(
+                                data["vocab_items"], data["paragraphs"],
+                                blank_token_spans(data["paragraphs"]),
+                                pid=pid, report=_rerr2, strict=False)
+                            if _ri2:
+                                data["vocab_items"] = _ri2
+                            else:
+                                print(f"[VAR][A][{pid}] ⚠ 재분할 후 어휘 좌표 재정렬 실패 "
+                                      f"({_rerr2[-1] if _rerr2 else '사유 미기록'}) (_s162)")
                         print(f"[VAR][A][{pid}] intro 중복 감지 → 코드가 순서 강제 재분할(안전장치)")
             except Exception:
                 pass
@@ -2839,12 +2852,34 @@ def generate_variation_a(
                                              avoid=[_orig_sent])
                             if _pre else None)
                     if _alt:
+                        # ★★ 빈칸을 옮겼으면 어휘 좌표를 **반드시** 다시 맞춘다 (_s162)
+                        #   빈칸은 여러 낱말이 <BLANK_A> 토큰 하나로 줄어든다. 자리가
+                        #   바뀌면 그 뒤 낱말의 인덱스가 통째로 밀린다. 어휘 항목의
+                        #   (para, idx) 는 옛 단락 기준이라 그대로 두면 전부 어긋난다.
+                        #   실측(25년 고2 9월 22번): 세 번의 시도가 전부 이 경로로 죽어
+                        #   "Q3 어휘 N번 자리 불일치 — 원문[0][31]='that' vs 'growing'"
+                        #   이 뜨고 지문이 통째로 빠졌다. _s158 이 심은 회귀다.
+                        #   → 새 단락 기준으로 재정렬하고, 실패하면 빈칸 이동을 **되돌린다.**
+                        #     (어긋난 좌표로 내보내느니 겹친 채로 바깥 검사에 맡긴다)
+                        _bk = (data["paragraphs"], data.get("blank_A"), data.get("blank_B"))
                         data["paragraphs"] = _alt["paragraphs"]
                         data["blank_A"] = _alt["blank_A"]
                         data["blank_B"] = _alt["blank_B"]
-                        print(f"[VAR][A][{pid}] Q3 정답이 Q5 빈칸과 같은 문장 → "
-                              f"빈칸 재선정 (A)'{_alt['blank_A'][:35]}' "
-                              f"(B)'{_alt['blank_B'][:35]}' (_s158)")
+                        _rerr = []
+                        _re_items = normalize_llm_vocab(
+                            data.get("vocab_items"), data["paragraphs"],
+                            blank_token_spans(data["paragraphs"]),
+                            pid=pid, report=_rerr, strict=False)
+                        if _re_items:
+                            data["vocab_items"] = _re_items
+                            print(f"[VAR][A][{pid}] Q3 정답이 Q5 빈칸과 같은 문장 → "
+                                  f"빈칸 재선정 (A)'{_alt['blank_A'][:35]}' "
+                                  f"(B)'{_alt['blank_B'][:35]}' + 어휘 좌표 재정렬 (_s162)")
+                        else:
+                            (data["paragraphs"], data["blank_A"], data["blank_B"]) = _bk
+                            print(f"[VAR][A][{pid}] ⚠ 빈칸을 옮기면 어휘 좌표가 깨진다 "
+                                  f"({_rerr[-1] if _rerr else '사유 미기록'}) → 빈칸 이동 취소, "
+                                  f"바깥 검사로 넘김 (_s162)")
                     else:
                         print(f"[VAR][A][{pid}] ⚠ Q3 정답이 Q5 빈칸과 같은 문장인데 "
                               f"대체 빈칸을 못 찾음 — 바깥 검사로 넘김 (_s158)")

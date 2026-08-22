@@ -140,6 +140,13 @@ def prepare_a_passage(data: dict, label: str) -> dict:
             "vocab_items": data.get("vocab_items") or [],
             "vocab_explain": data.get("vocab_explain", ""),
             "paragraphs_render": data.get("paragraphs_render") or [],
+            # ★ 3문항 지문(안내문·도표) 표시에 필요하다 (_s163).
+            #   generator 가 layout="notice" 를 넣어도 여기서 안 실어 보내면
+            #   템플릿의 `_notice` 가 영영 거짓이 된다 — 안내문이 순서·어휘까지
+            #   달린 5문항으로 인쇄돼 왔다. 이 목록은 화이트리스트라
+            #   **새 키를 만들면 여기에 반드시 같이 넣어야 한다.**
+            "layout": data.get("layout", "order"),
+            "layout_kind": data.get("layout_kind", "notice"),
         },
     }
 

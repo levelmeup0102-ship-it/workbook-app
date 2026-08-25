@@ -761,7 +761,23 @@ def extract_json_from_response(text: str) -> dict:
         except json.JSONDecodeError:
             pass
     
-    # 첫 { 부터 마지막 } 까지
+    # ★★ 앞뒤에 말이 붙어 와도 JSON 하나만 떼어 낸다 (_s165).
+    #   옛 코드는 첫 '{' 부터 **마지막** '}' 까지를 통째로 잘랐다. 모델이 JSON 을
+    #   다 쓴 뒤 설명을 덧붙이면 그 설명 속 '}' 까지 끌려와 'Extra data' 로 죽었다.
+    #   실측(25-08-25 배치): 01번·02번이 이것 하나로 3회 소진 후 전멸했고,
+    #   오류 문구는 엉뚱하게 '따옴표 escape' 를 지목해 재시도가 헛돌았다.
+    #   raw_decode 는 첫 객체가 **어디서 끝나는지** 알려 주므로 뒤에 뭐가 붙든 상관없다.
+    #   여는 괄호를 앞에서부터 훑는 이유: 머리말에 '{' 가 섞여 와도 넘어가려는 것이다.
+    _dec = json.JSONDecoder()
+    for _m in re.finditer(r"\{", text):
+        try:
+            _obj, _ = _dec.raw_decode(text, _m.start())
+        except json.JSONDecodeError:
+            continue
+        if isinstance(_obj, dict):
+            return _obj
+
+    # 위로 안 되면 옛 방식 — 따옴표가 깨진 경우는 여기서 복구한다
     start = text.find("{")
     end = text.rfind("}")
     if start >= 0 and end > start:
@@ -777,15 +793,25 @@ def extract_json_from_response(text: str) -> dict:
                 return result
             except json.JSONDecodeError as e2:
                 # 자동 복구도 실패
+                # ★ 오류에 맞는 지시를 준다 (_s165).
+                #   전에는 무슨 오류든 '따옴표를 고쳐라'고만 해서, 말이 덧붙은
+                #   경우에 모델이 엉뚱한 데를 고치며 재시도를 다 태웠다.
+                if "Extra data" in (e.msg or ""):
+                    _hint = ("JSON 뒤에 설명이 덧붙어 있다. 다음 재시도 시: "
+                             "JSON 객체 하나만 출력하고 앞뒤에 아무 말도 쓰지 말 것.")
+                else:
+                    _hint = ("문자열 값 안에 escape 안 된 큰따옴표(\") 또는 특수문자가 있을 가능성 높음. "
+                             "다음 재시도 시: 원문에 큰따옴표가 있으면 작은따옴표(')로 바꿔서 출력할 것. "
+                             "예: \"cheated God\" → 'cheated God'")
                 err_msg = (
-                    f"JSON 파싱 실패 ({e.msg}, line {e.lineno} col {e.colno}): "
-                    f"문자열 값 안에 escape 안 된 큰따옴표(\") 또는 특수문자가 있을 가능성 높음. "
-                    f"다음 재시도 시: 원문에 큰따옴표가 있으면 작은따옴표(')로 바꿔서 출력할 것. "
-                    f"예: \"cheated God\" → 'cheated God'"
+                    f"JSON 파싱 실패 ({e.msg}, line {e.lineno} col {e.colno}): {_hint}"
                 )
                 raise ValueError(err_msg)
     
-    raise ValueError(f"JSON 객체를 찾을 수 없음. 응답 일부: {text[:300]}")
+    raise ValueError(
+        "JSON 객체를 찾을 수 없음 — 응답에 JSON 이 아예 없다. 다음 재시도 시: "
+        "설명·머리말 없이 JSON 객체 하나만 출력할 것. "
+        f"응답 일부: {text[:300]}")
 
 
 # ════════════════════════════════════════════════════════════════

@@ -2361,6 +2361,19 @@ def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000,
             if "thinking" in (r.text or ""):
                 payload.pop("thinking", None)
                 r = client.post(url, headers=headers, json=payload)
+            # ★★ 이 모델이 prefill 을 안 받아 주면 그것만 빼고 한 번 더 (_s169).
+            #   실측(26-08-26 12:09 배치): claude-sonnet-4-5 가 400 을 냈다 —
+            #   "This model does not support assistant message prefill."
+            #   52건 전부 이걸로 죽어 **어휘 문항이 하나도 안 만들어졌다**
+            #   (그 배치에서 나온 지문 3개는 전부 옛 캐시였다).
+            #   ★ 교훈: 가짜 응답 테스트는 API 가 뭘 거부하는지 못 알려 준다.
+            #     캐싱(_s164)에는 되돌아갈 길을 깔아 놓고 prefill 에는 안 깔았다.
+            #     모델에 새 파라미터를 얹을 때는 **항상** 빠질 길을 같이 만든다.
+            if r.status_code != 200 and "prefill" in (r.text or ""):
+                payload["messages"] = [{"role": "user", "content": user_message}]
+                prefill = ""          # 아래에서 되붙이지 않도록 지운다
+                r = client.post(url, headers=headers, json=payload)
+                print("[VAR] ⚠ 이 모델은 prefill 을 못 쓴다 — 없이 진행 (_s169)")
             # ★ 1시간 캐시를 안 받아 주는 환경이면 5분짜리로, 그래도 안 되면
             #   캐시 없이 (옛 방식대로 평문 system) 한 번 더 (_s164).
             #   캐싱은 돈을 아끼자는 것이지 생성을 죽일 이유가 아니다.

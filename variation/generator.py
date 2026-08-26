@@ -2298,8 +2298,13 @@ def split_passage_and_translation(passage_text: str) -> tuple:
 
 
 # ============ Claude API 호출 (httpx) ============
-def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000) -> str:
-    """anthropic SDK 없이 httpx 직접 호출"""
+def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000,
+                prefill: str = "") -> str:
+    """anthropic SDK 없이 httpx 직접 호출
+
+    prefill 을 주면 그 글자로 **시작하는** 응답만 받는다 (_s166).
+    JSON 만 받아야 하는 자리에 prefill="{" 을 주면 머리말을 쓸 수가 없다.
+    """
     if not ANTHROPIC_API_KEY:
         raise RuntimeError("ANTHROPIC_API_KEY 환경변수가 없습니다")
 
@@ -2330,7 +2335,17 @@ def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000) -
         "model": CLAUDE_MODEL,
         "max_tokens": max_tokens,
         "system": _sys_block,
-        "messages": [{"role": "user", "content": user_message}],
+        # ★★ 답을 미리 시작해 준다 (_s166).
+        #   실측(26-08-26 배치): 어휘 문항 요청에 모델이 "분석해보겠습니다."
+        #   "Let me work through the passage carefully." 한 줄만 쓰고 끝낸 응답이
+        #   7건 나왔다. JSON 이 아예 없어 재시도를 태웠고 33번·41-42번이 그렇게 죽었다.
+        #   오류 문구로 "머리말 쓰지 마라"고 일러도 세 번 연속 같은 머리말이 나왔다.
+        #   → assistant 턴을 '{' 로 미리 채우면 모델은 그 뒤부터 이어 쓴다.
+        #     머리말을 쓸 자리가 물리적으로 없어진다.
+        #   ★ prefill 은 끝에 공백이 있으면 API 가 거부한다 — rstrip 해서 넣는다.
+        "messages": ([{"role": "user", "content": user_message}]
+                     + ([{"role": "assistant", "content": prefill.rstrip()}]
+                        if prefill.strip() else [])),
         # ★★ thinking 을 끈다 (_s134).
         #   Sonnet 5 는 응답에 thinking 블록을 먼저 넣는데, 그게 max_tokens 를
         #   다 먹어 정작 JSON(text 블록)이 안 나온다.
@@ -2372,7 +2387,8 @@ def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000) -
         _texts = [b.get("text", "") for b in content if b.get("type") == "text"]
         _joined = "\n".join(t for t in _texts if t).strip()
         if _joined:
-            return _joined
+            # ★ prefill 은 응답에 안 실려 온다 — 우리가 도로 붙여 온전한 JSON 을 만든다 (_s166)
+            return (prefill.rstrip() + _joined) if prefill.strip() else _joined
         _stop = data.get("stop_reason")
         _kinds = [b.get("type") for b in content]
         raise RuntimeError(
@@ -2769,7 +2785,8 @@ def generate_variation_a(
                                    "  그 자리 antonym 칸의 말을 shown 에 옮기면 안 된다.\n"
                                    "· 정답 반의어는 원문어와 철자가 확연히 달라야 한다\n"
                                    "  ('inhabitable'→'uninhabitable' 은 눈으로 찾힌다. 'barren' 처럼).")
-                    _vraw = call_claude(VOCAB_SYS, _msg, max_tokens=1800)
+                    #   ★ prefill 로 JSON 을 강제한다 (_s166) — 위 call_claude 주석 참조
+                    _vraw = call_claude(VOCAB_SYS, _msg, max_tokens=1800, prefill="{")
                     _v = extract_json_from_response(_vraw)
                     #   ★ 첫 시도만 -ing/-ed 형태까지 본다(_s100). 재시도에서는
                     #     -s 불일치만 막는다 — 'vast'→'overwhelming' 같은 정상 치환을

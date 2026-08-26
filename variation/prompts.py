@@ -1170,6 +1170,61 @@ VOCAB_SYS = (
 )
 
 
+# ── 밑줄에 쓸 수 없는 낱말 — 게이트가 실제로 막는 목록을 그대로 보여 준다 (_s167) ──
+def _forbidden_words_block() -> str:
+    """vocab_q3 게이트의 차단 목록을 프롬프트 문장으로 만든다.
+
+    ★ 두 곳에 따로 적어 두면 반드시 어긋난다. 실제로 어긋나 있었다 —
+      프롬프트는 스무 개, 게이트는 백 개가 넘었다. 그래서 여기서 가져다 쓴다.
+    """
+    try:
+        from variation.vocab_q3 import _VOCAB_STOP, _DISCOURSE_MARKER
+    except Exception:
+        return ("   ★★ 기능어·접속부사는 아예 고르지 마라 — 방향이 없어 반대말이 성립하지 않는다.\n"
+                "     [X] the / a / of / in / to / and / but / is / are / no / not / there\n"
+                "     [X] however / moreover / furthermore / clearly / certainly / also\n")
+
+    def _wrap(words, per=11, indent="       "):
+        w = sorted(words)
+        return "\n".join(indent + " ".join(w[i:i + per]) for i in range(0, len(w), per))
+
+    return (
+        "   ★★ 아래 낱말은 밑줄 자리로 **아예 고르지 마라.** 검사기가 무조건 튕긴다.\n"
+        "     방향이 없어 반대말이 성립하지 않는 말들이다.\n"
+        "     [X] 기능어 — 관사·전치사·접속사·대명사·한정사·조동사·be동사\n"
+        + _wrap(_VOCAB_STOP) + "\n"
+        "     [X] 접속부사·담화표지 — 논리 흐름 표지지 문맥 판단 대상이 아니다\n"
+        + _wrap(_DISCOURSE_MARKER) + "\n"
+        "     실측 실패: 'why?' 가 선지로 나갔다 — 의문사의 반대말이란 없다.\n"
+        "     실측 실패: 'no' 를 네 번, 'Furthermore,' 를 한 번 골라 지문 하나가 통째로 죽었다.\n"
+    )
+
+
+# ── 밑줄 바로 뒤에 오면 그 자리를 못 쓰는 낱말 — 게이트 목록 그대로 (_s168) ──
+def _particle_block() -> str:
+    """vocab_q3 의 구동사 불변화사 목록을 프롬프트 문장으로 만든다.
+
+    ★ 게이트는 '고쳐 쓰라'가 아니라 '그 자리를 쓰지 마라'다. 문구를 그렇게 맞춘다.
+      전에는 프롬프트가 '같은 전치사를 받는 말로 바꿔라'고 가르쳐 놓고
+      게이트가 자리째 거부해, 모델이 규칙을 지켜도 계속 튕겼다.
+    """
+    try:
+        from variation.vocab_q3 import _PARTICLES
+        _p = " / ".join(sorted(_PARTICLES))
+    except Exception:
+        _p = "up / down / off / out / away / back"
+    return (
+        "  · ★★★ 밑줄 칠 낱말 **바로 뒤** 낱말이 아래 여섯 중 하나면\n"
+        "    그 자리는 **아예 고르지 마라.** 무엇으로 바꾸든 검사기가 거부한다.\n"
+        "        " + _p + "\n"
+        "    구동사라 동사만 바꾸면 불변화사가 남아 비문이 된다.\n"
+        "      [X] 'add up' 자리 → 'accumulate up'      [X] 'pointed out' → 'remarked out'\n"
+        "      [X] 'break down' → 'decompose down'      [X] 'giving up' → 'relinquishing up'\n"
+        "    ★ 구동사인지 따질 것 없다. **바로 뒤 낱말만 보면 된다.** 여섯 중 하나면 넘어가라.\n"
+        "    실측 실패: 'add up' 과 'pointed out' 을 골라 지문 하나가 통째로 죽었다.\n"
+    )
+
+
 def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0,
                        used_words=None) -> str:
     """paragraphs: [[label, text], ...] 원문 그대로
@@ -1236,12 +1291,13 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0,
         "       그냥 '다른 말'이 되면 안 된다. 반대여야 한다.\n"
         "   ★ 못 적겠거나 넣어도 성립 안 하면(audience / story / role / face 처럼)\n"
         "     **그 단어를 고르지 마라.** 다른 문장에서 다른 단어를 고른다.\n"
-        "   ★★ 기능어는 아예 고르지 마라 — 방향이 없어 반대말이 성립하지 않는다.\n"
-        "     [X] why / how / what / when / where   의문사\n"
-        "     [X] the / a / of / in / to / and / but 관사·전치사·접속사\n"
-        "     [X] they / it / this / their          대명사·한정사\n"
-        "     [X] can / will / must / have          조동사\n"
-        "     실측 실패: 'why?' 가 선지로 나갔다 — 의문사의 반대말이란 없다.\n"
+        # ★★ 금지 낱말을 게이트에서 그대로 가져와 박는다 (_s167).
+        #   여기 예시 스무 개만 적어 두고 게이트는 백 개 넘게 막고 있었다.
+        #   그 틈에서 모델이 no · is · Furthermore 를 골랐고 게이트가 튕겨
+        #   재시도가 헛돌았다. 실측(26-08-26 배치): 33번이 그렇게 죽었다.
+        #   ★ 목록을 **좁히는 게 아니다.** 이미 막고 있던 것을 알려 줄 뿐이라
+        #     후보가 줄지 않는다 — 헛도는 재시도만 없앤다.
+        + _forbidden_words_block() +
         "   ★★ 품사는 안 가린다. **방향이 있는가**만 본다.\n"
         "     부사도 방향이 있으면 쓸 수 있다.\n"
         "       [O] rarely → frequently        빈도가 뒤집힌다\n"
@@ -1487,6 +1543,15 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0,
         "  · ★★ 다섯 선지(shown)가 서로 다른 단어여야 한다. **굴절형도 같은 단어다.**\n"
         "    실측 실패: ② 'relinquishing' 과 ⑤ 'relinquished' 가 같이 나갔다 —\n"
         "    원문어는 달랐지만(giving / claimed) 학생이 보는 건 선지다.\n"
+        # ★★ 구동사 규칙도 게이트에서 가져온다 (_s168).
+        #   프롬프트는 'rely on' 을 예로 들며 "같은 전치사를 받는 말로 바꿔라"고
+        #   가르쳤는데, 게이트는 뒤 낱말이 up/down/off/out/away/back 이면
+        #   **무엇으로 바꾸든 그 자리를 통째로 거부**한다. 규칙이 서로 달랐다.
+        #   프롬프트가 경고하던 on/to/for/with/in/at/from 은 게이트가 아예 안 본다.
+        #   실측(26-08-26 배치): 31번이 'add up'·'pointed out' 으로 여섯 번 거부돼 죽었다.
+        #   ★ 이건 모델이 구동사인지 '판단'할 필요가 없는 기계 규칙이다 —
+        #     바로 뒤 낱말만 보면 된다. 알려 주기만 하면 100% 지킬 수 있다.
+        + _particle_block() +
         "  · ★★ 구동사(phrasal verb)의 동사만 바꾸지 마라. 뒤에 남은 전치사가 어긋난다.\n"
         "    실측 실패: 원문 'rely **on** landmarks' 에서 rely 만 disregard 로 바꿨다.\n"
         "      [X] disregard on landmarks   — disregard 는 타동사라 on 을 안 받는다.\n"

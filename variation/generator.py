@@ -1646,6 +1646,10 @@ def cache_key_to_prefix(cache_key: str) -> Optional[str]:
 
 
 # 캐시 버전 — 유형별로 따로 움직인다 (_s161)
+# ★ 이 모델이 prefill 을 받아 주는가 — 한 번 확인하면 기억한다 (_s170).
+#   None=아직 모름 / False=못 씀 / True=씀
+_PREFILL_OK = None
+
 _A_VER = "s160"
 _B_VER = "s161"
 
@@ -2305,6 +2309,7 @@ def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000,
     prefill 을 주면 그 글자로 **시작하는** 응답만 받는다 (_s166).
     JSON 만 받아야 하는 자리에 prefill="{" 을 주면 머리말을 쓸 수가 없다.
     """
+    global _PREFILL_OK        # ★ 아래 400 처리에서 갱신한다 (_s170)
     if not ANTHROPIC_API_KEY:
         raise RuntimeError("ANTHROPIC_API_KEY 환경변수가 없습니다")
 
@@ -2343,9 +2348,10 @@ def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000,
         #   → assistant 턴을 '{' 로 미리 채우면 모델은 그 뒤부터 이어 쓴다.
         #     머리말을 쓸 자리가 물리적으로 없어진다.
         #   ★ prefill 은 끝에 공백이 있으면 API 가 거부한다 — rstrip 해서 넣는다.
+        # ★ 못 쓰는 모델로 판명났으면 아예 안 붙인다 (_s170) — 아래 400 처리 참조
         "messages": ([{"role": "user", "content": user_message}]
                      + ([{"role": "assistant", "content": prefill.rstrip()}]
-                        if prefill.strip() else [])),
+                        if (prefill.strip() and _PREFILL_OK is not False) else [])),
         # ★★ thinking 을 끈다 (_s134).
         #   Sonnet 5 는 응답에 thinking 블록을 먼저 넣는데, 그게 max_tokens 를
         #   다 먹어 정작 JSON(text 블록)이 안 나온다.
@@ -2370,10 +2376,15 @@ def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000,
             #     캐싱(_s164)에는 되돌아갈 길을 깔아 놓고 prefill 에는 안 깔았다.
             #     모델에 새 파라미터를 얹을 때는 **항상** 빠질 길을 같이 만든다.
             if r.status_code != 200 and "prefill" in (r.text or ""):
+                # ★★ 한 번 겪었으면 기억해서 다시 시도하지 않는다 (_s170).
+                #   실측(26-08-26 12:23 배치): 폴백이 23회 돌았다 — 어휘 호출마다
+                #   400 을 한 번씩 맞고 다시 쏜 것이다. 호출이 두 배로 나갔다.
+                #   모델은 배치 중에 안 바뀌므로 한 번 확인하면 그만 물어도 된다.
+                _PREFILL_OK = False
                 payload["messages"] = [{"role": "user", "content": user_message}]
                 prefill = ""          # 아래에서 되붙이지 않도록 지운다
                 r = client.post(url, headers=headers, json=payload)
-                print("[VAR] ⚠ 이 모델은 prefill 을 못 쓴다 — 없이 진행 (_s169)")
+                print("[VAR] ⚠ 이 모델은 prefill 을 못 쓴다 — 이후 호출은 안 붙인다 (_s170)")
             # ★ 1시간 캐시를 안 받아 주는 환경이면 5분짜리로, 그래도 안 되면
             #   캐시 없이 (옛 방식대로 평문 system) 한 번 더 (_s164).
             #   캐싱은 돈을 아끼자는 것이지 생성을 죽일 이유가 아니다.
@@ -2401,7 +2412,8 @@ def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000,
         _joined = "\n".join(t for t in _texts if t).strip()
         if _joined:
             # ★ prefill 은 응답에 안 실려 온다 — 우리가 도로 붙여 온전한 JSON 을 만든다 (_s166)
-            return (prefill.rstrip() + _joined) if prefill.strip() else _joined
+            return ((prefill.rstrip() + _joined)
+                    if (prefill.strip() and _PREFILL_OK is not False) else _joined)
         _stop = data.get("stop_reason")
         _kinds = [b.get("type") for b in content]
         raise RuntimeError(

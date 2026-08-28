@@ -730,6 +730,30 @@ def validate_a(data: dict, original_passage: str = None, pid: str = "?", lenient
                     f"[{pid}] [CRITICAL] Q4 진술 '{_s[0]}'이 Q3 정답 구절을 그대로 베낌 "
                     f"({sorted(_ov)}) — Q3를 안 풀어도 답이 보인다. 진술을 빈칸 밖 문장 근거로 다시 쓸 것")
 
+    # ★★ Q4 진술이 Q5 빈칸 정답을 재현하는지 (_s172).
+    #   위 검사는 폐기된 '핵심빈칸'(core_blank)에만 물려 있어 지금은 아무것도 안 본다
+    #   (_s96 에서 핵심빈칸을 없앴는데 이 검사는 같이 안 옮겼다).
+    #   그래서 4번 진술이 5번 (A)(B) 정답을 그대로 옮겨 적는 결함이 계속 나갔다 —
+    #   실측(26-08-26~28 네 배치 27지문): 치명적 12건이 전부 이 유형이었다.
+    #   4번을 푼 학생이 5번을 공짜로 얻고, 반대로 5번을 못 풀면 4번을 판단 못 한다.
+    #   ★ 후보 소진 측정(캐시 400지문): 걸리는 지문 27개(6.8%), 지문당 최대 2건.
+    #     재시도 한 번이면 대개 풀린다. 규칙을 조이는 수정이라 먼저 재 봤다.
+    #   ★ lenient(마지막 시도)에서는 넘긴다 — 지문을 통째로 잃는 것보다는 낫다.
+    if not lenient and isinstance(data.get("statements"), list):
+        for _bk, _bl in (("blank_A", "(A)"), ("blank_B", "(B)")):
+            _ans5 = str(data.get(_bk) or "").strip()
+            if len(_ans5.split()) < 4:
+                continue
+            for _s in data["statements"]:
+                if not (isinstance(_s, (list, tuple)) and len(_s) >= 2):
+                    continue
+                _ov5 = option_echoes_answer(_ans5, str(_s[1]))
+                if _ov5:
+                    errors.append(
+                        f"[{pid}] [CRITICAL] Q4 진술 '{_s[0]}'이 Q5 {_bl} 정답을 그대로 옮겨 적었다 "
+                        f"({sorted(_ov5)}) — 4번을 풀면 5번이 공짜다. "
+                        f"빈칸 밖 문장을 근거로 진술을 다시 쓸 것 (O/X 판정은 그대로 둘 것)")
+
     # statements 5개
     if not isinstance(data.get("statements"), list) or len(data["statements"]) != 5:
         errors.append(f"[{pid}] statements는 5개 항목이어야 함")

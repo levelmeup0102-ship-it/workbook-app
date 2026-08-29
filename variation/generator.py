@@ -1649,6 +1649,43 @@ def cache_key_to_prefix(cache_key: str) -> Optional[str]:
 # ★ 이 모델이 prefill 을 받아 주는가 — 한 번 확인하면 기억한다 (_s170).
 #   None=아직 모름 / False=못 씀 / True=씀
 _PREFILL_OK = None
+# ★ 이 모델이 output_config(구조화 출력)를 받는가 (_s177).
+#   None=아직 모름 / False=400 을 받아 봤다 → 다시 안 붙인다.
+_JSONFMT_OK = None
+
+# ★ Q3 어휘 응답 스키마 (_s177) — 구조화 출력으로 서버가 이 꼴만 내보내게 한다.
+#   prompts.py 의 출력 예시와 칸 이름이 같아야 한다.
+VOCAB_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "vocab_items": {
+            "type": "array",
+            "minItems": 5,
+            "maxItems": 5,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "n": {"type": "integer"},
+                    # ★ para·idx 를 뺐다 (_s179) — 모델이 낱말을 세지 않는다.
+                    #   before = 그 낱말 바로 앞 한두 낱말(지문에서 베낀 것).
+                    #   자리는 normalize_llm_vocab 이 찾아 para·idx 를 채운다.
+                    "original": {"type": "string"},
+                    "before": {"type": "string"},
+                    "antonym": {"type": "string"},
+                    "shown": {"type": "string"},
+                    "is_answer": {"type": "boolean"},
+                    "why": {"type": "string"},
+                },
+                "required": ["n", "original", "before", "antonym",
+                             "shown", "is_answer", "why"],
+                "additionalProperties": False,
+            },
+        },
+        "vocab_explain": {"type": "string"},
+    },
+    "required": ["vocab_items", "vocab_explain"],
+    "additionalProperties": False,
+}
 
 _A_VER = "s160"
 _B_VER = "s161"
@@ -2303,13 +2340,23 @@ def split_passage_and_translation(passage_text: str) -> tuple:
 
 # ============ Claude API 호출 (httpx) ============
 def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000,
-                prefill: str = "") -> str:
+                prefill: str = "", json_schema: Optional[dict] = None) -> str:
     """anthropic SDK 없이 httpx 직접 호출
 
     prefill 을 주면 그 글자로 **시작하는** 응답만 받는다 (_s166).
     JSON 만 받아야 하는 자리에 prefill="{" 을 주면 머리말을 쓸 수가 없다.
+
+    json_schema 를 주면 **구조화 출력**을 건다 (_s177).
+    ★ 이게 prefill 을 대신한다. prefill 은 Sonnet 5·Opus 5·4.6 이후 모델에서
+      400 으로 거부돼(_s169) 지금은 꺼져 있고, 그 뒤로 JSON 을 강제하는 수단이
+      하나도 없었다. 실측(26-08-29 소명여고2 배치): 모델이
+      "Let me analyze the passage carefully." 로 시작하는 분석문을 쓰다가
+      max_tokens 에 걸려 JSON 에 도달하지 못한 응답이 3건,
+      그 때문에 05번·01번 두 지문이 통째로 죽었다.
+      output_config 는 서버가 스키마에 맞는 JSON 만 내보내게 하므로
+      머리말이 물리적으로 못 나온다.
     """
-    global _PREFILL_OK        # ★ 아래 400 처리에서 갱신한다 (_s170)
+    global _PREFILL_OK, _JSONFMT_OK   # ★ 아래 400 처리에서 갱신한다 (_s170/_s177)
     if not ANTHROPIC_API_KEY:
         raise RuntimeError("ANTHROPIC_API_KEY 환경변수가 없습니다")
 
@@ -2359,6 +2406,11 @@ def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000,
         #   우리는 JSON 만 필요하므로 사고 과정을 받을 이유가 없다.
         "thinking": {"type": "disabled"},
     }
+    # ★ 구조화 출력 (_s177) — 스키마를 주면 서버가 JSON 만 내보낸다.
+    #   못 쓰는 모델로 판명났으면 안 붙인다(아래 400 처리 참조).
+    if json_schema and _JSONFMT_OK is not False:
+        payload["output_config"] = {"format": {"type": "json_schema",
+                                               "schema": json_schema}}
 
     with httpx.Client(timeout=120.0) as client:
         r = client.post(url, headers=headers, json=payload)
@@ -2385,6 +2437,15 @@ def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000,
                 prefill = ""          # 아래에서 되붙이지 않도록 지운다
                 r = client.post(url, headers=headers, json=payload)
                 print("[VAR] ⚠ 이 모델은 prefill 을 못 쓴다 — 이후 호출은 안 붙인다 (_s170)")
+
+            # ★ 구조화 출력을 못 받는 모델이면 떼고 다시 쏜다 (_s177).
+            #   prefill 폴백(_s169/_s170)과 같은 구조 — 한 번 겪으면 기억한다.
+            if (r.status_code != 200 and "output_config" in (r.text or "")
+                    and "output_config" in payload):
+                _JSONFMT_OK = False
+                payload.pop("output_config", None)
+                r = client.post(url, headers=headers, json=payload)
+                print("[VAR] ⚠ 이 모델은 output_config 를 못 쓴다 — 이후 호출은 안 붙인다 (_s177)")
             # ★ 1시간 캐시를 안 받아 주는 환경이면 5분짜리로, 그래도 안 되면
             #   캐시 없이 (옛 방식대로 평문 system) 한 번 더 (_s164).
             #   캐싱은 돈을 아끼자는 것이지 생성을 죽일 이유가 아니다.
@@ -2406,6 +2467,14 @@ def call_claude(system_prompt: str, user_message: str, max_tokens: int = 8000,
         _rd = _u.get("cache_read_input_tokens") or 0
         if _wr or _rd:
             print(f"[VAR] 캐시 — 저장 {_wr:,} / 재사용 {_rd:,} 토큰")
+        # ★ 왜 끊겼는지 남긴다 (_s177).
+        #   실측(26-08-29 소명여고2): 'JSON 이 아예 없다' 가 세 번 났는데
+        #   응답이 max_tokens 에 잘린 것인지, 애초에 JSON 을 안 쓴 것인지
+        #   구분할 근거가 로그에 없었다. 추측으로 원인을 정하게 된다.
+        _stop = data.get("stop_reason")
+        if _stop and _stop != "end_turn":
+            print(f"[VAR] ⚠ 응답이 '{_stop}' 로 끝났다 "
+                  f"(출력 {(_u.get('output_tokens') or 0):,} / 한도 {max_tokens:,})")
         content = data.get("content", [])
         # ★ text 블록을 전부 모은다 — thinking 이 켜져 오더라도 뒤의 text 를 놓치지 않는다
         _texts = [b.get("text", "") for b in content if b.get("type") == "text"]
@@ -2491,6 +2560,13 @@ def generate_variation_a(
 
     last_errors = []
     last_data = None
+    # ★ Q3 어휘 실패 사유를 **바깥 재시도 사이에도** 이어 간다 (_s178).
+    #   전에는 _vfail 이 바깥 루프 안에 있어 라운드가 바뀌면 빈 리스트가 됐다.
+    #   실측(26-08-29 소명여고2 13강 01번): 1라운드 시도1 에서
+    #   "'pull away.' 는 구동사다" 로 거부됐는데, 2라운드 시도3 에서 모델이
+    #   **같은 자리를 또 골랐다.** 앞 라운드에서 배운 걸 못 받아 봤기 때문이다.
+    #   지문은 9번 시도 끝에 통째로 죽었다.
+    _vfail_all = []
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             user_msg = (
@@ -2746,7 +2822,8 @@ def generate_variation_a(
                 #     안에서만 뚫을 수 있어 정식보다 훨씬 좁았고, 실패하면 CRITICAL 이
                 #     나서 A 가 통째로 죽었다. 같은 유형 재시도가 성공률이 높다 —
                 #     지문 전체에서 고르므로. 두 번 다 실패하면 Q3 없이 4문항으로 낸다.
-                _vfail = []          # normalize 실패 사유 — 재시도 프롬프트로 돌려준다
+                # ★ 같은 리스트를 계속 쓴다 (_s178) — 라운드가 바뀌어도 사유가 남는다
+                _vfail = _vfail_all
 
                 def _try_vocab(_attempt: int):
                     _spans = blank_token_spans(data["paragraphs"])
@@ -2811,7 +2888,11 @@ def generate_variation_a(
                                    "· 정답 반의어는 원문어와 철자가 확연히 달라야 한다\n"
                                    "  ('inhabitable'→'uninhabitable' 은 눈으로 찾힌다. 'barren' 처럼).")
                     #   ★ prefill 로 JSON 을 강제한다 (_s166) — 위 call_claude 주석 참조
-                    _vraw = call_claude(VOCAB_SYS, _msg, max_tokens=1800, prefill="{")
+                    # ★ max_tokens 를 1800 → 4000 (_s177). 머리말이 붙어도
+                    #   JSON 까지 도달할 여유를 준다. 구조화 출력이 걸리면 머리말
+                    #   자체가 안 나오지만, 못 쓰는 모델로 폴백했을 때의 보험이다.
+                    _vraw = call_claude(VOCAB_SYS, _msg, max_tokens=4000, prefill="{",
+                                        json_schema=VOCAB_JSON_SCHEMA)
                     _v = extract_json_from_response(_vraw)
                     #   ★ 첫 시도만 -ing/-ed 형태까지 본다(_s100). 재시도에서는
                     #     -s 불일치만 막는다 — 'vast'→'overwhelming' 같은 정상 치환을
@@ -2887,7 +2968,12 @@ def generate_variation_a(
                 # ★ 안내문은 Q3 어휘를 아예 시도하지 않는다 (_s152).
                 #   _vok 를 참으로 두어 아래 '2회 실패 → raise' 도 타지 않게 한다.
                 _vok = _short
-                for _va in (() if _short else range(3)):   # ★ _s130: 2 → 3회
+                # ★ 3 → 5회 (_s178). 후보 자리가 마른 짧은 지문에서 3회는 모자란다.
+                #   실측(26-08-29 소명여고2): 죽은 두 지문은 밑줄 후보가 14·17개인데
+                #   살아난 다섯은 26~43개였다. 후보가 적으면 검사 다섯을 한꺼번에
+                #   만족시키기 어렵고, 매 시도마다 다른 규칙에 걸린다.
+                #   _want_n 이 시도마다 정답 자리를 한 칸씩 옮기므로 5회면 ①~⑤ 를 다 돈다.
+                for _va in (() if _short else range(5)):
                     try:
                         _items, _v = _try_vocab(_va)
                         data["vocab_items"] = _items
@@ -3220,6 +3306,19 @@ def generate_variation_a(
             except Exception as _e:
                 # ★ 조용히 넘기지 않는다 (_s151) — 아래 주석 참조
                 print(f"[VAR][A][{pid}] ⚠ 검사 건너뜀 (q4_conflicts_with_answer): {_e}")
+
+            # ★ 1번 주제 정답 선지가 3번 어휘 정답을 흘리는가 (_s176)
+            try:
+                from variation.vocab_q3 import q1_leaks_vocab_answer as _q1l
+                _leak1 = _q1l(data.get("topic_options"), data.get("topic_correct"),
+                              data.get("vocab_items"))
+                if _leak1 and not is_last:
+                    errors = list(errors) + [
+                        f"[{pid}] [CRITICAL] Q1 주제 정답 선지가 '{_leak1}' 을 써서 "
+                        f"Q3 어휘 정답 자리를 흘린다 — 학생이 1번을 풀면 3번이 공짜다. "
+                        f"주제 선지를 그 낱말 없이 다시 쓸 것"]
+            except Exception as _e:
+                print(f"[VAR][A][{pid}] ⚠ 검사 건너뜀 (q1_leaks_vocab_answer): {_e}")
 
             if not errors:
                 # ★ Q1 주제 정답 자리를 강 단위로 돌린다 (_s136).

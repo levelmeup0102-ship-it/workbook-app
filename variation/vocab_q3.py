@@ -255,6 +255,12 @@ def vocab_candidates(paragraphs, blank_spans=None, min_sent_gap=1) -> list:
                 # ★ 구동사 자리는 쓰지 않는다 (_s146) — 동사만 바꾸면 불변화사가 남는다
                 if i + 1 <= s_hi and i + 1 < len(toks) and particle_follows(toks[i + 1]):
                     continue
+                # ★ 앞말이 지배하는 전치사 자리도 쓰지 않는다 (_s175)
+                if i + 1 <= s_hi and i + 1 < len(toks) and governed_prep(toks[i], toks[i + 1]):
+                    continue
+                # ★ 목적어 뒤로 떨어진 불변화사도 본다 (_s175)
+                if split_particle_after(toks, i, s_hi):
+                    continue
                 if toks[i][:1].isupper() and i != s_lo:   # 고유명사 회피
                     continue
                 # ★ 반의어를 만들 수 있는 단어만 — 기출 정답은 전부 형용사 아니면 동사다.
@@ -449,6 +455,102 @@ def particle_follows(next_token: str) -> bool:
     return re.sub(r"[^A-Za-z]", "", str(next_token or "")).lower() in _PARTICLES
 
 
+# ★ 전치사를 **지배하는** 낱말 표 (_s175)
+#   하루에 넷이 샜다(25년 고1 9월 29·35번, 24년 고2 9월 30번, 24년 고2 9월 21번):
+#     [X] 'dreamed of creating'        → 'envisioned of creating'      (envision 은 of 를 안 받는다)
+#     [X] 'capable of spreading'       → 'able of spreading'           (able 은 to 를 받는다)
+#     [X] 'opportunity to domesticate' → 'impediment to domesticate'   (impediment 는 to+동사원형을 못 받는다)
+#     [X] 'catches up with'            → 'overtakes up with'           (_s146 이 이미 막던 자리 — 옛 캐시였다)
+#   전치사는 앞말의 선택 제약이다. 앞말만 갈면 남은 전치사가 안 맞아 비문이 된다.
+#
+#   ★ 처음엔 '뒤가 전치사면 무조건 그 자리를 버린다'로 짰다가 되돌렸다.
+#     실측(오늘 나간 시험지 6종, 실제로 쓰인 밑줄 137자리):
+#       전치사 전부 차단 → 36자리(26.3%)가 걷힌다. 'optimistic about winning',
+#         'persistence of the', 'changed over the' 처럼 멀쩡한 자리가 대부분이다.
+#       of/to 만 차단   → 18자리(13.1%). 여전히 'euphoria of first' 가 걷힌다.
+#       지배어 표      → 1자리(0.7%). 걸린 게 바로 그 'opportunity to' 다.
+#     거부는 재시도 한 번을 태운다. 26%는 크레딧을 태우는 값이고, 그 값을 치러도
+#     정작 못 잡는 자리가 남는다. 목록을 좁게 들고 **틀린 자리만** 잡는다.
+#
+#   ★ 표를 넓힐 때 기준 — '흔한 동의어가 같은 전치사를 못 받는' 낱말만 넣는다.
+#     'significant to' → 'trivial to' 처럼 동의어가 그대로 받는 자리는 넣지 않는다.
+#     (실제로 넣었다가 tests/test_vocab_gate.py 의 정상 fixture 가 거부됐다.)
+_PREP_GOVERNORS = {
+    "of": {"capable", "incapable", "dream", "dreams", "dreamed", "dreamt", "aware", "unaware",
+           "afraid", "fond", "devoid", "consist", "consists", "consisted", "dispose", "disposed",
+           "conscious", "desirous", "worthy", "indicative", "reminiscent"},
+    "to": {"opportunity", "opportunities", "accustomed", "unaccustomed", "subject", "able",
+           "unable", "liable", "prone", "reluctant", "bound", "entitled", "obliged",
+           "resort", "resorts", "resorted", "succumb", "succumbs", "succumbed",
+           "adhere", "adheres", "adhered", "amount", "amounts", "tantamount", "akin"},
+    "on": {"keen", "intent", "insist", "insists", "insisted", "rely", "relies", "relied",
+           "depend", "depends", "depended", "dwell", "dwells", "embark", "embarked"},
+    "from": {"refrain", "refrains", "refrained", "deter", "deters", "deterred", "abstain",
+             "derive", "derives", "derived", "stem", "stems", "stemmed"},
+    "with": {"comply", "complies", "complied", "cope", "copes", "coped", "dispense", "tamper"},
+}
+
+
+# ★ 목적어 뒤로 떨어진 불변화사 (_s175)
+#   실측(24년 고2 9월 21번 ③): 원문 'Leave the conductor and the sheet music behind.'
+#   에서 Leave → Discard 로 바꿔 'Discard ... behind' 가 됐다.
+#   불변화사가 목적어 **뒤**에 떨어져 있어 바로 뒤 낱말만 보는 _s146 으로는 안 잡힌다.
+_SPLIT_PARTICLES = {"behind", "back", "away", "out", "up", "down", "off", "apart", "aside"}
+
+# 절이 여기서 끝난다 / 여기서부터는 다른 절이다
+_CLAUSE_END = re.compile(r'[.,;:!?)\]\u2014\u2015\u2013\u2500\u2501]$')
+# ★ and·or·but 은 넣지 않는다 (_s175) — 목적어 안에서 흔히 쓰인다.
+#   실측: 'Leave the conductor **and** the sheet music behind.' 에서 and 로 걸음을
+#   멈추는 바람에 정작 잡아야 할 자리를 놓쳤다.
+_CLAUSE_BREAK = {"to", "that", "which", "who", "whom", "whose", "where", "when",
+                 "because", "while", "though", "although", "if"}
+
+def governed_prep(cur_token: str, next_token: str) -> str:
+    """앞말이 **지배하는** 전치사면 그 전치사를 돌려준다 (_s175).
+
+    표에 있는 낱말 + 그 낱말이 지배하는 전치사일 때만 참이다.
+    'significant to' 처럼 동의어가 전치사를 그대로 받는 자리는 건드리지 않는다.
+    """
+    n = re.sub(r"[^A-Za-z]", "", str(next_token or "")).lower()
+    if n not in _PREP_GOVERNORS:
+        return ""
+    # 앞말이 문장을 끝내면 뒤 전치사는 다음 문장 것이다 ('keenness. In the …')
+    if re.search(r'[.!?;:]["\u2019\u201d)\]]*$', str(cur_token or "")):
+        return ""
+    w = re.sub(r"[^A-Za-z]", "", str(cur_token or "")).lower()
+    return n if w in _PREP_GOVERNORS[n] else ""
+
+
+def split_particle_after(toks, i, hi=None, window=12) -> str:
+    """i번째 낱말이 지배하는 **절이 불변화사로 끝나는가** (_s175).
+
+    끝나면 그 불변화사를, 아니면 빈 문자열을 돌려준다.
+
+    ★ 헛걸림을 두 가지로 막는다. 실측(오늘 나간 시험지 6종, 밑줄 137자리)에서
+      이 두 가지를 안 넣으면 2자리가 걸리는데 **둘 다 헛걸림**이었다:
+        · 'You gradually slow down.'        — down 을 지배하는 건 slow 다
+        · 'trying to herd … that runs away' — away 를 지배하는 건 runs 다
+      1) -ly 로 끝나는 낱말은 부사다. 불변화사를 지배하지 않는다.
+      2) to·that·which·and 같은 낱말이 나오면 거기서 절이 갈린다. 걸음을 멈춘다.
+      두 가지를 넣으면 137자리에서 헛걸림 0개, 'Leave … behind' 는 그대로 잡힌다.
+    """
+    try:
+        end = len(toks) - 1 if hi is None else min(int(hi), len(toks) - 1)
+        i = int(i)
+    except Exception:
+        return ""
+    if re.sub(r"[^A-Za-z]", "", str(toks[i])).lower().endswith("ly"):
+        return ""                                   # 부사는 불변화사를 지배하지 않는다
+    for j in range(i + 1, min(i + 1 + window, end + 1)):
+        tok = str(toks[j])
+        w = re.sub(r"[^A-Za-z]", "", tok).lower()
+        if j == end or _CLAUSE_END.search(tok):      # 절이 여기서 끝난다
+            return w if w in _SPLIT_PARTICLES else ""
+        if w in _CLAUSE_BREAK:                       # 여기서부터는 다른 절이다
+            return ""
+    return ""
+
+
 def modal_before_to(shown: str, next_token: str) -> bool:
     """shown 이 조동사인데 바로 뒤가 to 면 비문('must to be')."""
     w = re.sub(r"[^A-Za-z]", "", str(shown or "")).lower()
@@ -579,6 +681,20 @@ def validate_vocab(vocab_items, paragraphs, pid="?") -> list:
                 f"[{pid}] Q3 어휘 {it.get('n')}번 '{shown} to' — 조동사 뒤에는 to 가 "
                 f"오지 않는다. 원문 '{it.get('original')} to' 를 조동사로 바꾸면 비문이 "
                 f"된다 (have/need 처럼 to 를 받는 말로 고를 것)")
+        # ★ 앞말이 지배하는 전치사 (_s175)
+        _pv = governed_prep(toks[i], toks[i + 1]) if i + 1 < len(toks) else ""
+        if _pv and not modal_before_to(shown, toks[i + 1]):
+            errors.append(
+                f"[{pid}] Q3 어휘 {it.get('n')}번 '{shown} {_pv}' — '{it.get('original')}' 가 "
+                f"지배하는 전치사 '{_pv}' 다. 낱말만 바꾸면 전치사가 안 맞아 비문이 된다 "
+                f"(capable of → able of, dreamed of → envisioned of)")
+        # ★ 절 끝에 떨어져 남은 불변화사 (_s175)
+        _sp = split_particle_after(toks, i)
+        if _sp:
+            errors.append(
+                f"[{pid}] Q3 어휘 {it.get('n')}번 '{shown} … {_sp}' — 원문 "
+                f"'{it.get('original')} … {_sp}' 는 목적어를 사이에 낀 구동사다. "
+                f"낱말만 바꾸면 불변화사가 남아 비문이 된다 (leave ~ behind → discard ~ behind)")
         if article_mismatch(toks[i - 1], shown):
             want = "an" if needs_an(shown) else "a"
             errors.append(
@@ -1058,13 +1174,60 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
         orig = str(it.get("original", "")).strip()
         if not orig:
             return _fail(f"{_no}번 original 이 비어 있음")
+
+        def _loose(w):
+            return re.sub(r"[^A-Za-z0-9'-]", "", str(w or "")).lower()
+
+        # ★★ 자리를 '앞 낱말'로 잡는다 (_s179).
+        #   전에는 LLM 에게 para(몇 번째 단락)·idx(공백으로 세어 몇 번째 낱말)를
+        #   적으라고 시켰다. 그러려면 지문을 한 낱말씩 세야 하는데 thinking 이
+        #   꺼져 있어(_s134) 모델이 **답변 칸에서** 셌다.
+        #   실측(26-08-29 소명여고2): 응답이
+        #     "Let me index words per paragraph (0-indexed, split by space)"
+        #     "**Paragraph 0 (A):** \"Short-lived pain from a possible injury...\""
+        #   로 시작해 세는 데 출력을 다 쓰고 JSON 에 도달하지 못한 것이 6건,
+        #   'idx 자리를 못 찾음' 이 2건. 13강 01번은 그렇게 통째로 죽었다.
+        #   ★ 세는 게 아니라 **베껴 적는** 일로 바꾼다 — before 칸에 그 낱말
+        #     바로 앞 한두 낱말을 지문에서 그대로 옮겨 적게 한다.
+        #   ★ 실측 근거: 지문 36개·밑줄 후보 988개에서 69.3% 는 지문에 딱 한 번만
+        #     나와 낱말만으로 자리가 정해진다. 나머지 30.7%(existing×4 처럼)만
+        #     before 가 필요하다.
+        #     앞 낱말을 몇 개 받아야 하는지도 쟀다(175자리 무작위 표본):
+        #       1낱말 173/175 · 2낱말 174/175 · **3낱말 175/175**
+        #     그래서 프롬프트는 앞 세 낱말을 요구한다.
+        #   ★ para·idx 는 **없어지지 않는다.** 여기서 코드가 채워 넣는다 —
+        #     렌더링·검증·문장 떼어내기가 전부 그 값을 그대로 쓴다.
+        _before = str(it.get("before", "") or "").strip()
         if not isinstance(p, int) or p < 0 or p >= len(paragraphs):
-            return _fail(f"{_no}번 '{orig}' 의 para={p} 가 범위 밖 (0~{len(paragraphs)-1})")
+            p, i = None, None                    # LLM 이 안 줬거나 범위 밖 → 코드가 찾는다
+        if p is None:
+            _cands = []                          # (단락, 자리)
+            for _q in range(len(paragraphs)):
+                _tk = paragraphs[_q][1].split()
+                for _j, _w in enumerate(_tk):
+                    if _w == orig or _loose(_w) == _loose(orig):
+                        _cands.append((_q, _j))
+            if not _cands:
+                return _fail(f"{_no}번 '{orig}' 가 지문에 없다 — 지문에 인쇄된 "
+                             f"낱말을 구두점까지 그대로 옮겨 적을 것")
+            if len(_cands) > 1 and _before:
+                _bw = [_loose(x) for x in _before.split() if _loose(x)]
+                _scored = []
+                for _q, _j in _cands:
+                    _tk = paragraphs[_q][1].split()
+                    _prev = [_loose(x) for x in _tk[max(0, _j - len(_bw)):_j]]
+                    _scored.append((sum(1 for a, b in zip(_prev[::-1], _bw[::-1])
+                                        if a == b), _q, _j))
+                _best = max(x[0] for x in _scored)
+                _cands = [(q, j) for sc, q, j in _scored if sc == _best]
+            if len(_cands) > 1:
+                # 앞 낱말로도 못 가리면 첫 자리를 쓴다 — 버리는 것보다 낫다.
+                print(f"[VAR][A][{pid}] Q3어휘 '{orig}' 가 {len(_cands)}군데 있는데 "
+                      f"before='{_before}' 로 못 가렸다 — 첫 자리를 쓴다 (_s179)")
+            p, i = _cands[0]
         toks = paragraphs[p][1].split()
 
         # ── 좌표 찾기: 정확 → 느슨(구두점·대소문자 무시) 순 ──
-        def _loose(w):
-            return re.sub(r"[^A-Za-z0-9'-]", "", str(w or "")).lower()
 
         found = None
         if isinstance(i, int) and 0 <= i < len(toks) and toks[i] == orig:
@@ -1175,6 +1338,18 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
                 return _fail(f"{_no}번 '{it.get('shown')} to' — 조동사 뒤에는 to 가 "
                              f"오지 않는다. 원문이 '{orig} to' 이므로 to 를 받는 말"
                              f"(have/need/ought 등)로 고르거나 다른 자리를 고를 것")
+            # ★ 앞말이 지배하는 전치사 자리 (_s175)
+            _pv = governed_prep(_tk[_ix], _tk[_ix + 1]) if _ix + 1 < len(_tk) else ""
+            if _pv and not modal_before_to(it.get("shown"), _tk[_ix + 1]):
+                return _fail(f"{_no}번 '{orig} {_pv}' — '{_pv}' 는 '{orig}' 가 지배하는 "
+                             f"전치사다. 낱말만 갈면 '{it.get('shown')} {_pv}' 처럼 전치사가 "
+                             f"안 맞아 비문이 된다. **다른 자리를 고를 것**")
+            # ★ 절 끝에 떨어져 남은 불변화사 (_s175)
+            _sp = split_particle_after(_tk, _ix)
+            if _sp:
+                return _fail(f"{_no}번 '{orig} … {_sp}' — 목적어를 사이에 낀 구동사다. "
+                             f"낱말만 갈면 '{it.get('shown')} … {_sp}' 처럼 불변화사가 "
+                             f"남아 비문이 된다. **다른 자리를 고를 것**")
         except _IdxUnknown:
             pass          # 자리를 못 정하면 이 검사만 건너뛴다 (_s156)
         except Exception:
@@ -1390,6 +1565,43 @@ def q4_conflicts_with_answer(vocab_items, paragraphs, statements_evidence,
 #     그건 _s112 가 되돌린 실수를 반복하는 것이다. 그래서 **정답 자리에만**
 #     건다 — 오답 넷은 동의어라 판단할 게 없으므로 빈칸 문장에 있어도 무해하다.
 # ════════════════════════════════════════════════════════════════
+
+def q1_leaks_vocab_answer(topic_options, topic_correct, vocab_items) -> str:
+    """1번 주제 **정답 선지**가 3번 어휘 정답 낱말의 어족을 쓰는가 (_s176).
+
+    쓰면 그 낱말을, 아니면 빈 문자열을 돌려준다.
+
+    ★ 왜 정답 선지만 보는가 — 학생은 1번을 먼저 푼다. 정답 선지에 3번 정답
+      자리의 원문어가 들어 있으면 지문을 다시 읽지 않고도 그 자리가 뒤집혔음을
+      안다. 오답 선지는 학생이 고르지 않으므로 흘려도 무해하다.
+
+    ★ 실측(오늘 나간 시험지 6종·34지문, 수정 전 원본):
+        3건 걸렸고 **셋 다 진짜**였다.
+          26년 고2 6월 31번 — 정답 '… adapt to changing commercial uses'
+                              3번 정답이 remained ← **changed**
+          25년 고1 9월 37번 — 정답 '… in gradually stopping moving objects'
+                              3번 정답이 abruptly ← **gradually**
+        헛걸림 0건. 좁고 정확해서 그대로 쓴다.
+    """
+    if not topic_options or not topic_correct:
+        return ""
+    ans = next((it for it in vocab_items or [] if it.get("is_answer")), None)
+    if not ans:
+        return ""
+    keys = [w for w in (_norm_w(ans.get("original", "")), _norm_w(ans.get("shown", ""))) if w]
+    if not keys:
+        return ""
+    try:
+        idx = "①②③④⑤".index(str(topic_correct).strip()[:1])
+        opt = str(topic_options[idx])
+    except Exception:
+        return ""
+    for w in re.findall(r"[A-Za-z]+", opt):
+        for k in keys:
+            if _kin_word(w, k):
+                return w
+    return ""
+
 
 def answer_in_blank_sentence(vocab_items, paragraphs) -> bool:
     """Q3 정답 단어가 Q5 빈칸 마커와 같은 문장에 있으면 True."""

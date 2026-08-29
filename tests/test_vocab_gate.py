@@ -178,6 +178,82 @@ for _w, _want in [("hinder", True), ("found", False), ("coughed.", False)]:
     check(V.answer_in_blank_sentence(_it, _bp) == _want,
           f"정답 '{_w}' 의 빈칸 문장 판정이 틀렸다")
 
+# ── 10. 전치사·불변화사 비문 (_s175) ────────────────────────
+#   오늘 하루에 다섯 자리가 비문인 채로 인쇄됐다. 세 길 전부에서 막혀야 한다.
+_BAD = [
+    # (지문, 원문 낱말, LLM 이 낸 낱말, 무엇에 걸려야 하는가)
+    ("Eventually, a lack of sleep catches up with you and the debt comes due.",
+     "catches", "overtakes", "구동사"),
+    ("A symphony isn't the goal. Leave the conductor and the sheet music behind.",
+     "Leave", "Discard", "불변화사"),
+    ("Literature throughout history has dreamed of creating human-like machines.",
+     "dreamed", "envisioned", "지배하는"),
+    ("In time they became capable of spreading out from Africa to the world.",
+     "capable", "able", "지배하는"),
+    ("No mammal gave those peoples more opportunity to domesticate than gazelles.",
+     "opportunity", "impediment", "지배하는"),
+]
+for _txt, _orig, _shown, _why in _BAD:
+    _tk = _txt.split()
+    _ix = next(k for k, w in enumerate(_tk) if V.strip_edge_punct(w).lower() == _orig.lower())
+    # (1) 코드 픽 후보에서 빠져야 한다
+    check(all(c["idx"] != _ix for c in V.vocab_candidates([["A", _txt]])),
+          f"코드 픽이 '{_orig}' 자리를 후보로 냈다 ({_why})")
+    # (2) 백스톱(validate_vocab)이 막아야 한다
+    _it = [dict(n=1, para=0, idx=_ix, original=_tk[_ix], shown=_shown,
+                antonym=_shown, is_answer=True)]
+    _errs = " ".join(V.validate_vocab(_it * 5, [["A", _txt]], pid="t"))
+    check(_why in _errs, f"백스톱이 '{_orig} → {_shown}' 를 안 막았다 ({_why})")
+
+# 헛걸림 — 동의어가 전치사를 그대로 받는 자리는 막지 않는다
+for _cur, _nx in [("significant", "to"), ("important", "to"), ("meaning", "of"),
+                  ("majority", "of"), ("optimistic", "about"), ("persistence", "of")]:
+    check(V.governed_prep(_cur, _nx) == "",
+          f"지배어 표가 정상 자리 '{_cur} {_nx}' 를 막았다")
+# 앞말이 문장을 끝내면 뒤 전치사는 다음 문장 것이다
+check(V.governed_prep("dreams.", "of") == "", "문장 경계를 못 봤다")
+# 부사는 불변화사를 지배하지 않는다 / 절이 갈리면 걸음을 멈춘다
+check(V.split_particle_after("You gradually slow down.".split(), 1) == "",
+      "부사 자리를 불변화사 자리로 봤다")
+check(V.split_particle_after("trying to herd an animal that runs away,".split(), 0) == "",
+      "절이 갈렸는데 계속 걸어갔다")
+check(V.split_particle_after("spreading out from Africa, eventually".split(), 0) == "",
+      "뒤에 목적어가 있는 전치사를 불변화사로 봤다")
+
+
+# ── 11. para·idx 없이 자리 잡기 (_s179) ────────────────────
+#   모델은 낱말과 앞 세 낱말만 적고, 자리는 코드가 찾는다.
+_P = [["(A)", "Assimilation refers to the process of including new information into "
+               "existing schemas or what we already know."],
+      ["(B)", "In accommodation, existing schemas are changed in response to new "
+               "situations and experiences."],
+      ["(C)", "But when he sees a cow, he will need to modify the schema, as the new "
+               "schema will not fit into the existing schema of a dog."]]
+def _one(orig, before):
+    _it = dict(n=1, original=orig, before=before, antonym="opposite",
+               shown=orig + "x", is_answer=True)
+    _o = V.normalize_llm_vocab([_it] * 5, _P, pid="t", report=[])
+    return (_o[0]["para"], _o[0]["idx"]) if _o else None
+
+# 지문에 한 번만 나오는 낱말 — before 가 없어도 잡힌다
+check(_one("refers", "") == (0, 1), "유일한 낱말의 자리를 못 잡았다")
+# 같은 낱말이 네 번 — before 로 갈린다
+_tk0, _tk1, _tk2 = (p[1].split() for p in _P)
+check(_one("existing", "new information into") == (0, _tk0.index("existing")),
+      "(A)의 existing 을 못 가렸다")
+check(_one("existing", "In accommodation,") == (1, _tk1.index("existing")),
+      "(B)의 existing 을 못 가렸다")
+check(_one("existing", "fit into the") == (2, len(_tk2) - 1 - _tk2[::-1].index("existing")),
+      "(C)의 existing 을 못 가렸다")
+# 모델이 para·idx 를 아예 안 줘도 된다
+check(_one("modify", "need to") == (2, _tk2.index("modify")), "before 만으로 못 잡았다")
+# 지문에 없는 낱말은 사유를 돌려준다
+_rep = []
+V.normalize_llm_vocab([dict(n=1, original="zzzz", before="", antonym="a",
+                            shown="b", is_answer=True)] * 5, _P, pid="t", report=_rep)
+check(any("지문에 없다" in x for x in _rep), "지문에 없는 낱말을 안 걸렀다")
+
+
 # 약어 마침표를 문장 끝으로 보지 않는다
 check(len(V._sentence_bounds("It closes at 5 p.m. every day today.".split())) == 1,
       "약어 마침표를 문장 끝으로 봤다")

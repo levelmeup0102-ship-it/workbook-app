@@ -1209,19 +1209,47 @@ def _particle_block() -> str:
       게이트가 자리째 거부해, 모델이 규칙을 지켜도 계속 튕겼다.
     """
     try:
-        from variation.vocab_q3 import _PARTICLES
+        from variation.vocab_q3 import (_PARTICLES, _PREP_GOVERNORS,
+                                        _SPLIT_PARTICLES)
         _p = " / ".join(sorted(_PARTICLES))
+        _g = "\n".join(
+            "        " + prep + " 를 지배: " + ", ".join(sorted(ws))
+            for prep, ws in sorted(_PREP_GOVERNORS.items()))
+        _sp = " / ".join(sorted(_SPLIT_PARTICLES))
     except Exception:
-        _p = "up / down / off / out / away / back"
+        _p = "away / back / down / off / out / up"
+        _g = "        of 를 지배: capable, dreamed, aware, afraid, consist, devoid …"
+        _sp = "apart / aside / away / back / behind / down / off / out / up"
     return (
         "  · ★★★ 밑줄 칠 낱말 **바로 뒤** 낱말이 아래 여섯 중 하나면\n"
         "    그 자리는 **아예 고르지 마라.** 무엇으로 바꾸든 검사기가 거부한다.\n"
         "        " + _p + "\n"
         "    구동사라 동사만 바꾸면 불변화사가 남아 비문이 된다.\n"
-        "      [X] 'add up' 자리 → 'accumulate up'      [X] 'pointed out' → 'remarked out'\n"
-        "      [X] 'break down' → 'decompose down'      [X] 'giving up' → 'relinquishing up'\n"
-        "    ★ 구동사인지 따질 것 없다. **바로 뒤 낱말만 보면 된다.** 여섯 중 하나면 넘어가라.\n"
-        "    실측 실패: 'add up' 과 'pointed out' 을 골라 지문 하나가 통째로 죽었다.\n"
+        "      [X] 'add up' → 'accumulate up'       [X] 'break down' → 'decompose down'\n"
+        "      [X] 'pointed out' → 'remarked out'   [X] 'catch up with' → 'overtake up with'\n"
+        "    ★ 구동사인지 따질 것 없다. **바로 뒤 낱말만 보면 된다.**\n"
+        "\n"
+        "  · ★★★ 불변화사는 목적어 **뒤로 떨어져** 있기도 하다. 밑줄 칠 낱말이 동사인데\n"
+        "    그 **절이 아래 낱말로 끝나면** 그 자리도 고르지 마라.\n"
+        "        " + _sp + "\n"
+        "      [X] 'Leave the conductor and the sheet music behind.'\n"
+        "          → 'Discard the conductor and the sheet music behind.' (behind 가 남는다)\n"
+        "    ★ 'spreading out from Africa' 처럼 뒤에 목적어가 이어지면 평범한 전치사이니\n"
+        "      그 자리는 써도 된다.\n"
+        "\n"
+        "  · ★★★ 전치사를 **지배하는** 낱말도 그 자리를 고르지 마라. 뒤 전치사는\n"
+        "    앞말이 정한 것이라, 앞말만 갈면 전치사가 안 맞아 비문이 된다.\n"
+        + _g + "\n"
+        "      [X] 'capable of spreading' → 'able of spreading'   (able 은 to 를 받는다)\n"
+        "      [X] 'dreamed of creating' → 'envisioned of creating'\n"
+        "      [X] 'opportunity to domesticate' → 'impediment to domesticate'\n"
+        "    ★ 뒤에 전치사가 있다고 다 피하라는 말이 아니다. 'significant to' → 'trivial to'\n"
+        "      처럼 동의어가 전치사를 그대로 받는 자리는 **써도 된다.** 위 목록에 있는\n"
+        "      낱말만 피하라.\n"
+        "\n"
+        "    실측 실패: 'add up' 과 'pointed out' 으로 지문 하나가 통째로 죽었고,\n"
+        "    'catch up with' · 'leave ~ behind' · 'dreamed of' · 'capable of' ·\n"
+        "    'opportunity to domesticate' 다섯 자리가 비문인 채 시험지로 인쇄됐다.\n"
     )
 
 
@@ -1525,9 +1553,15 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0,
         "      지문 'internal features such as eyes'  →  original 에 'external' 이라고 적음\n"
         "      지문 'vicarious functioning.'          →  original 에 'flexibility' 라고 적음\n"
         "    비슷한 뜻의 다른 단어를 쓰면 안 된다. 그 자리에 **실제로 인쇄된** 글자여야 한다.\n"
-        "  · para 와 idx 를 적기 전에, 그 단락을 공백으로 끊어 세어 확인하라.\n"
-        "    idx 가 틀려도 코드가 근처에서 찾아 보정하지만, original 자체가 지문에 없으면\n"
-        "    찾을 방법이 없다.\n"
+        "  · ★★★ before 칸에는 그 낱말 **바로 앞 세 낱말**을 지문에서 그대로 옮겨 적어라.\n"
+        "    세지 마라. 눈에 보이는 대로 베끼면 된다.\n"
+        "      지문 'This daily drive for sleep appears …' 에서 drive 를 고른다면\n"
+        "        original: \"drive\"   before: \"This daily\"   (문단 첫머리라 둘뿐이면 둘만)\n"
+        "    같은 낱말이 지문에 여러 번 나올 때 어느 자리인지 코드가 이걸로 가린다\n"
+        "    ('existing' 이 네 번 나오면 'into the existing' 과 'the existing schema of'\n"
+        "     가 before 로 구분된다).\n"
+        "  · ★ 단락 번호나 낱말 번호는 적지 않는다. 세지 마라 — 자리는 코드가 찾는다.\n"
+        "    네가 할 일은 **어느 낱말에 밑줄을 그을지 고르는 것**이다.\n"
         "  · ★★ **그 자리에 넣었을 때 문장이 읽히는가**를 머릿속으로 확인하라.\n"
         "    어휘 문제는 단어 하나만 바꾸는 것이다. 그 하나가 문장을 깨면 안 된다.\n"
         "      지문 'the brain depends on external features'\n"
@@ -1566,13 +1600,15 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0,
         "    'depends' 와 'depend' 를 둘 다 밑줄 치지 마라. 학생 눈에는 같은 말이다.\n"
         "  · 선지는 밑줄 단어 하나만 보인다 — 구가 아니라 한 단어다.\n\n"
 
-        "## OUTPUT — 자리는 '몇 번째 단락, 몇 번째 단어'로 정확히 지목하라\n"
+        "## OUTPUT — 자리는 '그 낱말 + 앞 낱말'로 지목하라 (번호를 세지 마라)\n"
         "  ★ why 는 정답 항목에만, 40자 이내 한 줄로 쓴다. 답지에 한 줄로 들어가므로\n"
         "    문단으로 늘어놓지 마라. 오답 4개의 why 는 비워도 된다.\n"
         "  ★ vocab_explain 은 빈 문자열로 둔다 — 답지에 이미 근거·이유·나머지 선지가 나온다.\n"
-        "  Count words by splitting on spaces, starting at 0, within that paragraph only.\n"
-        "  'original' must be the passage's word at that exact index, punctuation included\n"
-        "  as it appears.\n"
+        "  'original' 은 지문에 인쇄된 그대로 — 구두점·대소문자까지 옮겨 적는다.\n"
+        "  'before' 는 그 바로 앞 **세 낱말**을 지문에서 그대로 옮겨 적는다.\n"
+        "    실측: 앞 세 낱말이면 실지문 36개·175자리에서 자리가 100% 정확히 잡힌다\n"
+        "    (두 낱말이면 'shots or scenes' 처럼 같은 토막이 두 번 나오는 자리를 못 가린다).\n"
+        "  ★ 문단 첫 낱말이라 앞이 없으면 before 를 빈 문자열로 둔다.\n"
         + (f"  ★ 출력 직전 확인: is_answer 가 true 인 항목의 n 이 {want_n} 인가?\n"
            f"    아래 예시 JSON 은 n:3 을 정답으로 보여주지만 그건 형식 예시일 뿐이다.\n"
            if want_n in (1, 2, 3, 4, 5) else "")
@@ -1613,19 +1649,19 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0,
         "★★ 다섯 항목 **전부** antonym 을 채워라. 하나라도 비면 버려진다.\n"
         "   그 단어의 반대말 한 단어. 못 적으면 그 자리를 쓰지 마라.\n\n"
         '{"vocab_items": [\n'
-        '   {"n": 1, "para": 0, "idx": 12, "original": "exciting",\n'
+        '   {"n": 1, "original": "exciting", "before": "makes the opening",\n'
         '    "antonym": "dull",  "shown": "thrilling", "is_answer": <ANSWER_HERE>,\n'
         '    "why": "도입부의 흡인력을 말하는 자리"},\n'
-        '   {"n": 2, "para": 1, "idx": 5,  "original": "internal",\n'
+        '   {"n": 2, "original": "internal", "before": "on the",\n'
         '    "antonym": "external", "shown": "intrinsic", "is_answer": <ANSWER_HERE>,\n'
         '    "why": "..."},\n'
-        '   {"n": 3, "para": 1, "idx": 22, "original": "convince",\n'
+        '   {"n": 3, "original": "convince", "before": "hard to",\n'
         '    "antonym": "dissuade", "shown": "dissuade", "is_answer": <ANSWER_HERE>,\n'
         '    "why": "..."},\n'
-        '   {"n": 4, "para": 2, "idx": 8,  "original": "adapted",\n'
+        '   {"n": 4, "original": "adapted", "before": "is well",\n'
         '    "antonym": "unsuited", "shown": "adjusted", "is_answer": <ANSWER_HERE>,\n'
         '    "why": "..."},\n'
-        '   {"n": 5, "para": 2, "idx": 30, "original": "greater",\n'
+        '   {"n": 5, "original": "greater", "before": "even",\n'
         '    "antonym": "lesser", "shown": "larger", "is_answer": <ANSWER_HERE>,\n'
         '    "why": "..."}\n'
         '],\n'

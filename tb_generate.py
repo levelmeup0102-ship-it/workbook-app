@@ -5,9 +5,11 @@ topic_background.py 에서 import 해서 씀. pipeline 의 call_claude 인프라
 """
 import os, re, json, time, subprocess, tempfile, html as _html
 
-API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+from core.settings import settings
+
+API_KEY = settings.ANTHROPIC_API_KEY or ""
 API_URL = "https://api.anthropic.com/v1/messages"
-MODEL   = "claude-sonnet-4-20250514"
+MODEL   = settings.CLAUDE_MODEL
 
 # 이미지 허용 도메인 (위키 계열만)
 _IMG_ALLOW = ("upload.wikimedia.org",)

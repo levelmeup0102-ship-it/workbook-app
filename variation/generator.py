@@ -130,17 +130,15 @@ def build_order_blocks_a(en_text: str, pid: str = "?", seed_extra: str = "") -> 
     return {"intro": intro_text, "paragraphs": paragraphs, "order_correct": order_correct}
 
 # ============ 환경 변수 ============
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5")
+from core.settings import settings
+
+ANTHROPIC_API_KEY = settings.ANTHROPIC_API_KEY or ""
+CLAUDE_MODEL = settings.CLAUDE_MODEL
 ANTHROPIC_VERSION = "2023-06-01"
 MAX_RETRIES = 3
 
-SB_URL = os.environ.get("SUPABASE_URL", "")
-SB_KEY = (
-    os.environ.get("SUPABASE_SERVICE_KEY")
-    or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    or os.environ.get("SUPABASE_KEY", "")
-)
+SB_URL = settings.SUPABASE_URL or ""
+SB_KEY = settings.SUPABASE_KEY or ""
 
 
 # ============ Supabase REST 헬퍼 ============

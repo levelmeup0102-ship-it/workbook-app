@@ -4,8 +4,10 @@ from urllib.parse import quote
 
 import httpx
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+from core.settings import settings
+
+SUPABASE_URL = settings.SUPABASE_URL
+SUPABASE_KEY = settings.SUPABASE_KEY
 
 def _enabled():
     return bool(SUPABASE_URL and SUPABASE_KEY)

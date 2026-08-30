@@ -1,13 +1,36 @@
 #!/usr/bin/env python3
 """Workbook webapp server v12 - stable local + supabase passages, cache status"""
+from core.settings import settings  # noqa: F401 — env/테이블명 로딩 최우선. 다른 import보다 먼저.
 import os, json, hashlib, re, shutil
 from pathlib import Path
+from contextlib import asynccontextmanager
+import uvicorn
+import logging
+import supa
 
+from database.client import init as supabase_init, close as supabase_close
+
+from fastapi.exceptions import RequestValidationError
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
-from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
+from fastapi.security import APIKeyHeader
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from first_round_workbook.router import router as first_round_router
+from core.exceptions import AppError
+from core.exception_handler import (
+    app_error_handler,
+    request_validation_exception_handler,
+    http_exception_handler,
+    unhandled_exception_handler
+)
+from core.logging_config import setup_logging
+
+setup_logging()
+
+logger = logging.getLogger(__name__)
 
 APP_VERSION = "v12-main-replace"
 
@@ -15,16 +38,41 @@ APP_VERSION = "v12-main-replace"
 for p in Path(".").glob("__pycache__"):
     shutil.rmtree(p, ignore_errors=True)
 
-APP_PASSWORD = os.getenv("APP_PASSWORD", "levelmeup2026")
+APP_PASSWORD = settings.APP_PASSWORD
 
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
 
 PASSAGES_FILE = DATA_DIR / "passages.json"  # data/ 안에 저장 → 볼륨으로 영속
 
-app = FastAPI()
+# ============================================================
+# Supabase 연결 - lifespan
+# ============================================================
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # startup: env 있으면 async client 생성 → app.state 에 보관 (없으면 None=로컬 모드)
+    app.state.supabase = await supabase_init()
+    yield
+    # shutdown: postgrest 세션 정리(DB 연결 해제)
+    await supabase_close(app.state.supabase)
+
+app = FastAPI(lifespan=lifespan)
+
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# ============================================================
+# ★ 1회독 교재 생성 라우터 등록
+#   passages/books/generation 3개 도메인 전체 등록 (집계 라우터)
+# ============================================================
+app.include_router(first_round_router)
+
+app.add_exception_handler(AppError, app_error_handler) # type checker로 인한 오류
+app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
+
+
 
 # ============================================================
 # ★ 변형문제 (2회독) 라우터 등록 - 2026-05-13 추가
@@ -53,13 +101,8 @@ except Exception as e:
 # ============================================================
 # Auth
 # ============================================================
-def _token(pw: str) -> str:
-    return hashlib.sha256(f"{pw}_wb2026".encode()).hexdigest()[:32]
-
-def _verify(r: Request) -> None:
-    got = r.headers.get("Authorization", "").replace("Bearer ", "")
-    if got != _token(APP_PASSWORD):
-        raise HTTPException(401)
+# 인증 유틸 → util.security 로 이전 (main/패키지 공용, 순환 import 방지)
+from core.security import _token, _verify
 
 
 # ============================================================
@@ -69,7 +112,6 @@ async def _load_db():
     """Load passages - Supabase first, local fallback"""
     # Supabase
     try:
-        import supa
         if supa._enabled():
             rows = await supa.get_all_passages()
             if isinstance(rows, list) and rows:
@@ -88,7 +130,7 @@ async def _load_db():
                     }
                 return db
     except Exception as e:
-        print(f"[supa] load error: {e}")
+        logger.error(f"[supa] load error (NO SUPABASE_URL OR SUPABASE_KEY): {e}")
 
     # Local fallback
     if PASSAGES_FILE.exists():
@@ -107,7 +149,6 @@ async def _save_db(d):
 
     # supabase passages sync (best-effort)
     try:
-        import supa
         if not supa._enabled():
             print("[save_db] Supabase not enabled")
             return
@@ -141,16 +182,8 @@ async def _save_db(d):
 # ============================================================
 # Cache Key / Cache Check
 # ============================================================
-def _ck(book: str, unit: str, pid: str) -> str:
-    """캐시 키: 책이름_과_번호_hash (한국어 포함, 가독성 우선)
-    예: 공통영어1비상홈_1과_01번_26c81a4e
-    """
-    raw = f"{book}_{unit}_{pid}"
-    h = hashlib.md5(raw.encode("utf-8")).hexdigest()[:8]
-    BAD = set(' ()[]/\\:*?"<>|')
-    def safe(s: str, maxlen: int = 20) -> str:
-        return "".join(ch for ch in s if ch not in BAD)[:maxlen]
-    return f"{safe(book,15)}_{safe(unit,8)}_{safe(pid,6)}_{h}"
+# 캐시 키 유틸 → util.cache 로 이전
+from utils.cache_key import _ck
 
 async def _is_cached(ck: str) -> bool:
     """Check cache - local first, then Supabase (count only)"""
@@ -165,7 +198,6 @@ async def _is_cached(ck: str) -> bool:
 
     # supabase cache count (best-effort)
     try:
-        import supa
         if supa._enabled():
             n = await supa.count_steps(ck)
             if isinstance(n, int) and n >= 8:
@@ -186,7 +218,7 @@ async def index():
 
 @app.get("/api/version")
 async def version():
-    key = os.getenv("ANTHROPIC_API_KEY", "NOT_SET")
+    key = settings.ANTHROPIC_API_KEY or "NOT_SET"
 
     pf_exists = PASSAGES_FILE.exists()
     passage_count = 0
@@ -202,7 +234,6 @@ async def version():
         pass
 
     try:
-        import supa
         if supa._enabled():
             rows = await supa.get_all_passages()
             supa_count = len(rows) if isinstance(rows, list) else 0
@@ -231,7 +262,9 @@ async def auth(request: Request):
     raise HTTPException(401, "wrong password")
 
 
-@app.get("/api/passages")
+# ===== [리팩토링 중복 코드] first_round_workbook.passages / books 로 이전됨 — 비활성 보존 (아래 블록 전체, 다음 라운드에 삭제) =====
+r'''
+# @app.get("/api/passages")  # → first_round_workbook.passages 라우터로 이전 (기존 코드 보존, 나중 삭제)
 async def list_passages(request: Request):
     _verify(request)
     db = await _load_db()
@@ -257,7 +290,7 @@ async def list_passages(request: Request):
     return result
 
 
-@app.post("/api/passages/upload")
+# @app.post("/api/passages/upload")  # → first_round_workbook.passages 라우터로 이전 (기존 코드 보존, 나중 삭제)
 async def upload_passages(request: Request):
     _verify(request)
     body = await request.json()
@@ -312,7 +345,7 @@ async def upload_passages(request: Request):
     return {"ok": True, "count": count}
 
 
-@app.delete("/api/passages")
+# @app.delete("/api/passages")  # → first_round_workbook.passages 라우터로 이전 (기존 코드 보존, 나중 삭제)
 async def delete_passage_api(request: Request):
     """개별 지문 삭제"""
     _verify(request)
@@ -347,7 +380,6 @@ async def delete_passage_api(request: Request):
 
     # Supabase passage row 삭제 (best-effort)
     try:
-        import supa
         if supa._enabled():
             await supa.delete_passage(book, unit, pid)
     except Exception as e:
@@ -356,7 +388,7 @@ async def delete_passage_api(request: Request):
     return {"ok": True}
 
 
-@app.delete("/api/books")
+# @app.delete("/api/books")  # → first_round_workbook.books 라우터로 이전 (기존 코드 보존, 나중 삭제)
 async def delete_book_api(request: Request):
     """교재 전체 삭제"""
     _verify(request)
@@ -383,13 +415,14 @@ async def delete_book_api(request: Request):
 
     # Supabase에서도 삭제 (best-effort)
     try:
-        import supa
         if supa._enabled():
             await supa.delete_book(book)
     except Exception as e:
         print(f"[supa] delete book error: {e}")
 
     return {"ok": True}
+'''
+# ===== [리팩토링 중복 코드] 끝 (passages / books) =====
 
 
 @app.post("/api/sync-supabase")
@@ -397,7 +430,6 @@ async def sync_supabase(request: Request):
     """로컬 DB를 수파베이스에 강제 동기화"""
     _verify(request)
     try:
-        import supa
         if not supa._enabled():
             return {"ok": False, "error": "Supabase not enabled"}
 
@@ -447,7 +479,7 @@ async def clear_cache(request: Request):
 
     # supabase helper (없어도 서버가 죽지 않게)
     try:
-        import supa
+        pass
     except Exception:
         supa = None
 
@@ -513,7 +545,9 @@ async def clear_cache(request: Request):
     }
 
 
-@app.post("/api/generate")
+# ===== [리팩토링 중복 코드] first_round_workbook.generation 로 이전됨 — 비활성 보존 (아래 블록 전체, 다음 라운드에 삭제) =====
+r'''
+# @app.post("/api/generate")  # → first_round_workbook.generation 라우터로 이전 (기존 코드 보존, 나중 삭제)
 async def generate(request: Request):
     _verify(request)
     body = await request.json()
@@ -574,6 +608,8 @@ async def generate(request: Request):
         raise
     except Exception as e:
         raise HTTPException(500, str(e))
+'''
+# ===== [리팩토링 중복 코드] 끝 (generation) =====
 
 
 
@@ -734,4 +770,4 @@ async def _secret_note_impl(body: dict):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+    uvicorn.run(app, host="0.0.0.0", port=settings.PORT)

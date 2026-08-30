@@ -22,10 +22,12 @@ from .generator import (
 )
 from .renderer import render_seosul_set
 
-OUTPUT_DIR = os.environ.get("SEOSUL_OUTPUT_DIR", "/tmp/seosul_output")
+from core.settings import settings
+
+OUTPUT_DIR = settings.SEOSUL_OUTPUT_DIR
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-APP_PASSWORD = os.environ.get("APP_PASSWORD", "levelmeup2026")
+APP_PASSWORD = settings.APP_PASSWORD
 
 def _token(pw: str) -> str:
     return hashlib.sha256(f"{pw}_wb2026".encode()).hexdigest()[:32]

@@ -30,12 +30,14 @@ from variation.renderer import (
 )
 
 # ============ 출력 디렉토리 ============
-OUTPUT_DIR = os.environ.get("VARIATION_OUTPUT_DIR", "/tmp/variation_output")
+from core.settings import settings
+
+OUTPUT_DIR = settings.VARIATION_OUTPUT_DIR
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
 # ============ 인증 (main.py와 정확히 동일) ============
-APP_PASSWORD = os.environ.get("APP_PASSWORD", "levelmeup2026")
+APP_PASSWORD = settings.APP_PASSWORD
 
 
 def _token(pw: str) -> str:

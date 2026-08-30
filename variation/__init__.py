@@ -10,7 +10,7 @@ main.py에 추가 (자동으로 try/except 처리됨):
     ANTHROPIC_API_KEY   — Claude API 키 (필수)
     SUPABASE_URL        — Supabase URL (기존 사용 중)
     SUPABASE_SERVICE_KEY 또는 SUPABASE_KEY — Supabase 키 (기존 사용 중)
-    APP_PASSWORD        — 인증 토큰 (기존 main.py와 동일, 기본값 levelmeup2026)
+    APP_PASSWORD        — 인증 토큰 (필수, 기존 main.py와 동일)
     CLAUDE_MODEL        — Claude 모델 (기본 claude-sonnet-4-5-20251022)
     VARIATION_OUTPUT_DIR — HTML 임시 저장 경로 (기본 /tmp/variation_output)
 

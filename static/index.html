@@ -796,6 +796,8 @@ async function doGenerate() {
   const resultsList = document.getElementById('results-list');
   btn.disabled=true; progress.classList.remove('hidden');
   resultsSection.classList.add('hidden'); resultsList.innerHTML='';
+  // ===== [기존 코드 — 지문별 1요청(구 스키마). bulk 전환으로 주석 처리] =====
+  /*
   let completed=0; const results=[];
   for (const p of passages) {
     progressText.textContent = `생성 중... ${completed+1}/${passages.length} — ${p.unit} ${p.id}`;
@@ -809,6 +811,44 @@ async function doGenerate() {
     completed++;
     progressFill.style.width = `${(completed/passages.length)*100}%`;
   }
+  */
+  // ===== [신규 코드 — book 단위 bulk 요청 + 순서 기반 라벨 매핑] =====
+  const results = [];
+  const levelsVal = levels.length===11 ? null : levels;
+
+  // selectedPassages → book별 { unitsMap: {unit:[pid...]}, labels: [{unit,id}...](순서 보존) }
+  const byBook = {};
+  for (const p of passages) {
+    (byBook[p.book] ??= { unitsMap:{}, labels:[] });
+    (byBook[p.book].unitsMap[p.unit] ??= []).push(p.id);
+    byBook[p.book].labels.push({ unit:p.unit, id:p.id });  // 순서 = 백엔드 평탄화 순서
+  }
+
+  const bookKeys = Object.keys(byBook);
+  let doneBooks = 0;
+  for (const book of bookKeys) {
+    const { unitsMap, labels } = byBook[book];
+    progressText.textContent = `생성 중... (${book})`;
+    progressFill.style.width = `${(doneBooks/bookKeys.length)*100}%`;
+    try {
+      const units = Object.entries(unitsMap).map(([unit, passage_ids]) => ({ unit, passage_ids }));
+      const res = await fetch(API+'/api/generate', { method:'POST', headers:headers(), body:JSON.stringify({ book, units, levels:levelsVal }) });
+      const data = await res.json();
+      if (!res.ok) {  // 요청 자체 실패(422/500 등)
+        const msg = (data.error && data.error.message) || '요청 실패';
+        labels.forEach(l => results.push({id:`${l.unit} ${l.id}`,status:'error',error:msg}));
+      } else {  // 응답에 식별자 없음 → 보낸 순서(labels)와 results 순서를 zip
+        (data.results || []).forEach((r, i) => {
+          const l = labels[i] || {};
+          if (r.ok) results.push({id:`${l.unit} ${l.id}`,status:'success',html:r.html,filename:r.filename});
+          else results.push({id:`${l.unit} ${l.id}`,status:'error',error:'생성 실패'});
+        });
+      }
+    } catch(e) { labels.forEach(l => results.push({id:`${l.unit} ${l.id}`,status:'error',error:e.message})); }
+    doneBooks++;
+    progressFill.style.width = `${(doneBooks/bookKeys.length)*100}%`;
+  }
+  //////////////////////////////////////////////////수정된 코드 END
   progressText.textContent = `완료! ${results.filter(r=>r.status==='success').length}/${passages.length} 성공`;
   resultsSection.classList.remove('hidden');
   const successResults = results.filter(r=>r.status==='success');
@@ -862,11 +902,40 @@ async function deletePassage(book, unit, pid) {
   try {
     const res = await fetch(API+'/api/passages',{method:'DELETE',headers:headers(),body:JSON.stringify({book,unit,pid})});
     const data = await res.json();
+    /* // [수정 전 코드 주석 처리]
     if (data.ok) {
       toast('✅ 지문 삭제 완료');
       selectedPassages.delete(`${book}|${unit}|${pid}`);
       await loadPassages();
       if (document.getElementById('sel-book').value) onBookChange();
+    }
+    */
+    /* // [수정 후 v1 주석 처리] 백엔드가 not-found를 200(deleted:false)로 반환하므로 404 분기는 죽은 코드
+    if (data.ok) {
+      toast('✅ 지문 삭제 완료');
+      selectedPassages.delete(`${book}|${unit}|${pid}`);
+      await loadPassages();
+      if (document.getElementById('sel-book').value) onBookChange();
+    } else if (res.status === 404) {
+      toast('⚠️ DB에 없는 지문입니다');
+    } else {
+      toast('삭제 실패');
+    }
+    */
+    // [수정 후 v2] 200(deleted 플래그) 기준 분기 + 정보누락(400)은 안내만(방식 B)
+    if (data.ok) {
+      if (data.deleted) {
+        toast('✅ 지문 삭제 완료');
+        selectedPassages.delete(`${book}|${unit}|${pid}`);
+        await loadPassages();
+        if (document.getElementById('sel-book').value) onBookChange();
+      } else {
+        toast('⚠️ DB에 없는 지문입니다');
+      }
+    } else if (res.status === 400) {
+      toast('⚠️ 지문 정보가 없습니다. 새로고침 후 다시 시도해주세요');
+    } else {
+      toast('삭제 실패');
     }
   } catch(e) { toast('삭제 실패'); }
 }

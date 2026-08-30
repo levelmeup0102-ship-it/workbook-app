@@ -24,7 +24,7 @@ from stage7_1_step1_prompt import PROMPT_TEMPLATE
 logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s] %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
-logger = logging.getLogger("pipeline")
+logger = logging.getLogger(__name__)
 from pathlib import Path
 
 # QA 검증 모듈
@@ -37,8 +37,10 @@ except ImportError:
 # ============================================================
 # 설정
 # ============================================================
-API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-MODEL = "claude-sonnet-4-20250514"
+from core.settings import settings
+
+API_KEY = settings.ANTHROPIC_API_KEY or ""
+MODEL = settings.CLAUDE_MODEL
 TEMPLATE_DIR = Path(__file__).parent
 DATA_DIR = TEMPLATE_DIR / "data"
 
@@ -243,7 +245,6 @@ def call_claude(system_prompt: str, user_prompt: str, max_retries=2, max_tokens=
     body = {
         "model": MODEL,
         "max_tokens": max_tokens,
-        "temperature": 0.3,
         "system": system_prompt,
         "messages": [{"role": "user", "content": user_prompt}]
     }
@@ -455,13 +456,9 @@ def load_step(passage_dir: Path, step_name: str) -> dict | None:
 # ============================================================
 # SYSTEM PROMPT (공통)
 # ============================================================
-SYS_JSON = """You are an English exam content generator for Korean high school students.
-Return ONLY valid JSON. No markdown fences. No explanations. No preamble.
-All Korean text must use proper Korean. All English must be grammatically correct."""
+SYS_JSON = """You are an English exam content generator for Korean high school students. Return ONLY valid JSON. No markdown fences. No explanations. No preamble. All Korean text must use proper Korean. All English must be grammatically correct."""
 
-SYS_JSON_KR = """당신은 한국 고등학생을 위한 영어 시험 콘텐츠 생성기입니다.
-반드시 유효한 JSON만 반환하세요. 마크다운, 설명, 서문 없이 JSON만 출력하세요.
-한국어는 자연스럽게, 영어는 문법적으로 정확하게 작성하세요."""
+SYS_JSON_KR = """당신은 한국 고등학생을 위한 영어 시험 콘텐츠 생성기입니다. 반드시 유효한 JSON만 반환하세요. 마크다운, 설명, 서문 없이 JSON만 출력하세요. 한국어는 자연스럽게, 영어는 문법적으로 정확하게 작성하세요."""
 
 # ============================================================
 # STEP 1: 기본 분석 (어휘 + 번역 + 핵심문장)
@@ -500,7 +497,7 @@ def step1_basic_analysis(passage: str, passage_dir: Path, full_translation: str,
 {numbered_sentences}
 
 [생성 항목]
-1. vocab: 핵심 어휘 14개 (각각 word, meaning(한국어), synonyms(영어 유의어 4개 쉼표구분))
+1. vocab: 핵심 어휘 15개 (각각 word, meaning(한국어), synonyms(영어 유의어 4개 쉼표구분))
 2. sentence_translations: 위 [문장 분리 기준]의 각 문장에 대한 한국어 번역 (정확히 {sent_count}개, 같은 순서!)
   - ⚠ 영어 1문장 = 한국어 1문장! 영어가 긴 문장이어도 한국어 번역을 절대 2개로 나누지 마세요!
   - 한국어 번역 중간에 마침표(.)를 찍어 문장을 나누면 안 됩니다. 쉼표(,)로 이어주세요.
@@ -648,7 +645,7 @@ def step2_order(passage: str, sentences: list, passage_dir: Path) -> dict:
 {passage}
 
 [개별 문장]
-{json.dumps(sentences, ensure_ascii=False)}
+{sentences}
 
 [생성 항목]
 1. order_intro: 제시문 (첫 1~2문장)
@@ -1678,10 +1675,10 @@ def step5_grammar(passage: str, passage_dir: Path) -> dict:
             'do', 'does', 'did',
         }
         common_adverbs = {'also', 'always', 'often', 'never', 'still', 'just', 
-                         'only', 'really', 'quite', 'very', 'rather', 'now',
-                         'then', 'too', 'so', 'even', 'already', 'yet',
-                         'usually', 'sometimes', 'generally', 'typically',
-                         'simply', 'merely', 'truly', 'actually', 'not'}
+                        'only', 'really', 'quite', 'very', 'rather', 'now',
+                        'then', 'too', 'so', 'even', 'already', 'yet',
+                        'usually', 'sometimes', 'generally', 'typically',
+                        'simply', 'merely', 'truly', 'actually', 'not'}
         for num_str, content in all_br_na:
             bracket_pos = final_bp_na.find(f'({num_str})[')
             if bracket_pos < 1:
@@ -2389,13 +2386,14 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
     
     stage7_step2_answer = ''.join(step2_items)
     
-    blocks.append(f'<div class="ablock"><p class="ast">Stage 7-1 어법</p>'
-                  '<p>[STEP 1]</p>'
-                  f'<ul>{stage7_step1_answer}</ul>'
-                  '<p>[STEP 2]</p>'
-                  f'<ul>{stage7_step2_answer}</ul>'
-                  '</div>'
-                  )
+    blocks.append(
+        f'<div class="ablock"><p class="ast">Stage 7-1 어법</p>'
+        '<p>[STEP 1]</p>'
+        f'<ul>{stage7_step1_answer}</ul>'
+        '<p>[STEP 2]</p>'
+        f'<ul>{stage7_step2_answer}</ul>'
+        '</div>'
+        )
     
     # Stage 8 어휘 (Part A / Part B 정답만: 3단/2단 구성의 정답지)
     stage8_data = all_data.get("step6")
@@ -2418,13 +2416,14 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
     
     insert_data_8_B = ''.join(partB_items)
 
-    blocks.append('<div class="ablock"><p class="ast">Stage 8 어휘</p>'
-                  '<p>[Part A]</p>'
-                  f'<ul>{insert_data8_A}</ul>'
-                  '<p>[Part B]</p>'
-                  f'<ul>{insert_data_8_B}</ul>'
-                  '</div>'
-                )
+    blocks.append(
+        '<div class="ablock"><p class="ast">Stage 8 어휘</p>'
+        '<p>[Part A]</p>'
+        f'<ul>{insert_data8_A}</ul>'
+        '<p>[Part B]</p>'
+        f'<ul>{insert_data_8_B}</ul>'
+        '</div>'
+        )
 
     # Lv.9 - step2 정답 (정답: 번호만 / 오답: 번호+한글해석문장)
     stage9_data = all_data.get("step6") or {}
@@ -2448,17 +2447,17 @@ def step8_answers(all_data: dict, passage_dir: Path) -> dict:
     logger.debug(f"DEBUG | STAGE 9 |오답 선지 해석 KOR/ENG DATA CHECK\nKOR> {stage6_wrong}\nENG> {stage9_wrong_eng}\n")
 
     blocks.append(
-          '<div class="ablock"><p class="ast">Stage 9 내용 일치</p>'
-          '<p>[STEP 2 - Part A. 한국어]</p>'
-          f'<p>정답: {correct_numbers_kor}</p>'
-          '<p>[오답 선지 해설 및 정답]</p>'
-          f'{stage9_wrong_kor}'
-          '<p>[STEP 2 - Part B. English]</p>'
-          f'<p>정답: {correct_numbers_eng}</p>'
-          '<p>[오답 선지 해설 및 정답]</p>'
-          f'{stage9_wrong_eng}'
-          '</div>'
-      )
+        '<div class="ablock"><p class="ast">Stage 9 내용 일치</p>'
+        '<p>[STEP 2 - Part A. 한국어]</p>'
+        f'<p>정답: {correct_numbers_kor}</p>'
+        '<p>[오답 선지 해설 및 정답]</p>'
+        f'{stage9_wrong_kor}'
+        '<p>[STEP 2 - Part B. English]</p>'
+        f'<p>정답: {correct_numbers_eng}</p>'
+        '<p>[오답 선지 해설 및 정답]</p>'
+        f'{stage9_wrong_eng}'
+        '</div>'
+    )
 
     # Lv.10
     s7 = all_data.get("step7", {})
@@ -2657,23 +2656,23 @@ def process_passage(passage: str, meta: dict, passage_id: str, force=False, leve
 
     # Step 7: Stage 10 영작 (로컬)
     # ★ 사용자 해석이 있으면 step7 캐시 무효화 (한국어 문장이 바뀌므로)
-    if user_tr:
-        step7_cache = passage_dir / "step7_writing.json"
-        if step7_cache.exists():
-            step7_cache.unlink()
-            _safe_print("  step7: 사용자 해석 변경 → 로컬 캐시 삭제")
-        # Supabase 캐시도 삭제
-        try:
-            import supa
-            if supa._enabled():
-                _run_async(supa.delete_step(passage_dir.name, "step7_writing"))
-                _safe_print("  step7: Supabase 캐시도 삭제")
-        except:
-            pass
-    translation = all_steps["step1"].get("translation", "")
+    # if user_tr:
+    #     step7_cache = passage_dir / "step7_writing.json"
+    #     if step7_cache.exists():
+    #         step7_cache.unlink()
+    #         _safe_print("  step7: 사용자 해석 변경 → 로컬 캐시 삭제")
+    #     # Supabase 캐시도 삭제
+    #     try:
+    #         import supa
+    #         if supa._enabled():
+    #             _run_async(supa.delete_step(passage_dir.name, "step7_writing"))
+    #             _safe_print("  step7: Supabase 캐시도 삭제")
+    #     except:
+    #         pass
+    # translation = all_steps["step1"].get("translation", "")
     sentence_translations = all_steps["step1"].get("sentence_translations", [])
     
-    logger.debug(f"DEBUG | translation와 sentence_translations 비교\ntranslation> {translation}\nsentence_translations> {sentence_translations}")
+    # logger.debug(f"DEBUG | translation와 sentence_translations 비교\ntranslation> {translation}\nsentence_translations> {sentence_translations}")
 
     all_steps["step7"] = step7_writing(sentences=sentences_from_api, passage_dir=passage_dir, sentence_translations=sentence_translations)
 
@@ -2827,7 +2826,6 @@ def split_and_run(filepath: str, lesson_num: str = "5", levels=None):
     _safe_print(f"Found {len(passages)} passages")
     for p in passages:
         _safe_print(f"  - {p['meta']['challenge_title']}")
-    print()
     
     process_batch(passages, levels=levels)
 
@@ -2934,7 +2932,6 @@ if __name__ == "__main__":
         _safe_print("  Levels: py pipeline.py --all all.txt --level 1,2,5,8")
         _safe_print("  Single: py pipeline.py passage.txt 5 \"05-01\"")
         _safe_print("  Merge: py pipeline.py --merge")
-        print()
         _safe_print("  --level option: select levels (0=cover+answers)")
         _safe_print("    e.g.) --level 1,2,3,4")
         _safe_print("    e.g.) --level 5,6,7,8")
@@ -3767,8 +3764,8 @@ def _load_grammar_points_for_prompt() -> str:
     """
     try:
         import httpx
-        url = os.environ.get("SUPABASE_URL", "")
-        key = os.environ.get("SUPABASE_KEY", "")
+        url = settings.SUPABASE_URL or ""
+        key = settings.SUPABASE_KEY or ""
         if not url or not key:
             return ""
         

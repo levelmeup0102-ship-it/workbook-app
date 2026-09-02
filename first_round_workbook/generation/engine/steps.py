@@ -509,24 +509,9 @@ def _generate_order_block_shuffled(data: Dict):
         data["full_order_blocks"] = new_blocks
 
 
-def _normalize_for_matching(text: str) -> str:
-    """매칭 비교용 정규화.
-
-    - 스마트 따옴표(' ' " ")를 일반 따옴표(' ")로 치환
-    - 연속 공백/줄바꿈을 공백 하나로 합치고 앞뒤 공백 제거
-    LLM이 준 문장과 원문 문장이 '따옴표 모양·공백'만 달라 안 맞는 경우를 흡수한다.
-    """
-    smart_quote_to_plain = {
-        "‘": "'", "’": "'",   # ' ' → '
-        "“": '"', "”": '"',   # " " → "
-    }
-    for smart_quote, plain_quote in smart_quote_to_plain.items():
-        text = text.replace(smart_quote, plain_quote)
-    return re.sub(r"\s+", " ", text).strip()
-
-
 def _build_sentence_insertion_problem(insert_sentence: str, sentences: List[str], data: Dict):
-    """문장 삽입 문제(Stage5-B)를 코드로 재구성 — LLM 결과를 신뢰하지 않음.
+    """
+    문장 삽입 문제(Stage5-B) 재구성
 
     원문에서 insert_sentence 1개를 빼고, 남은 문장 사이에 ①~⑤ 마커를 배치.
     뺀 문장의 원래 자리가 정답. data['insert_answer'], data['insert_passage'] 를 채운다.
@@ -541,16 +526,17 @@ def _build_sentence_insertion_problem(insert_sentence: str, sentences: List[str]
         logger.warning("클로드의 응답 값 중 하나인 핵심 문장(insert_sentence)가 없음. step2의 처음인 claude call 재시도 필요")
         return
 
-    # 1. 삭제할 문장 찾기.
-    #    insert_sentence 는 대화문일 경우 여러 문장이 합쳐진 통짜일 수 있다.
-    #    → 각 문장(정규화)이 insert_sentence(정규화) 안에 포함되면 삭제 대상으로 본다.
-    #      (대화문: 여러 문장이 매칭 / 일반 지문: 한 문장만 매칭)
-    normalized_insert_sentence = _normalize_for_matching(insert_sentence)
-    matched_indexes = [
-        index
-        for index, sentence in enumerate(sentences)
-        if _normalize_for_matching(sentence) in normalized_insert_sentence
-    ]
+    # 1. 삭제할 문장 찾기 — 대화문/일반 지문을 _is_dialogue 로 분기.
+    target = insert_sentence.strip()
+    if _is_dialogue(sentences):
+        # 대화문: insert_sentence 가 한 화자의 turn(여러 문장 합본)일 수 있음.
+        #        → 각 문장이 insert 안에 '포함'되면 삭제(여러 문장 매칭 허용).
+        matched_indexes = [i for i, s in enumerate(sentences) if s.strip() in target]
+    else:
+        # 일반 지문: insert 는 단일 문장 → 공백 무시 '정확' 매칭(오매칭 방지).
+        matched_indexes = [i for i, s in enumerate(sentences) if s.strip() == target]
+        if not matched_indexes:                       # 정확 실패 시 '포함'으로 보조
+            matched_indexes = [i for i, s in enumerate(sentences) if s.strip() in target]
 
     if matched_indexes:
         # 경우 1: 매칭 성공 — 매칭된 문장들을 모두 삭제.

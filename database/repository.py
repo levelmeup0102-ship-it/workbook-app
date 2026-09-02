@@ -8,7 +8,8 @@
 확정 매핑: docs/refactor_plan.md 참고.
 """
 import logging
-from typing import List, Dict
+import math
+from typing import Any, List, Dict
 from functools import wraps
 
 from supabase import AsyncClient
@@ -42,11 +43,42 @@ def _guard(default):
 # ========================
 # Passages
 # ========================
-@_guard(default=list)          # None시 []
-async def get_all_passages(client: AsyncClient) -> List:
-    """전체 지문 조회"""
-    res = await client.table(PASSAGES).select("book,unit,pid,title,passage_text").execute()
-    return res.data
+async def _fetch_all_rows(client: AsyncClient, table: str, columns: str) -> List[Dict[str, Any]]:
+    """지정 테이블/컬럼의 전체 행을 페이지네이션으로 조회 (PostgREST 기본 1000행 제한 회피).
+
+    - 먼저 전체 행 수(count=exact)를 구한 뒤 PAGE_SIZE 단위로 range 조회해 누적.
+    - table/columns 를 인자로 받아 호출마다 독립적으로 조회 → 테이블 간 데이터 혼입 없음.
+    - client is None(로컬 모드) 처리는 호출부의 @_guard 가 담당.
+    """
+    PAGE_SIZE = 1000
+
+    # 전체 행 개수 구하기 (head=True → 데이터 없이 count 만)
+    count_res = await (
+        client.table(table)
+        .select("*", count="exact", head=True)
+        .execute()
+    )
+    total_count = count_res.count or 0
+    total_pages = math.ceil(total_count / PAGE_SIZE)
+
+    rows: List[Dict[str, Any]] = []
+    for page in range(total_pages):
+        start = page * PAGE_SIZE
+        end = start + PAGE_SIZE - 1
+        res = await (
+            client.table(table)
+            .select(columns)
+            .range(start, end)
+            .execute()
+        )
+        rows.extend(res.data or [])
+    return rows
+
+
+@_guard(default=list)
+async def get_all_passages(client: AsyncClient) -> List[Dict[str, Any]]:
+    """전체 지문 조회 (1000행 제한 회피 — _fetch_all_rows 로 전량 페이지네이션)."""
+    return await _fetch_all_rows(client, PASSAGES, "book,unit,pid,title,passage_text")
 
 
 @_guard(default=None)          # None시 None
@@ -182,12 +214,12 @@ async def count_steps(client: AsyncClient, cache_key) -> int:
 
 @_guard(default=dict)          # None시 {}
 async def count_steps_all(client: AsyncClient) -> Dict:
-    """전체 step_cache 를 1쿼리로 조회 → cache_key별 step 개수 dict 반환.
-    (list_passages 의 지문별 count_steps N+1 을 배치 1회로 대체)
+    """전체 step_cache 를 조회 → cache_key별 step 개수 dict 반환.
+    (list_passages 의 지문별 count_steps N+1 을 배치로 대체 + 1000행 제한 회피)
     """
-    res = await client.table(STEP_CACHE).select("cache_key").execute()
+    rows = await _fetch_all_rows(client, STEP_CACHE, "cache_key")
     counts: dict = {}
-    for row in (res.data or []):
+    for row in rows:
         ck = row.get("cache_key")
         if ck:
             counts[ck] = counts.get(ck, 0) + 1

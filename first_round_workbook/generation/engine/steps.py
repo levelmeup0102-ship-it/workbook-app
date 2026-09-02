@@ -510,6 +510,22 @@ def _generate_order_block_shuffled(data: Dict):
         data["full_order_blocks"] = new_blocks
 
 
+def _normalize_for_matching(text: str) -> str:
+    """매칭 비교용 정규화.
+
+    - 스마트 따옴표(' ' " ")를 일반 따옴표(' ")로 치환
+    - 연속 공백/줄바꿈을 공백 하나로 합치고 앞뒤 공백 제거
+    LLM이 준 문장과 원문 문장이 '따옴표 모양·공백'만 달라 안 맞는 경우를 흡수한다.
+    """
+    smart_quote_to_plain = {
+        "‘": "'", "’": "'",   # ' ' → '
+        "“": '"', "”": '"',   # " " → "
+    }
+    for smart_quote, plain_quote in smart_quote_to_plain.items():
+        text = text.replace(smart_quote, plain_quote)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def _build_sentence_insertion_problem(insert_sentence: str, sentences: List[str], data: Dict):
     """문장 삽입 문제(Stage5-B)를 코드로 재구성 — LLM 결과를 신뢰하지 않음.
 
@@ -520,30 +536,47 @@ def _build_sentence_insertion_problem(insert_sentence: str, sentences: List[str]
 
     markers = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
 
+    sentences = list(sentences)
+
     if len(insert_sentence) == 0:
         logger.warning("클로드의 응답 값 중 하나인 핵심 문장(insert_sentence)가 없음. step2의 처음인 claude call 재시도 필요")
         return
 
-    # original_sentences = split_sentences(passage)
-    # insert_normalized = re.sub(r'\s+', ' ', insert_sentence.strip())
+    # 1. 삭제할 문장 찾기.
+    #    insert_sentence 는 대화문일 경우 여러 문장이 합쳐진 통짜일 수 있다.
+    #    → 각 문장(정규화)이 insert_sentence(정규화) 안에 포함되면 삭제 대상으로 본다.
+    #      (대화문: 여러 문장이 매칭 / 일반 지문: 한 문장만 매칭)
+    normalized_insert_sentence = _normalize_for_matching(insert_sentence)
+    matched_indexes = [
+        index
+        for index, sentence in enumerate(sentences)
+        if _normalize_for_matching(sentence) in normalized_insert_sentence
+    ]
 
-    # 삽입 문장의 원문 위치 찾기: 정확 매칭 → 부분 매칭 → 중앙 fallback
-    # 1. 단순 insert_sentence의 위치를 찾는 거라면,
-    insert_sentence_index = sentences.index(insert_sentence.strip())
+    if matched_indexes:
+        # 경우 1: 매칭 성공 — 매칭된 문장들을 모두 삭제.
+        #         정답 위치(삽입 지점)는 첫 매칭 문장의 인덱스.
+        insertion_index = matched_indexes[0]
+        answer_sentence = insert_sentence.strip()
+        for index in reversed(matched_indexes):   # 뒤에서부터 삭제해야 인덱스가 밀리지 않음
+            del sentences[index]
+    else:
+        # 경우 2: 매칭 실패(LLM 패러프레이즈·특수문자 등) — 크래시 방지 fallback.
+        #         중앙 문장을 삽입 대상으로 삼아 삭제.(정답도 그 문장으로 맞춤)
+        insertion_index = len(sentences) // 2
+        answer_sentence = sentences[insertion_index]   # 삭제 전에 실제 문장 확보
+        logger.warning("step2: insert_sentence 원문 매칭 실패 → %d번째 문장으로 대체", insertion_index)
+        del sentences[insertion_index]
 
-    # 2. insert_sentence를 sentences에서 지우기.
-    del sentences[insert_sentence_index]
-
-    # 3. 각 지문의 문장들의 앞에 마커 붙여주기.
-
+    # 2. 남은 문장들 앞에 마커(①②③…) 붙이기. 마지막 문장 뒤에는 마커 하나 더.
     for i in range(len(sentences)):
         sentences[i] = f"( {markers[i]} ) {sentences[i]}"
-        if i == (len(sentences)-1): sentences[i] = f"{sentences[i]} ( {markers[i+1]} )"
-                
+        if i == (len(sentences) - 1):
+            sentences[i] = f"{sentences[i]} ( {markers[i + 1]} )"
 
-    # 4. 합쳐서 1개의 string값의 지문으로 만들고 정답도 지정.
-    data["insert_passage"] = ' '.join(sentences)
-    data["insert_answer"] = f"{markers[insert_sentence_index]} {insert_sentence}"
+    # 3. 지문 문자열로 합치고 정답 지정. (정답 마커 = 삽입 지점 인덱스의 마커)
+    data["insert_passage"] = " ".join(sentences)
+    data["insert_answer"] = f"{markers[insertion_index]} {answer_sentence}"
 
 
     ################################################################

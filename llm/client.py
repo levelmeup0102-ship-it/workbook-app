@@ -62,7 +62,6 @@ def _get_client() -> AsyncAnthropic:
 #     """CLAUDE_FILE_IDS(콤마 구분) → 리스트."""
 #     return [fid.strip() for fid in os.environ.get("CLAUDE_FILE_IDS", "").split(",") if fid.strip()]
 
-
 async def call_claude_json_async(
     system_prompt: str,
     user_prompt: str,

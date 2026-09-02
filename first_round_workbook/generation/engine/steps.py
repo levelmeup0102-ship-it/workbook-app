@@ -40,19 +40,18 @@ _CIRCLE_NUMS = CIRCLE_NUMBERS[:10]
 # STEP 1: 기본 분석 (어휘 + 번역 + 핵심문장)
 #   프롬프트 템플릿($passage, $sent_count, $numbered_sentences) = DB(prompt_templates)
 # ============================================================
-async def step1_basic_analysis(passage: str, prompt_template: str, user_translations: List[str], full_translation: str = "") -> Dict:
-    sentences_regex = split_sentences(passage)
-    sentences_regex = merge_short_dialogue(sentences_regex)
-    sent_count = len(sentences_regex)
+async def step1_basic_analysis(passage: str, sentences: List[str], prompt_template: str, user_translations: List[str], full_translation: str = "") -> Dict:
+    # 문장 분리·대화문 병합은 orchestrator 에서 1회 수행해 주입(sentences) — 전 step 공유
+    sent_count = len(sentences)
 
-    # 대화문 병합된 문장 리스트를 프롬프트에 명시적으로 전달
-    numbered_sentences = "\n".join([f"[문장{i+1}] {s}" for i, s in enumerate(sentences_regex)])
+    # 가공된 문장 리스트를 프롬프트에 명시적으로 전달
+    numbered_sentences = "\n".join([f"[문장{i+1}] {s}" for i, s in enumerate(sentences)])
     prompt = render_prompt(prompt_template, passage=passage, sent_count=sent_count, numbered_sentences=numbered_sentences)
 
     data = await call_claude_json_async(SYS_JSON_KR, prompt, max_tokens=4096)
 
-    # 🔒 문장 분리는 항상 regex 결과 사용 (AI가 문장을 합치거나 쪼개는 것 방지)
-    data["sentences"] = sentences_regex
+    # 🔒 문장 분리는 항상 주입된 결과 사용 (AI가 문장을 합치거나 쪼개는 것 방지)
+    data["sentences"] = sentences
 
     # 번역은 항상 DB(user_translations) 사용 — LLM 번역 절대 미사용
     data["sentence_translations"] = user_translations
@@ -168,13 +167,13 @@ async def step4_topic(passage: str, prompt_template: str) -> Dict:
     return data
 
 
-async def step5_grammar(passage: str, prompt_template: str, grammar_addendum: str = "") -> Dict:
+async def step5_grammar(passage: str, prompt_template: str, sentences: List[str], grammar_addendum: str = "") -> Dict:
     """Lv.8 어법: 8-1 괄호형(grammar_bracket) + 8-2 서술형(grammar_error) 생성.
     프롬프트 변수: $sent_count, $passage, $bracket_count, $bracket_dist_lines.
+    sentences: orchestrator 에서 가공(문장분리+대화문병합)해 주입 — 전 step 공유.
     grammar_addendum: Supabase grammar_points 텍스트(service에서 주입) → 시스템프롬프트 보강.
     """
     logger.info("step5: 어법 생성 시작")
-    sentences = split_sentences(passage)
     sent_count = len(sentences)
     word_count = len(passage.split())
 

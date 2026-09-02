@@ -12,6 +12,7 @@ import logging
 from supabase import AsyncClient
 
 from core.exceptions import GenerationError, LLMError
+from utils.text import split_sentences, merge_short_dialogue
 from . import cache
 from . import steps
 from . import answer_sheet
@@ -89,52 +90,59 @@ async def generate_workbook(
     prompts: dict,
     grammar_addendum: str = "",
 ) -> str:
-    """step1~8 을 의존 순서대로 조율 → 답안지 조립 → 템플릿 렌더 → 최종 HTML 문자열 반환.
+    """선택된 levels에 필요한 step만 생성 → 답안지 조립 → 렌더 → 최종 HTML 반환.
 
-    파도0(단계0): passage 만 필요 → step1,3,4,5,6 동시
-    파도1(단계1): step1 산출(sentences) 필요 → step2,7 동시
-    파도2(단계2): 전체 결과로 답안지 조립 + 병합/렌더
+    - 지문 가공(문장 분리 + 대화문 병합)은 여기서 1회만 수행해 모든 step이 공유한다.
+    - step1 산출물(sentences/translations)에 대한 의존이 사라져 파도 구분 없이 한 번에 실행.
+    - levels 로 필요한 step 집합만 골라 실행 → 미선택 레벨의 LLM 호출을 생략.
 
     prompts: {step_key: prompt_template} — service 에서 DB 로드해 주입.
     levels: meta['levels'] (None=전체 레벨 출력).
     """
-    results: dict = {}
-    
-    # ── 파도0: passage 만 필요 (동시) ──
-    logger.info("[generate_workbook] 단계 0 시작: step1,3,4,5,6")
-    wave0 = await asyncio.gather(
-        run_step(client, steps.step1_basic_analysis, cache_key, "step1_basic", passage_text,
-                passage_text, prompts["step1_basic"],
-                meta["user_translations"], meta["full_translation"]),
-        run_step(client, steps.step3_blank, cache_key, "step3_blank", passage_text,
-                passage_text, prompts["step3_blank"]),
-        run_step(client, steps.step4_topic, cache_key, "step4_topic", passage_text,
-                passage_text, prompts["step4_topic"]),
-        run_step(client, steps.step5_grammar, cache_key, "step5_grammar", passage_text,
-                passage_text, prompts["step5_grammar"], grammar_addendum),
-        run_step(client, steps.step6_vocab_content, cache_key, "step6_vocab_content", passage_text,
-                passage_text, prompts["step6_vocab_content"]),
-    )
-    results["step1"], results["step3"], results["step4"], results["step5"], results["step6"] = wave0
+    # 1. 지문 1회 가공 (전 step 공유) — 문장 분리 후 대화문 병합
+    sentences = merge_short_dialogue(split_sentences(passage_text))
+    translations = meta["user_translations"]
 
-    # ── 파도1: step1 산출물(sentences) 필요 (동시) ──
-    sentences = results["step1"].get("sentences", [])
-    sentence_translations = results["step1"].get("sentence_translations", [])
-    logger.info("[generate_workbook] 단계 1 시작: step2,7")
-    wave1 = await asyncio.gather(
-        run_step(client, steps.step2_order, cache_key, "step2_order", passage_text,
-                passage_text, prompts["step2_order"], sentences),
-        run_step(client, steps.step7_writing, cache_key, "step7_writing", passage_text,
-                sentences, sentence_translations),
-    )
-    results["step2"], results["step7"] = wave1
+    # 2. levels → 필요한 step 집합 결정
+    #    (level 1/2/3 → 어휘·해석·문장분석은 모두 step1 산출물 사용)
+    LEVEL_TO_STEP = {
+        1: "step1", 2: "step1", 3: "step1",
+        4: "step4", 5: "step2", 6: "step3",
+        7: "step5", 8: "step6", 9: "step6", 10: "step7",
+    }
+    levels = meta.get("levels")
+    if levels is None:
+        needed_steps = {"step1", "step2", "step3", "step4", "step5", "step6", "step7"}
+    else:
+        needed_steps = {LEVEL_TO_STEP[level] for level in levels if level in LEVEL_TO_STEP}
 
-    # ── 파도2: 전체 결과로 답안지 조립 (캐시 없이 항상 재생성 — 직접 호출) ──
-    logger.info("[generate_workbook] 단계 2 시작(마지막): 답안지 조립")
-    results["step8"] = answer_sheet.build_answer_sheet(results)
+    # 3. step별 실행(run_step) 조립 — 필요한 것만 lambda 로 지연 생성해 gather.
+    #    가공 산출물 주입: step1/2/5 ← sentences, step7 ← sentences+translations.
+    #    step3/4/6 은 passage 원문만 사용.
+    step_calls = {
+        "step1": lambda: run_step(client, steps.step1_basic_analysis, cache_key, "step1_basic",
+                    passage_text, sentences, prompts["step1_basic"], translations, meta["full_translation"]),
+        "step2": lambda: run_step(client, steps.step2_order, cache_key, "step2_order",
+                    passage_text, passage_text, prompts["step2_order"], sentences),
+        "step3": lambda: run_step(client, steps.step3_blank, cache_key, "step3_blank",
+                    passage_text, passage_text, prompts["step3_blank"]),
+        "step4": lambda: run_step(client, steps.step4_topic, cache_key, "step4_topic",
+                    passage_text, passage_text, prompts["step4_topic"]),
+        "step5": lambda: run_step(client, steps.step5_grammar, cache_key, "step5_grammar",
+                    passage_text, passage_text, prompts["step5_grammar"], sentences, grammar_addendum),
+        "step6": lambda: run_step(client, steps.step6_vocab_content, cache_key, "step6_vocab_content",
+                    passage_text, passage_text, prompts["step6_vocab_content"]),
+        "step7": lambda: run_step(client, steps.step7_writing, cache_key, "step7_writing",
+                    passage_text, sentences, translations),
+    }
+    ordered_steps = [name for name in step_calls if name in needed_steps]
+    logger.info("[generate_workbook] 생성 step: %s (levels=%s)", ordered_steps, levels)
+    step_outputs = await asyncio.gather(*(step_calls[name]() for name in ordered_steps))
+    results: dict = dict(zip(ordered_steps, step_outputs))
 
-    # ── 병합 + 렌더 → 최종 HTML ──
-    logger.info("[generate_workbook] 병합/렌더 시작")
+    # 4. 답안지는 항상 생성하되 선택 levels 블록만 포함 + 렌더
+    logger.info("[generate_workbook] 답안지 조립 + 병합/렌더")
+    results["step8"] = answer_sheet.build_answer_sheet(results, levels)
     template_data = render.merge_to_template_data(passage_text, meta, results)
-    html = render.render_workbook_html(template_data, meta.get("levels"))
+    html = render.render_workbook_html(template_data, levels)
     return html

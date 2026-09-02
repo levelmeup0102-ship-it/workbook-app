@@ -121,7 +121,7 @@ async def generate_workbook(
     #    step3/4/6 은 passage 원문만 사용.
     step_calls = {
         "step1": lambda: run_step(client, steps.step1_basic_analysis, cache_key, "step1_basic",
-                    passage_text, sentences, prompts["step1_basic"], translations, meta["full_translation"]),
+                    passage_text, passage_text, sentences, prompts["step1_basic"], translations, meta["full_translation"]),
         "step2": lambda: run_step(client, steps.step2_order, cache_key, "step2_order",
                     passage_text, passage_text, prompts["step2_order"], sentences),
         "step3": lambda: run_step(client, steps.step3_blank, cache_key, "step3_blank",

@@ -1646,6 +1646,16 @@ def build_vocab_prompt(paragraphs, blank_phrases=None, want_n: int = 0,
         "★ is_answer 가 true 인 항목에는 이 둘을 **추가로** 넣는다:\n"
         '     "evidence_type": "next_sentence | same_sentence | thesis",\n'
         '     "evidence": "<모순을 증명하는 지문 속 문장을 그대로>"\n'
+        # ★ 근거는 답지에 그대로 인쇄된다 (_s180). 선생님이 원문에서 찾을 수
+        #   있어야 하고, 근거가 틀리면 O/X 판정도 대개 틀린다.
+        "★★ evidence 는 지문 문장을 **한 글자도 바꾸지 말고** 옮겨 적어라.\n"
+        "   · 생략 부호(`[...]` `...`)를 넣지 마라. 길면 짧은 한 문장을 고른다.\n"
+        "   · 낱말을 바꿔 적지 마라 (실측: 원문 \"precise\" 를 'accurate' 로 적었다).\n"
+        "   · 요약하거나 이어 붙이지 마라. 지문에 있는 그대로 한 덩어리여야 한다.\n"
+        "   지문에서 그대로 옮길 문장이 없으면 그 자리를 정답으로 쓰지 마라.\n"
+        "★★ why 는 **우리말로만** 쓴다. evidence_type 의 값(next_sentence,\n"
+        "   same_sentence, thesis)이나 필드 이름을 why 에 넣지 마라 —\n"
+        "   그대로 답지 '오답 이유' 칸에 인쇄된다 (실측 1건).\n"
         "★★ 다섯 항목 **전부** antonym 을 채워라. 하나라도 비면 버려진다.\n"
         "   그 단어의 반대말 한 단어. 못 적으면 그 자리를 쓰지 마라.\n\n"
         '{"vocab_items": [\n'

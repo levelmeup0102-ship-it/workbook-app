@@ -1675,6 +1675,11 @@ VOCAB_JSON_SCHEMA = {
                     "shown": {"type": "string"},
                     "is_answer": {"type": "boolean"},
                     "why": {"type": "string"},
+                    # ★ 프롬프트가 정답 항목에만 요구하는 둘 (_s180).
+                    #   스키마에 없으면 additionalProperties:False 때문에
+                    #   구조화 출력이 통째로 떨어뜨린다 — 답지 근거 칸이 빈다.
+                    "evidence": {"type": "string"},
+                    "evidence_type": {"type": "string"},
                 },
                 "required": ["n", "original", "before", "antonym",
                              "shown", "is_answer", "why"],
@@ -3319,6 +3324,55 @@ def generate_variation_a(
                         f"주제 선지를 그 낱말 없이 다시 쓸 것"]
             except Exception as _e:
                 print(f"[VAR][A][{pid}] ⚠ 검사 건너뜀 (q1_leaks_vocab_answer): {_e}")
+
+            # ★★ Q3 어휘 답지 근거는 원문을 글자 그대로 인용해야 한다 (_s180)
+            #   오늘 실측: 생략 부호를 넣거나("[...]"), 원문의 낱말을 바꿔 적은
+            #   근거가 나갔다("precise" → 'accurate'). 근거가 틀리면 판정도 대개
+            #   틀리고, 검수자가 원문을 안 열면 끝까지 모른다.
+            #   ★ 대소문자·따옴표 종류는 봐준다. 생략과 낱말 바꿔치기만 잡는다.
+            try:
+                from variation.vocab_q3 import evidence_not_verbatim as _evv
+                for _it in (data.get("vocab_items") or []):
+                    if not _it.get("is_answer"):
+                        continue
+                    _why = _evv(_it.get("evidence"), en_text)
+                    if _why and not is_last:
+                        errors = list(errors) + [
+                            f"[{pid}] [CRITICAL] Q3 어휘 근거가 원문 인용이 아니다 "
+                            f"({_why}) «{str(_it.get('evidence'))[:70]}» — 지문에 있는 "
+                            f"문장을 생략 없이 그대로 옮겨 적을 것"]
+                    # 답지 '오답 이유' 칸에 내부 이름이 그대로 인쇄된 적이 있다
+                    #   실측: "next_sentence 근거로 최적↔부족 방향이 뒤집힘"
+                    _w = str(_it.get("why") or "")
+                    _bad = [m for m in ("next_sentence", "same_sentence", "thesis",
+                                        "evidence_type", "is_answer") if m in _w]
+                    if _bad and not is_last:
+                        errors = list(errors) + [
+                            f"[{pid}] [CRITICAL] Q3 오답 이유에 내부 이름 "
+                            f"{'·'.join(_bad)} 이(가) 들어 있다 — 답지에 그대로 인쇄된다. "
+                            f"우리말로만 쓸 것"]
+            except Exception as _e:
+                print(f"[VAR][A][{pid}] ⚠ 검사 건너뜀 (evidence_not_verbatim/Q3): {_e}")
+
+            # ★★ Q4 근거도 같은 기준으로 조인다 (_s180)
+            #   _s149 는 내용어가 겹치기만 하면 통과시켜 생략·바꿔치기를 놓쳤다.
+            try:
+                from variation.vocab_q3 import evidence_not_verbatim as _evv
+                _bad4 = []
+                for _i, _ev in enumerate(data.get("statements_evidence") or []):
+                    _why = _evv(_ev, en_text)
+                    if _why:
+                        try:
+                            _lb = str((data.get("statements") or [])[_i][0])
+                        except Exception:
+                            _lb = "가나다라마"[_i] if _i < 5 else str(_i + 1)
+                        _bad4.append(f"{_lb} ({_why})")
+                if _bad4 and not is_last:
+                    errors = list(errors) + [
+                        f"[{pid}] [CRITICAL] Q4 근거가 원문 인용이 아니다 "
+                        f"({'; '.join(_bad4)}) — 지문 문장을 생략 없이 그대로 옮길 것"]
+            except Exception as _e:
+                print(f"[VAR][A][{pid}] ⚠ 검사 건너뜀 (evidence_not_verbatim/Q4): {_e}")
 
             if not errors:
                 # ★ Q1 주제 정답 자리를 강 단위로 돌린다 (_s136).

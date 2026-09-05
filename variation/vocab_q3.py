@@ -1687,6 +1687,52 @@ def statements_leak_blanks(statements, blank_a: str, blank_b: str) -> list:
 #     안 맞고, 살짝 바꾼 인용은 다른 자리에서 맞는다.
 # ════════════════════════════════════════════════════════════════
 
+# ════════════════════════════════════════════════════════════════
+# ★ 답지 근거는 원문을 **글자 그대로** 인용해야 한다 (_s180)
+#   evidence_not_in_passage 는 내용어 n-gram 이 겹치기만 하면 통과시킨다.
+#   그 틈으로 세 가지가 샜다 (오늘 실측 146개 인용 중 3건):
+#     [X] "Ruth's doll went into production and [...] Mattel sold 351,000"
+#         → 생략 부호. 학생·선생님이 원문에서 못 찾는다.
+#     [X] "Some jurors heard the witness respond straightforwardly... Others"
+#         → 같은 이유.
+#     [X] "Whether or not the quoted number is 'accurate' therefore depends"
+#         → 원문은 "precise" 다. 낱말을 바꿔 적었다. 이게 제일 나쁘다 —
+#           근거가 틀리면 O/X 판정도 대개 틀리고, 검수자가 원문을 안 열면 모른다.
+#   ★ 대소문자와 따옴표 **종류**는 봐주고, 생략과 낱말 바꿔치기만 잡는다.
+#     문두 대문자를 소문자로 적거나 “ ” 를 " 로 적은 것까지 막으면
+#     오탐만 늘고 재시도를 태운다 (실측 8건 중 5건이 그 부류였다).
+# ════════════════════════════════════════════════════════════════
+
+_ELLIPSIS = ("[...]", "[…]", "...", "…", "~~", "( )")
+
+
+def _ev_norm(t: str) -> str:
+    """근거 대조용 정규화 — 대소문자, 따옴표 종류, 대시 종류, 공백만 맞춘다."""
+    t = str(t or "")
+    for a, b in (("\u2500", "-"), ("\u2015", "-"), ("\u2014", "-"), ("\u2013", "-"),
+                 ("\u2019", "'"), ("\u2018", "'"), ("\u201c", '"'), ("\u201d", '"'),
+                 ("\u2032", "'"), ("\u00a0", " ")):
+        t = t.replace(a, b)
+    t = t.replace('"', "'")           # 큰따옴표/작은따옴표를 한쪽으로 모은다
+    return re.sub(r"\s+", " ", t).strip().lower()
+
+
+def evidence_not_verbatim(quote: str, passage_text: str) -> str:
+    """근거 인용이 원문에 글자 그대로 없으면 그 까닭을 돌려준다. 있으면 빈 문자열."""
+    q = str(quote or "").strip()
+    if len(q.split()) < 5:
+        return ""                      # 너무 짧은 인용은 대조 대상이 아니다
+    for e in _ELLIPSIS:
+        if e in q:
+            return f"생략 부호 '{e}' 가 들어 있다"
+    qn, pn = _ev_norm(q), _ev_norm(passage_text)
+    if not pn:
+        return ""
+    if qn.rstrip(" .!?") in pn:
+        return ""
+    return "원문에 그대로 없다 (낱말을 바꿔 적었는지 확인할 것)"
+
+
 def evidence_not_in_passage(statements, evidences, passage_text) -> list:
     """지문에 없는 근거를 든 진술의 라벨 목록."""
     pool = _content_grams(passage_text)

@@ -54,7 +54,7 @@ async def run_step(
     if cached is not None:
         logger.info(f"[{step_name}] 지문 변경 없음. 저장된 결과 사용.")
         return cached
-    logger.info(f"{step_name} - 캐시 불일치: 지문이 변경되어 새롭게 문제를 생성합니다.")
+    logger.warning(f"{step_name} - 캐시 불일치: 지문이 변경되어 새롭게 문제를 생성합니다.")
 
     # 2. 생성 (최대 3회 재시도)
     for attempt in range(1, MAX_RETRIES + 1):

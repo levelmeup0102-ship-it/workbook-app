@@ -785,81 +785,248 @@ function updateGenerateBtn() {
   btn.textContent = selectedPassages.size>0 ? `워크북 생성하기 (${selectedPassages.size}개 지문)` : '워크북 생성하기';
 }
 
+// ============================================================
+// 워크북 생성 — sync/job 분기 + 다중 job polling
+// ============================================================
+const SYNC_TARGET_LIMIT = 5;                 // 이 수 이하 sync / 초과 job (백엔드 SYNC_TARGET_LIMIT와 맞출 것)
+const ACTIVE_JOBS_KEY = 'activeGenerationJobs';
+const activePollers = new Map();             // job_id → setInterval id (중복 polling 방지)
+const generationResultsMap = new Map();      // renderId → 성공 결과 배열(합본용)
+
+// ---------- localStorage active jobs ----------
+function getActiveJobs() {
+  try { return JSON.parse(localStorage.getItem(ACTIVE_JOBS_KEY) || '[]'); }
+  catch (e) { return []; }
+}
+function saveActiveJobs(jobs) {
+  try { localStorage.setItem(ACTIVE_JOBS_KEY, JSON.stringify(jobs)); } catch (e) {}
+}
+function addActiveJob(job) { const jobs = getActiveJobs(); jobs.push(job); saveActiveJobs(jobs); }
+function removeActiveJob(jobId) { saveActiveJobs(getActiveJobs().filter(j => j.job_id !== jobId)); }
+function hasSameActiveJob(requestKey) { return getActiveJobs().some(j => j.requestKey === requestKey); }
+
+// ---------- 요청 구성 ----------
+function flattenRequestItems(payload) {
+  const items = [];
+  for (const unitItem of payload.units) {
+    for (const passageId of unitItem.passage_ids) {
+      items.push({ book: payload.book, unit: unitItem.unit, passage_id: passageId });
+    }
+  }
+  return items;
+}
+function makeRequestKey(payload) {
+  const normalized = {
+    book: String(payload.book || '').trim(),
+    units: payload.units.map(unit => ({
+      unit: String(unit.unit || '').trim(),
+      passage_ids: unit.passage_ids.map(v => String(v).trim()),
+    })),
+    levels: payload.levels ? [...payload.levels].map(Number).sort((a, b) => a - b) : null,
+  };
+  return JSON.stringify(normalized);
+}
+function summarizeRequestItems(items) {
+  if (!items || !items.length) return '';
+  const book = items[0].book;
+  const units = [...new Set(items.map(i => i.unit))].join(', ');
+  return `${book} · ${units} · ${items.length}개`;
+}
+
+// ---------- 결과 매칭/렌더 (sync·job 공용) ----------
+function buildZippedRows(resultItems, requestItems) {
+  return (resultItems || []).map((r, i) => {
+    const it = (requestItems && requestItems[i]) || {};
+    const id = `${it.unit || ''} ${it.passage_id || ''}`.trim();
+    return r.ok
+      ? { id, status: 'success', html: r.html, filename: r.filename }
+      : { id, status: 'error', error: '생성 실패' };
+  });
+}
+function renderResults(zippedRows, renderId, summaryText) {
+  const resultsSection = document.getElementById('results-section');
+  const resultsList = document.getElementById('results-list');
+  resultsSection.classList.remove('hidden');
+
+  const successRows = zippedRows.filter(r => r.status === 'success');
+  generationResultsMap.set(renderId, successRows);
+  window._lastResults = successRows;   // 기존 경로 호환
+
+  const mergeBtn = successRows.length > 1
+    ? `<div style="margin-bottom:8px;"><button class="btn btn-orange" style="width:100%;" onclick="downloadMergedByRenderId('${renderId}')">📦 합본 다운로드 (${successRows.length}개)</button></div>`
+    : '';
+  const itemsHtml = zippedRows.map(r => `
+    <div class="result-item">
+      <span>${r.status === 'success' ? '✅' : '❌'} ${r.id}</span>
+      ${r.status === 'success'
+        ? `<button class="btn btn-sm btn-primary" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')">📥 다운로드</button>`
+        : `<span style="color:#dc2626;font-size:12px;">${r.error}</span>`}
+    </div>`).join('');
+
+  const block = document.createElement('div');
+  block.id = `results-block-${renderId}`;
+  block.innerHTML = `<div style="font-weight:600;margin:10px 0 4px;">${summaryText || ''} — ${successRows.length}/${zippedRows.length} 성공</div>${mergeBtn}${itemsHtml}`;
+  const old = document.getElementById(`results-block-${renderId}`);
+  if (old) old.replaceWith(block); else resultsList.appendChild(block);
+}
+
+// ---------- job 진행 카드 ----------
+function ensureJobsContainer() {
+  let container = document.getElementById('generation-jobs');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'generation-jobs';
+    container.style.margin = '8px 0';
+    const progress = document.getElementById('progress');
+    progress.parentNode.insertBefore(container, progress.nextSibling);
+  }
+  return container;
+}
+function jobStatusLabel(status, progress) {
+  if (status === 'done') return (progress && progress.failed) ? '완료(일부 실패 포함)' : '완료';
+  if (status === 'processing') return '진행 중';
+  return '대기';
+}
+function upsertJobCard(jobId, summaryText, progress, statusText) {
+  const container = ensureJobsContainer();
+  let card = document.getElementById(`job-card-${jobId}`);
+  if (!card) {
+    card = document.createElement('div');
+    card.id = `job-card-${jobId}`;
+    card.className = 'result-item';
+    card.style.display = 'block';
+    container.appendChild(card);
+  }
+  const total = progress ? progress.total : 0;
+  const doneCount = progress ? (progress.completed + progress.failed) : 0;
+  const percent = total ? Math.round((doneCount / total) * 100) : 0;
+  card.innerHTML = `
+    <div style="font-weight:600;">${summaryText} <span style="color:#888;font-size:11px;">[${String(jobId).slice(0, 8)}]</span></div>
+    <div style="font-size:12px;color:#555;">${statusText} · ${percent}% (${doneCount}/${total})</div>
+    <div style="font-size:11px;color:#888;">대기 ${progress ? progress.pending : 0} · 진행 ${progress ? progress.processing : 0} · 완료 ${progress ? progress.completed : 0} · 실패 ${progress ? progress.failed : 0}</div>
+    <div style="height:6px;background:#eee;border-radius:3px;margin-top:4px;overflow:hidden;"><div style="height:100%;width:${percent}%;background:#1A6BB5;"></div></div>`;
+}
+function removeJobCard(jobId) { const el = document.getElementById(`job-card-${jobId}`); if (el) el.remove(); }
+
+// ---------- polling ----------
+function stopPoller(jobId) {
+  const id = activePollers.get(jobId);
+  if (id) { clearInterval(id); activePollers.delete(jobId); }
+}
+function handleJobGone(jobId) {
+  stopPoller(jobId);
+  removeActiveJob(jobId);
+  removeJobCard(jobId);
+  alert('진행 중이던 생성 작업 정보를 찾을 수 없습니다. 다시 생성해주세요.');
+}
+async function fetchAndRenderJobResults(jobId, requestItems, summaryText) {
+  try {
+    const res = await fetch(API + `/api/generate/results/${jobId}`, { headers: headers() });
+    if (res.status === 404) { handleJobGone(jobId); return; }
+    const data = await res.json();
+    if (!data.done || !Array.isArray(data.results)) return;   // 방어(아직 미완/형식 이상)
+    const rows = buildZippedRows(data.results, requestItems);
+    renderResults(rows, jobId, summaryText);
+    removeActiveJob(jobId);   // 카드는 완료(100%) 상태로 유지
+  } catch (e) { /* 네트워크 일시 오류 → 새로고침 시 복구됨 */ }
+}
+function pollGenerationJob(jobId, requestItems, summaryText) {
+  if (activePollers.has(jobId)) return;   // 중복 polling 방지
+  const summary = summaryText || summarizeRequestItems(requestItems);
+
+  const tick = async () => {
+    try {
+      const res = await fetch(API + `/api/generate/status/${jobId}`, { headers: headers() });
+      if (res.status === 404) { handleJobGone(jobId); return; }
+      const data = await res.json();
+      upsertJobCard(jobId, summary, data.progress, jobStatusLabel(data.status, data.progress));
+      if (data.done) {
+        stopPoller(jobId);
+        await fetchAndRenderJobResults(jobId, requestItems, summary);
+      }
+    } catch (e) { /* 일시 오류 → 다음 tick 재시도 */ }
+  };
+
+  const interval = setInterval(tick, 2000);
+  activePollers.set(jobId, interval);
+  tick();   // 즉시 1회
+}
+
+// ---------- 새로고침 후 복구 ----------
+function resumeActiveJobs() {
+  for (const job of getActiveJobs()) {
+    if (!job.job_id) continue;
+    const summary = summarizeRequestItems(job.requestItems || []);
+    upsertJobCard(job.job_id, summary, null, '복구 중');
+    pollGenerationJob(job.job_id, job.requestItems || [], summary);
+  }
+}
+document.addEventListener('DOMContentLoaded', resumeActiveJobs);
+
+// ---------- 생성 진입점 ----------
 async function doGenerate() {
   const levels = getSelectedLevels();
   const passages = [...selectedPassages.values()];
+  if (!passages.length) return;
   const btn = document.getElementById('btn-generate');
   const progress = document.getElementById('progress');
-  const progressFill = document.getElementById('progress-fill');
   const progressText = document.getElementById('progress-text');
-  const resultsSection = document.getElementById('results-section');
-  const resultsList = document.getElementById('results-list');
-  btn.disabled=true; progress.classList.remove('hidden');
-  resultsSection.classList.add('hidden'); resultsList.innerHTML='';
-  // ===== [기존 코드 — 지문별 1요청(구 스키마). bulk 전환으로 주석 처리] =====
-  /*
-  let completed=0; const results=[];
-  for (const p of passages) {
-    progressText.textContent = `생성 중... ${completed+1}/${passages.length} — ${p.unit} ${p.id}`;
-    progressFill.style.width = `${(completed/passages.length)*100}%`;
-    try {
-      const res = await fetch(API+'/api/generate', { method:'POST', headers:headers(), body:JSON.stringify({book:p.book,unit:p.unit,passage_id:p.id,levels:levels.length===11?null:levels}) });
-      const data = await res.json();
-      if (data.ok) results.push({id:`${p.unit} ${p.id}`,status:'success',html:data.html,filename:data.filename});
-      else results.push({id:`${p.unit} ${p.id}`,status:'error',error:data.detail});
-    } catch(e) { results.push({id:`${p.unit} ${p.id}`,status:'error',error:e.message}); }
-    completed++;
-    progressFill.style.width = `${(completed/passages.length)*100}%`;
-  }
-  */
-  // ===== [신규 코드 — book 단위 bulk 요청 + 순서 기반 라벨 매핑] =====
-  const results = [];
-  const levelsVal = levels.length===11 ? null : levels;
 
-  // selectedPassages → book별 { unitsMap: {unit:[pid...]}, labels: [{unit,id}...](순서 보존) }
+  const levelsVal = levels.length === 11 ? null : levels;
+  const totalSelectedCount = passages.length;               // 전체 선택 지문 수
+  const forceJob = totalSelectedCount > SYNC_TARGET_LIMIT;  // 초과 → 모든 book payload를 강제 job
+
+  // book별 그룹핑 (GenerateIn은 book 1개 기준)
   const byBook = {};
   for (const p of passages) {
-    (byBook[p.book] ??= { unitsMap:{}, labels:[] });
+    (byBook[p.book] ??= { unitsMap: {} });
     (byBook[p.book].unitsMap[p.unit] ??= []).push(p.id);
-    byBook[p.book].labels.push({ unit:p.unit, id:p.id });  // 순서 = 백엔드 평탄화 순서
   }
 
-  const bookKeys = Object.keys(byBook);
-  let doneBooks = 0;
-  for (const book of bookKeys) {
-    const { unitsMap, labels } = byBook[book];
-    progressText.textContent = `생성 중... (${book})`;
-    progressFill.style.width = `${(doneBooks/bookKeys.length)*100}%`;
+  const url = API + '/api/generate' + (forceJob ? '?force_job=true' : '');
+
+  for (const book of Object.keys(byBook)) {
+    const units = Object.entries(byBook[book].unitsMap).map(([unit, passage_ids]) => ({ unit, passage_ids }));
+    const payload = { book, units, levels: levelsVal };
+    const requestItems = flattenRequestItems(payload);
+    const requestKey = makeRequestKey(payload);
+    const summary = summarizeRequestItems(requestItems);
+
+    if (hasSameActiveJob(requestKey)) {   // 동일 조건 재생성만 차단(해당 payload만 skip)
+      alert('이미 동일한 생성 작업이 진행 중입니다. 완료 후 다시 시도해주세요.');
+      continue;
+    }
+
+    btn.disabled = true;                  // POST 동안에만 disable
+    progress.classList.remove('hidden');
+    progressText.textContent = `요청 중... (${book})`;
+    let data = null;
     try {
-      const units = Object.entries(unitsMap).map(([unit, passage_ids]) => ({ unit, passage_ids }));
-      const res = await fetch(API+'/api/generate', { method:'POST', headers:headers(), body:JSON.stringify({ book, units, levels:levelsVal }) });
-      const data = await res.json();
-      if (!res.ok) {  // 요청 자체 실패(422/500 등)
-        const msg = (data.error && data.error.message) || '요청 실패';
-        labels.forEach(l => results.push({id:`${l.unit} ${l.id}`,status:'error',error:msg}));
-      } else {  // 응답에 식별자 없음 → 보낸 순서(labels)와 results 순서를 zip
-        (data.results || []).forEach((r, i) => {
-          const l = labels[i] || {};
-          if (r.ok) results.push({id:`${l.unit} ${l.id}`,status:'success',html:r.html,filename:r.filename});
-          else results.push({id:`${l.unit} ${l.id}`,status:'error',error:'생성 실패'});
-        });
+      const res = await fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify(payload) });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert('생성 요청 실패: ' + ((err.error && err.error.message) || res.status));
+        continue;
       }
-    } catch(e) { labels.forEach(l => results.push({id:`${l.unit} ${l.id}`,status:'error',error:e.message})); }
-    doneBooks++;
-    progressFill.style.width = `${(doneBooks/bookKeys.length)*100}%`;
+      data = await res.json();
+    } catch (e) {
+      alert('생성 요청 오류: ' + e.message);
+      continue;
+    } finally {
+      btn.disabled = false;
+    }
+
+    if (data.mode === 'sync') {
+      const rows = buildZippedRows(data.results, requestItems);
+      renderResults(rows, `sync-${Date.now()}-${book}`, summary);
+    } else {   // job
+      addActiveJob({ job_id: data.job_id, requestKey, requestItems, startedAt: Date.now() });
+      upsertJobCard(data.job_id, summary, data.progress, jobStatusLabel(data.status || 'pending', data.progress));
+      pollGenerationJob(data.job_id, requestItems, summary);
+    }
   }
-  //////////////////////////////////////////////////수정된 코드 END
-  progressText.textContent = `완료! ${results.filter(r=>r.status==='success').length}/${passages.length} 성공`;
-  resultsSection.classList.remove('hidden');
-  const successResults = results.filter(r=>r.status==='success');
-  window._lastResults = successResults;
-  let mergeBtn = successResults.length>1 ? `<div style="margin-bottom:8px;"><button class="btn btn-orange" style="width:100%;" onclick="downloadMerged()">📦 합본 다운로드 (${successResults.length}개)</button></div>` : '';
-  resultsList.innerHTML = mergeBtn + results.map(r=>`
-    <div class="result-item">
-      <span>${r.status==='success'?'✅':'❌'} ${r.id}</span>
-      ${r.status==='success' ? `<button class="btn btn-sm btn-primary" onclick="downloadHtml(\`${encodeURIComponent(r.html)}\`,'${r.filename}')">📥 다운로드</button>` : `<span style="color:#dc2626;font-size:12px;">${r.error}</span>`}
-    </div>`).join('');
-  btn.disabled=false;
+
+  progress.classList.add('hidden');
   await loadPassages();
 }
 
@@ -871,10 +1038,18 @@ function downloadHtml(encodedHtml, filename) {
   URL.revokeObjectURL(url);
 }
 
-function downloadMerged() {
-  if (!window._lastResults||!window._lastResults.length) return;
-  const css = (window._lastResults[0].html.match(/<style[^>]*>([\s\S]*?)<\/style>/)||['',''])[1];
-  const bodies = window._lastResults.map(r=>(r.html.match(/<body[^>]*>([\s\S]*?)<\/body>/)||['',r.html])[1]);
+// renderId별 결과만 합본 (여러 job 동시 완료 시 서로 덮어쓰지 않도록)
+function downloadMergedByRenderId(renderId) {
+  const results = generationResultsMap.get(renderId);
+  if (!results || !results.length) { alert('합본할 결과가 없습니다.'); return; }
+  downloadMerged(results);
+}
+
+function downloadMerged(results) {
+  const list = results || window._lastResults;   // 인자 없으면 기존 경로 호환
+  if (!list || !list.length) return;
+  const css = (list[0].html.match(/<style[^>]*>([\s\S]*?)<\/style>/)||['',''])[1];
+  const bodies = list.map(r=>(r.html.match(/<body[^>]*>([\s\S]*?)<\/body>/)||['',r.html])[1]);
   const unit = document.getElementById('sel-book').value||'합본';
   const merged = `<!DOCTYPE html>\n<html lang="ko">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>${unit} 합본</title>\n<style>\nhtml{-webkit-text-size-adjust:100%;}\nbody{margin:0;}\n${css}\n</style>\n</head>\n<body>\n${bodies.join('\n')}\n</body>\n</html>`;
   const blob = new Blob([merged],{type:'text/html; charset=utf-8'});

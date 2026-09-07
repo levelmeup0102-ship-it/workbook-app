@@ -865,7 +865,7 @@ function renderResults(zippedRows, renderId, summaryText) {
 
   const block = document.createElement('div');
   block.id = `results-block-${renderId}`;
-  block.innerHTML = `<div style="font-weight:600;margin:10px 0 4px;">${summaryText || ''} — ${successRows.length}/${zippedRows.length} 성공</div>${mergeBtn}${itemsHtml}`;
+  block.innerHTML = `<div class="card-title" style="margin-top:8px;">${summaryText || ''} — ${successRows.length}/${zippedRows.length} 성공</div>${mergeBtn}${itemsHtml}`;
   const old = document.getElementById(`results-block-${renderId}`);
   if (old) old.replaceWith(block); else resultsList.appendChild(block);
 }
@@ -901,7 +901,7 @@ function upsertJobCard(jobId, summaryText, progress, statusText) {
   const doneCount = progress ? (progress.completed + progress.failed) : 0;
   const percent = total ? Math.round((doneCount / total) * 100) : 0;
   card.innerHTML = `
-    <div style="font-weight:600;">${summaryText} <span style="color:#888;font-size:11px;">[${String(jobId).slice(0, 8)}]</span></div>
+    <div style="font-weight:600;">${summaryText}</div>
     <div style="font-size:12px;color:#555;">${statusText} · ${percent}% (${doneCount}/${total})</div>
     <div style="font-size:11px;color:#888;">대기 ${progress ? progress.pending : 0} · 진행 ${progress ? progress.processing : 0} · 완료 ${progress ? progress.completed : 0} · 실패 ${progress ? progress.failed : 0}</div>
     <div style="height:6px;background:#eee;border-radius:3px;margin-top:4px;overflow:hidden;"><div style="height:100%;width:${percent}%;background:#1A6BB5;"></div></div>`;
@@ -927,7 +927,8 @@ async function fetchAndRenderJobResults(jobId, requestItems, summaryText) {
     if (!data.done || !Array.isArray(data.results)) return;   // 방어(아직 미완/형식 이상)
     const rows = buildZippedRows(data.results, requestItems);
     renderResults(rows, jobId, summaryText);
-    removeActiveJob(jobId);   // 카드는 완료(100%) 상태로 유지
+    removeActiveJob(jobId);
+    removeJobCard(jobId);      // 완료 → 진행 카드 제거(결과는 오른쪽 결과 블록으로 이동)
   } catch (e) { /* 네트워크 일시 오류 → 새로고침 시 복구됨 */ }
 }
 function pollGenerationJob(jobId, requestItems, summaryText) {

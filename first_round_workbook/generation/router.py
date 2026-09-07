@@ -4,7 +4,7 @@ prefix="/api" + dependencies=[Depends(verify)] 로
 엔드포인트마다 _verify(request) 호출하던 것을 대체.
 """
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Query
 
 from core.security import _verify
 from core.settings import settings
@@ -22,7 +22,11 @@ router = APIRouter(prefix="/api", tags=["generation"], dependencies=[Depends(_ve
 
 
 @router.post("/generate", response_model=GenerateResponseOut, summary="영어 교재 생성")
-async def generate(payload: GenerateIn, request: Request):
+async def generate(
+    payload: GenerateIn,
+    request: Request,
+    force_job: bool = Query(False, description="true면 지문 수가 적어도 job으로 처리"),
+):
     """지문 수에 따라 분기: 소량은 즉시 생성(sync), 다량은 대기열 등록(job)."""
     client = request.app.state.supabase
     job_manager = request.app.state.job_manager
@@ -31,8 +35,8 @@ async def generate(payload: GenerateIn, request: Request):
     if target_count > settings.MAX_JOB_TARGETS:
         raise BadRequestError(f"한 번에 최대 {settings.MAX_JOB_TARGETS}개 지문까지 요청할 수 있습니다.")
 
-    # 소량 → 즉시 생성 후 결과 반환
-    if target_count <= settings.SYNC_TARGET_LIMIT:
+    # 소량 + force_job 아님 → 즉시 생성 후 결과 반환
+    if not force_job and target_count <= settings.SYNC_TARGET_LIMIT:
         out = await service.generate(payload, client)
         return GenerateResponseOut(mode="sync", done=True, results=out.results)
 

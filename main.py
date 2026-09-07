@@ -4,6 +4,7 @@ from core.settings import settings  # noqa: F401 — env/테이블명 로딩 최
 import os, json, hashlib, re, shutil
 from pathlib import Path
 from contextlib import asynccontextmanager
+import asyncio
 import uvicorn
 import logging
 import supa
@@ -19,6 +20,8 @@ from fastapi.security import APIKeyHeader
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from first_round_workbook.router import router as first_round_router
+from first_round_workbook.generation.job_manager import JobManager
+from first_round_workbook.generation.worker import worker_loop
 from core.exceptions import AppError
 from core.exception_handler import (
     app_error_handler,
@@ -46,14 +49,50 @@ DATA_DIR.mkdir(exist_ok=True)
 PASSAGES_FILE = DATA_DIR / "passages.json"  # data/ 안에 저장 → 볼륨으로 영속
 
 # ============================================================
-# Supabase 연결 - lifespan
+# 완료 job 주기적 정리 — finished_at + TTL(분) 지난 job 삭제
+# ============================================================
+async def _cleanup_loop(job_manager: JobManager):
+    ttl_seconds = settings.JOB_RESULT_TTL_MINUTES * 60   # 완료 시각 + 이 시간 경과 시 삭제
+    while True:
+        await asyncio.sleep(60)                          # 1분마다 점검
+        try:
+            await job_manager.cleanup(ttl_seconds)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("[cleanup] job 정리 중 오류")
+
+
+# ============================================================
+# Supabase 연결 + 생성 워커 - lifespan
 # ============================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # startup: env 있으면 async client 생성 → app.state 에 보관 (없으면 None=로컬 모드)
+    # startup: async client 생성 → app.state 에 보관 (없으면 None=로컬 모드)
     app.state.supabase = await supabase_init()
+
+    # 대기열 매니저 + 워커 기동 (client 를 워커에 주입하므로 supabase_init 이후에 생성)
+    app.state.job_manager = JobManager(max_task_retries=settings.MAX_TASK_RETRIES)
+    background_tasks = [
+        asyncio.create_task(
+            worker_loop(
+                worker_name=f"worker-{i}",
+                job_manager=app.state.job_manager,
+                client=app.state.supabase,
+            )
+        )
+        for i in range(settings.GENERATION_WORKERS)
+    ]
+    background_tasks.append(asyncio.create_task(_cleanup_loop(app.state.job_manager)))
+    app.state.background_tasks = background_tasks
+    logger.info("[startup] 워커 %d개 + cleanup 기동", settings.GENERATION_WORKERS)
+
     yield
-    # shutdown: postgrest 세션 정리(DB 연결 해제)
+
+    # shutdown: 워커/정리 task 취소 후 대기 → DB 세션 정리
+    for task in background_tasks:
+        task.cancel()
+    await asyncio.gather(*background_tasks, return_exceptions=True)
     await supabase_close(app.state.supabase)
 
 app = FastAPI(lifespan=lifespan)

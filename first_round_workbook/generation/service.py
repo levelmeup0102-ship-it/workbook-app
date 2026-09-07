@@ -17,10 +17,12 @@ from llm.prompt_service import get_prompt_from_database, get_grammar_addendum
 
 from .schemas import GenerateTarget, GenerateIn, GenerateOut, GenerateItemOut
 from .engine.orchestrator import generate_workbook
+from .job_manager import JobManager
+from .job_models import GenerationJob
 
 logger = logging.getLogger(__name__)
 
-TARGET_CONCURRENCY = 5
+TARGET_CONCURRENCY = 4
 
 def _split_passage_and_translation(raw: str) -> tuple[str, list]:
     """passage_text 에서 영어 지문 / 한글 번역 분리.(기준: ###해석###)"""
@@ -120,40 +122,69 @@ async def prepare_generation_data(
     return targets, prompts, grammar_addendum
 
 
-# 준비된 데이터를 바탕으로 병렬 실행이 진행되는 함수
-async def _execute_target(
+# 지문 수만 세는 경량 계산(DB 접근 없음) — router 의 sync/job 분기용
+def count_targets(payload: GenerateIn) -> int:
+    """payload 의 총 지문 수 = 모든 unit 의 passage_ids 합."""
+    return sum(len(unit.passage_ids) for unit in payload.units)
+
+
+# job 생성 경로 — prepare 1회 후 job_manager 에 등록(router 는 prepare 를 호출하지 않음)
+async def create_generation_job(
+    payload: GenerateIn,
+    client: AsyncClient | None,
+    job_manager: JobManager,
+) -> GenerationJob:
+    """대량 요청을 대기열 job 으로 등록하고 생성된 job 을 반환한다."""
+    targets, prompts, grammar_addendum = await prepare_generation_data(payload, client)
+    return await job_manager.create_job(targets, prompts, grammar_addendum)
+
+
+# 지문 1건 생성(순수) — 세마포어 없음. sync 경로와 worker 가 공용으로 사용.
+async def execute_generation_target(
+    *,
     target: GenerateTarget,
     client: AsyncClient | None,
     prompts: Dict,
     grammar_addendum: str,
-    semaphore: asyncio.Semaphore
 ) -> GenerateItemOut:
+    """지문 1건에 대한 워크북 생성.
+    성공 시 GenerateItemOut(ok=True, ...) 반환, 실패 시 예외를 그대로 올린다(호출측이 처리).
+    (worker → mark_failed_or_retry / sync → _safe_execute_target 에서 처리)
     """
-    지문 1건에 대한 워크북 생성 함수를 call.
-    실패시, ok=False로 처리 + 로깅
-    """
-    book, unit, pid = target.book, target.unit, target.passage_id
-    async with semaphore:
-        try:
-            row, passage_text, user_translations = await _load_passage(client=client, book=book, unit=unit, pid=pid)
-            cache_key = _ck(book=book, unit=unit, pid=pid)
-            title = row.get("title", pid)
-            lesson_match = re.match(r"(\d+)", unit or "")
-            lesson_num = lesson_match.group(1) if lesson_match else "00"
-            meta = {
-                "full_translation": " ".join(user_translations),
-                "user_translations": user_translations,
-                "title": title, "challenge_title": title,
-                "subject": book, "lesson_num": lesson_num, "lesson_n": lesson_num,
-                "book": book, "unit": unit, "levels": target.levels,
-            }
-            html = await generate_workbook(client, passage_text, meta, cache_key, prompts, grammar_addendum)
-            filename = f"{lesson_num}과_{title}_워크북.html"
-            logger.info("[generate] 완료: %s/%s/%s", book, unit, pid)
-            return GenerateItemOut(ok=True, html=html, filename=filename)
-        except Exception as e:
-            logger.warning("[generate] 실패 %s/%s/%s: %s", book, unit, pid, e)
-            return GenerateItemOut(ok=False)
+    book, unit, passage_id = target.book, target.unit, target.passage_id
+    row, passage_text, user_translations = await _load_passage(client=client, book=book, unit=unit, pid=passage_id)
+    cache_key = _ck(book=book, unit=unit, pid=passage_id)
+    title = row.get("title", passage_id)
+    lesson_match = re.match(r"(\d+)", unit or "")
+    lesson_num = lesson_match.group(1) if lesson_match else "00"
+    meta = {
+        "full_translation": " ".join(user_translations),
+        "user_translations": user_translations,
+        "title": title, "challenge_title": title,
+        "subject": book, "lesson_num": lesson_num, "lesson_n": lesson_num,
+        "book": book, "unit": unit, "levels": target.levels,
+    }
+    html = await generate_workbook(client, passage_text, meta, cache_key, prompts, grammar_addendum)
+    filename = f"{lesson_num}과_{title}_워크북.html"
+    logger.info("[generate] 완료: %s/%s/%s", book, unit, passage_id)
+    return GenerateItemOut(ok=True, html=html, filename=filename)
+
+
+# sync 경로용 안전 래퍼 — 한 지문 실패가 전체를 죽이지 않도록 예외를 잡아 ok=False 반환.
+async def _safe_execute_target(
+    target: GenerateTarget,
+    client: AsyncClient | None,
+    prompts: Dict,
+    grammar_addendum: str,
+) -> GenerateItemOut:
+    try:
+        return await execute_generation_target(
+            target=target, client=client, prompts=prompts, grammar_addendum=grammar_addendum,
+        )
+    except Exception as exception:
+        logger.warning("[generate] 실패 %s/%s/%s: %s",
+                       target.book, target.unit, target.passage_id, exception)
+        return GenerateItemOut(ok=False)
 
 
 # _execute_target을 call + 병렬 제어하는 함수
@@ -177,11 +208,15 @@ async def _execute_target(
 #     return GenerateOut(results=results)
 
 
-# router -> 최종 호출 함수 -> 결과 반환 to router
+# router -> sync 최종 호출 함수 -> 결과 반환 to router
+# (지문 수가 적을 때만 호출됨. 많으면 router가 job 대기열로 우회)
 async def generate(payload, client) -> GenerateOut:
     targets, prompts, grammar_addendum = await prepare_generation_data(payload, client)
     semaphore = asyncio.Semaphore(TARGET_CONCURRENCY)
-    results = await asyncio.gather(
-        *[_execute_target(t, client, prompts, grammar_addendum, semaphore) for t in targets]
-    )
+
+    async def run_with_limit(target: GenerateTarget) -> GenerateItemOut:
+        async with semaphore:   # 동시에 생성하는 지문 수 제한
+            return await _safe_execute_target(target, client, prompts, grammar_addendum)
+
+    results = await asyncio.gather(*[run_with_limit(target) for target in targets])
     return GenerateOut(results=list(results))

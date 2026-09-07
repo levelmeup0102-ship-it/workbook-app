@@ -28,6 +28,17 @@ MODEL = settings.CLAUDE_MODEL
 
 _client: AsyncAnthropic | None = None
 
+# Claude API 동시 호출 제한 세마포어 — lazy 생성(첫 호출 시 실행 loop 에 바인딩).
+_llm_semaphore: asyncio.Semaphore | None = None
+
+
+def get_llm_semaphore(limit: int) -> asyncio.Semaphore:
+    """전역 LLM 동시호출 세마포어(없으면 생성). sync/job 모든 Claude 호출이 공유."""
+    global _llm_semaphore
+    if _llm_semaphore is None:
+        _llm_semaphore = asyncio.Semaphore(limit)
+    return _llm_semaphore
+
 
 def _map_llm_error(e: Exception) -> LLMError:
     """Anthropic SDK 예외/기타 예외 → 앱 LLMError 계열로 변환 (재시도 여부는 클래스가 앎)."""
@@ -71,12 +82,14 @@ async def call_claude_json_async(
     """일반 Claude 호출 → JSON 파싱 반환. 실패 시 지수 backoff 재시도."""
     for attempt in range(max_retries + 1):
         try:
-            response = await _get_client().messages.create(
-                model=MODEL,
-                max_tokens=max_tokens,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
+            # Claude 동시 호출 수를 LLM_CONCURRENCY 로 제한 (API 호출만 세마포어로 감쌈)
+            async with get_llm_semaphore(settings.LLM_CONCURRENCY):
+                response = await _get_client().messages.create(
+                    model=MODEL,
+                    max_tokens=max_tokens,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_prompt}],
+                )
             # 안전 거부(refusal): 같은 입력엔 계속 거부하므로 비재시도 처리
             # 설명: API 호출 자체는 성공했지만 Claude가 정책/안전 필터 등의 이유로 답변 생성을 거절한 상태
             if response.stop_reason == "refusal":

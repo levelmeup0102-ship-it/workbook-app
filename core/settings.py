@@ -50,6 +50,14 @@ class Settings:
         self.LOG_LEVEL: str = os.environ.get("LOG_LEVEL", "WARNING").upper()
         self.PORT: int = int(os.environ.get("PORT", "8000"))
 
+        # ── 대기열(Job) 생성/워커 설정 ──
+        self.SYNC_TARGET_LIMIT: int      = int(os.environ.get("SYNC_TARGET_LIMIT"))       # type: ignore | 이하=sync, 초과=job
+        self.MAX_JOB_TARGETS: int        = int(os.environ.get("MAX_JOB_TARGETS"))         # type: ignore | job 최대 지문 수(초과 400)
+        self.GENERATION_WORKERS: int     = int(os.environ.get("GENERATION_WORKERS"))      # type: ignore | 워커 코루틴 수(지문 동시 처리)
+        self.LLM_CONCURRENCY: int        = int(os.environ.get("LLM_CONCURRENCY"))         # type: ignore | Claude 총 동시 호출 제한
+        self.MAX_TASK_RETRIES: int       = int(os.environ.get("MAX_TASK_RETRIES"))        # type: ignore | task 재시도 횟수(초기+N)
+        self.JOB_RESULT_TTL_MINUTES: int = int(os.environ.get("JOB_RESULT_TTL_MINUTES"))  # type: ignore | 완료 job 메모리 보관(분)
+
         # ── 출력 경로(레거시: variation/seosul) ──
         self.VARIATION_OUTPUT_DIR: str = os.environ.get("VARIATION_OUTPUT_DIR", "/tmp/variation_output")
         self.SEOSUL_OUTPUT_DIR: str = os.environ.get("SEOSUL_OUTPUT_DIR", "/tmp/seosul_output")

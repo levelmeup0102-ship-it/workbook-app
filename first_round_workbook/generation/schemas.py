@@ -1,5 +1,5 @@
 """generation 도메인 요청/응답 모델."""
-from typing import Annotated, List
+from typing import Annotated, List, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
@@ -87,3 +87,40 @@ class GenerateItemOut(BaseModel):
 # 최종 Output 모델
 class GenerateOut(BaseModel):
     results: List[GenerateItemOut] = Field(..., description="생성 결과 목록")
+
+
+# ============================================================
+# 대기열(Job) 방식 응답 모델 — 지문이 많아 sync 처리 시 timeout 되는 경우 대비
+# ============================================================
+class GenerateProgressOut(BaseModel):
+    """job 진행 상황 집계."""
+    total: int = Field(..., description="전체 task(지문) 수")
+    pending: int = Field(..., description="대기 중")
+    processing: int = Field(..., description="처리 중")
+    completed: int = Field(..., description="완료")
+    failed: int = Field(..., description="실패")
+
+
+class GenerateResponseOut(BaseModel):
+    """POST /api/generate 통합 응답. mode=sync(즉시 결과) / mode=job(대기열 등록)."""
+    mode: Literal["sync", "job"] = Field(..., description="처리 방식")
+    done: bool = Field(..., description="완료 여부(sync는 항상 True)")
+    job_id: str | None = Field(default=None, description="job 모드일 때만 발급")
+    progress: GenerateProgressOut | None = Field(default=None, description="job 모드 진행상황")
+    results: List[GenerateItemOut] | None = Field(default=None, description="sync 모드 결과")
+
+
+class GenerateJobStatusOut(BaseModel):
+    """GET /api/generate/status/{job_id} 응답 — 진행 상황만."""
+    job_id: str
+    status: str = Field(..., description="job 상태(pending/processing/done 등)")
+    done: bool
+    progress: GenerateProgressOut
+
+
+class GenerateJobResultsOut(BaseModel):
+    """GET /api/generate/results/{job_id} 응답 — 완료 시 결과(task_index 순)."""
+    job_id: str
+    status: str
+    done: bool
+    results: List[GenerateItemOut] | None = Field(default=None, description="done=True일 때만 채움")

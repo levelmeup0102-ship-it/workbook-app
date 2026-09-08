@@ -151,7 +151,7 @@ async def _safe_execute_target(
 
 # router -> sync 최종 호출 함수 -> 결과 반환 to router
 # (지문 수가 적을 때만 호출됨. 많으면 router가 job 대기열로 우회)
-async def generate(payload, client) -> GenerateOut:
+async def generate(payload: GenerateIn, client: AsyncClient | None) -> GenerateOut:
     targets, prompts, grammar_addendum = await prepare_generation_data(payload, client)
     semaphore = asyncio.Semaphore(TARGET_CONCURRENCY)
 

@@ -16,7 +16,7 @@ from typing import List, Dict
 
 from llm.client import call_claude_json_async
 from llm.prompt_service import render_prompt, SYS_JSON, SYS_JSON_KR
-from utils.text import split_sentences, merge_short_dialogue, _is_dialogue
+from utils.text import split_sentences, _is_dialogue
 
 logger = logging.getLogger(__name__)
 

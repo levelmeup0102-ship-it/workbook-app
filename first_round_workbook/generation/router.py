@@ -26,7 +26,7 @@ async def generate(
     payload: GenerateIn,
     request: Request,
     force_job: bool = Query(False, description="true면 지문 수가 적어도 job으로 처리"),
-):
+) -> GenerateResponseOut:
     """지문 수에 따라 분기: 소량은 즉시 생성(sync), 다량은 대기열 등록(job)."""
     client = request.app.state.supabase
     job_manager = request.app.state.job_manager
@@ -47,7 +47,7 @@ async def generate(
 
 
 @router.get("/generate/status/{job_id}", response_model=GenerateJobStatusOut, summary="job 진행 상황 조회")
-async def generate_status(job_id: str, request: Request):
+async def generate_status(job_id: str, request: Request) -> GenerateJobStatusOut:
     """job 의 상태 + 진행상황(polling 용)."""
     result = await request.app.state.job_manager.get_status(job_id)
     if result is None:
@@ -62,7 +62,7 @@ async def generate_status(job_id: str, request: Request):
 
 
 @router.get("/generate/results/{job_id}", response_model=GenerateJobResultsOut, summary="job 결과 조회")
-async def generate_results(job_id: str, request: Request):
+async def generate_results(job_id: str, request: Request) -> GenerateJobResultsOut:
     """job 완료 시 결과(task 순서). 미완이면 done=False, results=null."""
     job_manager = request.app.state.job_manager
     done, results = await job_manager.get_results(job_id)

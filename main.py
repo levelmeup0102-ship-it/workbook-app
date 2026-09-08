@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Workbook webapp server v12 - stable local + supabase passages, cache status"""
 from core.settings import settings  # noqa: F401 — env/테이블명 로딩 최우선. 다른 import보다 먼저.
-import os, json, hashlib, re, shutil
+import json, shutil
 from pathlib import Path
 from contextlib import asynccontextmanager
 import asyncio
@@ -16,7 +16,6 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
-from fastapi.security import APIKeyHeader
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from first_round_workbook.router import router as first_round_router

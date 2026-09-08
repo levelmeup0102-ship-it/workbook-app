@@ -32,7 +32,7 @@ def _guard(default):
     """
     def deco(fn):
         @wraps(fn)
-        async def wrapper(client, *args, **kwargs):
+        async def wrapper(client: "AsyncClient | None", *args, **kwargs):
             if client is None:
                 return default() if callable(default) else default
             return await fn(client, *args, **kwargs)
@@ -82,7 +82,7 @@ async def get_all_passages(client: AsyncClient) -> List[Dict[str, Any]]:
 
 
 @_guard(default=None)          # None시 None
-async def get_passage(client: AsyncClient, book, unit, pid) -> Dict:
+async def get_passage(client: AsyncClient, book: str, unit: str, pid: str) -> Dict:
     """단일 지문 조회"""
     res = await (
         client.table(PASSAGES).select("*")
@@ -99,7 +99,7 @@ async def get_passage(client: AsyncClient, book, unit, pid) -> Dict:
 
 
 @_guard(default=list) # 교재 None -> return []
-async def get_passages_by_book(client: AsyncClient, book) -> List:
+async def get_passages_by_book(client: AsyncClient, book: str) -> List:
     """
     특정 교재의 지문 전체 조회 -> 지문 목록 반환
     주 사용: delete_book 의 404 판정 + 지문별 캐시 정리용 — cache_key컬럼 값은 지문마다 _ck()로 계산)
@@ -109,7 +109,7 @@ async def get_passages_by_book(client: AsyncClient, book) -> List:
 
 
 @_guard(default=None)
-async def upsert_passage(client: AsyncClient, book, unit, pid, title, text) -> List:
+async def upsert_passage(client: AsyncClient, book: str, unit: str, pid: str, title: str, text: str) -> List:
     """지문 업데이트"""
     row = {
         "book": book,
@@ -180,7 +180,7 @@ async def get_grammar_points(client: AsyncClient) -> List:
 # Step Cache (table: step_cache)
 # ========================
 @_guard(default=None)
-async def get_step(client: AsyncClient, cache_key, step_name) -> Dict:
+async def get_step(client: AsyncClient, cache_key: str, step_name: str) -> Dict:
     """step_cache 행 반환: {"data": <결과 JSONB>, "passage_hash": <text>} 또는 None.
     (해시 검증은 호출측 cache 계층에서 — repository 는 행만 반환)
     """
@@ -193,7 +193,7 @@ async def get_step(client: AsyncClient, cache_key, step_name) -> Dict:
 
 
 @_guard(default=None)
-async def save_step(client: AsyncClient, cache_key, step_name, data: dict, passage_hash: str) -> List:
+async def save_step(client: AsyncClient, cache_key: str, step_name: str, data: dict, passage_hash: str) -> List:
     """구 save_step_supa. step_cache 에 upsert. data(순수 결과) + passage_hash(별도 컬럼)."""
     row = {
         "cache_key": cache_key,
@@ -206,7 +206,7 @@ async def save_step(client: AsyncClient, cache_key, step_name, data: dict, passa
 
 
 @_guard(default=0)             # None시 0
-async def count_steps(client: AsyncClient, cache_key) -> int:
+async def count_steps(client: AsyncClient, cache_key: str) -> int:
     """cache_key 에 캐시된 step 개수 (>=8 이면 워크북 생성 완료로 간주)."""
     res = await client.table(STEP_CACHE).select("step_name").eq("cache_key", cache_key).execute()
     return len(res.data) if isinstance(res.data, list) else 0
@@ -227,14 +227,14 @@ async def count_steps_all(client: AsyncClient) -> Dict:
 
 
 @_guard(default=None)
-async def delete_steps_by_cache_key(client: AsyncClient, cache_key) -> List:
+async def delete_steps_by_cache_key(client: AsyncClient, cache_key: str) -> List:
     """cache_key 의 모든 step 캐시 삭제."""
     res = await client.table(STEP_CACHE).delete().eq("cache_key", cache_key).execute()
     return res.data
 
 
 @_guard(default=None)
-async def delete_step(client: AsyncClient, cache_key, step_name) -> List:
+async def delete_step(client: AsyncClient, cache_key: str, step_name: str) -> List:
     """단일 step 캐시 삭제."""
     res = await (
         client.table(STEP_CACHE).delete()
@@ -244,7 +244,7 @@ async def delete_step(client: AsyncClient, cache_key, step_name) -> List:
     return res.data
 
 
-async def delete_all_steps(client: AsyncClient | None, cache_key) -> List:
+async def delete_all_steps(client: AsyncClient | None, cache_key: str) -> List:
     """delete_steps_by_cache_key 별칭 (pipeline.py 호환)."""
     return await delete_steps_by_cache_key(client, cache_key)
 
@@ -253,7 +253,7 @@ async def delete_all_steps(client: AsyncClient | None, cache_key) -> List:
 # Delete passages
 # ========================
 @_guard(default=None)
-async def delete_passage(client: AsyncClient, book, unit, pid) -> List:
+async def delete_passage(client: AsyncClient, book: str, unit: str, pid: str) -> List:
     """교재의 지문 삭제"""
     res = await (
         client.table(PASSAGES).delete()
@@ -264,7 +264,7 @@ async def delete_passage(client: AsyncClient, book, unit, pid) -> List:
 
 
 @_guard(default=None)
-async def delete_book(client: AsyncClient, book) -> List:
+async def delete_book(client: AsyncClient, book: str) -> List:
     """교재 삭제(CASCADE)"""
     res = await client.table(PASSAGES).delete().eq("book", book).execute()
     return res.data

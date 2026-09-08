@@ -66,46 +66,6 @@ def normalize_generate_targets(payload: GenerateIn) -> List[GenerateTarget]:
         return targets
 
 
-# 1개의 데이터에 대한 generate함수
-# async def generate_one(generate_request: GenerateTarget, client: AsyncClient | None) -> dict:
-#     """지문+프롬프트 로드 → /generation/engine call → 결과 반환."""
-#     book, unit, pid = generate_request.book, generate_request.unit, generate_request.passage_id
-#     logger.info("[generate] 요청 수신: %s/%s/%s", book, unit, pid)
-
-#     # 1. 지문 로드
-#     row, passage_text, user_translations = await _load_passage(client, book, unit, pid)
-
-#     # 2. 캐시 키 + 메타 (템플릿/파일명용)
-#     cache_key = _ck(book, unit, pid)
-#     title = row.get("title", pid)
-#     lesson_match = re.match(r"(\d+)", unit or "")
-#     lesson_num = lesson_match.group(1) if lesson_match else "00"
-#     meta = {
-#         "full_translation": " ".join(user_translations), # 한글 번역: string
-#         "user_translations": user_translations, # 한글 번역: list
-#         "title": title,
-#         "challenge_title": title,
-#         "subject": book,
-#         "lesson_num": lesson_num,
-#         "lesson_n": lesson_num,
-#         "book": book,
-#         "unit": unit,
-#         "levels": generate_request.levels,
-#     }
-
-#     # 3. 프롬프트 로드 + step5 어법 함정(grammar_points) 로드
-#     prompts = await _load_prompts(client)
-#     grammar_addendum = await get_grammar_addendum(client)
-
-#     # 4. 엔진 조율 (파도0→1→2 + 병합/렌더) → 최종 HTML
-#     logger.info("[generate] 엔진 조율 시작: cache_key=%s", cache_key)
-#     html = await generate_workbook(client, passage_text, meta, cache_key, prompts, grammar_addendum)
-#     logger.info("[generate] 완료: %s/%s/%s", book, unit, pid)
-
-#     filename = f"{lesson_num}과_{title}_워크북.html"
-#     return {"ok": True, "html": html, "filename": filename}
-
-##############
 
 # 워크북 생성을 위한 데이터 준비 함수
 async def prepare_generation_data(
@@ -187,25 +147,6 @@ async def _safe_execute_target(
         return GenerateItemOut(ok=False)
 
 
-# _execute_target을 call + 병렬 제어하는 함수
-# 아래까지 주석 이유: GenerateItemOut에 ok나 status추가를 하지 않아서 최종 재시도 로직을 구현하지 않음.(의도적) 필요에 의해 나중에 구현될수도.
-# async def run_generation_targets(
-#     targets: list[GenerateTarget], client: AsyncClient | None,
-#     prompts: dict, grammar_addendum: str,
-# ) -> list[GenerateItemOut]:
-#     """target들을 제한 병렬로 실행 → 결과 목록 반환"""
-#     semaphore = asyncio.Semaphore(TARGET_CONCURRENCY)
-#     results = await asyncio.gather(
-#         *[_execute_target(t, client, prompts, grammar_addendum, semaphore) for t in targets]
-#     )
-#     return list(results)
-
-
-# async def generate(payload: GenerateIn, client: AsyncClient | None) -> GenerateOut:
-#     """공개 진입점: 준비 → 제한 병렬 생성 → 결과 조립."""
-#     targets, prompts, grammar_addendum = await prepare_generation_data(payload, client)
-#     results = await run_generation_targets(targets, client, prompts, grammar_addendum)
-#     return GenerateOut(results=results)
 
 
 # router -> sync 최종 호출 함수 -> 결과 반환 to router

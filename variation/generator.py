@@ -3218,6 +3218,34 @@ def generate_variation_a(
             except Exception as _rie:
                 print(f"[VAR][A][{pid}] ⚠ 검사 건너뜀 (내부 마커 복원): {_rie}")
 
+            # ★★ Q4 근거는 시험지에 인쇄되는 글자여야 한다 (_s181)
+            #   답지 근거는 원문을 인용하는데 학생이 보는 시험지는 두 군데가 다르다 —
+            #   5번 (A)(B) 는 빈칸이고 3번 정답 자리는 뒤집힌 낱말로 찍힌다.
+            #   그 두 곳을 문 근거는 선생님이 답지·시험지를 대조할 수 없고,
+            #   판단 근거가 시험지에 아예 없는 문항이 나가기도 한다.
+            #   → 재시도로 막지 않는다. 같은 조건을 재시도 사유로 걸면 실측 31지문 중
+            #     27개(87%)가 튕겨 _s112·_s161 때의 폭주가 재현된다.
+            #     _s158·_s162 와 같은 방침 — **코드가 인용을 잘라 고친다.**
+            #     실측: 해당 44건 중 41건(93%)이 잘라서 해결되고, 남는 3건만 재시도.
+            try:
+                from variation.vocab_q3 import (fix_statements_evidence as _fse,
+                                                evidence_sentence_spread as _ess)
+                _stuck = _fse(data)
+                if _stuck and not is_last:
+                    errors = list(errors) + [
+                        f"[{pid}] [CRITICAL] Q4 진술 {', '.join(_stuck)} 의 근거가 "
+                        f"5번 빈칸이나 3번 정답 자리에 통째로 들어 있다 — "
+                        f"그 진술을 **빈칸도 밑줄도 없는 다른 문장** 근거로 바꿔 쓸 것 "
+                        f"(O/X 판정은 그대로 유지)"]
+                _dup = _ess(data.get("statements_evidence"), en_text)
+                if _dup:
+                    print(f"[VAR][A][{pid}] ⚠ Q4 진술이 같은 문장을 근거로 씀 — "
+                          + ", ".join(f"{x}/{y}" for x, y in _dup[:3])
+                          + " (경고, 재시도 안 함)")
+            except Exception as _fe:
+                # ★ 조용히 넘기지 않는다 (_s151)
+                print(f"[VAR][A][{pid}] ⚠ 검사 건너뜀 (fix_statements_evidence): {_fe}")
+
             errors = validate_a(data, en_text, pid, lenient=is_last)
 
             # ★★ Q3 정답 자리 문장을 Q4 진술이 근거로 삼으면 정답이 갈린다 (_s147).

@@ -251,6 +251,25 @@ Everything you generate must reflect that whole-passage understanding:
    - ★★ GRAMMATICAL FIT IS MANDATORY: the paraphrase MUST keep the SAME grammatical structure as core_blank_target so that, when inserted into the blank, the sentence is fully grammatical English. If the original blanked phrase is a CLAUSE (subject + verb, e.g. "food and nutrition play the greatest role"), the paraphrase MUST also be a clause (e.g. "food and nutrition have the most significant impact"). If it is a noun phrase, keep a noun phrase. NEVER turn a clause into a bare noun phrase. TEST: read the full sentence with the correct option in the blank — if it is not grammatical (e.g. "believe that most significant impact on well-being" ❌), the option is WRONG; rewrite it.
    - ★ The 4 WRONG options = opposite meaning or content NOT mentioned. Each ≤ 15 words, grammatically fits the blank, not near-duplicates of each other.
 
+3-5. **★★ Q4 STATEMENTS — 다섯 진술을 어떻게 쓰는가 (읽고 쓸 것)**:
+   지금까지 이 문항만 규칙이 없어서 아래 네 가지가 반복해서 났다. 전부 지키면
+   된다 — 어렵지 않고, 어기면 학생 답과 답지가 갈린다.
+   - ★ **다섯 진술은 서로 다른 문장에 기댄다.** 한 문장에 두 진술을 걸지 마라.
+     (문장이 넷뿐인 짧은 지문이면 어쩔 수 없다. 그때만 예외다.)
+   - ★★★ **5번 (A)(B) 빈칸과는 절대 겹치면 안 된다.** 예외 없다. 빈칸 속 문장을
+     근거로 삼으면 학생은 5번을 먼저 풀지 않는 한 4번을 판단할 수 없다
+     (실측: 근거가 통째로 빈칸이라 시험지에 "The time spent ___." 만 찍혔다).
+     진술도 마찬가지다 — 빈칸에 들어갈 말을 진술이 되풀이하면 5번이 공짜가 된다.
+   - ★★ **3번 어휘와는 겹쳐도 된다. 단 '정답 자리' 하나만 피하면 된다.**
+     밑줄 다섯 중 넷(오답)은 동의어로만 바꾼 자리라 뜻이 안 변한다 — 그 문장은
+     근거로 써도 무해하다. 문제는 **반의어로 뒤집은 정답 자리 하나**다. 그 문장은
+     학생 시험지에 뒤집힌 낱말로 인쇄되므로, 원문 기준으로 쓴 진술·해설과 O/X 가
+     갈린다. 불일치 **개수**가 답이라 객관식 정답 번호까지 바뀐다.
+     낱말을 바꿔 써도 소용없다 — 뜻으로 부딪히면 똑같이 갈린다
+     (실측: relish→resent 자리를 "enjoy" 라고 바꿔 쓴 진술).
+   - ★ **진술이 5번 정답을 말만 바꿔 되풀이하지 마라.** 4번을 읽은 학생이 5번을
+     공짜로 얻는다. 낱말을 바꿔도 내용이 같으면 안 된다.
+
 3-4. **Q4 EVIDENCE — copy the proof sentence from the passage**:
    - For EACH statement (가~마), put in statements_evidence the EXACT English sentence/clause from the passage that proves or disproves it.
    - Copy it verbatim from the passage (do NOT paraphrase). Keep it short — just the decisive part.

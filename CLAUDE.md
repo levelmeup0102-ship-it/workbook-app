@@ -6,6 +6,28 @@
 
 **`feature/backend-from-design`** 에서만 작업한다. (main보다 최신)
 
+## 세션 분담 (동시 작업 중 — 충돌 주의)
+
+이 저장소는 여러 채팅 세션이 **같은 브랜치 `feature/backend-from-design`** 에서 동시에 돌아간다.
+세션을 시작하면 아래 표에서 **자기 담당 영역만** 손댄다. 남의 영역 파일은 읽기만 하고 고치지 않는다.
+고쳐야 할 일이 생기면 선생님께 먼저 알리고, 해당 세션이 처리하게 넘긴다.
+
+| 세션 | 담당 영역 | 파일 |
+|---|---|---|
+| **서술형 종합** | 2회독 서술형 (SA·SC·SD·SE) | `seosul/` 전체 |
+| **2회독 집중 수정** | 2회독 변형문제 유형 A·B | `variation/`, `variation.html`, `variation_b.html`, `docs/2회독_변형문제.md` |
+| **사이트 전반 수정** | 프론트·인증·라우팅·1회독·분석지 | `static/index.html`, `main.py`, `sheet/`, `pipeline.py`, `template.html` |
+
+**겹치는 지점 — 손대기 전에 반드시 확인할 것**
+
+- `static/index.html` — 한 파일에 탭 4개가 다 들어 있다. 서술형 탭(`#tab-seosul`, `switchTab('seosul')`,
+  `ssRefreshBooks` 계열 JS)은 서술형 세션 담당, 변형문제 탭은 2회독 세션 담당이다.
+- `main.py` — `seosul` / `variation` / `sheet` 라우터 등록 블록. 남의 모듈 등록부는 건드리지 않는다.
+- `seosul/assets/var_style.css` 와 `logo2.png` 는 변형문제 모듈에서 복사해 온 것이다.
+  변형문제 쪽 스타일을 고쳐도 **서술형 쪽 사본은 따라 바뀌지 않는다.** 양쪽 다 필요하면 각각 고친다.
+
+푸시 전에 `git pull` 한 번. 남의 영역 파일이 diff에 섞여 있으면 빼고 올린다.
+
 ## 작업 규칙
 
 - **코드·템플릿 커밋은 선생님이 한다.** Claude는 열람·분석·검증·수정안 제시까지.

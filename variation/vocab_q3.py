@@ -1944,3 +1944,137 @@ def q4_conflict_unsatisfiable(paragraphs, statements_evidence) -> bool:
             if not covered:
                 free += 1
     return free == 0
+
+
+# ════════════════════════════════════════════════════════════════
+# ★ Q4 근거 인용은 '시험지에 인쇄되는 글자'여야 한다 (_s181)
+#
+#   답지 근거는 원문을 인용하는데, 학생이 보는 시험지는 두 군데가 다르다 —
+#   5번 (A)(B) 는 빈칸으로 비어 있고, 3번 정답 자리는 뒤집힌 낱말로 찍힌다.
+#   근거가 그 두 곳을 물고 있으면 선생님이 답지와 시험지를 대조할 수 없고,
+#   실제로 학생이 판단할 근거가 시험지에 없는 문항이 나간다.
+#
+#   실측(26-09-09, 네 파일 31지문 155진술 — 부천고1·부명고1·소명여고2·수원외고1):
+#     근거가 빈칸이나 뒤집힌 낱말을 무는 진술            44건
+#       ├ 잘라서 5단어 이상 남음 → 코드가 그 자리에서 처리  41건 (93%)
+#       └ 잘라도 안 남음 → 진술 자체를 바꿔야 함(재시도)     3건 (지문 3개, 9%)
+#
+#   ★ 재시도로 막지 않는다. 같은 조건을 재시도 사유로 걸면 지문 31개 중 27개
+#     (87%)가 튕겨 _s112·_s161 때의 재시도 폭주가 그대로 재현된다. 실측했다.
+#     _s158 이 쓴 방식과 같다 — 재시도가 아니라 **코드가 직접 고친다.**
+#     자를 수 없는 3건만 재시도로 넘긴다(지금 재시도 부담 9%와 같다).
+# ════════════════════════════════════════════════════════════════
+
+def _ev_cut(quote: str, bad_spans) -> str:
+    """근거 인용에서 bad_spans 를 도려내고 남는 가장 긴 조각.
+
+    bad_spans: 5번 빈칸 정답 두 개 + 3번 정답 자리의 원문어.
+    """
+    parts = [str(quote or "")]
+    for b in bad_spans:
+        b = str(b or "").strip()
+        if not b:
+            continue
+        nxt = []
+        for seg in parts:
+            # ★ 한 조각에 같은 말이 두 번 나올 수 있다. 첫 번째만 지우면 남는다(실측 1건).
+            while True:
+                i = seg.lower().find(b.lower())
+                if i < 0:
+                    nxt.append(seg)
+                    break
+                nxt.append(seg[:i])
+                seg = seg[i + len(b):]
+        parts = nxt
+    return max((p.strip(" ,;:.—-─\"'") for p in parts),
+               key=lambda x: len(x.split()), default="")
+
+
+def evidence_bad_spans(data: dict) -> list:
+    """근거가 물으면 안 되는 구간 — 5번 (A)(B) 정답과 3번 정답 자리의 원문어."""
+    out = [data.get("blank_A") or "", data.get("blank_B") or ""]
+    ans = next((it for it in (data.get("vocab_items") or [])
+                if it.get("is_answer")), None)
+    if ans and ans.get("original"):
+        out.append(str(ans["original"]))
+    return [x for x in out if x]
+
+
+def fix_statements_evidence(data: dict) -> list:
+    """Q4 근거를 시험지에 보이는 부분만 남기도록 잘라 넣는다.
+
+    ★ 두 조건의 세기가 다르다 (선생님 규칙, 26-09-09).
+      · 5번 (A)(B) 빈칸 — **절대** 겹치면 안 된다. 남는 말이 짧아져도 무조건 잘라낸다.
+        (겹친 채로 나가면 학생이 5번을 먼저 풀지 않는 한 4번을 판단할 수 없다.)
+      · 3번 어휘 — **정답 자리 하나만** 피하면 된다. 오답 넷은 동의어라 무해하다.
+        정답 자리를 잘라 낼 수 없으면(근거가 그 문장뿐이면) 자르지 않고 그대로 두고
+        진술을 바꾸도록 재시도로 넘긴다 — 뜻이 통하지 않는 토막을 답지에 싣느니 낫다.
+
+    반환: 진술 자체를 바꿔야 하는 라벨 목록. 호출한 쪽이 재시도 사유로 쓴다.
+    """
+    evs = data.get("statements_evidence") or []
+    if not evs:
+        return []
+    blanks = [x for x in (data.get("blank_A") or "", data.get("blank_B") or "") if x]
+    ans = next((it for it in (data.get("vocab_items") or [])
+                if it.get("is_answer")), None)
+    answord = str(ans.get("original") or "") if ans else ""
+    if not blanks and not answord:
+        return []
+
+    def _label(i):
+        try:
+            return str((data.get("statements") or [])[i][0])
+        except Exception:
+            return "가나다라마"[i] if i < 5 else str(i + 1)
+
+    stuck = []
+    for i, ev in enumerate(evs):
+        if not isinstance(ev, str) or not ev.strip():
+            continue
+        cur = ev
+        # ① 5번 빈칸 — 무조건 잘라낸다
+        if any(b.lower() in cur.lower() for b in blanks):
+            cur = _ev_cut(cur, blanks)
+            if len(cur.split()) < 5:
+                stuck.append(_label(i))
+        # ② 3번 정답 자리 — 잘라도 쓸 만할 때만 자른다
+        if answord and re.search(r"(?<![A-Za-z])" + re.escape(answord) + r"(?![A-Za-z])",
+                                 cur, re.I):
+            trimmed = _ev_cut(cur, [answord])
+            if len(trimmed.split()) >= 5:
+                cur = trimmed
+            elif _label(i) not in stuck:
+                stuck.append(_label(i))
+        if cur != ev:
+            evs[i] = cur
+    data["statements_evidence"] = evs
+    return stuck
+
+
+def evidence_sentence_spread(statements_evidence, passage_text) -> list:
+    """두 진술이 같은 문장을 근거로 쓰면 그 라벨 쌍 목록 (경고용).
+
+    ★ 재시도 사유로 쓰지 않는다 — 답이 갈리지 않고, 문장이 넷뿐인 지문에서는
+      다섯 진술을 다 흩을 수 없다(실측: 31지문 중 8지문이 여기 걸린다).
+      검수 때 사람이 볼 표시로만 쓴다.
+    """
+    sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+",
+             str(passage_text or "").replace("\n", " ")) if s.strip()]
+    if not sents:
+        return []
+    def kw(t): return {w.lower() for w in re.findall(r"[A-Za-z]{3,}", t or "")}
+    seen, out = {}, []
+    for i, ev in enumerate(statements_evidence or []):
+        if not isinstance(ev, str) or len(ev.split()) < 5:
+            continue
+        ek = kw(ev)
+        if not ek:
+            continue
+        best = max(sents, key=lambda x: len(kw(x) & ek))
+        lab = "가나다라마"[i] if i < 5 else str(i + 1)
+        if best in seen:
+            out.append((seen[best], lab))
+        else:
+            seen[best] = lab
+    return out

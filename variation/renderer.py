@@ -446,6 +446,36 @@ def _shuffle_b_bogi(b_items: List[dict]) -> None:
 
 
 # ============ 메인 렌더링 ============
+
+def _fix_a_evidence(a_items: List[dict]) -> None:
+    """A 4번 근거 인용을 시험지에 인쇄되는 부분만 남기도록 자른다 (_s181).
+
+    ★ generator 가 아니라 renderer 에도 두는 이유는 _s161 의 B 보기 셔플과 같다 —
+      캐시 버전을 올리면 이미 쌓인 A 캐시가 통째로 재생성돼 크레딧을 태운다.
+      renderer 에서 자르면 옛 캐시도 **재생성 없이 다음 출력부터** 정상이 된다.
+      새로 만드는 것은 generator 쪽에서 이미 잘려 오므로 여기서는 할 일이 없다.
+
+    한 번 자른 데이터는 _ev_trimmed 로 표시해 건너뛴다(두 번 자르면 더 깎인다).
+    """
+    try:
+        from variation.vocab_q3 import fix_statements_evidence
+    except Exception as e:
+        print(f"[RENDER] ⚠ 근거 정리 건너뜀 (_s181): {e}")
+        return
+    for it in a_items or []:
+        d = it.get("data") if isinstance(it, dict) and isinstance(it.get("data"), dict) else it
+        if not isinstance(d, dict) or d.get("_ev_trimmed"):
+            continue
+        try:
+            stuck = fix_statements_evidence(d)
+            d["_ev_trimmed"] = True
+            if stuck:
+                print(f"[RENDER] ⚠ 4번 근거를 자를 수 없는 진술 {', '.join(stuck)} "
+                      f"— 검수 대상 (_s181)")
+        except Exception as e:
+            print(f"[RENDER] ⚠ 근거 정리 실패 (_s181): {e}")
+
+
 def render_variation_html(
     a_items: List[dict],
     b_items: List[dict],
@@ -462,6 +492,7 @@ def render_variation_html(
     logo_url = get_logo_data_uri()
 
     _shuffle_b_bogi(b_items)   # ★ _s161 — B 보기가 정답 순서 그대로 나가는 것을 막는다
+    _fix_a_evidence(a_items)   # ★ _s181 — A 4번 근거를 시험지에 보이는 부분만 남긴다
     
     try:
         tmpl_a = env.get_template("variation.html")

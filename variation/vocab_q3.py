@@ -1165,7 +1165,7 @@ def normalize_llm_vocab(raw_items, paragraphs, blank_spans=None,
         return None
 
     if not isinstance(raw_items, list) or len(raw_items) != 5:
-        # ★ '리스트 아님개' 로 찍히던 자리 (_s183). 개수 자리에 문자열을 끼워 넣었다.
+        # ★ '리스트 아님개' 로 찍히던 자리 (_s184). 개수 자리에 문자열을 끼워 넣었다.
         return _fail(f"항목이 {len(raw_items)}개 (5개여야 함)"
                      if isinstance(raw_items, list) else "항목이 리스트가 아니다 (5개짜리 배열이어야 함)")
     out = []

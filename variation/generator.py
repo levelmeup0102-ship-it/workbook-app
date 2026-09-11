@@ -1003,6 +1003,25 @@ def place_vocab_answer(items, want_n):
     return items
 
 
+def _pid_seq(pid) -> int:
+    """번호를 '자리 순환용 정수' 로 바꾼다 (_s184).
+
+    ★ 전에는 `re.findall(r"\\d+", pid)[0]` 로 **첫 숫자 하나만** 썼다.
+      '18번' 처럼 번호가 하나인 모의고사 교재에서는 18·19·20… 이라 잘 퍼졌지만,
+      '1-2번' 같은 대단원-소단원 꼴에서는 1-1번부터 1-8번까지 전부 seq=1 이 되어
+      **한 대단원의 정답이 전부 같은 번호로 나왔다.**
+      실측(북일고 부교재 6강, step_cache 15건 전수):
+        1-2 ~ 1-7번 → 전부 ②  /  2-1~2 ~ 2-7~8번 → 전부 ③  /  3-1 ~ 3-4번 → 전부 ④
+      7강은 13지문이 ④ 7건·⑤ 6건 둘로만 갈린다(카이제곱 19.7, 임계 9.49).
+      학생이 1번 주제를 전부 ②로 찍으면 여섯 문항을 공짜로 얻는다.
+    → 숫자를 전부 이어 붙인다. '1-2번'→12, '1-3번'→13, '2-7~8번'→278, '18번'→18.
+      같은 교재·단원·번호면 값이 늘 같으므로 이미 배포한 답지는 안 흔들린다.
+      측정: 6강 카이제곱 14.2→1.4, 7강 19.7→2.0.
+    """
+    _d = re.findall(r"\d+", str(pid))
+    return int("".join(_d)) if _d else 0
+
+
 def shuffle_correct_position(options, correct_idx, book, unit, pid, salt):
     """선지 순서를 섞고 정답을 강 단위 순환 자리에 놓는다 (_s136).
 
@@ -1018,8 +1037,7 @@ def shuffle_correct_position(options, correct_idx, book, unit, pid, salt):
         return options, correct_idx
     if not isinstance(correct_idx, int) or not (0 <= correct_idx < 5):
         return options, correct_idx
-    _seq = re.findall(r"\d+", str(pid))
-    _seq = int(_seq[0]) if _seq else 0
+    _seq = _pid_seq(pid)                      # ★ 첫 숫자만 쓰던 것을 고쳤다 (_s184)
     _start = int(hashlib.md5(
         (str(book) + "|" + str(unit) + "|" + salt).encode()
     ).hexdigest()[:8], 16) % 5
@@ -1577,6 +1595,8 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5")
 ANTHROPIC_VERSION = "2023-06-01"
 MAX_RETRIES = 3
+# ★ 유형 A 지문 최소 단어 수 (_s183). 이 아래는 5문항 틀이 안 들어간다 — 아래 주석 참고.
+MIN_WORDS_A = 80
 # ★ B 는 검사가 훨씬 많다 (_s122) — 제목 형식·절대어·Q3 본문베끼기·복수정답·
 #   요약문 겹침·역할 배치·풀이 검증. 3회로는 매번 다른 사유로 소진돼
 #   정작 복수정답을 고칠 기회가 없었다(실측: B 하나가 통째로 누락).
@@ -2563,6 +2583,28 @@ def generate_variation_a(
     #   _short = '순서·어휘를 내지 않는 지문'. 아래 분기는 전부 이 값을 본다.
     _short = _is_notice or _is_chart
 
+    # ★ 80단어 미만 지문은 유형 A 5문항 틀이 물리적으로 안 들어간다 (_s183).
+    #   Q5 빈칸 둘(각 4~12단어)을 서로 다른 단락에 파고 나면, Q3 어휘 밑줄 다섯을
+    #   서로 다른 문장에 나눠 심을 문장이 남지 않는다. 모델이 그걸 말로 되받는다 —
+    #   "지문에 실제로 인쇄된 문장이 (C) 한 문장뿐이라 다섯 자리를 뽑을 수 없습니다".
+    #   ★ 문장 수는 기준이 아니다. 4문장이어도 149단어(수특 영독연 1강 3번)·141단어
+    #     (25년 고2 9월 22번)짜리는 만들어져 나갔다. 갈리는 것은 단어 수다.
+    #   ★ 경계는 북일고 부교재 6강에서 확인했다(step_cache 유무로 성패가 확정된다).
+    #     실패 49 · 63 · 78단어 / 성공 82 · 89단어 → 78과 82 사이가 경계다.
+    #     80으로 두면 죽는 셋을 다 막고 사는 둘을 다 통과시킨다.
+    #     처음 90으로 잡았다가 82단어·89단어짜리 **멀쩡히 만들어진 둘**을 막는 것을
+    #     확인하고 내렸다. 숫자를 옮길 때는 반드시 이렇게 실측하고 옮긴다.
+    #   실측(중복 뺀 192지문, 전부 시험지로 나간 것): 최소 91단어 — 80 미만은 0건.
+    #   실측(26-09-10·09-11 로그): 49·63·78단어짜리가 Q3 어휘를 지문당 15회
+    #     (안쪽 5 × 바깥 3) 전부 실패하고 10분 44초·LLM 45회를 태운 뒤 통째로 빠졌다.
+    #     이틀 연속 같은 지문이 같은 이유로 죽었다. 될 수 없는 일에 크레딧을 태우지 않는다.
+    _wc = len(en_text.split())
+    if (not _short) and _wc < MIN_WORDS_A:
+        raise RuntimeError(
+            f"유형 A 생성 불가 — 지문이 {_wc}단어뿐이다 (최소 {MIN_WORDS_A}단어).\n"
+            f"5번 빈칸 둘을 파고 나면 3번 어휘 밑줄 다섯을 심을 문장이 남지 않는다.\n"
+            f"앞뒤 지문과 합치거나 이 지문은 유형 B로 낼 것.")
+
     last_errors = []
     last_data = None
     # ★ Q3 어휘 실패 사유를 **바깥 재시도 사이에도** 이어 간다 (_s178).
@@ -2839,8 +2881,7 @@ def generate_variation_a(
                     #     성립하기 때문이다. 우리 A 지문은 Q2 순서배열 때문에
                     #     (A)(B)(C)가 셔플돼 있어 앞뒤 개념 자체가 없다.
                     #   강 안에서 1~5를 돌려 써 한 강에서 번호가 겹치지 않게 한다.
-                    _seq = re.findall(r"\d+", str(pid))
-                    _seq = int(_seq[0]) if _seq else 0
+                    _seq = _pid_seq(pid)      # ★ _s184
                     _start = int(hashlib.md5(
                         (str(book) + "|" + str(unit) + "|vocabpos").encode()
                     ).hexdigest()[:8], 16) % 5
@@ -3006,7 +3047,7 @@ def generate_variation_a(
                     data.pop("vocab_items", None)
                     data.pop("vocab_explain", None)
                     raise ValueError(
-                        "Q3어휘 3회 실패 — "
+                        f"Q3어휘 {_va + 1}회 실패 — "
                         + " / ".join(_vfail[-3:] or ["사유 미기록"]))
 
             if "mismatch_count" not in data and "statements" in data:
@@ -3616,8 +3657,7 @@ def generate_variation_b(
             #   프롬프트에 "한쪽만 흐리게"라고만 하면 LLM 이 매번 같은 쪽을 고른다
             #   (실측: 3문항 전부 (B)가 결정 칸). 그러면 학생이 "항상 B를 보면 된다"를
             #   배운다. 어휘 정답 자리와 같은 방식으로 강 안에서 번갈아 준다.
-            _seqb = re.findall(r"\d+", str(pid))
-            _seqb = int(_seqb[0]) if _seqb else 0
+            _seqb = _pid_seq(pid)             # ★ _s184
             _startb = int(hashlib.md5(
                 (str(book) + "|" + str(unit) + "|decider").encode()
             ).hexdigest()[:8], 16) % 2
@@ -3681,8 +3721,7 @@ def generate_variation_b(
                         print(f"[VAR][B][{pid}] Q3 _why 누락 {_nw} → 재시도")
                         continue
                     _rows = [(_dsg[k]["A"], _dsg[k]["B"]) for k in _keys]
-                    _seq3 = re.findall(r"\d+", str(pid))
-                    _seq3 = int(_seq3[0]) if _seq3 else 0
+                    _seq3 = _pid_seq(pid)     # ★ _s184
                     _st3 = int(hashlib.md5(
                         (str(book) + "|" + str(unit) + "|q3pos").encode()
                     ).hexdigest()[:8], 16) % 5

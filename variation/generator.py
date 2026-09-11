@@ -3245,12 +3245,25 @@ def generate_variation_a(
             #     27개(87%)가 튕겨 _s112·_s161 때의 폭주가 재현된다.
             #     _s158·_s162 와 같은 방침 — **코드가 인용을 잘라 고친다.**
             #     실측: 해당 44건 중 41건(93%)이 잘라서 해결되고, 남는 3건만 재시도.
+            # ★ 이 검사는 통째로 죽어 있었다 (_s185).
+            #   `errors` 는 바로 아래 validate_a 에서 처음 만들어지는 지역변수인데
+            #   여기서 먼저 읽으려 해서 파이썬이 UnboundLocalError 를 냈다:
+            #     "cannot access local variable 'errors' where it is not associated with a value"
+            #   except 가 그것을 삼켜 **_stuck 이 잡힐 때마다 검사가 조용히 건너뛰어졌다.**
+            #   실측(26-09-11 로그, 북일고 부교재 6강 2-6번): 그 줄이 그대로 찍혔다.
+            #   _fse(data) 의 '잘라 고치기' 는 돌고 있었으므로, 잘라도 남는 것이 없는
+            #   나머지만 조용히 그대로 나갔다 — 검수에서 매번 잡히던 바로 그 부류다
+            #   (근거가 "Maybe this understanding can" / "the mother responded by saying that"
+            #    처럼 빈칸 앞에서 끊겨 판단할 내용이 시험지에 없는 진술).
+            #   → 사유를 모아 두었다가 errors 가 만들어진 뒤에 붙인다. 잘라 고치는 시점은
+            #     validate_a 앞 그대로라 검증 순서는 바뀌지 않는다.
+            _stuck_err = []
             try:
                 from variation.vocab_q3 import (fix_statements_evidence as _fse,
                                                 evidence_sentence_spread as _ess)
                 _stuck = _fse(data)
                 if _stuck and not is_last:
-                    errors = list(errors) + [
+                    _stuck_err = [
                         f"[{pid}] [CRITICAL] Q4 진술 {', '.join(_stuck)} 의 근거가 "
                         f"5번 빈칸이나 3번 정답 자리에 통째로 들어 있다 — "
                         f"그 진술을 **빈칸도 밑줄도 없는 다른 문장** 근거로 바꿔 쓸 것 "
@@ -3265,6 +3278,8 @@ def generate_variation_a(
                 print(f"[VAR][A][{pid}] ⚠ 검사 건너뜀 (fix_statements_evidence): {_fe}")
 
             errors = validate_a(data, en_text, pid, lenient=is_last)
+            if _stuck_err:
+                errors = list(errors) + _stuck_err
 
             # ★★ Q3 정답 자리 문장을 Q4 진술이 근거로 삼으면 정답이 갈린다 (_s147).
             #   Q4 진술·해설은 원문 기준인데 학생이 보는 지문은 Q3 로 뒤집혀 있다.

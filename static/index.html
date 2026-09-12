@@ -711,7 +711,9 @@ function onBookChange() {
   );
   let html = '';
   for (const unit of units) {
-    const up = passages.filter(p => p.unit === unit);
+    // unit 내부 지문도 이름(pid) 자연 정렬
+    const up = passages.filter(p => p.unit === unit)
+      .sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
     html += `<div class="unit-header" onclick="toggleUnit('${book}','${unit}')">📁 ${unit} (${up.length}개)<span class="unit-select">단원 전체선택</span></div>`;
     for (const p of up) {
       const key = `${p.book}|${p.unit}|${p.id}`;

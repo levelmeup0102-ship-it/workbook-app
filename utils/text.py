@@ -104,6 +104,64 @@ def split_sentences(text: str) -> List[str]:
     return restored
 
 
+def count_english_words(text: str) -> int:
+    """영어 단어 수 계산. 축약형(it's)·하이픈(ten-thousand) 은 한 단어로 유지."""
+    words = re.findall(r"[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*", text)
+    return len(words)
+
+
+def merge_short_sentence_pairs(
+    sentences: List[str],
+    translations: List[str],
+    *,
+    trigger_word_count: int = 5,
+    target_word_count: int = 20,
+) -> tuple[List[str], List[str]]:
+    """일반(비대화문) 지문용 짧은 문장 병합.
+
+    - 영어 문장의 단어 수가 trigger_word_count 미만이면 병합 시작
+    - 뒤 문장을 계속 합쳐 target_word_count 이상이 되면 종료
+    - 한글 해석도 같은 index 기준으로 함께 병합 → 영어/한글 정렬 유지
+    - 번역이 없으면(translations 빈 값) 영어만 병합하고 번역은 빈 리스트 반환
+
+    반환: (병합된 영어 문장, 병합된 한글 해석) — 두 리스트 길이 동일.
+    """
+    def korean_at(index: int) -> str | None:
+        return translations[index] if index < len(translations) else None
+
+    merged_english: List[str] = []
+    merged_korean: List[str] = []
+    sentence_count = len(sentences)
+    i = 0
+
+    while i < sentence_count:
+        current_english = sentences[i]
+
+        # trigger 이상이면 병합 없이 그대로 사용
+        if count_english_words(current_english) >= trigger_word_count:
+            merged_english.append(current_english)
+            merged_korean.append(korean_at(i) or "")
+            i += 1
+            continue
+
+        # 짧은 문장 → 뒤 문장을 target 이상이 될 때까지 병합
+        english_parts = [current_english]
+        korean_parts = [korean_at(i)] if korean_at(i) else []
+        total_words = count_english_words(current_english)
+        i += 1
+        while i < sentence_count and total_words < target_word_count:
+            english_parts.append(sentences[i])
+            if korean_at(i):
+                korean_parts.append(korean_at(i))
+            total_words += count_english_words(sentences[i])
+            i += 1
+
+        merged_english.append(" ".join(english_parts))
+        merged_korean.append(" ".join(korean_parts))
+
+    return merged_english, (merged_korean if translations else [])
+
+
 def _is_dialogue(sentences: List[str]) -> bool:
     """대화문 지문인지 판별: 문장의 20% 이상이 '이름:' 패턴으로 시작하면 대화문"""
     if len(sentences) < 3:

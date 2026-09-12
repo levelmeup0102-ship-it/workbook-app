@@ -12,7 +12,12 @@ import logging
 from supabase import AsyncClient
 
 from core.exceptions import GenerationError, LLMError
-from utils.text import split_sentences, merge_short_dialogue
+from utils.text import (
+    split_sentences,
+    merge_short_dialogue,
+    merge_short_sentence_pairs,
+    _is_dialogue,
+)
 from . import cache
 from . import steps
 from . import answer_sheet
@@ -99,9 +104,14 @@ async def generate_workbook(
     prompts: {step_key: prompt_template} — service 에서 DB 로드해 주입.
     levels: meta['levels'] (None=전체 레벨 출력).
     """
-    # 1. 지문 1회 가공 (전 step 공유) — 문장 분리 후 대화문 병합
-    sentences = merge_short_dialogue(split_sentences(passage_text))
-    translations = meta["user_translations"]
+    # 1. 지문 1회 가공 (전 step 공유) — 문장 분리 후 짧은 문장 병합
+    #    대화문: 같은 화자끼리 병합(영어만). 일반 지문: 영어+한글을 함께 병합해 정렬 유지.
+    raw_sentences = split_sentences(passage_text)
+    if _is_dialogue(raw_sentences):
+        sentences = merge_short_dialogue(raw_sentences)
+        translations = meta["user_translations"]
+    else:
+        sentences, translations = merge_short_sentence_pairs(raw_sentences, meta["user_translations"])
 
     # 2. levels → 필요한 step 집합 결정
     #    (level 1/2/3 → 어휘·해석·문장분석은 모두 step1 산출물 사용)

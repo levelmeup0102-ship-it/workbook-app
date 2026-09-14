@@ -531,7 +531,11 @@ body {
       <div class="ans-row-c">
         <b class="q-name">{{ 'Q2.불일치' if _notice else 'Q4.불일치' }}</b>
        <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.mismatch_count - 1] if (item.data.mismatch_count is number and 1 <= item.data.mismatch_count <= 5) else '-' }}</span>
-<span class="ans-text">{{ item.data.mismatch_count }}개 — {% for s in item.data.statements if not s[2] %}{{ s[0] }}{% if not loop.last %}, {% endif %}{% endfor %}</span>        <span class="ans-note">{% for stmt in item.data.statements %}{% set kr = item.data.statements_kr[loop.index0] if item.data.statements_kr and (item.data.statements_kr|length > loop.index0) else ['',''] %}<b>{{ stmt[0] }}</b>({{ 'O' if stmt[2] else 'X' }}){% if kr[1] %} — {{ kr[1] }}{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</span>
+<span class="ans-text">{{ item.data.mismatch_count }}개 — {% for s in item.data.statements if not s[2] %}{{ s[0] }}{% if not loop.last %}, {% endif %}{% endfor %}</span>        <span class="ans-note">{# ★ 4번 내용불일치 해설을 뺐다 (_s187).
+     근거 인용을 빼자 해설이 그 자리를 대신해 영어 원문을 통째로 옮겨 적기 시작했다
+     (중흥고1 25고1 9모 39번: "'But actual consequences are important'라는 문장이…").
+     진술마다 맞고 틀림만 남긴다. 위 칸의 "N개 — 나, 라" 와 함께 보면 채점은 된다.
+     데이터(statements_kr)는 그대로 두어 되돌리려면 이 블록만 되살리면 된다. #}{% for stmt in item.data.statements %}<b>{{ stmt[0] }}</b>({{ 'O' if stmt[2] else 'X' }}){% if not loop.last %}&nbsp;&nbsp;{% endif %}{% endfor %}</span>
       </div>
 
       <div class="ans-row-c">

@@ -1,2651 +1,604 @@
 <!DOCTYPE html>
 <html lang="ko">
-
 <head>
-    <meta charset="UTF-8">
-    <title>{{ subject }} — {{ challenge_title }}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
-    <style>
-        /* ===== CSS VARIABLES ===== */
-        :root {
-            --primary: #1A6BB5;
-            --accent: #C0621A;
-            --green: #1A7D40;
-            --bg-blue: #D4E8F7;
-            --bg-green: #C8EDD8;
-            --bg-orange: #FCEADE;
-            --bg-yellow: #FFF3C0;
-            --bg-passage: #F3F5F7;
-            --text-primary: #000;
-            --text-secondary: #333;
-            --text-muted: #555;
-            --border-light: #C2CBD6;
-            --border-table: #A8B4C0;
-            --border-input: #888;
-            --border-dotted: #AAA;
-            --red: #B91C1C;
-        }
-
-        @page {
-            size: A4;
-            margin: 6mm 0 6mm 0;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            font-family: 'Noto Sans KR', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Nanum Gothic', 'NanumGothic', 'Dotum', 'Helvetica Neue', Arial, sans-serif;
-            font-size: 9.5pt;
-            color: var(--text-primary);
-            line-height: 1.5;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-        }
-
-        .page {
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            width: 210mm;
-            height: auto;
-            min-height: 297mm;
-            padding: 12mm 15mm 18mm 15mm;
-            box-sizing: border-box;
-            page-break-after: always;
-            break-after: always;
-        }
-
-        .page:last-of-type {
-            page-break-after: avoid;
-            break-after: avoid;
-        }
-
-        .page.page-last {
-            page-break-after: avoid;
-            break-after: avoid;
-        }
-
-        /* 정답 페이지: 높이를 강제로 잡지 않고, 다음 지문으로 넘어갈 때만 페이지를 넘김 */
-        .page.page-answer {
-            page-break-after: always;
-            break-after: page;
-            min-height: 0 !important;
-        }
-
-        /* 진짜 마지막 페이지(자바스크립트가 부여)만 빈 페이지 방지 */
-        .page.page-answer.page-last {
-            page-break-after: avoid;
-            break-after: avoid;
-            min-height: 0 !important;
-        }
-
-
-        .page-head {
-            flex-shrink: 0;
-        }
-
-        .page-content {
-            flex: 1;
-            min-height: 0;
-            overflow: visible;
-            display: flex;
-            flex-direction: column;
-            gap: var(--block-gap, 3mm);
-        }
-
-        .page-foot {
-            flex-shrink: 0;
-        }
-
-        .page-stage-1,
-        .page-stage-2,
-        .page-stage-3,
-        .page-stage-4,
-        .page-stage-5,
-        .page-stage-6,
-        .page-stage-7,
-        .page-stage-8,
-        .page-stage-9,
-        .page-stage-10 {
-            font-size: 8pt;
-            line-height: 1.3;
-        }
-
-        .page-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            padding-bottom: 0.8mm;
-            border-bottom: 0.25mm solid var(--border-light);
-            margin-bottom: 1.5mm;
-            font-size: 8pt;
-            position: relative;
-        }
-
-        .page-header-left {
-            font-weight: bold;
-        }
-
-        .page-header-right {
-            color: var(--text-secondary);
-        }
-
-        .stage-info-block {
-            text-align: center;
-            padding: 1.5mm 0 2mm;
-            border-bottom: 0.5mm solid var(--primary);
-            margin-bottom: 2mm;
-        }
-
-        .stage-info-subject {
-            font-size: 15pt;
-            font-weight: bold;
-        }
-
-        .stage-info-challenge {
-            font-size: 11pt;
-            color: var(--primary);
-            margin-top: 0.5mm;
-        }
-
-        .stage-phase-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin: 1mm 0 2mm;
-        }
-
-        .stage-phase {
-            font-weight: bold;
-            font-size: 9pt;
-            padding: 1mm 3.5mm;
-            border-radius: 10mm;
-            border: 0.4mm solid currentColor;
-            display: inline-block;
-        }
-
-        .stage-phase-before {
-            color: var(--primary);
-        }
-
-        .stage-phase-class {
-            color: var(--green);
-        }
-
-        .stage-phase-after {
-            color: var(--accent);
-        }
-
-        .stage-nav {
-            display: flex;
-            gap: 1mm;
-        }
-
-        .stage-nav-dot {
-            width: 5mm;
-            height: 5mm;
-            border-radius: 50%;
-            border: 0.25mm solid var(--border-light);
-            text-align: center;
-            line-height: 5mm;
-            font-size: 8pt;
-            color: var(--text-muted);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .stage-nav-dot.active {
-            background: var(--primary);
-            color: #fff;
-            border-color: var(--primary);
-        }
-
-        .stage-notice {
-            font-size: 8pt;
-            font-weight: bold;
-            color: var(--accent);
-            text-align: center;
-            position: absolute;
-            left: 50%;
-            transform: translateX(-50%);
-        }
-
-        .checklist {
-            border: 0.5mm solid var(--primary);
-            border-radius: 2mm;
-            background: var(--bg-blue);
-            padding: 2mm 3mm;
-            margin-bottom: 2mm;
-            break-inside: avoid;
-        }
-
-        .checklist-title {
-            font-weight: bold;
-            color: var(--primary);
-            font-size: 9pt;
-            margin-bottom: 0.8mm;
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-        }
-
-        .section-title-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            margin-bottom: 1.5mm;
-        }
-
-        .section-title-row .section-title {
-            margin-bottom: 0;
-        }
-
-        .checklist-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .checklist-step {
-            font-size: 6.5pt;
-            padding: 0.5mm 1mm;
-        }
-
-        .checklist-checks {
-            padding: 0.5mm 1.5mm;
-            white-space: nowrap;
-        }
-
-        .checklist-sm {
-            padding: 1mm 2mm;
-            font-size: 7.5pt;
-        }
-
-        .checklist-sm .checklist-title {
-            font-size: 8pt;
-        }
-
-        .check-group {
-            display: inline-flex;
-            gap: 2mm;
-        }
-
-        .check-box {
-            width: 3.5mm;
-            height: 3.5mm;
-            border: 0.4mm solid var(--text-muted);
-            border-radius: 0.8mm;
-            display: flex;
-            font-size: 5.5pt;
-            color: var(--text-muted);
-            align-items: center;
-            justify-content: center;
-            line-height: 0;
-        }
-
-        .section-title {
-            font-size: 14pt;
-            font-weight: 800;
-            color: #333;
-            border-bottom: 0.7mm solid #333;
-            padding-bottom: 0.8mm;
-            display: inline-block;
-            margin-bottom: 2mm;
-            letter-spacing: 0.2mm;
-        }
-
-        .section-title.title-LG {
-            font-size: 13pt;
-        }
-
-        .section-title.title-MD {
-            font-size: 12.5pt;
-        }
-
-        .section-title.title-SM {
-            font-size: 12pt;
-        }
-
-        /* ===== HIERARCHY: section-title(14pt) > STEP(10.5pt) > PART(9pt) > 문제번호 ===== */
-        .step-badge {
-            display: block;
-            font-size: 10.5pt;
-            font-weight: bold;
-            color: #444;
-            margin-top: 3mm;
-            margin-bottom: 1mm;
-            letter-spacing: 0.3mm;
-        }
-
-        /* Stage 7-1 STEP 2 위 여백 축소 */
-        .page-stage-7 .content-block + .content-block .step-badge {
-            margin-top: 0;
-        }
-        .page-stage-7 .page-content {
-            gap: 1.5mm;
-        }
-
-        .part-badge {
-            display: block;
-            font-size: 9pt;
-            font-weight: bold;
-            color: #555;
-            margin-top: 2mm;
-            margin-bottom: 0.8mm;
-            padding-left: 0;
-            letter-spacing: 0.2mm;
-        }
-
-        .step-title {
-            font-size: 9.5pt;
-            font-weight: bold;
-            color: var(--text-primary);
-            margin-bottom: 1.5mm;
-        }
-
-        .step-number {
-            color: #333;
-            font-weight: bold;
-        }
-
-        .passage {
-            border: 0.25mm solid var(--border-light);
-            border-radius: 1mm;
-            background: var(--bg-passage);
-            padding: 3mm 4mm;
-            line-height: 1.8;
-            font-size: 8pt;
-            margin-bottom: 1.5mm;
-            break-inside: avoid;
-        }
-
-        .passage-b {
-            padding: 3mm 4mm;
-            line-height: 1.8;
-            font-size: 8pt;
-            margin-bottom: 1.5mm;
-            break-inside: avoid;
-        }
-
-        .p-dense {
-            letter-spacing: -0.05em;
-            word-spacing: -0.02em;
-            text-align: justify;
-        }
-
-        .passage-sm {
-            line-height: 1.5;
-            font-size: 10pt;
-        }
-
-        .passage-xs {
-            line-height: 1.45;
-            padding: 2mm 3mm;
-            font-size: 10pt;
-        }
-
-        .passage-xxs {
-            line-height: 1.45;
-            padding: 1.5mm 2mm;
-        }
-
-        .passage-wide {
-            line-height: 2.8;
-            font-size: 12pt;
-        }
-
-        .page-stage-7 .passage-xs {
-            font-size: 9pt;
-        }
-
-        .passage-md {
-            line-height: 1.6;
-        }
-
-        .input-line {
-            border-bottom: 0.4mm solid var(--border-input);
-            min-width: 26mm;
-            display: inline-block;
-        }
-
-        .input-line-block {
-            border-bottom: 0.4mm solid var(--border-input);
-            width: 100%;
-            display: block;
-            height: 5mm;
-            margin: 0.8mm 0;
-        }
-
-        .input-line-dotted {
-            border-bottom: 0.4mm solid var(--border-input);
-            min-width: 32mm;
-            display: inline-block;
-            height: 3mm;
-        }
-
-        .input-line-w70 {
-            width: 18mm;
-            min-width: 0;
-        }
-
-
-        .input-xs {
-            min-width: 11mm;
-        }
-
-        .input-sm {
-            min-width: 13mm;
-        }
-
-        .input-md {
-            min-width: 18.5mm;
-        }
-
-        .input-lg {
-            min-width: 69mm;
-        }
-
-        .input-32 {
-            min-width: 32mm;
-        }
-
-        .input-80p {
-            width: 80%;
-        }
-
-        .input-half {
-            min-width: 37mm;
-        }
-
-        .input-ans {
-            min-width: 66mm;
-        }
-
-        .input-topic {
-            min-width: 74mm;
-        }
-
-        .input-primary {
-            border-bottom-color: var(--primary);
-        }
-
-        .input-accent {
-            border-bottom-color: var(--accent);
-        }
-
-        .blank-cloze {
-            border-bottom: 0.5mm solid #000;
-            display: inline-block;
-            min-width: 28mm;
-            height: 4mm;
-        }
-
-        .info-box {
-            border: 0.25mm solid var(--accent);
-            border-radius: 2mm;
-            background: var(--bg-yellow);
-            padding: 2.5mm 3.5mm;
-            font-size: 8pt;
-            margin-top: 2mm;
-            break-inside: avoid;
-        }
-
-        .dash-box {
-            border: 0.5mm dashed var(--border-dotted);
-            border-radius: 2mm;
-            padding: 2.5mm 3.5mm;
-            break-inside: avoid;
-        }
-
-        .box-light {
-            border: 0.25mm solid var(--border-light);
-            border-radius: 0.8mm;
-            padding: 1mm 2mm;
-        }
-
-        .sol {
-            border: 0.5mm solid var(--accent);
-            border-radius: 2mm;
-            background: var(--bg-orange);
-            padding: 1.5mm 2.5mm;
-            break-inside: avoid;
-        }
-
-        .sol-title {
-            font-weight: bold;
-            font-size: 8pt;
-            margin-bottom: 0.8mm;
-        }
-
-        .sol-steps {
-            margin-top: 0.8mm;
-        }
-
-        .sol-step {
-            flex: 1;
-            font-size: 8pt;
-        }
-
-        .sol-step-block {
-            font-size: 8pt;
-            margin-bottom: 1mm;
-        }
-
-        .sol-step-block .sol-sub {
-            display: block;
-            padding-left: 11mm;
-            margin-top: 0.3mm;
-        }
-
-        .sol-step-tbl {
-            border-collapse: collapse;
-            font-size: 8pt;
-            margin-top: 0.5mm;
-        }
-
-        .sol-step-tbl td {
-            vertical-align: top;
-            padding: 0.3mm 0;
-        }
-
-        .sol-step-tbl .sol-step-label {
-            white-space: nowrap;
-            font-weight: bold;
-            padding-right: 1mm;
-        }
-
-        .sol-step-tbl .sol-step-line {
-            display: block;
-            margin-bottom: 0.3mm;
-        }
-
-        .gram-ans-row {
-            display: flex;
-            align-items: flex-end;
-            gap: 1mm;
-            margin-bottom: 1.2mm;
-        }
-
-        .gram-ans-line {
-            flex: 1;
-            border-bottom: 0.4mm solid var(--border-input);
-            align-self: flex-end;
-            min-height: 4mm;
-        }
-
-        /* 연속 페이지에서 체크리스트/섹션 타이틀/페이지 안내 숨김 */
-        .page[data-continuation="true"] .checklist,
-        .page[data-continuation="true"] .checklist-full,
-        .page[data-continuation="true"] .section-title,
-        .page[data-continuation="true"] .section-title-row,
-        .page[data-continuation="true"] .ans-heading,
-        .page[data-continuation="true"] .stage-notice {
-            display: none;
-        }
-
-        .page-stage-9 .page-content {
-            --block-gap: 5mm;
-        }
-
-        .page-stage-9 .content-block {
-            margin-top: 1.5mm;
-        }
-
-        .cm-step3-row {
-            display: flex;
-            align-items: flex-end;
-            gap: 1.5mm;
-            margin-bottom: 1.5mm;
-        }
-
-        .cm-step3-mark {
-            flex: 0 0 auto;
-            font-weight: bold;
-            white-space: nowrap;
-        }
-
-        .cm-step3-line {
-            flex: 1 1 auto;
-            min-width: 0;
-            border-bottom: 0.4mm solid var(--border-input);
-            align-self: flex-end;
-            min-height: 4mm;
-        }
-
-        .sol-warn {
-            font-size: 7.5pt;
-            color: var(--red);
-            font-weight: bold;
-        }
-
-        .sol-header {
-            display: flex;
-            align-items: baseline;
-            gap: 2mm;
-            margin-bottom: 0.8mm;
-        }
-
-        .sent-block {
-            break-inside: avoid;
-            margin-bottom: 1mm;
-        }
-
-        .sent-english {
-            font-size: 10pt;
-            line-height: 3.2;
-        }
-
-        .sent-korean {
-            height: 7mm;
-        }
-
-        .flow-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 4mm;
-            align-items: start;
-        }
-
-        .flow-column {
-            font-size: 8pt;
-            line-height: 1.35;
-        }
-
-        .flow-2col {
-            columns: 2;
-            column-gap: 4mm;
-            column-fill: auto;
-            height: 210mm;
-            font-size: 8pt;
-            line-height: 1.35;
-        }
-
-        .flow-2col .order-block,
-        .flow-2col .flow-err-row,
-        .flow-2col .flow-meta-row,
-        .flow-2col .passage,
-        .flow-2col .flow-abc-block {
-            break-inside: avoid;
-        }
-
-        .flow-2col .flow-section-label,
-        .flow-2col .flow-section-label-sep {
-            break-after: avoid;
-        }
-
-        .flow-2col .sol {
-            margin-top: 2mm;
-        }
-
-        .order-block {
-            break-inside: avoid;
-            border: 0.25mm solid var(--border-light);
-            border-radius: 0.8mm;
-            padding: 0.8mm 1.5mm;
-            margin-bottom: 0.8mm;
-            font-size: 8pt;
-        }
-
-        .flow-section-label {
-            font-size: 9pt;
-            font-weight: bold;
-            color: var(--primary);
-            margin-bottom: 2mm;
-        }
-
-        .flow-section-label-sep {
-            font-size: 9pt;
-            font-weight: bold;
-            color: var(--primary);
-            margin-bottom: 2mm;
-            margin-top: 6mm;
-            border-top: 0.25mm solid var(--border-light);
-            padding-top: 3mm;
-        }
-
-        .flow-pass-intro {
-            font-size: 8pt;
-            padding: 1.5mm 2mm;
-            line-height: 1.45;
-        }
-
-        .flow-pass-insert {
-            font-size: 8pt;
-            padding: 1mm 2mm;
-            line-height: 1.45;
-        }
-
-        .flow-meta-row {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 8pt;
-            margin: 0.8mm 0;
-            border: 0.25mm solid var(--border-light);
-            break-inside: avoid;
-        }
-
-        .flow-meta-hd {
-            width: 9mm;
-            padding: 0.5mm 1mm;
-            border: 0.25mm solid var(--border-light);
-            font-weight: bold;
-        }
-
-        .flow-meta-td {
-            padding: 0.5mm 1mm;
-            border: 0.25mm solid var(--border-light);
-            color: var(--text-muted);
-        }
-
-        .flow-order-ans {
-            text-align: center;
-            font-weight: bold;
-            margin-top: 1.5mm;
-            font-size: 8pt;
-        }
-
-        .flow-err-note {
-            font-size: 7.5pt;
-            color: var(--text-muted);
-            margin-top: 1.5mm;
-            margin-bottom: 1mm;
-        }
-
-        .flow-err-row {
-            font-size: 8pt;
-            margin-bottom: 1mm;
-        }
-
-        .flow-abc-block {
-            font-size: 8pt;
-            line-height: 1.4;
-            margin: 0.8mm 0;
-        }
-
-        .sketch-box {
-            border: none;
-            border-top: 0.4mm dashed var(--border-dotted);
-            border-radius: 0;
-            min-height: 22mm;
-            margin-bottom: 3mm;
-            padding: 3mm 2mm 2mm;
-        }
-
-        .sketch-label {
-            font-size: 8pt;
-            color: var(--text-muted);
-            margin-bottom: 1.5mm;
-        }
-
-        .draw-box {
-            min-height: 16mm;
-            margin-top: 2mm;
-        }
-
-        .opt-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            margin-bottom: 0.8mm;
-            font-size: 8pt;
-            line-height: 1.35;
-        }
-
-        .opt-row-stack {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            gap: 6mm;
-            margin-bottom: 2.5mm;
-            font-size: 9pt;
-            line-height: 1.4;
-        }
-
-        .opt-text {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .opt-memo {
-            flex-shrink: 0;
-            color: var(--text-muted);
-            font-size: 7.5pt;
-            margin-left: 2mm;
-            white-space: nowrap;
-        }
-
-        .opt-memo-indent {
-            display: inline-block;
-            color: var(--text-muted);
-            font-size: 8pt;
-            font-weight: normal;
-            flex-shrink: 0;
-            white-space: nowrap;
-        }
-
-        .ans-row {
-            font-size: 8pt;
-            margin-top: 1.5mm;
-        }
-
-        .ans-heading {
-            font-size: 10pt;
-            padding-bottom: 0.5mm;
-            border-bottom: 0.5mm solid var(--primary);
-            display: block;
-        }
-
-        .part-divider {
-            border-top: 0.5mm solid var(--accent);
-            margin-top: 1.5mm;
-            padding-top: 1mm;
-        }
-
-        .part-divider-label {
-            font-size: 9pt;
-            color: var(--accent);
-            font-weight: bold;
-            margin-bottom: 1mm;
-        }
-
-        .part-label {
-            font-size: 9pt;
-            font-weight: bold;
-            margin-bottom: 1mm;
-        }
-
-        .part-label-accent {
-            font-size: 8pt;
-            font-weight: bold;
-            color: var(--accent);
-            margin-bottom: 1mm;
-        }
-
-        .part-note {
-            font-size: 8pt;
-            color: var(--text-muted);
-            margin-bottom: 1mm;
-        }
-
-        .word-table {
-            width: 100%;
-            table-layout: fixed;
-            border-collapse: separate;
-        }
-
-        .word-table-compact {
-            border-spacing: 0.8mm;
-            font-size: 8pt;
-            line-height: 1.15;
-        }
-
-        .word-table-spacious {
-            border-spacing: 1mm;
-            font-size: 8pt;
-            line-height: 1.3;
-        }
-
-        .word-table-cell {
-            width: 33.333%;
-            vertical-align: top;
-            border: 0.25mm solid var(--border-table);
-            border-radius: 0.8mm;
-            padding: 0.5mm 1mm;
-            overflow: hidden;
-        }
-
-        .word-table-cell-light {
-            border: 0.25mm solid var(--border-light);
-            padding: 0.8mm 1.5mm;
-        }
-
-        .word-table-row-nobreak {
-            break-inside: avoid;
-            page-break-inside: avoid;
-        }
-
-        .word-table-row {
-            margin: 0;
-        }
-
-        .word-table-bold {
-            flex: 0 0 auto;
-            margin-right: 1mm;
-        }
-
-        .word-table-row-fixed {
-            display: flex;
-            align-items: flex-end;
-            flex-wrap: nowrap;
-            white-space: nowrap;
-            gap: 1mm;
-        }
-
-        .word-table-row-word {
-            display: flex;
-            align-items: center;
-        }
-
-        .word-table-group {
-            display: flex;
-            align-items: flex-end;
-            flex: 1 1 0;
-            min-width: 0;
-            gap: 0.5mm;
-        }
-
-        .word-table-row-fixed {
-            min-height: 5mm;
-            margin-bottom: 0.3mm;
-        }
-
-        .word-table-row-fixed .input-line-block {
-            margin: 0;
-        }
-
-        /* 네모 박스 안 라벨:____ 행은 margin-top 적용 금지 */
-        .gram-ans-cell > *,
-        .gram-err-cell > *,
-        .vocerr-card > *,
-        .word-table-cell > *,
-        .dict-box > * {
-            margin-top: 0;
-        }
-
-        .word-table-row-fixed .input-line {
-            min-width: 0;
-        }
-
-        .word-table-line,
-        .input-line.word-table-line {
-            display: inline-block;
-            flex: 1 1 0;
-            min-width: 0;
-            width: auto;
-        }
-
-        .word-table-line-full {
-            flex: 1;
-            min-width: 0;
-            display: block;
-        }
-
-        .word-table-word-line {
-            flex: 0 0 auto;
-            width: 14.5mm;
-            height: 3.5mm;
-        }
-
-        .input-line-h13 {
-            height: 3.5mm;
-        }
-
-        .word-table-line-h10 {
-            height: 3.5mm;
-        }
-
-        .word-table-line-h17 {
-            height: 3.5mm;
-        }
-
-        .word-table-line-full-h10 {
-            height: 3.5mm;
-        }
-
-        .word-table-line-min45 {
-            min-width: 12mm;
-        }
-
-        .word-table-line-min70 {
-            min-width: 18.5mm;
-        }
-
-        .vtbl {
-            width: 100%;
-            border-collapse: collapse;
-            border: 0.25mm solid var(--border-table);
-            font-size: 8pt;
-        }
-
-        .vtbl-word-cell {
-            width: 28%;
-            padding: 0.5mm 1mm;
-            border: 0.25mm solid var(--border-table);
-            vertical-align: top;
-        }
-
-        .vtbl-mean-cell {
-            width: 22%;
-            padding: 0.5mm 1mm;
-            border: 0.25mm solid var(--border-table);
-            font-size: 8pt;
-        }
-
-        .vtbl-word-name {
-            font-size: 8pt;
-            font-weight: bold;
-        }
-
-        .vtbl-syn {
-            font-size: 6.5pt;
-            color: var(--text-muted);
-            display: block;
-        }
-
-        .test-tbl {
-            width: 100%;
-            font-size: 8pt;
-            border-collapse: collapse;
-        }
-
-        .test-col {
-            vertical-align: top;
-            padding-right: 2mm;
-            width: 33%;
-        }
-
-        .test-item {
-            margin-bottom: 0.5mm;
-        }
-
-        .voc-test-inner {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 0.5mm;
-        }
-
-        .voc-test-inner tr {
-            break-inside: avoid;
-        }
-
-        .voc-test-word {
-            white-space: nowrap;
-            padding: 0.8mm 1.5mm 0.8mm 0;
-            vertical-align: bottom;
-            font-size: 8pt;
-        }
-
-        .voc-test-ans {
-            border-bottom: 0.25mm solid var(--border-input);
-            vertical-align: bottom;
-            padding-bottom: 0.5mm;
-            width: 100%;
-        }
-
-        .gram-ans-tbl {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0.8mm;
-            font-size: 8pt;
-        }
-
-        .gram-ans-cell {
-            border: 0.25mm solid var(--border-light);
-            border-radius: 0.8mm;
-            padding: 0.5mm 1mm;
-            vertical-align: top;
-            line-height: 0.95;
-        }
-        .gram-ans-cell .gram-ans-row {
-            margin-bottom: 0.2mm;
-            min-height: 0;
-        }
-        .gram-ans-cell .gram-ans-line {
-            min-height: 3mm;
-        }
-        .gram-ans-cell .word-table-row-fixed {
-            margin: 0;
-            line-height: 0.95;
-            font-size: 7pt;
-        }
-
-        .gram-err-tbl {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 1mm;
-            font-size: 8pt;
-        }
-
-        .gram-err-cell {
-            border: 0.25mm solid var(--border-light);
-            border-radius: 0.8mm;
-            padding: 0.5mm 1mm;
-            vertical-align: top;
-            line-height: 0.95;
-        }
-        .gram-err-cell .word-table-row-fixed {
-            margin: 0;
-            line-height: 0.95;
-            font-size: 7pt;
-        }
-
-        .gram-err-cell > p:first-child {
-            white-space: nowrap;
-            overflow: hidden;
-            display: flex;
-            align-items: flex-end;
-            gap: 0.8mm;
-            font-size: 8pt;
-        }
-
-        .gram-err-cell > p:first-child .input-line,
-        .gram-err-cell > p:first-child .input-line.input-xs {
-            flex: 1 1 0;
-            min-width: 0;
-        }
-
-        .gram-err-cell > p:first-child .grammar-number,
-        .gram-err-cell > p:first-child .grammar-option {
-            flex: 0 0 auto;
-        }
-
-        .gram-err-cell > p:first-child {
-            white-space: nowrap;
-            overflow: hidden;
-            display: flex;
-            align-items: flex-end;
-            gap: 0.8mm;
-            font-size: 8pt;
-        }
-
-        .gram-err-cell > p:first-child .input-line,
-        .gram-err-cell > p:first-child .input-line.input-xs {
-            flex: 1 1 0;
-            min-width: 0;
-        }
-
-        .gram-err-cell > p:first-child .grammar-number,
-        .gram-err-cell > p:first-child .grammar-option {
-            flex: 0 0 auto;
-        }
-
-        .gram-note {
-            font-size: 8pt;
-            margin-bottom: 0.8mm;
-        }
-
-        .gram-err-label {
-            font-size: 8pt;
-            font-weight: bold;
-            margin-bottom: 1mm;
-        }
-
-        .grammar-number {
-            font-weight: bold;
-            color: var(--primary);
-        }
-
-        .grammar-option {
-            font-weight: bold;
-            color: var(--accent);
-        }
-
-        .vocanswer-tbl {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 8pt;
-            margin: 1.5mm 0;
-        }
-
-        .vocanswer-td {
-            width: 20%;
-            padding: 0.5mm 1mm;
-        }
-
-        .vocerr-tbl {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 1mm;
-            font-size: 8pt;
-            margin-top: 1mm;
-            table-layout: fixed;
-        }
-
-        .vocerr-card {
-            border: 0.25mm solid var(--border-light);
-            border-radius: 0.8mm;
-            padding: 1.2mm 2mm;
-            vertical-align: top;
-            width: 33.33%;
-        }
-
-        .vocerr-card-row {
-            display: flex;
-            align-items: baseline;
-            gap: 1.5mm;
-            margin: 0.5mm 0;
-        }
-
-        .vocerr-card-label {
-            white-space: nowrap;
-            font-weight: bold;
-            color: var(--text-secondary);
-        }
-
-        .vocerr-card-line {
-            flex: 1;
-            border-bottom: 0.25mm solid var(--border-input);
-            min-height: 4mm;
-        }
-
-        .vocerr-label {
-            white-space: nowrap;
-            padding: 1mm 1mm 1mm 0;
-            vertical-align: bottom;
-        }
-
-        .vocerr-ans {
-            border-bottom: 0.25mm solid var(--border-input);
-            vertical-align: bottom;
-            padding-bottom: 0.5mm;
-            height: 5mm;
-        }
-
-        .vocerr-sep {
-            width: 4mm;
-        }
-
-        .voc-partb-item {
-            font-size: 8pt;
-            margin-bottom: 1mm;
-        }
-
-        .w50 {
-            width: 50%;
-        }
-
-        .cm-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 8pt;
-            margin-top: 1mm;
-        }
-
-        .cm-col {
-            width: 50%;
-            vertical-align: top;
-        }
-
-        .cm-col-pr {
-            padding-right: 2mm;
-        }
-
-        .cm-col-pr15 {
-            padding-right: 1.5mm;
-        }
-
-        .cm-label {
-            font-size: 8pt;
-            font-weight: bold;
-            color: var(--accent);
-            margin-bottom: 1mm;
-        }
-
-        .cm-item {
-            margin-bottom: 0.5mm;
-        }
-
-        .cm-ans-row {
-            font-size: 8pt;
-            margin-top: 1mm;
-        }
-
-        .cm-ans-col {
-            width: 50%;
-            font-size: 8pt;
-        }
-
-        .writing-item {
-            break-inside: avoid;
-            margin-bottom: 1.5mm;
-        }
-
-        .writing-korean {
-            font-size: 8pt;
-            font-weight: bold;
-            margin-bottom: 0.5mm;
-        }
-
-        .writing-words {
-            background: var(--bg-passage);
-            border: 0.25mm solid var(--border-light);
-            border-radius: 0.8mm;
-            padding: 0.8mm 1.5mm;
-            font-size: 8pt;
-            margin-bottom: 0.5mm;
-            line-height: 1.4;
-        }
-
-        .writing-line {
-            height: 13mm;
-        }
-
-        .answer-page {
-            columns: 2;
-            column-gap: 6mm;
-            column-fill: auto;
-            column-rule: 0.2mm solid var(--border-light);
-            height: 210mm;
-            font-size: 8pt;
-            line-height: 1.4;
-            overflow-wrap: break-word;
-            display: block;
-        }
-
-        .answer-stage,
-        .ast {
-            font-weight: bold;
-            color: var(--primary);
-            font-size: 7.5pt;
-            margin-top: 1.5mm;
-            margin-bottom: 1.5mm;
-            break-after: avoid;
-            background: var(--bg-blue);
-            padding: 1mm 2mm;
-            border-radius: 1mm;
-        }
-
-        .answer-block,
-        .ablock {
-            break-inside: avoid;
-            margin-bottom: 3mm;
-            padding-bottom: 2.5mm;
-            border-bottom: 0.2mm dashed var(--border-light);
-        }
-
-        /* 타이틀(.ast)은 다음 줄과 떨어지지 않게 */
-        .ablock .ast {
-            break-after: avoid;
-        }
-        /* p 단위로는 break-inside: avoid 유지 (한 줄 안에서만 안 잘림) */
-        .ablock p {
-            break-inside: avoid;
-        }
-
-        .answer-block:last-child,
-        .ablock:last-child {
-            border-bottom: none;
-        }
-
-        .answer-block p:not(.answer-commentary),
-        .ablock p:not(.ast):not(.answer-stage):not(.answer-commentary) {
-            padding: 0.5mm 0;
-            border-bottom: 0.15mm solid #eee;
-            font-size: 7.5pt;
-        }
-
-        .answer-block p:last-child,
-        .ablock p:last-child {
-            border-bottom: none;
-        }
-
-        .answer-commentary {
-            font-size: 7.5pt;
-            color: var(--text-secondary);
-            border-left: 0.5mm solid var(--border-light);
-            padding-left: 2.5mm;
-            margin: 0.5mm 0 1mm;
-        }
-
-        .text-bold {
-            font-weight: bold;
-        }
-
-        .text-center {
-            text-align: center;
-        }
-
-        .text-muted {
-            color: var(--text-muted);
-        }
-
-        .text-small {
-            font-size: 8pt;
-        }
-
-        .text-underline {
-            text-decoration: underline;
-        }
-
-        .warning-text {
-            color: var(--red);
-            font-weight: bold;
-        }
-
-        .color-primary {
-            color: var(--primary);
-        }
-
-        .color-accent {
-            color: var(--accent);
-        }
-
-        .color-muted {
-            color: var(--text-muted);
-        }
-
-        .color-secondary {
-            color: var(--text-secondary);
-        }
-
-        .mt2 {
-            margin-top: 0.5mm
-        }
-
-        .mt4 {
-            margin-top: 1mm
-        }
-
-        .mt6 {
-            margin-top: 1.5mm
-        }
-
-        .mt8 {
-            margin-top: 2mm
-        }
-
-        .mt10 {
-            margin-top: 2.5mm
-        }
-
-        .mt12 {
-            margin-top: 3mm
-        }
-
-        .mb2 {
-            margin-bottom: 0.5mm
-        }
-
-        .mb4 {
-            margin-bottom: 1mm
-        }
-
-        .mb6 {
-            margin-bottom: 1.5mm
-        }
-
-        .mb8 {
-            margin-bottom: 2mm
-        }
-
-        .mb10 {
-            margin-bottom: 2.5mm
-        }
-
-        .fs-7 {
-            font-size: 7pt;
-        }
-
-        .fs-75 {
-            font-size: 7.5pt;
-        }
-
-        .fs-8 {
-            font-size: 8pt;
-        }
-
-        .fs-85 {
-            font-size: 8.5pt;
-        }
-
-        .fs-9 {
-            font-size: 9pt;
-        }
-
-        .fs-95 {
-            font-size: 9.5pt;
-        }
-
-        .fs-10 {
-            font-size: 10pt;
-        }
-
-        .fs-11 {
-            font-size: 11pt;
-        }
-
-        .lh-135 {
-            line-height: 1.35;
-        }
-
-        .lh-14 {
-            line-height: 1.4;
-        }
-
-        .lh-15 {
-            line-height: 1.5;
-        }
-
-        .lh-175 {
-            line-height: 1.75;
-        }
-
-        .lh-18 {
-            line-height: 1.8;
-        }
-
-        .pr2 {
-            padding-right: 2mm;
-        }
-
-        .pr15 {
-            padding-right: 1.5mm;
-        }
-
-        .w33 {
-            width: 33%;
-        }
-
-        .bi-avoid {
-            break-inside: avoid;
-            page-break-inside: avoid;
-        }
-
-        body {
-            counter-reset: pagenum;
-        }
-
-        .page {
-            counter-increment: pagenum;
-            position: relative;
-        }
-
-        /* 쪽번호 제거 (사용자 요청) */
-        /* .page::after {
-            content: counter(pagenum);
-            position: absolute;
-            bottom: 6mm;
-            left: 0;
-            right: 0;
-            text-align: center;
-            font-size: 7.5pt;
-            color: #999;
-        } */
-
-        @media screen {
-            html {
-                background: #5a5a5a;
-            }
-
-            body {
-                background: #5a5a5a;
-                padding: 24px 0;
-            }
-
-            .page {
-                background: #fff;
-                width: 210mm;
-                height: auto;
-                min-height: 297mm;
-                margin: 0 auto 20px;
-                padding: 6mm 15mm 6mm 15mm;
-                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-            }
-        }
-
-        @media print {
-            body {
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-                break-after: avoid;
-            }
-
-            .page {
-                width: 210mm;
-                height: auto;
-                min-height: 285mm;
-                padding-top: 6mm;
-                padding-bottom: 6mm;
-            }
-
-            .page {
-                padding-left: 15mm;
-                padding-right: 15mm;
-            }
-
-            /* 정답 페이지: print 모드에서도 높이를 강제로 잡지 않고 페이지 넘김만 유지 */
-            .page.page-answer {
-                min-height: 0 !important;
-                page-break-after: always;
-                break-after: page;
-            }
-
-            /* 진짜 마지막 페이지(자바스크립트가 부여)만 빈 페이지 방지 */
-            .page.page-answer.page-last {
-                min-height: 0 !important;
-                page-break-after: avoid;
-                break-after: avoid;
-            }
-
-            /* JS 페이지네이션이 screen/print 동일 height 기준으로 동작 → print 별도 override 불필요 */
-
-            * {
-                outline: none !important;
-            }
-
-            /* orphans/widows 2는 컬럼/페이지마다 dead space를 누적시켜
-               JS에서 측정한 스크린 레이아웃과 인쇄 레이아웃 사이 큰 차이 발생 → 1로 완화 */
-            p {
-                orphans: 1;
-                widows: 1;
-            }
-
-            :root {
-                --primary: #111;
-                --accent: #444;
-                --green: #222;
-                --bg-blue: #E6E6E6;
-                --bg-green: #E6E6E6;
-                --bg-orange: #E6E6E6;
-                --bg-yellow: #F0F0F0;
-                --bg-passage: #F6F6F6;
-                --text-muted: #555;
-                --border-light: #AAAAAA;
-                --border-table: #888888;
-                --border-dotted: #999999;
-                --red: #222;
-            }
-
-            .stage-phase-before {
-                color: #000
-            }
-
-            .stage-phase-class {
-                color: #333
-            }
-
-            .stage-phase-after {
-                color: #555
-            }
-
-            mark {
-                background: none;
-                text-decoration: underline
-            }
-        }
-    </style>
+<meta charset="UTF-8">
+<style>
+:root {
+  --primary: #1A3A6B; --accent: #28527D; --green: #1F5276;
+  --red: #B91C1C; --purple: #3D4C7A; --border: #B6C2D4;
+  --bg-passage: #F1F4F9; --bg-yellow: #DCE6F5;
+  --bg-orange: #E8EEF6; --bg-blue: #E2EAF5; --bg-purple: #E9EDF6;
+}
+@page {
+  size: A4;
+  /* 하단 여백을 22mm → 14mm 로 줄였다 (_로고 이동).
+     옛 코드는 @bottom-left 에 running(footer-logo) 로 로고를 깔고 그만큼
+     여백을 비워뒀는데, position:running() 은 크롬이 지원하지 않아 그 <div> 가
+     본문 맨 위에 그대로 찍혔다. 로고는 헤더로 옮겼으므로 둘 다 없앤다. */
+  margin: 11mm 13mm 14mm 13mm;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Noto Sans CJK KR','Noto Sans KR','Malgun Gothic',sans-serif;
+  font-size: 9.5pt; color: #111; line-height: 1.55;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.q-page {
+  page-break-after: always;
+  /* ★ MEMO 를 페이지 '바닥'에 고정하기 위한 세로 플렉스 (_로고·MEMO 정리).
+     A4 297mm - 위 여백 11mm - 아래 여백 14mm = 272mm 가 인쇄 영역 높이다.
+     이만큼을 최소 높이로 잡아두고 .memo-box 에 margin-top:auto 를 주면
+     남는 공간이 전부 MEMO 위로 밀려 MEMO 가 바닥에 붙는다.
+     지문 길이가 제각각이라 그냥 두면 MEMO 위치가 페이지마다 달라진다. */
+  display: flex;
+  flex-direction: column;
+  min-height: 272mm;
+  position: relative;        /* .page-no 의 기준점 */
+  /* ★ max-height + overflow:hidden 은 쓰지 않는다.
+     내용이 넘칠 때 문항이 잘려 안 보이게 되는데, 그건 페이지가 갈리는 것보다 나쁘다.
+     넘치면 페이지가 갈리고 MEMO 가 다음 장으로 밀린다 — 보기 흉하지만
+     문항은 다 보인다. 지금 지문 기준 여유가 25mm 쯤이라 실제로는 안 넘친다. */
+}
+.q-page > * { flex-shrink: 0; }
+.hdr {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 4px; border-bottom: 2px solid var(--primary); margin-bottom: 10px;
+  gap: 8px;
+}
+.hdr-title { font-weight: bold; font-size: 11.5pt; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+.hdr-logo {
+  /* ★ 헤더 로고 — LEVEL ME UP 텍스트 왼쪽, 같은 높이(14pt)로.
+     background 로 넣는 이유: <img> 로 넣으면 페이지마다 base64 가 통째로
+     복제돼 파일이 몇 배로 커진다. CSS 는 한 번만 실린다.
+     body 에 print-color-adjust:exact 가 걸려 있어 인쇄·PDF 에서도 나온다. */
+  display: inline-block;
+  width: 14pt; height: 14pt;
+  flex-shrink: 0;
+  vertical-align: middle;
+  background: url("data:image/png;base64,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") no-repeat center center;
+  background-size: contain;
+}
+.hdr-right { font-size: 8.5pt; color: #555; }
+.var-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #1A3A6B, #2E5E8C);
+  color: white; padding: 1.5px 9px; border-radius: 10px;
+  font-size: 7.5pt; font-weight: bold; margin-left: 6px;
+}
+
+/* 지문 박스 */
+.psg-box {
+  border: 1px solid var(--border); border-radius: 5px;
+  background: var(--bg-passage); padding: 8px 13px;
+  font-size: 9pt; line-height: 1.55; margin-bottom: 8px;
+  text-align: justify;
+}
+.psg-lead {
+  margin-bottom: 5px; font-weight: 500;
+}
+.psg-chunk {
+  margin-top: 4px; padding-left: 8px; text-indent: -3px;
+}
+.psg-chunk .chunk-label {
+  font-weight: bold; color: var(--primary); margin-right: 3px;
+}
+.psg-box .blank-mark {
+  display: inline-block;
+  border: 1px solid #888; padding: 0 6px;
+  border-radius: 2px; background: white;
+  font-weight: bold; color: var(--accent); margin: 0 1px;
+}
+/* ⭐ Q5 빈칸 - 지문 안에 직접 표시 (밑줄 1개만, ⑤ 표시 없음) */
+.core-blank-inline {
+  display: inline-block;
+  padding: 0 8px;
+  color: var(--purple);
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.two-col {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px;
+}
+.col-left { border-right: 1px dashed #DDD; padding-right: 10px; }
+.col-right { padding-left: 6px; }
+.col-header {
+  font-size: 8.5pt; font-weight: bold; letter-spacing: 0.5px;
+  padding: 3px 8px; margin-bottom: 7px; border-radius: 3px;
+}
+.col-l-hdr { background: var(--bg-blue); color: var(--primary); border-left: 3px solid var(--primary); }
+.col-r-hdr { background: var(--bg-orange); color: var(--accent); border-left: 3px solid var(--accent); }
+.q-num {
+  display: inline-block; background: var(--primary); color: white;
+  width: 18px; height: 18px; border-radius: 4px;
+  font-size: 9pt; font-weight: bold;
+  text-align: center; line-height: 18px;
+  margin-right: 5px; vertical-align: middle;
+}
+.q-num.write { background: var(--accent); }
+.q-num.core { background: var(--purple); }
+.q-title {
+  font-weight: bold; font-size: 9.5pt; color: #111;
+  margin-bottom: 5px; margin-top: 12px;
+}
+.q-title:first-of-type { margin-top: 0; }
+
+.opt { font-size: 8.7pt; padding: 2px 4px; line-height: 1.55; }
+.opt-num { color: var(--primary); font-weight: bold; }
+.opt-num.purple { color: var(--purple); }
+.opts-order {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2px 6px;
+  font-size: 8.5pt; margin-bottom: 6px;
+}
+
+.statements { margin-bottom: 6px; }
+.stmt-item {
+  font-size: 8.5pt; line-height: 1.5; margin-bottom: 2px;
+  padding-left: 17px; text-indent: -17px;
+}
+.stmt-label {
+  display: inline-block; width: 13px; font-weight: bold;
+  color: var(--primary); text-indent: 0;
+}
+.opts-count {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  font-size: 8.5pt; margin-top: 4px;
+}
+.opts-count .opt { padding: 0; }
+
+.bogi {
+  border: 1.5px solid var(--accent); border-radius: 4px;
+  background: var(--bg-yellow); padding: 6px 9px;
+  font-size: 8.3pt; line-height: 1.6; margin: 4px 0 5px 32px;
+  text-align: justify;
+}
+.bogi-label { font-weight: bold; color: var(--accent); margin-right: 4px; font-size: 8pt; }
+.fill-row { display: flex; align-items: flex-start; gap: 8px; margin: 6px 0; }
+.fill-row b {
+  width: 24px; flex-shrink: 0; font-size: 9.5pt; color: var(--accent);
+  padding-top: 2mm; font-weight: bold;
+}
+.fill-line-big {
+  flex: 1; border: 1px solid #999; border-radius: 3px; background: #fff;
+  height: 12mm;
+  background-image:
+    repeating-linear-gradient(to bottom,
+      transparent 0, transparent 5.5mm,
+      #ddd 5.5mm, #ddd 6mm);
+}
+
+/* 답지 */
+.ans-start { page-break-before: always; }
+.ans-hdr {
+  background: linear-gradient(135deg, #E2EAF5, #DCE6F5);
+  border-left: 4px solid var(--accent);
+  padding: 6px 11px; margin-bottom: 7px; border-radius: 0 4px 4px 0;
+}
+.ans-hdr .hdr-title { color: var(--accent); font-size: 11pt; }
+.ans-block {
+  border: 1px solid #DDD; border-radius: 4px;
+  padding: 4px 7px; margin-bottom: 4px; background: #FAFAFA;
+  page-break-inside: avoid; break-inside: avoid;
+}
+.ans-block-title {
+  font-size: 9.5pt; font-weight: bold; color: var(--accent);
+  padding-bottom: 1px; margin-bottom: 2px; border-bottom: 1px solid #DDD;
+}
+.ans-row {
+  display: flex; align-items: center; gap: 5px;
+  padding: 1px 0; font-size: 7.8pt;
+}
+.ans-row b.q-name { width: 60px; flex-shrink: 0; font-size: 7.8pt; }
+.ans-row .ans-val {
+  font-weight: bold; color: var(--accent); font-size: 8.7pt;
+  padding: 0 5px; background: var(--bg-orange); border-radius: 3px;
+}
+.ans-row .ans-detail { color: #555; font-size: 7.3pt; flex: 1; }
+.blank-ans-grid {
+  display: grid; grid-template-columns: auto 1fr; gap: 0px 8px;
+  margin: 1px 0; font-size: 7.8pt;
+}
+.blank-ans-grid b { color: var(--primary); }
+.blank-ans-grid .ans-val {
+  color: var(--accent); font-weight: bold;
+  padding: 0 5px; background: var(--bg-orange); border-radius: 3px;
+  display: inline-block; font-size: 7.8pt;
+}
+.expl-box {
+  background: #F8F9FB; border-left: 2.5px solid var(--primary);
+  padding: 2px 6px; margin: 1.5px 0;
+  font-size: 7.3pt; line-height: 1.35;
+}
+.expl-label { font-weight: bold; color: var(--primary); margin-right: 3px; }
+.expl-label.purple { color: var(--purple); }
+
+/* ★★★ NEW: A 답지 컴팩트 행 (정답+해설 통합) ★★★ */
+.ans-row-c {
+  display: grid;
+  grid-template-columns: 56px 28px 1fr;
+  grid-template-rows: auto auto;
+  gap: 1px 6px;
+  padding: 3px 0;
+  border-bottom: 1px dashed #E5E5E5;
+  align-items: baseline;
+}
+.ans-row-c:last-child { border-bottom: none; }
+.ans-row-c b.q-name {
+  grid-column: 1; grid-row: 1;
+  font-size: 7.8pt; color: var(--accent); font-weight: bold;
+}
+.ans-row-c .ans-val {
+  grid-column: 2; grid-row: 1;
+  font-weight: bold; color: var(--accent); font-size: 8.7pt;
+  padding: 0 5px; background: var(--bg-orange); border-radius: 3px;
+  text-align: center;
+}
+.ans-row-c .ans-text {
+  grid-column: 3; grid-row: 1;
+  color: #333; font-size: 7.7pt; line-height: 1.35;
+}
+.ans-row-c .ans-write {
+  display: inline-block;
+  background: var(--bg-orange); color: var(--accent);
+  padding: 0 5px; border-radius: 3px; font-weight: bold;
+}
+.ans-row-c .ans-note {
+  grid-column: 2 / -1; grid-row: 2;
+  color: #777; font-size: 6.9pt; line-height: 1.3;
+  padding-left: 4px;
+  border-left: 2px solid #DDD;
+  margin-top: 1px;
+}
+.ans-row-c .ans-note b {
+  color: var(--accent);
+  font-size: 6.9pt;
+}
+
+.match-tbl { width: 100%; border-collapse: collapse; margin: 2px 0; font-size: 6.7pt; }
+.match-tbl th {
+  background: var(--bg-blue); padding: 1.5px 4px; text-align: left;
+  border: 1px solid var(--border); font-size: 6.7pt;
+}
+.match-tbl td {
+  padding: 1.5px 4px; border: 1px solid var(--border); vertical-align: top;
+  font-size: 6.7pt; line-height: 1.3;
+}
+.match-tbl td.x-mark { color: var(--red); font-weight: bold; text-align: center; }
+.match-tbl td.o-mark { color: var(--green); font-weight: bold; text-align: center; }
+.match-tbl .stmt-kr { color: #555; font-style: italic; }
+.match-tbl .stmt-why { color: var(--accent); }
+.match-tbl .stmt-why-true { color: var(--green); }
+.grammar-note {
+  background: #EAF0FA; border: 1px solid #C5D5EC; border-radius: 3px;
+  padding: 2.5px 6px; margin: 1.5px 0; font-size: 7pt; line-height: 1.4;
+}
+.grammar-note b { color: var(--accent); }
+
+/* Q3 어휘 유형 — 지문 내 밑줄 */
+/* 수능 30번 스타일 — 번호는 본문과 같은 크기로 나란히, 위첨자가 아니다.
+   기출 지면에서 '① revealing' 처럼 원숫자와 단어가 같은 줄에 붙어 나온다. */
+.vmark { font-size: inherit; vertical-align: baseline; margin-right: 1.5px; color: inherit; font-weight: normal; }
+.vword { text-decoration: underline; text-underline-offset: 2.5px; text-decoration-thickness: 0.7px; }
+.vocab-detail { color: #555; font-size: 7.4pt; line-height: 1.55; }
+.vocab-detail .vd-line { margin-top: 2px; }
+.vocab-detail .vd-line b { color: #333; margin-right: 3px; }
+.vocab-detail .vd-item { display: inline-block; margin-right: 11px; white-space: nowrap; }
+.vocab-detail .vd-arrow { color: #999; margin: 0 1px; }
+/* ★ 어휘 답지에서 어느 쪽이 시험지에 나간 말이고 어느 쪽이 지문 원래 말인지
+   구분이 안 돼 붙인 꼬리표. 시험지에 보이는 것이 (변형), 지문에 있던 것이 (원문). */
+.vd-tag {
+  font-size: 6.4pt; color: #8A94A6; margin-left: 2px;
+  vertical-align: baseline; font-weight: normal;
+}
+.opts-inline { display: flex; flex-wrap: wrap; gap: 3px 14px; }
+.opts-inline .opt { flex: 0 0 auto; }
+
+/* 수능 40번식 밑줄 빈칸 */
+.ublank {
+  display: inline-block;
+  min-width: 58px;
+  border-bottom: 1.6px solid #333;
+  text-align: center;
+  font-weight: 700;
+  color: #1a1a1a;
+  padding: 0 5px;
+  margin: 0 2px;
+  line-height: 1.15;
+}
+
+
+/* 헤더 로고 텍스트 (LEVEL ME UP) */
+.hdr-logo-text {
+  font-family: 'Noto Sans CJK KR', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+  font-weight: 900;
+  font-size: 14pt;
+  letter-spacing: 0.5px;
+  color: #1a1a1a;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+
+/* ── 페이지 하단 MEMO ────────────────────────────────
+   지문 박스(.psg-box)와 같은 모양 — 1px 테두리, radius 5px.
+   괘선은 넣지 않는다(자유 필기).
+   깨짐 방지: page-break-inside:avoid 로 페이지 경계에서 잘리지 않게 하고
+   높이는 고정한다. 여백을 채우려고 늘리면 긴 지문에서 페이지가 넘친다. */
+/* ★ 자리가 모자라면 MEMO 를 통째로 뺀다 (_memo_fit).
+   MEMO 는 남는 여백에 놓는 필기칸이라, 페이지가 꽉 차면 다음 장으로 밀려
+   MEMO 만 찍힌 빈 페이지가 생겼다. 문항은 지울 수 없으니 MEMO 를 뺀다.
+   판단은 문서 끝의 스크립트가 실제 높이를 재서 한다 — CSS 로는 잴 수 없다. */
+.memo-hidden { display: none !important; }
+.memo-box {
+  margin-top: auto;          /* ★ 남는 공간을 위로 밀어 MEMO 를 아래쪽에 붙인다 */
+  padding-top: 7px;          /* 위 문항과 최소 간격 */
+  /* ★ 바닥에 딱 붙이지 않는다 — 아래 8mm 는 페이지 번호 자리로 비워둔다. */
+  margin-bottom: 8mm;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+/* 페이지 번호 자리 — MEMO 아래 8mm 를 비워둔다(.memo-box 의 margin-bottom).
+   번호는 여기서 넣지 않는다(따로 처리). 나중에 필요하면 .q-page 안 마지막에
+   <div class="page-no">…</div> 를 넣으면 이 스타일이 적용된다.
+   @page 의 @bottom-center 는 크롬이 지원하지 않아 요소로 놓아야 한다. */
+.page-no {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  text-align: center;
+  font-size: 8pt; color: #8A94A6;
+  letter-spacing: 1px;
+}
+.memo-hdr {
+  font-size: 7.5pt; font-weight: bold; color: var(--accent);
+  letter-spacing: 1px; margin-bottom: 3px; padding-left: 2px;
+}
+.memo-area {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #fff;
+  /* 21mm — 라벨(약 4mm)·간격까지 더하면 블록 전체가 28mm 다.
+     긴 지문 기준 여유가 11mm 남는다(272 - 헤더10 - 지문95 - 문항120 - 28 - 번호8).
+     더 키우면 긴 지문에서 페이지가 갈린다. */
+  height: 21mm;
+}
+</style>
 </head>
-
 <body>
 
-    {# ===== JINJA2 MACROS ===== #}
-    {% macro stage_nav(active, phase_class='', phase_text='') %}
-    <div class="stage-phase-row">
-        <span class="stage-phase {{ phase_class }}">{{ phase_text }}</span>
-        <div class="stage-nav">
-            {% for i in range(1, 11) %}
-            <span class="stage-nav-dot{% if i == active %} active{% endif %}">{{ i }}</span>
-            {% endfor %}
-        </div>
-    </div>
-    {% endmacro %}
+{% for item in passages %}
+{# ★ 안내문(수능 27·28번)은 주제·일치·빈칸 3문항 (_s152) #}
+{% set _notice = (item.data.layout == 'notice') %}
+    {# _s163: 도표도 같은 3문항 경로를 탄다. 화면 문구만 갈라 쓴다. #}
+    {% set _kind = '도표' if item.data.layout_kind == 'chart' else '안내문' %}
+<div class="q-page">
+  <div class="hdr">
+    <span class="hdr-title">
+      <span class="hdr-logo"></span><span class="hdr-logo-text">LEVEL ME UP</span>
+      변형문제 — 유형 A{% if school_name %} · {{ school_name }}{% endif %}
+    </span>
+    <span class="hdr-right">{{ item.label }}</span>
+  </div>
 
-    {% macro check_group() %}
-    <div class="check-group">
-        <span class="check-box">1</span>
-        <span class="check-box">2</span>
-        <span class="check-box">3</span>
-    </div>
-    {% endmacro %}
-
-    {% if not levels or 1 in levels %}
-    {# ==================== STAGE 1: 지문 핵심 어휘 ==================== #}
-    <div class="page page-stage-1">
-        <div class="page-head">
-            <div class="page-header"><span class="page-header-left">레벨미업학원</span><span class="page-header-right">{{
-                    subject }}
-                    - {{ challenge_title }}</span></div>
-            <div class="stage-info-block">
-                <div class="stage-info-subject">{{ subject }}</div>
-                <div class="stage-info-challenge">{{ challenge_title }}</div>
-            </div>
-            {{ stage_nav(1, 'stage-phase-before', '수업 전') }}
-            <div class="checklist">
-                <div class="checklist-title"><span>☑ 수업 전 체크리스트 - Stage 1</span></div>
-                <table class="checklist-table">
-                    <tr>
-                        <td class="checklist-step"><span class="step-number">Step 1.</span> 지문 핵심 어휘 암기</td>
-                        <td class="checklist-checks">{{ check_group() }}</td>
-                        <td class="checklist-step"><span class="step-number">Step 2.</span> 어휘 확인 테스트</td>
-                        <td class="checklist-checks">{{ check_group() }}</td>
-                    </tr>
-                    <tr>
-                        <td class="checklist-step"><span class="step-number">Step 3.</span> 틀린 단어 사전 찾아 채우기</td>
-                        <td class="checklist-checks">{{ check_group() }}</td>
-                        <td></td>
-                        <td></td>
-                    </tr>
-                </table>
-            </div>
-        </div>
-        <div class="page-content">
-            <div class="content-block">
-                <div class="section-title title-MD mt4">Stage 1 지문 핵심 어휘</div>
-                <p class="step-badge">STEP 1</p>
-                <table class="vtbl">
-                    {% for i in range(0, vocab|length, 2) %}
-                    <tr>
-                        <td class="vtbl-word-cell"><span class="vtbl-word-name">{{ vocab[i].word }}</span><br><span
-                                class="vtbl-syn">{{ vocab[i].synonyms }}</span></td>
-                        <td class="vtbl-mean-cell">{{ vocab[i].meaning }}</td>
-                        {% if i+1 < vocab|length %} <td class="vtbl-word-cell"><span class="vtbl-word-name">{{
-                                vocab[i+1].word
-                                }}</span><br><span class="vtbl-syn">{{ vocab[i+1].synonyms }}</span></td>
-                            <td class="vtbl-mean-cell">{{ vocab[i+1].meaning }}</td>
-                            {% else %}<td class="vtbl-word-cell"></td>
-                            <td class="vtbl-word-cell"></td>{% endif %}
-                    </tr>{% endfor %}
-                </table>
-            </div>
-            <div class="content-block">
-                <p class="step-badge">STEP 2</p>
-                <p class="text-bold mb4 fs-10">어휘 확인 테스트</p>
-                <table class="test-tbl">
-                    <tr>
-                        <td class="test-col w33">
-                            <p class="text-bold mb2">A. 뜻 쓰기</p>
-                            <table class="voc-test-inner">
-                                {% for w in test_a %}
-                                <tr>
-                                    <td class="voc-test-word">{{ loop.index }}. {{ w }}</td>
-                                    <td class="voc-test-ans"></td>
-                                </tr>
-                                {% endfor %}
-                            </table>
-                        </td>
-                        <td class="test-col w33">
-                            <p class="text-bold mb2">B. 유의어 1개 쓰기</p>
-                            <table class="voc-test-inner">
-                                {% for w in test_b %}
-                                <tr>
-                                    <td class="voc-test-word">{{ loop.index }}. {{ w }}</td>
-                                    <td class="voc-test-ans"></td>
-                                </tr>
-                                {% endfor %}
-                            </table>
-                        </td>
-                        <td class="test-col w33">
-                            <p class="text-bold mb2">C. 철자 쓰기</p>
-                            <table class="voc-test-inner">
-                                {% for w in test_c %}
-                                <tr>
-                                    <td class="voc-test-word">{{ loop.index }}. {{ w }}</td>
-                                    <td class="voc-test-ans"></td>
-                                </tr>
-                                {% endfor %}
-                            </table>
-                        </td>
-                    </tr>
-                </table>
-            </div>
-            <div class="content-block">
-                <p class="step-badge">STEP 3</p>
-                <p class="text-bold mb4">D. 틀린 단어 사전 찾아 채우기</p>
-                <table class="word-table word-table-compact">
-                    <tr class="word-table-row">
-                        {% for col in range(3) %}
-                        <td class="word-table-cell">
-                            <p class="word-table-row word-table-row-fixed">
-                                <b class="word-table-bold">단어:</b>
-                                <span class="input-line word-table-line input-line-h13"></span>
-                            </p>
-                            <p class="word-table-row word-table-row-fixed">
-                                <b class="word-table-bold">뜻</b>
-                                <span class="word-table-group">1.<span
-                                        class="input-line word-table-line word-table-line-h10"></span></span>
-                                <span class="word-table-group">2.<span
-                                        class="input-line word-table-line word-table-line-h10"></span></span>
-                                <span class="word-table-group">3.<span
-                                        class="input-line word-table-line word-table-line-h10"></span></span>
-                            </p>
-                            <p class="word-table-row word-table-row-fixed">
-                                <b class="word-table-bold">예문</b>
-                                <span class="input-line-block word-table-line-full word-table-line-full-h10"></span>
-                            </p>
-                        </td>
-                        {% endfor %}
-                    </tr>
-                </table>
-            </div>
-        </div>
-        <div class="page-foot">
-            <div class="sol">
-                <p class="sol-title">[핵심 어휘 학습 솔루션]</p>
-                <div class="sol-steps">
-                    <div class="sol-step">① 영어 가리고 뜻 암기 → 막힌 단어 표시 후 다시 암기</div>
-                    <div class="sol-step">② 외운 어휘는 유의어 4개까지 묶어 추가 암기</div>
-                    <div class="sol-step">③ STEP 2 테스트 → 틀린 단어만 STEP 3 사전 정리</div>
-                </div>
-            </div>
-        </div>
-    </div>
+  {# 지문: (a)(b)(c)(d) 줄바꿈 + Q5 빈칸 ⑤가 지문 안에 삽입 #}
+  <div class="psg-box">
+    {% if item.data.intro and item.data.intro|trim %}
+    <div class="psg-lead">{{ item.data.intro | safe }}</div>
     {% endif %}
-
-    {% if not levels or 2 in levels %}
-    {# ==================== STAGE 2: 해석 예습 ==================== #}
-    <div class="page page-stage-2">
-        <div class="page-head">
-            <div class="page-header"><span class="page-header-left">레벨미업학원</span><span class="page-header-right">{{
-                    subject }}
-                    - {{ challenge_title }}</span></div>
-            {{ stage_nav(2, 'stage-phase-before', '수업 전') }}
-            <div class="checklist">
-                <div class="checklist-title"><span>☑ 수업 전 체크리스트 - Stage 2</span><span class="color-primary">★별표 문장은 수업
-                        시간에 확인합니다</span></div>
-                <table class="checklist-table">
-                    <tr>
-                        <td class="checklist-step"><span class="step-number">Step 1.</span> 모르는 단어에 <mark>형광펜</mark> 표시
-                        </td>
-                        <td class="checklist-checks">{{ check_group() }}</td>
-                        <td class="checklist-step"><span class="step-number">Step 2.</span> 사전 찾아 아래에 정리하기</td>
-                        <td class="checklist-checks">{{ check_group() }}</td>
-                    </tr>
-                    <tr>
-                        <td class="checklist-step"><span class="step-number">Step 3.</span> 한 문장씩 해석 연습</td>
-                        <td class="checklist-checks">{{ check_group() }}</td>
-                        <td class="checklist-step"><span class="step-number">Step 4.</span> 해석 안 되는 문장에 <span
-                                class="warning-text">★별표</span></td>
-                        <td class="checklist-checks">{{ check_group() }}</td>
-                    </tr>
-                </table>
-            </div>
-        </div>
-        <div class="page-content">
-            <div class="content-block">
-                <div class="section-title-row mt4">
-                    <div class="section-title title-LG">Stage 2 해석 예습</div>
-                    <span class="fs-75 text-muted">※ 모르는 단어 → <mark>형광펜</mark> / 해석 안 되는 문장 → ★표시</span>
-                </div>
-                <div class="passage passage-xs p-dense lh-175">{{ passage }}</div>
-                <div class="mt8">
-                    <p class="text-bold mb2 fs-10"><mark>형광펜</mark> 친 단어 사전검색 후 정리하기</p>
-                    <p class="text-small text-muted mb4"><span class="text-bold">Step 1.</span> <mark>형광펜</mark> 친 단어 옮겨 적기 → <span
-                            class="text-bold">Step 2.</span> 사전 검색 후 뜻/유의어 정리</p>
-                    <table class="word-table word-table-spacious">
-                        <tr class="word-table-row word-table-row-nobreak">
-                            {% for col in range(3) %}
-                            <td class="word-table-cell word-table-cell-light">
-                                <p class="word-table-row word-table-row-fixed">
-                                    <b class="word-table-bold">단어:</b>
-                                    <span class="input-line word-table-line input-line-h13"></span>
-                                </p>
-                                <p class="word-table-row word-table-row-fixed">
-                                    <b class="word-table-bold">뜻</b>
-                                    <span class="word-table-group">1.<span
-                                            class="input-line word-table-line word-table-line-h17"></span></span>
-                                    <span class="word-table-group">2.<span
-                                            class="input-line word-table-line word-table-line-h17"></span></span>
-                                </p>
-                                <p class="word-table-row word-table-row-fixed">
-                                    <b class="word-table-bold">유의어</b>
-                                    <span class="word-table-group">1.<span
-                                            class="input-line word-table-line word-table-line-h17"></span></span>
-                                    <span class="word-table-group">2.<span
-                                            class="input-line word-table-line word-table-line-h17"></span></span>
-                                </p>
-                            </td>
-                            {% endfor %}
-                        </tr>
-                    </table>
-                </div>
-            </div>
-            <div class="content-block bi-avoid">
-                <div class="box-light mt6">
-                    <p class="text-bold fs-9 mb4">▼ 해석 확인 (스스로 해석 후 비교)</p>
-                    <p class="text-small lh-15 color-secondary">{{ translation }}</p>
-                </div>
-                <div class="sketch-box mt6">
-                    <p class="sketch-label">구조화하세요</p>
-                </div>
-            </div>
-        </div>
-        <div class="page-foot">
-            <div class="sol">
-                <p class="sol-title">[해석 예습 솔루션]</p>
-                <div class="sol-steps">
-                    <div class="sol-step">① 우리말 해설을 보며 본인의 해석이 정확한지 확인해 보세요.</div>
-                    <div class="sol-step">② 선생님이 <strong>해석을 확인할 테니</strong> <u>수업 전 다시 해석 연습 후 입장!</u></div>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    {% if not levels or 3 in levels %}
-    {# ==================== STAGE 3: 문장별 분석 (동적 페이지 분할) ==================== #}
-    {% set ns = namespace(offset=0) %}
-    {% for chunk in sentence_chunks %}
-    <div class="page page-stage-3">
-        <div class="page-head">
-            <div class="page-header"><span class="page-header-left">레벨미업학원</span><span class="page-header-right">{{
-                    subject }}
-                    - {{ challenge_title }}</span></div>
-            {{ stage_nav(3, 'stage-phase-class', '수업 중') }}
-            {% if loop.first %}
-            <div class="checklist">
-                <div class="checklist-title"><span>☑ 수업 중 체크리스트 - Stage 3</span><span class="color-primary">★별표 문장은 수업
-                        시간에 확인합니다</span></div>
-                <table class="checklist-table">
-                    <tr>
-                        <td class="checklist-step"><span class="step-number">Step 1.</span> 해석 — 단어+문법으로 정확하게 해석하기</td>
-                        <td class="checklist-checks">{{ check_group() }}</td>
-                        <td class="checklist-step"><span class="step-number">Step 2.</span> 이해 — 나만의 예시로 문장 내용 확실히 이해하기
-                        </td>
-                        <td class="checklist-checks">{{ check_group() }}</td>
-                    </tr>
-                    <tr>
-                        <td class="checklist-step"><span class="step-number">Step 3.</span> 추론 — 다음에 나올 내용 예측 → 다음 문장에서
-                            확인</td>
-                        <td class="checklist-checks">{{ check_group() }}</td>
-                        <td class="checklist-step"><span class="step-number">Step 4.</span> 반복 — 모든 문장에 해석→이해→추론 반복</td>
-                        <td class="checklist-checks">{{ check_group() }}</td>
-                    </tr>
-                </table>
-            </div>
-            {% endif %}
-        </div>
-        <div class="page-content">
-            <div class="content-block">
-                {% if loop.first %}
-                <div class="section-title title-LG mt4">Stage 3 문장별 분석</div>
-                <p class="step-badge">STEP 1</p>
-                <p class="mb8 fs-9">문장의 기본 구성요소(S/V/O/C)를 표시한 후, 수업을 들으며 중요한 표현을 필기하시오.</p>
-                {% else %}
-                <p class="step-badge">STEP 1 (계속)</p>
-                {% endif %}
-                {% for sent in chunk %}
-                <div class="sent-block">
-                    <p class="sent-english"><strong>{{ ns.offset + loop.index }}.</strong> {{ sent }}</p>
-                    <div class="sent-korean"></div>
-                </div>
-                {% endfor %}
-                {% set ns.offset = ns.offset + chunk|length %}
-            </div>
-        </div>
-        <div class="page-foot">
-            {% if loop.last %}
-            <div class="sol">
-                <p class="sol-title">[문장 분석 솔루션]</p>
-                <div class="sol-steps">
-                    <div class="sol-step">① 문법 강조 사항을 <u>설명할 수 있는 수준으로</u> 이해했는지 확인하세요!</div>
-                    <div class="sol-step">② 추가로 정리할 사항은 하단에 작성해보세요!</div>
-                </div>
-            </div>
-            {% endif %}
-        </div>
-    </div>
+    {% set _paras = item.data.paragraphs_render or item.data.paragraphs %}
+    {% for para in _paras %}
+      <div class="psg-chunk">
+        {% if not _notice %}<span class="chunk-label">{{ para[0] }}</span>{% endif %}{{ para[1] | replace("<BLANK_A>", '<span class="ublank">(A)</span>') | replace("<BLANK_B>", '<span class="ublank">(B)</span>') | safe }}
+      </div>
     {% endfor %}
-    {% endif %}
+  </div>
 
-    {% if not levels or 4 in levels %}
-    {# ==================== STAGE 4: 수업 직후 정리 (재구성) ==================== #}
-    <div class="page page-stage-4">
-        <div class="page-head">
-            <div class="page-header"><span class="page-header-left">레벨미업학원</span><span class="stage-notice">★ 수업이 끝나면 바로
-                    작성하세요!</span><span class="page-header-right">{{
-                    subject }}
-                    - {{ challenge_title }}</span></div>
-            {{ stage_nav(4, 'stage-phase-class', '수업 직후') }}
-            <div class="checklist">
-                <div class="checklist-title">☑ 수업 직후 체크리스트 - Stage 4</div>
-                <table class="checklist-table">
-                    <tr>
-                        <td class="checklist-step"><span class="step-number">Step 1.</span> 주제문 찾기 — <mark>형광펜</mark> 치고 직접 쓰기</td>
-                        <td class="checklist-checks">{{ check_group() }}</td>
-                        <td class="checklist-step"><span class="step-number">Step 2.</span> 선지 확인 — 주제와 가장 유사한 선지 찾기
-                        </td>
-                        <td class="checklist-checks">{{ check_group() }}</td>
-                    </tr>
-                </table>
-            </div>
-        </div>
-        <div class="page-content">
-            <div class="content-block">
-                <div class="section-title title-LG mt4">Stage 4 수업 직후 정리</div>
-                <div class="passage passage-sm p-dense">{{ topic_passage }}</div>
-            </div>
-            <div class="content-block">
-                <p class="step-badge">STEP 1</p>
-                <p class="step-title">주제문 직접 쓰기</p>
-                <div class="box-light mt4">
-                    <p class="fs-9">주제: </p>
-                </div>
-            </div>
-            <div class="content-block">
-                <p class="step-badge">STEP 2</p>
-                <p class="step-title">주제와 가장 유사한 내용을 모두 고르시오</p>
-                {% for opt in topic_options %}
-                <div class="opt-row-stack">
-                    <span class="opt-text">{{ opt }}</span>
-                    <span class="opt-memo-indent">← 오답정리</span>
-                </div>{% endfor %}
-                <p class="ans-row">답: <span class="input-line input-ans"></span></p>
-                <div class="sketch-box mt6">
-                    <p class="sketch-label">구조화하세요</p>
-                </div>
-            </div>
-        </div>
-        <div class="page-foot">
-            <div class="sol">
-                <p class="sol-title">[주제 찾기 솔루션]</p>
-                <div class="sol-steps">
-                    <div class="sol-step">⚠ 주제문 선지에서 <strong>추론적 사고 금지!</strong> 글에서 <strong>언급되지 않은 내용은 오답</strong>
-                    </div>
-                    <div class="sol-step">① 지문 내 <strong>주제문을 다시 <mark>형광펜</mark></strong> 치기 / 주제문 직접 쓰세요.</div>
-                    <div class="sol-step">② 그 내용과 가장 유사한 비유적/문맥적 내용을 찾으세요.</div>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
+  <div class="two-col">
 
-    {% if not levels or 5 in levels %}
-    {# ==================== STAGE 5: 글의 흐름 (2단 구성) ==================== #}
-    <div class="page page-stage-5">
-        <div class="page-head">
-            <div class="page-header"><span class="page-header-left">레벨미업학원</span><span class="stage-notice">여기서부터
-                    복습입니다!</span><span class="page-header-right">{{
-                    subject }}
-                    - {{ challenge_title }}</span></div>
-            {{ stage_nav(5, 'stage-phase-after', '수업 후') }}
-            <div class="checklist">
-                <div class="checklist-title">☑ 수업 후 복습 체크리스트</div>
-                <table class="checklist-table">
-                    <tr>
-                        <td class="checklist-step">Stage 5 글의 흐름</td>
-                        <td class="checklist-checks">{{ check_group() }}</td>
-                        <td class="checklist-step">Stage 6 빈칸 추론</td>
-                        <td class="checklist-checks">{{ check_group() }}</td>
-                    </tr>
-                    <tr>
-                        <td class="checklist-step">Stage 7 어법</td>
-                        <td class="checklist-checks">{{ check_group() }}</td>
-                        <td class="checklist-step">Stage 8 어휘</td>
-                        <td class="checklist-checks">{{ check_group() }}</td>
-                    </tr>
-                    <tr>
-                        <td class="checklist-step">Stage 9 내용 일치</td>
-                        <td class="checklist-checks">{{ check_group() }}</td>
-                        <td class="checklist-step">Stage 10 영작</td>
-                        <td class="checklist-checks">{{ check_group() }}</td>
-                    </tr>
-                </table>
-            </div>
-        </div>
-        <div class="page-content">
-            <div class="content-block">
-                <div class="section-title title-MD mt4">Stage 5 글의 흐름 (순서 + 삽입)</div>
-                <div class="flow-2col mt4">
-                    <p class="flow-section-label">A. 순서 배열</p>
-                    <p class="mb2">주어진 문장 다음에 이어질 글의 순서를 고르시오.</p>
-                    <div class="passage flow-pass-intro p-dense">{{ order_intro }}</div>
-                    <div class="flow-abc-block">
-                        {% for label, text in order_paragraphs %}<p class="mb2"><strong>({{ label }})</strong> {{
-                            text }}</p>{%
-                        endfor %}
-                    </div>
-                    <p class="fs-85 mt2">①(A)-(C)-(B) ②(B)-(A)-(C) ③(B)-(C)-(A) ④(C)-(A)-(B) ⑤(C)-(B)-(A)</p>
-                    <p class="flow-section-label-sep">B. 문장 삽입</p>
-                    <p class="mb2">주어진 문장이 들어가기에 가장 적절한 곳을 고르시오.</p>
-                    <div class="passage flow-pass-insert p-dense">{{ insert_sentence }}</div>
-                    <div class="passage-b flow-pass-intro p-dense mt2">{{ insert_passage }}</div>
-                    <p class="flow-section-label-sep">(심화) 전체 문장 순서 배열</p>
-                    <p class="text-muted mb4 fs-75">지문의 모든 문장을 정확한 순서로 배열하여 글의 흐름을 완벽히 체화합니다.</p>
-                    {% for label, text in full_order_blocks %}
-                    <div class="order-block"><strong>({{ label }})</strong> {{ text }}</div>
-                    {% endfor %}
-                    <p class="flow-order-ans mt6">{% for _ in full_order_blocks %}( &nbsp; ){% if not loop.last %}-{%
-                        endif
-                        %}{% endfor %}</p>
-                    <p class="flow-err-note">틀리면, 정답 기호를 ( )에 적고 위쪽에 문장 내용을 한국말로 한 줄 요약하세요.</p>
-                    {% for label, text in full_order_blocks %}
-                    <p class="flow-err-row">( &nbsp;&nbsp; ) : <span class="input-line input-80p"></span></p>
-                    {% endfor %}
-                    <div class="sol">
-                        <p class="sol-title">[글의 흐름 솔루션]</p>
-                        <p class="fs-8 mb2">• 순서/삽입이 틀렸다면 <strong>Stage 4 주제문 정리로 돌아가세요.</strong></p>
-                        <table class="sol-step-tbl">
-                            <tr>
-                                <td class="sol-step-label">[순서]</td>
-                                <td>
-                                    <span class="sol-step-line">★ 연결 단서로 한문장씩 순서 연결</span>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td class="sol-step-label">[삽입]</td>
-                                <td>
-                                    <span class="sol-step-line">★ 핵심어·연결사 파악 + 앞뒤 문장 논리 확인</span>
-                                </td>
-                            </tr>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="page-foot"></div>
-    </div>
-    {% endif %}
+    <div class="col-left">
+      <div class="col-header col-l-hdr">[ {{ _kind ~ ' — 주제 파악' if _notice else '객관식 — 내용 이해' }} ]</div>
 
-    {% if not levels or 6 in levels %}
-    {# ==================== STAGE 6: 빈칸 추론 ==================== #}
-    <div class="page page-stage-6">
-        <div class="page-head">
-            <div class="page-header"><span class="page-header-left">레벨미업학원</span><span class="page-header-right">{{
-                    subject }}
-                    - {{ challenge_title }}</span></div>
-            {{ stage_nav(6, 'stage-phase-after', '수업 후') }}
-        </div>
-        <div class="page-content">
-            <div class="content-block">
-                <div class="section-title title-SM mt4">Stage 6 빈칸 추론 (모두 고르시오)</div>
-                <p class="mt4 fs-8 color-primary text-bold mb4">[핵심] 원문 표현이 <span class="text-underline">유의어로
-                        변형</span>되어 출제.
-                    유의어 정리가 핵심!</p>
-                <div class="passage passage-xs p-dense">{{ blank_passage }}</div>
-            </div>
-            <div class="content-block">
-                <p class="step-badge">STEP 1</p>
-                <p class="step-title">빈칸에 들어갈 내용을 우리말로 적기</p>
-                <div class="box-light mt2 mb4">
-                    <p class="fs-85">빈칸 우리말: <span class="input-line input-lg"></span></p>
-                </div>
-            </div>
-            <div class="content-block">
-                <p class="step-badge">STEP 2</p>
-                <p class="step-title">그 내용과 같은 선지 찾기 (관련 유의어 + <span class="color-accent">비유적 표현</span> 주의!)</p>
-                {% for opt in blank_options %}
-                <div class="opt-row-stack">
-                    <span class="opt-text">{{ opt }}</span>
-                    <span class="opt-memo-indent">← 오답정리</span>
-                </div>{% endfor %}
-                <p class="ans-row">답: <span class="input-line input-ans"></span></p>
-            </div>
-        </div>
-        <div class="page-foot">
-            <div class="sol">
-                <p class="sol-title">[빈칸 유형 솔루션]</p>
-                <div class="sol-steps">
-                    <div class="sol-step">① 빈칸에 들어갈 내용을 우리말로 먼저 적으세요. → 빈칸 우리말:</div>
-                    <div class="sol-step">② 그 내용과 같은 선지를 찾으세요. (유의어 + <strong>비유적 표현</strong> 주의!)</div>
-                </div>
-                <p class="mt4 fs-8">③ 틀린 선지 <u>단어 정리</u> <strong>꼭</strong> 할 것. &nbsp; 원문 단어: <span
-                        class="input-line input-32"></span> / 선지의 같은 의미 표현: 같은 <mark>형광펜</mark>으로 체크!</p>
-            </div>
-        </div>
-    </div>
-    {% endif %}
+      <div class="q-title"><span class="q-num">1</span> {{ '다음 도표가 나타내는 내용으로' if item.data.layout_kind == 'chart' else '다음 글의 주제로' }} 가장 적절한 것은?</div>
+      <div>
+        {% for opt in item.data.topic_options %}
+        <div class="opt"><span class="opt-num">{{ ['①','②','③','④','⑤'][loop.index0] }}</span> {{ opt }}</div>
+        {% endfor %}
+      </div>
 
-    {% if not levels or 7 in levels %}
-    {# ==================== STAGE 7-1: 어법 (괄호 속 올바른 표현 고르기 + 서술형) ==================== #}
-    <div class="page page-stage-7">
-        <div class="page-head">
-            <div class="page-header"><span class="page-header-left">레벨미업학원</span><span class="page-header-right">{{
-                    subject }}
-                    - {{ challenge_title }}</span></div>
-            {{ stage_nav(7, 'stage-phase-after', '수업 후') }}
-        </div>
-        <div class="page-content">
-            <div class="content-block">
-                <div class="section-title title-MD mt4">Stage 7-1 어법 (괄호 속 올바른 표현 고르기)</div>
-                <p class="step-badge">STEP 1. 어법 포인트 확인</p>
-                <p class="mb2 fs-85">아래 어법 문제를 순서대로 풀어보세요. 각 표현의 정답 근거를 반드시 확인하고 기록하세요.</p>
-                <p class="part-badge">PART 1. 기본적인 문장구조를 표시하여 <strong>정답의 근거를 분석</strong>해보기</p>
-                <div class="passage passage-xs p-dense">{{ grammar_bracket_passage }}</div>
-                <p class="part-badge mt4">PART 2. 각 번호에 해당하는 답을 <strong>'영어'</strong>로 작성</p>
-                {% set gram_ans_cols = 5 if grammar_bracket_count > 12 else 4 %}
-                <table class="gram-ans-tbl">
-                    {% for i in range(0, grammar_bracket_count, gram_ans_cols) %}
-                    <tr class="bi-avoid">
-                        {% for j in range(gram_ans_cols) %}
-                            {% if i + j < grammar_bracket_count %}
-                            <td class="gram-ans-cell">
-                                <p class="gram-ans-row"><span class="grammar-number word-table-bold">({{ i+j+1 }})</span><span class="gram-ans-line"></span></p>
-                                <p class="word-table-row-fixed text-muted fs-75"><span class="word-table-bold">틀린 이유:</span><span class="input-line word-table-line"></span></p>
-                                <p class="word-table-row-fixed text-muted fs-75"><span class="word-table-bold">문법 바로잡기:</span><span class="input-line word-table-line"></span></p>
-                            </td>
-                            {% else %}
-                            <td></td>
-                            {% endif %}
-                        {% endfor %}
-                    </tr>
-                    {% endfor %}
-                </table>
-            </div>
-            <div class="content-block">
-                <p class="step-badge">STEP 2. 어법 서술형 — 틀린 곳 찾아 고치기</p>
-                <p class="mb2 fs-85">다음 글에서 어법상 틀린 부분을 <strong>{{ grammar_error_count }}곳</strong> 찾아 바르게 고치시오. <span
-                        class="warning-text">(밑줄 없음!) 기본적인 문장구조를 표시하여 <strong>정답의 근거</strong>를 분석해보기</span></p>
-                <!-- <p class="mb2 fs-85">기본적인 문장구조를 표시하여 <strong>정답의 근거</strong>를 분석해보기</p> -->
-                <div class="passage passage-xs p-dense">{{ grammar_error_passage }}</div>
-                <p class="mt6 mb2 fs-85"><strong>답안 작성 및 오답정리</strong> (올바른 표현으로 고치지 못한 경우에도 무조건 오답정리)</p>
-                {% set gram_err_cols = 5 if grammar_error_count > 12 else 4 %}
-                <table class="gram-err-tbl">
-                    {% for i in range(0, grammar_error_count, gram_err_cols) %}
-                    <tr class="bi-avoid">
-                        {% for j in range(gram_err_cols) %}
-                            {% if i + j < grammar_error_count %}
-                            <td class="gram-err-cell">
-                                <p><span class="grammar-number">({{ i+j+1 }})</span> <span class="input-line input-xs input-primary"></span> <span class="grammar-option">→</span> <span class="input-line input-xs input-accent"></span></p>
-                                <p class="word-table-row-fixed text-muted fs-75"><span class="word-table-bold">틀린 이유:</span><span class="input-line word-table-line"></span></p>
-                                <p class="word-table-row-fixed text-muted fs-75"><span class="word-table-bold">문법 바로잡기:</span><span class="input-line word-table-line"></span></p>
-                            </td>
-                            {% else %}
-                            <td></td>
-                            {% endif %}
-                        {% endfor %}
-                    </tr>
-                    {% endfor %}
-                </table>
-            </div>
-        </div>
-        <div class="page-foot">
-            <div class="sol">
-                <p class="sol-title">[어법 유형 솔루션] : 모르겠으면 <strong>제발 물어보세요.</strong> 모르는 채로 넘어가는 게 가장 위험합니다.</p>
-                <div class="sol-steps">
-                    <div class="sol-step">① 문법적 이해 없이 단순 암기로 풀면 변형 시 <strong>반드시 틀립니다.</strong></div>
-                    <div class="sol-step">② 1회독 때 문법 미정리 시 시험 전 정리할 시간은 <strong>절대 없습니다.</strong></div>
-                </div>
-            </div>
-        </div>
+      {% if not _notice %}
+      <div class="q-title"><span class="q-num">2</span> 주어진 글 다음에 이어질 순서로 가장 적절한 것은?</div>
+      <div class="opts-order">
+        <div class="opt"><span class="opt-num">①</span> (A)-(C)-(B)</div>
+        <div class="opt"><span class="opt-num">②</span> (B)-(A)-(C)</div>
+        <div class="opt"><span class="opt-num">③</span> (B)-(C)-(A)</div>
+        <div class="opt"><span class="opt-num">④</span> (C)-(A)-(B)</div>
+        <div class="opt"><span class="opt-num">⑤</span> (C)-(B)-(A)</div>
+      </div>
+      {% endif %}
+
+      {% if item.data.vocab_items %}
+      <div class="q-title"><span class="q-num core">3</span> 다음 글의 밑줄 친 부분 중, 문맥상 낱말의 쓰임이 적절하지 <span style="color:var(--red); text-decoration:underline; font-weight:bold;">않은</span> 것은?</div>
+      <div class="opts-inline">
+        {% for v in item.data.vocab_items %}
+        <div class="opt"><span class="opt-num purple">{{ ['①','②','③','④','⑤'][loop.index0] }}</span> {{ v.shown_clean or v.shown }}</div>
+        {% endfor %}
+      </div>
+      {% elif item.data.core_blank_options %}
+      <div class="q-title"><span class="q-num core">3</span> 다음 빈칸에 들어갈 말로 가장 적절한 것은?</div>
+      <div>
+        {% for opt in item.data.core_blank_options %}
+        <div class="opt"><span class="opt-num purple">{{ ['①','②','③','④','⑤'][loop.index0] }}</span> {{ opt }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
 
-    {# ==================== STAGE 7-2: 어법 최종 체크 ==================== #}
-    <div class="page page-stage-7">
-        <div class="page-head">
-            <div class="page-header"><span class="page-header-left">레벨미업학원</span><span class="page-header-right">{{
-                    subject }}
-                    - {{ challenge_title }}</span></div>
-            {{ stage_nav(7, 'stage-phase-after', '수업 후') }}
-        </div>
-        <div class="page-content">
-            <div class="content-block">
-                <div class="section-title title-LG mt4">Stage 7-2 어법 최종 체크</div>
-                <p class="mt4 mb10 fs-95">핵심 문법을 스스로 상기하며 정리하고, 모르는 부분은 필기를 다시 보며 공부하세요.</p>
-                <div class="passage passage-wide p-dense">{{ passage }}</div>
-            </div>
-        </div>
-        <div class="page-foot">
-            <div class="sol">
-                <p class="sol-title">[어법 유형 솔루션] : 모르겠으면 <strong>제발 물어보세요.</strong> 모르는 채로 넘어가는 게 가장 위험합니다.</p>
-                <div class="sol-steps">
-                    <div class="sol-step">① 문법적 이해 없이 단순 암기로 풀면 변형 시 <strong>반드시 틀립니다.</strong></div>
-                    <div class="sol-step">② 1회독 때 문법 미정리 시 시험 전 정리할 시간은 <strong>절대 없습니다.</strong></div>
-                </div>
-            </div>
-        </div>
+    <div class="col-right">
+      <div class="col-header col-r-hdr">[ 일치판단 / 빈칸 서술 ]</div>
+
+      <div class="q-title"><span class="q-num">{{ 2 if _notice else 4 }}</span> {{ '다음 ' ~ _kind ~ '의' if _notice else '다음 글의' }} 내용과 일치하지 <span style="color:var(--red); text-decoration:underline; font-weight:bold;">않는</span> 진술의 개수는?</div>
+      <div class="statements">
+        {% for stmt in item.data.statements %}
+        <div class="stmt-item"><span class="stmt-label">{{ stmt[0] }}.</span> {{ stmt[1] }}</div>
+        {% endfor %}
+      </div>
+      <div class="opts-count">
+        <div class="opt"><span class="opt-num">①</span> 1개</div>
+        <div class="opt"><span class="opt-num">②</span> 2개</div>
+        <div class="opt"><span class="opt-num">③</span> 3개</div>
+        <div class="opt"><span class="opt-num">④</span> 4개</div>
+        <div class="opt"><span class="opt-num">⑤</span> 5개</div>
+      </div>
+
+      <div class="q-title"><span class="q-num write">{{ 3 if _notice else 5 }}</span> 빈칸 (A), (B)에 들어갈 말을 &lt;보기&gt;의 단어를 모두 사용하여 완성하시오.</div>
+      <div class="bogi">
+        <span class="bogi-label">&lt;보기&gt;</span>{{ item.data.bogi | join(' / ') }}
+      </div>
+      <div class="fill-row"><b>(A)</b><span class="fill-line-big"></span></div>
+      <div class="fill-row"><b>(B)</b><span class="fill-line-big"></span></div>
     </div>
-    {% endif %}
 
-    {% if not levels or 8 in levels %}
-    {# ==================== STAGE 8: 어휘 (괄호 속 올바른 표현 고르기) ==================== #}
-    <div class="page page-stage-8">
-        <div class="page-head">
-            <div class="page-header"><span class="page-header-left">레벨미업학원</span><span class="page-header-right">{{
-                    subject }}
-                    - {{ challenge_title }}</span></div>
-            {{ stage_nav(8, 'stage-phase-after', '수업 후') }}
-        </div>
-        <div class="page-content">
-            <div class="content-block">
-                <div class="section-title title-MD mt4">Stage 8 어휘 (괄호 속 올바른 표현 고르기)</div>
-                <p class="part-badge">PART A. 괄호 속 올바른 어휘 고르기</p>
-                <div class="passage passage-md p-dense">{{ vocab_advanced_passage }}</div>
-                <table class="vocanswer-tbl">
-                    <tr>{% for n in range(1, vocab_parta_answers|length + 1) %}{% if n == 6 %}</tr>
-                    <tr>{% endif %}<td class="vocanswer-td">({{ n }})<span class="input-line input-xs"></span></td>{%
-                        endfor %}
-                    </tr>
-                </table>
-                <div class="part-divider">
-                    <p class="part-divider-label">Part A 오답 - 틀린 단어 다시 정리</p>
-                    <table class="vocerr-tbl">
-                        <tr>
-                            <td class="vocerr-card">
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">단어:</span><span class="vocerr-card-line"></span></div>
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">뜻:</span><span class="vocerr-card-line"></span></div>
-                            </td>
-                            <td class="vocerr-card">
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">단어:</span><span class="vocerr-card-line"></span></div>
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">뜻:</span><span class="vocerr-card-line"></span></div>
-                            </td>
-                            <td class="vocerr-card">
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">단어:</span><span class="vocerr-card-line"></span></div>
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">뜻:</span><span class="vocerr-card-line"></span></div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="vocerr-card">
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">단어:</span><span class="vocerr-card-line"></span></div>
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">뜻:</span><span class="vocerr-card-line"></span></div>
-                            </td>
-                            <td class="vocerr-card">
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">단어:</span><span class="vocerr-card-line"></span></div>
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">뜻:</span><span class="vocerr-card-line"></span></div>
-                            </td>
-                            <td class="vocerr-card">
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">단어:</span><span class="vocerr-card-line"></span></div>
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">뜻:</span><span class="vocerr-card-line"></span></div>
-                            </td>
-                        </tr>
-                    </table>
-                </div>
-            </div>
-            <div class="content-block">
-                <p class="part-badge">PART B. 올바른 유의어에 O 표시 (모두 고르시오)</p>
-                {% for item in vocab_partb %}
-                <p class="mb4 fs-95">{{ loop.index }}. <strong>{{ item.word }}</strong>: &nbsp; {{ item.choices }}</p>{%
-                endfor
-                %}
-                <div class="part-divider">
-                    <p class="part-divider-label">Part B 오답 - 틀린 단어 다시 정리</p>
-                    <table class="vocerr-tbl">
-                        <tr>
-                            <td class="vocerr-card">
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">단어:</span><span class="vocerr-card-line"></span></div>
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">뜻:</span><span class="vocerr-card-line"></span></div>
-                            </td>
-                            <td class="vocerr-card">
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">단어:</span><span class="vocerr-card-line"></span></div>
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">뜻:</span><span class="vocerr-card-line"></span></div>
-                            </td>
-                            <td class="vocerr-card">
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">단어:</span><span class="vocerr-card-line"></span></div>
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">뜻:</span><span class="vocerr-card-line"></span></div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="vocerr-card">
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">단어:</span><span class="vocerr-card-line"></span></div>
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">뜻:</span><span class="vocerr-card-line"></span></div>
-                            </td>
-                            <td class="vocerr-card">
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">단어:</span><span class="vocerr-card-line"></span></div>
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">뜻:</span><span class="vocerr-card-line"></span></div>
-                            </td>
-                            <td class="vocerr-card">
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">단어:</span><span class="vocerr-card-line"></span></div>
-                                <div class="vocerr-card-row"><span class="vocerr-card-label">뜻:</span><span class="vocerr-card-line"></span></div>
-                            </td>
-                        </tr>
-                    </table>
-                </div>
-            </div>
-        </div>
-        <div class="page-foot">
-            <div class="sol">
-                <p class="sol-title">[어휘 유형 솔루션]</p>
-                <div class="sol-steps">
-                    <div class="sol-step">① 본문 흐름으로 괄호 자리 단어의 의미 방향 파악</div>
-                    <div class="sol-step">② 파악한 방향과 맞는 선지 선택</div>
-                    <div class="sol-step">③ 틀렸거나 헷갈린 단어는 오답 정리 칸에 사전 찾아 기록</div>
-                </div>
-            </div>
-        </div>
+  </div>
+
+  <div class="memo-box">
+    <div class="memo-hdr">MEMO</div>
+    <div class="memo-area"></div>
+  </div>
+</div>
+{% endfor %}
+
+<div class="ans-start">
+  <div class="ans-hdr">
+    <div class="hdr-title">
+      <span class="hdr-logo"></span><span class="hdr-logo-text">LEVEL ME UP</span>
+      변형문제 (유형 A) — 정답·해설{% if school_name %} · {{ school_name }}{% endif %}
     </div>
-    {% endif %}
+  </div>
 
-    {% if not levels or 9 in levels %}
-    {# ==================== STAGE 9: 내용 일치 ==================== #}
-    <div class="page page-stage-9">
-        <div class="page-head">
-            <div class="page-header"><span class="page-header-left">레벨미업학원</span><span class="page-header-right">{{
-                    subject }}
-                    - {{ challenge_title }}</span></div>
-            {{ stage_nav(9, 'stage-phase-after', '수업 후') }}
-        </div>
-        <div class="page-content">
-            <div class="content-block">
-                <div class="section-title title-SM mt4">Stage 9 내용 일치 (한국어 + 영어 - 모두 고르시오)</div>
-                <p class="step-badge">STEP 1</p>
-                <p class="mb2 fs-8">지문 구조 파악 및 정확한 해석 (영어지문 위에 직접 표시)</p>
-                <div class="passage passage-xs p-dense">{{ passage }}</div>
-            </div>
-            <div class="content-block">
-                <p class="step-badge">STEP 2</p>
-                <p class="mb2 fs-8">본문의 문장과 선지를 연결하여 정답 찾기</p>
-                <table class="cm-table">
-                    <tr>
-                        <td class="cm-col cm-col-pr">
-                            <p class="cm-label">Part A. 한국어 - 일치하는 것 모두</p>
-                            {% for s in content_match_kr %}<p class="cm-item">{{ s }}</p>{% endfor %}
-                        </td>
-                        <td class="cm-col">
-                            <p class="cm-label">Part B. English - Select ALL true</p>
-                            {% for s in content_match_en %}<p class="cm-item">{{ s }}</p>{% endfor %}
-                        </td>
-                    </tr>
-                </table>
-                <table class="cm-table">
-                    <tr>
-                        <td class="cm-ans-col">Part A 답: <span class="input-line input-half"></span></td>
-                        <td class="cm-ans-col">Part B 답: <span class="input-line input-half"></span></td>
-                    </tr>
-                </table>
-            </div>
-            <div class="content-block">
-                <p class="step-badge">STEP 3</p>
-                <div class="part-divider">
-                    <p class="part-divider-label">오답 - 틀린 문장 다시 정리</p>
-                    <table class="cm-table">
-                        <tr>
-                            <td class="cm-col cm-col-pr15">{% for _ in range(6) %}<p class="cm-step3-row"><span class="cm-step3-mark">(&nbsp;&nbsp;&nbsp;&nbsp;)</span><span class="cm-step3-line"></span></p>{% endfor %}</td>
-                            <td class="cm-col">{% for _ in range(6) %}<p class="cm-step3-row"><span class="cm-step3-mark">(&nbsp;&nbsp;&nbsp;&nbsp;)</span><span class="cm-step3-line"></span></p>{% endfor %}</td>
-                        </tr>
-                    </table>
-                </div>
-            </div>
-        </div>
-        <div class="page-foot">
-            <div class="sol">
-                <p class="sol-title">[내용일치 솔루션]</p>
-                <p class="fs-75"><strong>우리말 오답</strong> = 해석 문제 → Stage 1~4로 돌아가세요. &nbsp; <strong>영어 오답</strong> = 어휘
-                    문제 → 단어
-                    정리 필수.</p>
-            </div>
-        </div>
+  {% for item in passages %}
+    {% set _notice = (item.data.layout == 'notice') %}
+    {# _s163: 도표도 같은 3문항 경로를 탄다. 화면 문구만 갈라 쓴다. #}
+    {% set _kind = '도표' if item.data.layout_kind == 'chart' else '안내문' %}
+    <div class="ans-block">
+      <div class="ans-block-title">▶ {{ item.label }}</div>
+
+      <div class="ans-row-c">
+        <b class="q-name">Q1.주제</b>
+        <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.topic_correct] }}</span>
+        <span class="ans-text">{{ item.data.topic_options[item.data.topic_correct] }}</span>
+        {% if item.data.topic_answer_kr %}
+        <span class="ans-note">{{ item.data.topic_answer_kr }}</span>
+        {% endif %}
+      </div>
+
+      {% if not _notice %}
+      <div class="ans-row-c">
+        <b class="q-name">Q2.순서</b>
+        <span class="ans-val" style="background:none; padding-left:0;">{{ ['①','②','③','④','⑤'][item.data.order_correct] }} <span style="white-space:nowrap;">{{ ['(A)-(C)-(B)','(B)-(A)-(C)','(B)-(C)-(A)','(C)-(A)-(B)','(C)-(B)-(A)'][item.data.order_correct] }}</span></span>
+      </div>
+      {% endif %}
+
+      {% if item.data.vocab_items %}
+      {% set _va = (item.data.vocab_items | selectattr('is_answer') | list | first) %}
+      <div class="ans-row-c">
+        <b class="q-name">Q3.어휘</b>
+        <span class="ans-val" style="color:var(--purple); background:var(--bg-purple);">{{ ['①','②','③','④','⑤'][(_va.n - 1) if _va else 0] }}</span>
+        <span class="ans-text">{{ (_va.shown_clean or _va.shown) if _va else '' }}<span class="vd-tag">(변형)</span> &nbsp;→&nbsp; <b style="color:var(--purple);">{{ (_va.original_clean or _va.original) if _va else '' }}</b><span class="vd-tag">(원문)</span></span>
+        <span class="ans-text vocab-detail" style="grid-column:3; grid-row:2;">
+          {# ★ 3번 어휘 근거 인용을 답지에서 뺐다 (_s186).
+             밑줄이 걸리지 않은 엉뚱한 문장을 근거로 대는 일이 반복됐다 — 정답 자리
+             낱말이 아예 없는 다른 문장을 인용했다(북일고 7강 1-1번·2-1~2번,
+             6강 3-2~3번, 상동고1 36번·39번 실측). 아래 '오답 이유'와 '나머지 선지'가
+             남아 채점에는 지장이 없다. 데이터(_va.evidence)는 그대로 두어
+             되돌리려면 이 블록만 살리면 된다. #}
+          {% if _va and _va.why %}<div class="vd-line"><b>오답 이유</b> {{ _va.why }}</div>{% endif %}
+          <div class="vd-line"><b>나머지 선지</b>
+            {% for v in item.data.vocab_items %}{% if not v.is_answer %}<span class="vd-item">{{ ['①','②','③','④','⑤'][v.n - 1] }} {{ v.shown_clean or v.shown }}<span class="vd-tag">(변형)</span> <span class="vd-arrow">→</span> <b>{{ v.original_clean or v.original }}</b><span class="vd-tag">(원문)</span></span>{% endif %}{% endfor %}
+          </div>
+        </span>
+      </div>
+      {% elif item.data.core_blank_correct is defined and item.data.core_blank_correct is not none %}
+      <div class="ans-row-c">
+        <b class="q-name">Q3.핵심빈칸</b>
+        <span class="ans-val" style="color:var(--purple); background:var(--bg-purple);">{{ ['①','②','③','④','⑤'][item.data.core_blank_correct] }}</span>
+        <span class="ans-text">{{ item.data.core_blank_options[item.data.core_blank_correct] }}</span>
+        {% if item.data.core_blank_target %}
+        <span class="ans-text" style="grid-column:3; grid-row:2; color:#777; font-size:7.2pt;">원문: <b style="color:#555;">{{ item.data.core_blank_target }}</b> &nbsp;→&nbsp; 패러프레이즈: <b style="color:var(--purple);">{{ item.data.core_blank_options[item.data.core_blank_correct] }}</b></span>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <div class="ans-row-c">
+        <b class="q-name">{{ 'Q2.불일치' if _notice else 'Q4.불일치' }}</b>
+       <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.mismatch_count - 1] if (item.data.mismatch_count is number and 1 <= item.data.mismatch_count <= 5) else '-' }}</span>
+<span class="ans-text">{{ item.data.mismatch_count }}개 — {% for s in item.data.statements if not s[2] %}{{ s[0] }}{% if not loop.last %}, {% endif %}{% endfor %}</span>        <span class="ans-note">{% for stmt in item.data.statements %}{% set kr = item.data.statements_kr[loop.index0] if item.data.statements_kr and (item.data.statements_kr|length > loop.index0) else ['',''] %}<b>{{ stmt[0] }}</b>({{ 'O' if stmt[2] else 'X' }}){% if kr[1] %} — {{ kr[1] }}{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</span>
+      </div>
+
+      <div class="ans-row-c">
+        <b class="q-name">{{ 'Q3(A)' if _notice else 'Q5(A)' }}</b>
+        <span class="ans-text"><span class="ans-write">{{ item.data.blank_A }}</span></span>
+      </div>
+      <div class="ans-row-c">
+        <b class="q-name">{{ 'Q3(B)' if _notice else 'Q5(B)' }}</b>
+        <span class="ans-text"><span class="ans-write">{{ item.data.blank_B }}</span></span>
+      </div>
     </div>
-    {% endif %}
+  {% endfor %}
+</div>
 
-    {% if not levels or 10 in levels %}
-    {# ==================== STAGE 10: 영작 (동적 페이지 분할) ==================== #}
-    {% set ns10 = namespace(offset=0) %}
-    {% for chunk in writing_chunks %}
-    <div class="page page-stage-10">
-        <div class="page-head">
-            <div class="page-header"><span class="page-header-left">레벨미업학원</span><span class="page-header-right">{{
-                    subject }}
-                    - {{ challenge_title }}</span></div>
-            {{ stage_nav(10, 'stage-phase-after', '수업 후') }}
-        </div>
-        <div class="page-content">
-            <div class="content-block">
-                {% if loop.first %}
-                <div class="section-title title-MD mt4">Stage 10 영작 (단어 배열)</div>
-                <p class="mb2 mt4 fs-85">다음 우리말과 일치하도록 주어진 단어를 올바르게 배열하시오.</p>
-                <p class="step-badge">STEP 1</p>
-                <p class="mb4 fs-8"><strong>우리말에 구조 분석</strong>(S/V/O 체크) → 영어 어순으로 작성</p>
-                {% else %}
-                <p class="step-badge">STEP 1 (계속)</p>
-                {% endif %}
-                {% for item in chunk %}
-                <div class="writing-item">
-                    <p class="writing-korean">{{ ns10.offset + loop.index }}. {{ item.korean }}</p>
-                    <div class="writing-words">{{ item.scrambled }}</div>
-                    <div class="input-line-block writing-line"></div>
-                </div>{% endfor %}
-                {% set ns10.offset = ns10.offset + chunk|length %}
-            </div>
-        </div>
-        <div class="page-foot">
-            {% if loop.last %}
-            <div class="sol">
-                <p class="sol-title">[영작 솔루션]</p>
-                <p class="fs-8">① 우리말 구조 분석(S/V/O) → ② 영어 어순으로 써보기 → ③ 반복! <span class="warning-text">써봐라. 지금 당장.</span>
-                </p>
-            </div>
-            {% endif %}
-        </div>
-    </div>
-    {% endfor %}
-    {% endif %}
 
-    {% if not levels or 0 in levels %}
-    {# ==================== 정답 및 해설 ==================== #}
-    <div class="page page-answer">
-        <div class="page-head">
-            <div class="page-header"><span class="page-header-left">레벨미업학원</span><span>정답 및 해설</span></div>
-        </div>
-        <div class="page-content">
-            <div class="content-block">
-                <div class="answer-page">{{ answers_html | safe }}</div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
+<script>
+/* ★ MEMO 자동 제거 (_memo_fit)
+   .q-page 는 인쇄영역 높이(272mm)를 min-height 로 잡아 MEMO 를 바닥에 붙인다.
+   그런데 문항이 길어 272mm 를 넘으면 페이지가 갈리고 MEMO 가 다음 장으로
+   밀려 'MEMO 만 있는 빈 장'이 나온다. 그럴 땐 MEMO 를 아예 뺀다.
+   - 문항은 절대 건드리지 않는다(잘리면 시험지가 안 된다).
+   - display:none 으로만 감춰서 여러 번 실행돼도 결과가 같다.
+   - 화면 로드·글꼴 로드·인쇄 직전에 각각 다시 잰다. */
+(function () {
+  function mmToPx() {
+    var probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;visibility:hidden;top:0;left:0;height:272mm;';
+    document.body.appendChild(probe);
+    var h = probe.offsetHeight;
+    probe.parentNode.removeChild(probe);
+    return h;
+  }
 
-    {# ============================================================
-       D안: 콘텐츠 overflow 시 자동 페이지네이션
-       - .answer-page (정답 및 해설) / .flow-2col (Stage 5)
-       - 컨테이너 capacity = clientHeight × column-count
-       - 자식들 높이 누적이 capacity 초과 시 다음 .page 로 이동
-       ============================================================ #}
-    <script>
-    (function () {
-        'use strict';
+  function fitMemos() {
+    var pages = document.querySelectorAll('.q-page');
+    if (!pages.length) return;
 
-        function isOverflowing(container) {
-            // CSS 다단 레이아웃에서 scrollWidth/scrollHeight 는 실제 overflow를 정확히 반환하지 않음
-            // → 자식들의 실측 높이 합산 vs 컨테이너 capacity (height × column-count) 로 비교
+    // ① 먼저 전부 되살린다 — 잘못 감춘 게 있으면 여기서 복구된다
+    var memos = [];
+    for (var i = 0; i < pages.length; i++) {
+      var m = pages[i].querySelector('.memo-box');
+      memos.push(m);
+      if (m) m.classList.remove('memo-hidden');
+    }
 
-            // 1차: 일반 scroll 기반 검지 (다단 외 컨테이너 또는 명백한 가로 overflow)
-            if (container.scrollWidth > container.offsetWidth + 1) return true;
+    // ② 인쇄영역 높이를 px 로 구한다
+    var limit = mmToPx();
+    if (!limit) return;
 
-            // 2차: 다단 레이아웃 capacity 검지
-            var colCount = parseInt(getComputedStyle(container).columnCount, 10) || 1;
-            if (colCount <= 1) {
-                return container.scrollHeight > container.offsetHeight + 1;
-            }
-            var capacity = container.clientHeight * colCount;
-            var totalChildHeight = 0;
-            for (var i = 0; i < container.children.length; i++) {
-                var child = container.children[i];
-                var st = getComputedStyle(child);
-                var mt = parseFloat(st.marginTop) || 0;
-                var mb = parseFloat(st.marginBottom) || 0;
-                totalChildHeight += child.offsetHeight + mt + mb;
-            }
-            return totalChildHeight > capacity;
-        }
+    // ③ 넘치는 페이지만 MEMO 를 감춘다 (2px 은 반올림 오차 여유)
+    for (var j = 0; j < pages.length; j++) {
+      if (!memos[j]) continue;
+      if (pages[j].scrollHeight > limit + 2) memos[j].classList.add('memo-hidden');
+    }
+  }
 
-        function paginateContainer(container, selector) {
-            if (!isOverflowing(container)) return null;
-
-            var page = container.closest('.page');
-            if (!page) return null;
-            if (container.children.length <= 1) return null; // 자식 1개면 분할 의미 없음
-
-            // 페이지 깊은 복제 후 새 컨테이너 비우기
-            var newPage = page.cloneNode(true);
-            newPage.classList.remove('page-last');
-            newPage.dataset.continuation = 'true';
-
-            var newContainer = newPage.querySelector(selector);
-            if (!newContainer) return null;
-            while (newContainer.firstChild) newContainer.removeChild(newContainer.firstChild);
-
-            // 새 페이지를 원본 다음에 삽입 (DOM에 들어가야 layout 측정 가능)
-            page.parentNode.insertBefore(newPage, page.nextSibling);
-
-            // 마지막 자식을 하나씩 새 컨테이너로 옮기며 overflow 사라질 때까지
-            var safety = 500;
-            while (safety-- > 0 && isOverflowing(container)) {
-                var lastChild = container.lastElementChild;
-                if (!lastChild) break;
-
-                // 순서 보존: 새 컨테이너의 맨 앞으로 이동
-                if (newContainer.firstChild) {
-                    newContainer.insertBefore(lastChild, newContainer.firstChild);
-                } else {
-                    newContainer.appendChild(lastChild);
-                }
-            }
-
-            // 아무것도 못 옮겼다면 (단일 거대 자식) 새 페이지 제거
-            if (newContainer.children.length === 0) {
-                page.parentNode.removeChild(newPage);
-                return null;
-            }
-
-            return newContainer;
-        }
-
-        function paginate(selector) {
-            var queue = Array.prototype.slice.call(document.querySelectorAll(selector));
-            var safety = 50;
-            while (queue.length > 0 && safety-- > 0) {
-                var container = queue.shift();
-                var newContainer = paginateContainer(container, selector);
-                if (newContainer) queue.push(newContainer);
-            }
-        }
-
-        function ensurePageLast() {
-            var allPages = document.querySelectorAll('.page');
-            if (allPages.length === 0) return;
-            // 모든 .page 에서 .page-last 제거 후 마지막 페이지에만 부여
-            for (var i = 0; i < allPages.length; i++) {
-                allPages[i].classList.remove('page-last');
-            }
-            allPages[allPages.length - 1].classList.add('page-last');
-        }
-
-        function paginateAll() {
-            paginate('.answer-page');
-            paginate('.flow-2col');
-            ensurePageLast();
-        }
-
-        // 폰트(Noto Sans KR) 비동기 로딩 + 모든 리소스 로드 완료 후 페이지네이션 실행
-        // → fallback 폰트로 잘못 측정 → 폰트 로드 후 reflow → overflow 재발 문제 방지
-        function whenReady() {
-            var fontsReady = (document.fonts && document.fonts.ready)
-                ? document.fonts.ready
-                : Promise.resolve();
-            var loadReady = (document.readyState === 'complete')
-                ? Promise.resolve()
-                : new Promise(function (resolve) {
-                    window.addEventListener('load', resolve);
-                });
-            return Promise.all([fontsReady, loadReady]);
-        }
-
-        whenReady().then(paginateAll);
-
-        // 안전 재시도: 폰트/레이아웃이 늦게 안착되는 경우 대비
-        setTimeout(paginateAll, 800);
-        setTimeout(paginateAll, 2000);
-
-        // 인쇄 직전에도 다시 검증 (screen→print 레이아웃 차이로 추가 overflow 발생 시 처리)
-        window.addEventListener('beforeprint', paginateAll);
-
-        // matchMedia('print') 사용 가능한 브라우저 (일부 Chrome 등)
-        if (window.matchMedia) {
-            var mq = window.matchMedia('print');
-            if (typeof mq.addEventListener === 'function') {
-                mq.addEventListener('change', function (e) {
-                    if (e.matches) paginateAll();
-                });
-            }
-        }
-    })();
-    </script>
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', fitMemos);
+  } else {
+    fitMemos();
+  }
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(fitMemos).catch(function () {});
+  }
+  window.addEventListener('beforeprint', fitMemos);
+})();
+</script>
 
 </body>
-
 </html>

@@ -439,12 +439,35 @@ def _quote_ok(s: str, allow_comma: bool = False) -> bool:
         return False
     if not allow_comma and re.search(r'[,;:]', s):
         return False
-    # 대시(─ — –)도 배제. 하이픈(-)은 south-facing 같은 복합어라 허용한다.
-    if re.search(r'[\u2500\u2014\u2013]', s):
+    # 대시도 배제. 하이픈(- ‐ ‑)은 south-facing 같은 복합어라 허용한다.
+    # ★ U+2015(HORIZONTAL BAR)가 빠져 있었다 (_s182). 수능 지문이 실제로 쓰는 대시가
+    #   이것이라, 'apple pie ― one that nobody' 가 통째로 빈칸이 되어 보기에 '―' 가
+    #   낱말처럼 떨어져 나왔다(수원외고1 26고1 9모 31번 실측).
+    if re.search(r'[\u2012-\u2015\u2500\u2E3A\u2E3B]', s):
         return False
     if s.count('"') % 2 != 0:
         return False
     if s.count('\u201c') != s.count('\u201d'):
+        return False
+    # ★ 여는 홑따옴표만 먹은 경우 배제 (_s182).
+    #   큰따옴표는 짝을 보는데 홑따옴표는 안 봤다. 그래서
+    #   "'There's no maths involved, simply use reasoning" 처럼 여는 따옴표로 시작해
+    #   문장 중간에서 끊긴 구절이 빈칸이 됐다(36번). 39번은 "… underground 'gardens".
+    #   아포스트로피(don't, There's)는 낱말 '안'이라 세지 않고,
+    #   복수 소유격(students')은 닫는 쪽만 많으므로 통과시킨다.
+    _op = len(re.findall(r"(?:^|[\s(\[])['\u2018](?=\w)", s))
+    _cl = len(re.findall(r"\w['\u2019](?=$|[\s,;:.!?)\]])", s))
+    if _op > _cl:
+        return False
+    # ★ 수식·화살표 기호 배제 (_s182). '9 × 9 grid' 에서 'column and each 3 ×' 가
+    #   빈칸이 되어 보기에 '×' 가 낱말로 들어갔다(36번).
+    if re.search(r'[\u00D7\u00F7\u2260\u2264\u2265\u00B1\u2192\u2190\u2194\u221A\u2211\u220F\u2248]', s):
+        return False
+    # ★ 구절은 글자·숫자(또는 짝 맞는 여는 따옴표)로 시작하고 끝나야 한다 (_s182).
+    _t = s.strip()
+    if _t and not (_t[0].isalnum() or _t[0] in "'\u2018\"\u201c("):
+        return False
+    if _t and not (_t[-1].isalnum() or _t[-1] in "'\u2019\"\u201d)"):
         return False
     return True
 

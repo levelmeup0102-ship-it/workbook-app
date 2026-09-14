@@ -505,7 +505,12 @@ body {
         <span class="ans-val" style="color:var(--purple); background:var(--bg-purple);">{{ ['①','②','③','④','⑤'][(_va.n - 1) if _va else 0] }}</span>
         <span class="ans-text">{{ (_va.shown_clean or _va.shown) if _va else '' }}<span class="vd-tag">(변형)</span> &nbsp;→&nbsp; <b style="color:var(--purple);">{{ (_va.original_clean or _va.original) if _va else '' }}</b><span class="vd-tag">(원문)</span></span>
         <span class="ans-text vocab-detail" style="grid-column:3; grid-row:2;">
-          {% if _va and _va.evidence %}<div class="vd-line"><b>근거</b> “{{ _va.evidence }}”</div>{% endif %}
+          {# ★ 3번 어휘 근거 인용을 답지에서 뺐다 (_s186).
+             밑줄이 걸리지 않은 엉뚱한 문장을 근거로 대는 일이 반복됐다 — 정답 자리
+             낱말이 아예 없는 다른 문장을 인용했다(북일고 7강 1-1번·2-1~2번,
+             6강 3-2~3번, 상동고1 36번·39번 실측). 아래 '오답 이유'와 '나머지 선지'가
+             남아 채점에는 지장이 없다. 데이터(_va.evidence)는 그대로 두어
+             되돌리려면 이 블록만 살리면 된다. #}
           {% if _va and _va.why %}<div class="vd-line"><b>오답 이유</b> {{ _va.why }}</div>{% endif %}
           <div class="vd-line"><b>나머지 선지</b>
             {% for v in item.data.vocab_items %}{% if not v.is_answer %}<span class="vd-item">{{ ['①','②','③','④','⑤'][v.n - 1] }} {{ v.shown_clean or v.shown }}<span class="vd-tag">(변형)</span> <span class="vd-arrow">→</span> <b>{{ v.original_clean or v.original }}</b><span class="vd-tag">(원문)</span></span>{% endif %}{% endfor %}
@@ -526,7 +531,7 @@ body {
       <div class="ans-row-c">
         <b class="q-name">{{ 'Q2.불일치' if _notice else 'Q4.불일치' }}</b>
        <span class="ans-val">{{ ['①','②','③','④','⑤'][item.data.mismatch_count - 1] if (item.data.mismatch_count is number and 1 <= item.data.mismatch_count <= 5) else '-' }}</span>
-<span class="ans-text">{{ item.data.mismatch_count }}개 — {% for s in item.data.statements if not s[2] %}{{ s[0] }}{% if not loop.last %}, {% endif %}{% endfor %}</span>        <span class="ans-note">{% for stmt in item.data.statements %}{% set kr = item.data.statements_kr[loop.index0] if item.data.statements_kr and (item.data.statements_kr|length > loop.index0) else ['',''] %}{% set ev = item.data.statements_evidence[loop.index0] if item.data.statements_evidence and (item.data.statements_evidence|length > loop.index0) else '' %}<b>{{ stmt[0] }}</b>({{ 'O' if stmt[2] else 'X' }}){% if ev %} 근거: "{{ ev }}"{% endif %}{% if kr[1] %} — {{ kr[1] }}{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</span>
+<span class="ans-text">{{ item.data.mismatch_count }}개 — {% for s in item.data.statements if not s[2] %}{{ s[0] }}{% if not loop.last %}, {% endif %}{% endfor %}</span>        <span class="ans-note">{% for stmt in item.data.statements %}{% set kr = item.data.statements_kr[loop.index0] if item.data.statements_kr and (item.data.statements_kr|length > loop.index0) else ['',''] %}<b>{{ stmt[0] }}</b>({{ 'O' if stmt[2] else 'X' }}){% if kr[1] %} — {{ kr[1] }}{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</span>
       </div>
 
       <div class="ans-row-c">

@@ -3627,6 +3627,17 @@ def generate_variation_b(
     last_data = None  # 마지막 fallback용
     _err_history = []          # ★ 재시도 사유 누적 (_s122)
     for attempt in range(1, MAX_RETRIES_B + 1):
+        # ★ is_last 를 루프 머리에서 정의한다 (_s187).
+        #   전에는 훨씬 아래(Q1 셔플 직전)에서야 만들어졌는데, Q3 summary_design 검사
+        #   세 곳이 그보다 위에서 `not is_last` 를 읽어 UnboundLocalError 로 죽었다:
+        #     File "variation/generator.py", in generate_variation_b
+        #       if _nw and not is_last:
+        #     UnboundLocalError: cannot access local variable 'is_last'
+        #   실측(26-09-15 로그): 한 번 돌리는 동안 8건. _s185 에서 고친 errors 와 같은 꼴로,
+        #   **summary_design 누락·빈 칸·_why 누락 세 검사가 통째로 죽어 있었다.**
+        #   → 재시도 판단이 필요한 첫 지점보다 앞에 둔다. 아래 정의는 그대로 둬도
+        #     같은 값이라 무해하지만, 중복이라 지웠다.
+        is_last = (attempt == MAX_RETRIES_B)
         try:
             user_msg = (
                 f"Passage ID: {pid}\n\n"
@@ -4005,8 +4016,7 @@ def generate_variation_b(
             except Exception:
                 pass
 
-            # 마지막 시도면 strict=False (검증 풀어서라도 받아들임)
-            is_last = (attempt == MAX_RETRIES_B)
+            # 마지막 시도면 strict=False — is_last 는 루프 머리에서 정의했다 (_s187)
 
             # ★★ (버) 객관식 정답 위치 셔플 (B: 주제 Q2 / 요약빈칸 Q3) — 정답이 ①에 쏠리던 문제 교정.
             #   삽입(position_correct)은 위치형이라 손대지 않는다.

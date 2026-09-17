@@ -21,12 +21,9 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY", "")
 MAX_REPAIR = 3
 
-# 화면·산출물에 보이는 문구는 코드(SA/SC/SD/SE) 대신 문제 유형 이름으로 쓴다.
-TYPE_NAME = {"SA": "본문 빈칸 영작", "SB": "대화문 빈칸", "SC": "요약문 빈칸 영작",
-             "SD": "어법 틀린 곳 고치기", "SE": "어휘 품사 변형"}
-
-def type_name(code: str) -> str:
-    return TYPE_NAME.get(code, code)
+# 문제 유형 이름 표는 validator 에 있다(순환 import 방지). 여기선 가져다 쓴다.
+TYPE_NAME = V.TYPE_NAME
+type_name = V.type_name
 
 
 # ---------- Supabase REST ----------

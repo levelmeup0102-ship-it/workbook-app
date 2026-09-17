@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from .generator import (
     generate_set, fetch_grammar_points, fetch_seosul_types,
+    get_cache_status, delete_cache,
 )
 from .renderer import render_fragments, wrap_document, ANS_HDR
 
@@ -51,6 +52,34 @@ class SeosulRequest(BaseModel):
 
 router = APIRouter(prefix="/api", tags=["seosul"])
 download_router = APIRouter(prefix="/api", tags=["seosul-dl"])
+
+
+class PassageListRequest(BaseModel):
+    passages: List[PassageRef]
+
+
+@router.post("/seosul/cache-status")
+def seosul_cache_status(req: PassageListRequest, _=Depends(verify_token)):
+    """지문별 서술형 캐시 유무 — 탭의 생성됨 / 검증 미통과 / 미생성 표시용."""
+    try:
+        return {"ok": True,
+                "status": get_cache_status([p.model_dump() for p in req.passages])}
+    except Exception as e:
+        traceback.print_exc()
+        return {"ok": False, "status": {}, "error": str(e)}
+
+
+@router.post("/seosul/clear-cache")
+def seosul_clear_cache(req: PassageListRequest, _=Depends(verify_token)):
+    """선택한 지문의 서술형 캐시만 삭제. 1회독·2회독 캐시는 다른 테이블이라 무관."""
+    if not req.passages:
+        raise HTTPException(status_code=400, detail="지문이 선택되지 않음")
+    try:
+        n = delete_cache([p.model_dump() for p in req.passages])
+        return {"ok": True, "passages": len(req.passages), "deleted": n}
+    except Exception as e:
+        traceback.print_exc()
+        return {"ok": False, "deleted": 0, "error": str(e)}
 
 
 @router.post("/seosul")

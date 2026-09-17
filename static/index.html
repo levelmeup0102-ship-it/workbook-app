@@ -526,7 +526,15 @@ textarea:focus { border-color: #4A90D9; outline: none; }
           <button class="btn btn-sm" onclick="ssExpandAll()" style="background:#eee;color:#333;">전체 펼치기</button>
           <button class="btn btn-sm" onclick="ssCollapseAll()" style="background:#eee;color:#333;">전체 접기</button>
           <button class="btn btn-sm" onclick="ssClearSelection()" style="background:#fee;color:#dc2626;border:1px solid #fca5a5;">선택 초기화</button>
+          <button class="btn btn-sm" onclick="ssClearPassageCache()" style="background:#f3e8ff;color:#6d28d9;border:1px solid #c4b5fd;">🗑️ 선택 캐시 삭제</button>
+          <button class="btn btn-sm" onclick="ssLoadCacheStatus(true)" style="background:#eee;color:#333;" title="생성 여부 다시 확인">↻ 상태 새로고침</button>
           <span style="margin-left:auto;font-size:13px;color:#666;" id="ss-sel-count">0개 선택</span>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;font-size:11px;color:#666;">
+          <span><span class="vr-cs vr-cs-ready">✅</span> 생성됨</span>
+          <span><span class="vr-cs vr-cs-half">검증</span> 검증 미통과 — 다시 뽑으세요</span>
+          <span><span class="vr-cs vr-cs-none">○</span> 미생성</span>
+          <span id="ss-cs-note" style="margin-left:auto;color:#999;"></span>
         </div>
         <div id="ss-book-list" style="max-height:450px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;">
           <div style="padding:20px;text-align:center;color:#999;">로딩 중...</div>
@@ -545,22 +553,22 @@ textarea:focus { border-color: #4A90D9; outline: none; }
 
         <label style="display:flex;align-items:center;gap:8px;background:#fdf2f8;border:1.5px solid #f9a8d4;border-radius:8px;padding:9px;margin-bottom:7px;cursor:pointer;">
           <input type="checkbox" id="ss-type-sa" checked onchange="ssUpdateBtns()" style="width:18px;height:18px;">
-          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#ec4899;">SA — 본문 빈칸 배열영작</div>
-            <div style="font-size:11px;color:#666;">보기 단어 배열, 어형변형 가능</div></div>
+          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#ec4899;">본문 빈칸 영작</div>
+            <div style="font-size:11px;color:#666;">보기 단어 배열, 어형 변형 가능</div></div>
         </label>
         <label style="display:flex;align-items:center;gap:8px;background:#fdf2f8;border:1.5px solid #f9a8d4;border-radius:8px;padding:9px;margin-bottom:7px;cursor:pointer;">
           <input type="checkbox" id="ss-type-sc" checked onchange="ssUpdateBtns()" style="width:18px;height:18px;">
-          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#ec4899;">SC — 요약문 빈칸 영작</div>
+          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#ec4899;">요약문 빈칸 영작</div>
             <div style="font-size:11px;color:#666;">변형 없이 배열, 구조 회전</div></div>
         </label>
         <label style="display:flex;align-items:center;gap:8px;background:#dbeafe;border:1.5px solid #93c5fd;border-radius:8px;padding:9px;margin-bottom:7px;cursor:pointer;">
           <input type="checkbox" id="ss-type-sd" checked onchange="ssUpdateBtns()" style="width:18px;height:18px;">
-          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#1e40af;">SD — 어법 틀린 곳 고치기</div>
-            <div style="font-size:11px;color:#666;">밑줄 없음, grammar_points 근거</div></div>
+          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#1e40af;">어법 틀린 곳 고치기</div>
+            <div style="font-size:11px;color:#666;">밑줄 없음, 어법 포인트 근거</div></div>
         </label>
         <label style="display:flex;align-items:center;gap:8px;background:#f5f3ff;border:1.5px solid #ddd6fe;border-radius:8px;padding:9px;cursor:pointer;">
           <input type="checkbox" id="ss-type-se" checked onchange="ssUpdateBtns()" style="width:18px;height:18px;">
-          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#7c3aed;">SE — 어휘 품사 변형 채우기</div>
+          <div style="flex:1;"><div style="font-size:13px;font-weight:700;color:#7c3aed;">어휘 품사 변형</div>
             <div style="font-size:11px;color:#666;">핵심어 4~5곳, 품사 변형</div></div>
         </label>
       </div>
@@ -1495,7 +1503,68 @@ function switchTab(tab, el) {
 let ssSelectedPassages = new Map();   // 클릭 순서 유지
 let ssExpandedBooks = new Set();
 
-function ssRefreshBooks(){ if(PASSAGES_DATA) ssRenderBookList(); }
+function ssRefreshBooks(){ if(PASSAGES_DATA){ ssRenderBookList(); ssLoadCacheStatus(); } }
+
+// 지문별 서술형 캐시 유무: {"교재|단원|번호": {ok, unverified}}
+let ssCacheStatus = {}, ssCacheLoading = false, ssCacheLoaded = false;
+
+async function ssLoadCacheStatus(force){
+  if(!PASSAGES_DATA || !PASSAGES_DATA.length) return;
+  if(ssCacheLoading) return;
+  if(!force && Object.keys(ssCacheStatus).length) return;
+  const note = document.getElementById('ss-cs-note');
+  ssCacheLoading = true;
+  if(note) note.textContent = '생성 여부 확인 중...';
+  try{
+    const res = await fetch(API+'/api/seosul/cache-status', {
+      method:'POST', headers:headers(),
+      body: JSON.stringify({ passages: PASSAGES_DATA.map(p=>({book:p.book,unit:p.unit,id:p.id})) })
+    });
+    const data = await res.json();
+    if(data.ok){
+      ssCacheStatus = data.status || {};
+      ssCacheLoaded = true;
+      const vals = Object.values(ssCacheStatus);
+      const ready = vals.filter(s=>s.ok && !s.unverified).length;
+      const bad   = vals.filter(s=>s.ok && s.unverified).length;
+      if(note) note.textContent = `생성됨 ${ready}개${bad?` · 검증 미통과 ${bad}개`:''}`;
+    } else {
+      // 실패를 '미생성'으로 보여주면 멀쩡한 캐시를 지우고 다시 뽑는 헛수고를 한다
+      if(note) note.textContent = '⚠️ 확인 실패 — 표시 없음 (↻ 로 다시 시도)';
+    }
+  }catch(e){
+    if(note) note.textContent = '⚠️ 확인 실패 — 표시 없음 (↻ 로 다시 시도)';
+  }finally{
+    ssCacheLoading = false;
+    ssRenderBookList();
+  }
+}
+
+function ssCacheMark(book, unit, id){
+  if(!ssCacheLoaded) return '';
+  const s = ssCacheStatus[`${book}|${unit}|${id}`];
+  if(!s || !s.ok) return '<span class="vr-cs vr-cs-none" title="미생성">○</span>';
+  if(s.unverified) return '<span class="vr-cs vr-cs-half" title="검증을 통과하지 못한 문항이 섞여 있습니다 — 캐시를 지우고 다시 뽑으세요">검증</span>';
+  return '<span class="vr-cs vr-cs-ready" title="생성됨">✅</span>';
+}
+
+async function ssClearPassageCache(){
+  const passages = [...ssSelectedPassages.values()];
+  if(!passages.length){ alert('지문을 먼저 선택해주세요.'); return; }
+  if(!confirm(`${passages.length}개 지문의 서술형 캐시를 삭제하시겠습니까?\n\n· 1회독·2회독 캐시는 지워지지 않습니다.\n· 다음 생성 때 처음부터 다시 만듭니다.`)) return;
+  const note = document.getElementById('ss-cs-note');
+  if(note) note.textContent = '캐시 삭제 중...';
+  try{
+    const res = await fetch(API+'/api/seosul/clear-cache', {
+      method:'POST', headers:headers(),
+      body: JSON.stringify({ passages: passages.map(p=>({book:p.book,unit:p.unit,id:p.id})) })
+    });
+    const data = await res.json();
+    if(data.ok) alert(`✅ 캐시 삭제 완료! ${data.deleted}개 삭제됨.`);
+    else alert(`❌ 캐시 삭제 실패: ${data.error || data.detail || '알 수 없는 오류'}`);
+  }catch(e){ alert(`❌ 캐시 삭제 실패: ${e}`); }
+  await ssLoadCacheStatus(true);
+}
 
 function ssRenderBookList(){
   const books = {};
@@ -1535,7 +1604,7 @@ function ssRenderBookList(){
           const is = ssSelectedPassages.has(key);
           let ord = is ? `<span style="background:#2563eb;color:#fff;font-weight:700;padding:0 4px;border-radius:8px;font-size:9px;margin-right:2px;">${[...ssSelectedPassages.keys()].indexOf(key)+1}</span>`:'';
           html += `<label class="ext-pid-chip ${is?'selected':''}" style="${is?'background:#dbeafe;border-color:#60a5fa;':''}" data-book="${p.book}" data-unit="${p.unit}" data-pid="${p.id}" ondragover="chipDragOver(event)" ondrop="chipDrop(event)"><span class="chip-handle" draggable="true" ondragstart="chipDragStart(event)" ondragend="chipDragEnd(event)" title="드래그해서 순서 변경">⠿</span>
-            <input type="checkbox" ${is?'checked':''} onchange="ssTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">${ord}${p.id}</label>`;
+            <input type="checkbox" ${is?'checked':''} onchange="ssTogglePassage('${p.book}','${p.unit}','${p.id}')" style="width:12px;height:12px;">${ord}${p.id}${ssCacheMark(p.book,p.unit,p.id)}</label>`;
         }
         html += '</div></div>';
       }
@@ -1600,7 +1669,7 @@ async function doSeosul(){
     try{ window.open(url,'_blank'); }catch(e){}
     toast('서술형 종합 생성 완료!');
   }catch(e){ ptext.textContent='❌ '+(e.message||'생성 실패'); toast('생성 실패: '+(e.message||'')); }
-  finally{ setTimeout(()=>{ progress.classList.add('hidden'); fill.style.width='0%'; ssUpdateBtns(); },2000); }
+  finally{ ssLoadCacheStatus(true); setTimeout(()=>{ progress.classList.add('hidden'); fill.style.width='0%'; ssUpdateBtns(); },2000); }
 }
 
 function toast(msg) {

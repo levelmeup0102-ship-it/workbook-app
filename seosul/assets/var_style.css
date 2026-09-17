@@ -1,9 +1,12 @@
 
+/* 2회독 변형문제와 같은 방식 — 그라데이션 없이 한 계열(보라)로 통일.
+   변수 '이름'은 예전 것을 그대로 둔다(orange/blue/green 등). 쓰는 곳이 많아
+   이름을 바꾸면 전부 손봐야 하는데, 값만 보라 계열로 맞추면 결과는 같다. */
 :root {
-  --primary: #1A6BB5; --accent: #C0621A; --green: #1A7D40;
-  --red: #B91C1C; --purple: #6A1B9A; --border: #C2CBD6;
-  --bg-passage: #F3F5F7; --bg-yellow: #FFF3C0;
-  --bg-orange: #FCEADE; --bg-blue: #D4E8F7; --bg-purple: #F3E5F5;
+  --primary: #4A2A7A; --accent: #6B46A8; --green: #5A3D8C;
+  --red: #B91C1C; --purple: #7355B0; --border: #C6BBDC;
+  --bg-passage: #F6F3FB; --bg-yellow: #E8DFF5;
+  --bg-orange: #EFE8F8; --bg-blue: #EAE3F6; --bg-purple: #F1ECFA;
 }
 @page {
   size: A4;
@@ -36,7 +39,7 @@ body {
 .hdr-right { font-size: 8.5pt; color: #555; }
 .var-badge {
   display: inline-block;
-  background: linear-gradient(135deg, #1A6BB5, #C0621A);
+  background: var(--primary);
   color: white; padding: 1.5px 9px; border-radius: 10px;
   font-size: 7.5pt; font-weight: bold; margin-left: 6px;
 }
@@ -145,7 +148,7 @@ body {
 /* 답지 */
 .ans-start { page-break-before: always; }
 .ans-hdr {
-  background: linear-gradient(135deg, #fef3c7, #fed7aa);
+  background: var(--bg-purple);
   border-left: 4px solid var(--accent);
   padding: 6px 11px; margin-bottom: 7px; border-radius: 0 4px 4px 0;
 }
@@ -244,7 +247,7 @@ body {
 .match-tbl .stmt-why { color: var(--accent); }
 .match-tbl .stmt-why-true { color: var(--green); }
 .grammar-note {
-  background: #FFF8E1; border: 1px solid #FFE082; border-radius: 3px;
+  background: #fff; border: 1px solid var(--border); border-radius: 3px;
   padding: 2.5px 6px; margin: 1.5px 0; font-size: 7pt; line-height: 1.4;
 }
 .grammar-note b { color: var(--accent); }

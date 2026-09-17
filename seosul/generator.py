@@ -62,32 +62,50 @@ def _sb_post(path: str, rows: list, params: dict = None) -> list:
         r.raise_for_status()
         return r.json() if r.text else []
 
-# ★ 로직(generator/validator/prompts/renderer)을 고칠 때마다 +1 하면 전체 캐시가 무효화된다.
-#   _s04 = SE 라벨 점프 수정(SA 개수에 맞춰 시작). _s03 = SC 정답/보기 한글 혼입 차단. _s02(SD 문장중복 금지 + SD 0개 문항 제거
-#          + SC 보기 12~18개 + 실패결과 캐시 금지) 누적분 포함
-_SEOSUL_VER = "_s05"
+# ══════════════════════════════════════════════════════════════════
+#  캐시 — 문항 '한 개씩' 따로 저장한다 (2회독 variation 과 같은 방식)
+#
+#  예전에는 세트를 통째로 한 행에 담고, 키에 '유형 조합'을 넣었다.
+#      지문|SA,SC,SD,SE|_s05
+#  그래서 체크박스를 하나만 바꿔도 키가 달라져 4문항을 전부 새로 만들었다.
+#  실측: 558행 중 실제로 맞는 건 69행(12%)뿐이었고, 같은 지문이 평균 1.7번
+#       중복 저장돼 있었다(유형 조합이 10가지나 쌓임).
+#
+#  지금은 유형마다 한 행이다.
+#      지문|SA|_sa01   지문|SC|_sc01   지문|SD|_sd01   지문|SE|_se01
+#  → 체크박스를 바꿔도 이미 만든 유형은 그대로 꺼내 쓴다.
+#  → 한 유형만 고치면 그 유형 버전만 올리면 된다(나머지 캐시는 산다).
+# ══════════════════════════════════════════════════════════════════
+#  버전 올리는 법: 그 유형의 프롬프트·검증기·조립 로직을 고쳤으면 +1.
+#    _sa01 문장 선택 자유화 + 정답 분량 8~14단어
+#    _se01 '어휘 품사 변형'을 '제목 빈칸'으로 전면 교체
+_TYPE_VER = {"SA": "_sa01", "SC": "_sc01", "SD": "_sd01", "SE": "_se01"}
 
-def _cache_key(book, unit, pid, types):
-    return f"{book}|{unit}|{pid}|{','.join(sorted(types))}|{_SEOSUL_VER}"
 
-def cache_get(book: str, unit: str, pid: str, types: List[str]) -> Optional[dict]:
+def _item_key(book: str, unit: str, pid: str, typ: str) -> str:
+    return f"{book}|{unit}|{pid}|{typ}|{_TYPE_VER.get(typ, '_v0')}"
+
+
+def item_cache_get(book: str, unit: str, pid: str, typ: str) -> Optional[dict]:
     if not SUPABASE_URL:
         return None
     try:
-        rows = _sb_get("seosul_cache", {"select": "data",
-                                        "cache_key": f"eq.{_cache_key(book, unit, pid, types)}",
-                                        "limit": "1"})
+        rows = _sb_get("seosul_cache",
+                       {"select": "data",
+                        "cache_key": f"eq.{_item_key(book, unit, pid, typ)}",
+                        "limit": "1"})
         return rows[0]["data"] if rows else None
     except Exception:
         return None
 
-def cache_set(book: str, unit: str, pid: str, types: List[str], data: dict) -> None:
+
+def item_cache_set(book: str, unit: str, pid: str, typ: str, item: dict) -> None:
     if not SUPABASE_URL:
         return
     try:
         _sb_post("seosul_cache",
-                 [{"cache_key": _cache_key(book, unit, pid, types),
-                   "book": book, "unit": unit, "pid": pid, "data": data}],
+                 [{"cache_key": _item_key(book, unit, pid, typ),
+                   "book": book, "unit": unit, "pid": pid, "data": item}],
                  params={"on_conflict": "cache_key"})
     except Exception:
         pass
@@ -112,55 +130,45 @@ def _key_prefix(book: str, unit: str, pid: str) -> str:
     return f"{book}|{unit}|{pid}|"
 
 
-def _is_unverified(data: dict) -> bool:
-    """검증을 통과 못 했는데 살아서 캐시된 세트인가.
-
-    두 군데를 다 봐야 한다 — 실측(46행 중 16행 불량)에서
-    _warnings 만 보면 7행밖에 못 잡았다. 나머지 9행은 옛 코드가
-    _soft_fail 을 경고로 올리지 않아 items 안에만 남아 있다.
-    """
-    for it in (data.get("items") or []):
-        if it.get("_soft_fail"):
-            return True
-    for w in (data.get("_warnings") or []):
-        w = str(w)
-        if "검증 미통과" in w or w.lstrip().startswith("["):
-            return True
-    return False
-
-
 _CACHE_PAGE = 1000
 
 def get_cache_status(passages: List[dict]) -> Dict[str, dict]:
-    """지문별 서술형 캐시 유무 — 사이트의 ✅ / ⚠️ / ○ 표시용.
+    """지문별 캐시 현황 — 사이트 칩에 몇 유형이 준비됐는지 보여준다.
 
-    반환: {"교재|단원|번호": {"ok": 생성됨, "unverified": 검증 미통과 섞임}}
+    유형별로 따로 저장하므로 '네 유형 중 몇 개가 있나'가 실제로 쓸모 있는 정보다.
+    반환: {"교재|단원|번호": {"ok": 하나라도 있음, "n": 캐시된 유형 수,
+                             "types": [유형 이름…], "unverified": False}}
+    ※ 검증 미통과 문항은 이제 아예 저장하지 않으므로 unverified 는 항상 False다
+      (사이트 쪽 호환을 위해 키만 남긴다).
     """
     if not SUPABASE_URL:
         return {}
-    found: Dict[str, dict] = {}
+    want = {f"{t}|{v}" for t, v in _TYPE_VER.items()}   # 지금 버전의 유형별 꼬리
+    found: Dict[str, set] = {}
     offset = 0
     while True:
+        # data 는 안 받는다 — 개수만 세면 되므로 키만 읽어 가볍게.
         rows = _sb_get("seosul_cache",
-                       {"select": "cache_key,data",
-                        "cache_key": f"like.*|{_SEOSUL_VER}",
-                        "limit": str(_CACHE_PAGE),
-                        "offset": str(offset)})
+                       {"select": "cache_key",
+                        "limit": str(_CACHE_PAGE), "offset": str(offset)})
         for r in rows:
             parts = (r.get("cache_key") or "").split("|")
-            if len(parts) < 5:
-                continue
-            k = "|".join(parts[:3])
-            st = found.setdefault(k, {"ok": False, "unverified": False})
-            st["ok"] = True
-            if _is_unverified(r.get("data") or {}):
-                st["unverified"] = True
+            if len(parts) != 5:
+                continue                      # 옛 형식(유형 조합 키)은 무시
+            if f"{parts[3]}|{parts[4]}" not in want:
+                continue                      # 낡은 버전
+            found.setdefault("|".join(parts[:3]), set()).add(parts[3])
         if len(rows) < _CACHE_PAGE:
             break
         offset += _CACHE_PAGE
-    return {f"{p['book']}|{p['unit']}|{p['id']}":
-            found.get(f"{p['book']}|{p['unit']}|{p['id']}", {"ok": False, "unverified": False})
-            for p in passages}
+
+    out = {}
+    for p in passages:
+        k = f"{p['book']}|{p['unit']}|{p['id']}"
+        got = found.get(k, set())
+        out[k] = {"ok": bool(got), "n": len(got),
+                  "types": sorted(type_name(t) for t in got), "unverified": False}
+    return out
 
 
 def delete_cache(passages: List[dict]) -> int:
@@ -343,12 +351,6 @@ def _validate_sc(it: dict) -> List[str]:
 def generate_set(book: str, unit: str, pid: str, types: List[str],
                  gp_index: Dict[int, dict], stypes: Dict[str, dict],
                  use_cache: bool = True) -> dict:
-    if use_cache:
-        cached = cache_get(book, unit, pid, types)
-        if cached:
-            cached["_cached"] = True
-            return cached
-
     text = fetch_passage_text(book, unit, pid)
     if not text:
         raise RuntimeError(f"지문 없음: {book} {unit} {pid}")
@@ -378,7 +380,25 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
                 if isinstance(e.get("sent"), int):
                     used_sents.add(e["sent"])
 
-    def _try(typ, prompt_fn, validate_fn, *args):
+    hits, misses = [], []
+
+    def _try(typ, prompt_fn, validate_fn, *args, conflicts=None):
+        """그 유형을 캐시에서 꺼내 쓰거나, 없으면 만들어서 캐시에 넣는다.
+
+        conflicts(item) -> bool : 캐시본이 '지금 세트'와 부딪히는지 보는 검사.
+            True 면 캐시를 버리고 새로 만든다. 어법이 여기 걸린다 —
+            본문 빈칸이 이번에 다른 문장을 고르면, 예전에 만든 어법 오류가
+            그 빈칸 문장에 얹힐 수 있어서 그대로 쓰면 안 된다.
+        """
+        if use_cache:
+            it = item_cache_get(book, unit, pid, typ)
+            if it:
+                if conflicts and conflicts(it):
+                    warnings.append(f"{type_name(typ)} 캐시 버림(앞 문항과 문장이 겹침) → 새로 생성")
+                else:
+                    items.append(it); _mark_used(it); hits.append(typ)
+                    return
+        misses.append(typ)
         try:
             it = _gen_with_repair(prompt_fn, validate_fn, *args)
             items.append(it)
@@ -388,6 +408,9 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
             #   틀린 문항이 그대로 인쇄된다(실제 사고: 어휘 품사 변형 cycle→recycle).
             for _e in (it.get("_soft_fail") or []):
                 warnings.append(f"{type_name(typ)} 검증 미통과(그대로 출력됨): {_e}")
+            # 검증을 통과한 것만 저장한다. 실패본을 넣으면 원인을 고쳐도 계속 나온다.
+            if use_cache and not it.get("_soft_fail"):
+                item_cache_set(book, unit, pid, typ, it)
         except Exception as e:
             warnings.append(f"{type_name(typ)} 생략(자동 검증 미통과): {e}")
 
@@ -437,7 +460,10 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
         _try("SD", P.prompt_SD,
              lambda it: V.validate_grammar_errors(it["errors"], gp_index, blank_sents,
                                                   single_passage=True, sentences=sents),
-             sents, _sd_targets, allowed_gp, sorted(blank_sents))
+             sents, _sd_targets, allowed_gp, sorted(blank_sents),
+             # 예전에 만든 어법이 이번 본문 빈칸 문장에 얹히면 그대로 못 쓴다
+             conflicts=lambda it: any(e.get("sent") in blank_sents
+                                      for e in (it.get("errors") or [])))
 
     # ---- 4) SC : 요약문 빈칸 (본문 점유 없음, 맨 마지막) ----
     if "SC" in types:
@@ -509,17 +535,12 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
         # 개별 유형은 통과했으므로 전체는 막지 않고 경고만 남긴다
         s["_warnings"] = warnings + errs
 
-    # ★ 실패(유형 생략/폴백)한 결과는 캐시에 저장하지 않는다.
-    #   저장해 버리면 원인을 고쳐도 낡은 실패본이 계속 나와서, 매번 _SEOSUL_VER을 올려야 한다.
-    #   저장을 건너뛰면 다음 생성 때 자동으로 재시도된다.
-    #   "검증 미통과"(소프트 실패)도 같이 막는다 — 통과 못 한 문항을 캐시에 박아 두면
-    #   원인을 고쳐도 _SEOSUL_VER을 올리기 전까지 같은 불량이 계속 나온다.
-    _bad_words = ("생략", "폴백", "검증 미통과")
-    _failed = (any(any(k in w for k in _bad_words) for w in s["_warnings"])
-               or not ok
-               or any(it.get("_soft_fail") for it in items))
-    if use_cache and not _failed:
-        cache_set(book, unit, pid, types, s)
+    # ★ 세트를 통째로 저장하지 않는다. 유형별로 _try 안에서 이미 저장했다.
+    #   실패·검증 미통과 문항은 _try 가 저장을 건너뛰므로 여기서 또 볼 필요가 없다.
+    #     통째 저장은 유형 조합마다 행이 따로 생겨 캐시 적중률을 12%까지 떨어뜨렸다.
+    s["_cache"] = {"hit": hits, "miss": misses}
+    if hits:
+        s["_cached"] = True     # 하나라도 캐시에서 나왔으면 표시
     return s
 
 

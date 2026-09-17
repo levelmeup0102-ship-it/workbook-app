@@ -16,30 +16,66 @@ import re
 from typing import List, Dict, Tuple
 
 # ---- 문장 분리 (지문 분할 규칙의 약어 예외 처리 재사용) ----
-_ABBR = {"Ms.", "Mr.", "Mrs.", "Dr.", "Prof.", "Sr.", "Jr.", "St.",
-         "e.g.", "i.e.", "vs.", "etc."}
-
 def split_sentences(text: str) -> List[str]:
-    """. ! ? 뒤 공백으로 분리하되 약어/1글자 이니셜은 문장끝으로 보지 않음."""
-    text = re.sub(r"\s+", " ", text.strip())
-    out, buf, i = [], "", 0
-    toks = text.split(" ")
-    for idx, w in enumerate(toks):
-        buf = (buf + " " + w).strip()
-        if w and w[-1] in ".!?":
-            # 약어 예외
-            if w in _ABBR:
-                continue
-            # 1글자 이니셜 (J. K.)
-            if re.fullmatch(r"[A-Z]\.", w):
-                continue
-            # 따옴표로 닫히는 인용 ("...despair.") 도 문장끝 허용
-            out.append(buf)
-            buf = ""
-    if buf.strip():
-        out.append(buf.strip())
-    return out
+    """영어 지문 문장 분리 (원문 무손실).
 
+    ★ 1회독 pipeline.py / 2회독 variation/generator.py 와 동일 로직을 그대로 가져왔다.
+      서술형이 쓰던 자체 구현은 아래를 전부 틀렸다(실측):
+        · 인용문으로 끝나는 문장을 안 쪼갬  He shouted, "Get out." Then he left.
+        · U.S. / Vol. / No. 등 약어에서 잘못 쪼갬  The U.S. | economy grew.
+        · 마침표 뒤 소문자인데 쪼갬  3 percent. | it then fell
+      문장 번호가 어긋나면 빈칸·어법 자리가 통째로 밀리므로 반드시 같은 로직을 써야 한다.
+    """
+    protected = text
+
+    def protect_quote_internals(match):
+        inner = match.group(1)
+        open_q = match.group(0)[0]
+        close_q = match.group(0)[-1]
+        protected_inner = re.sub(
+            r'([.!?])\s+([A-Z])',
+            lambda m2: f"{m2.group(1)}§QSEP§{m2.group(2)}",
+            inner
+        )
+        return open_q + protected_inner + close_q
+
+    protected = re.sub(r'["\u201c](.*?)["\u201d]', protect_quote_internals, protected, flags=re.DOTALL)
+
+    abbrevs = [
+        'Dr.', 'Mr.', 'Ms.', 'Mrs.', 'Prof.', 'Jr.', 'Sr.', 'St.',
+        'vs.', 'etc.', 'No.', 'Vol.', 'Fig.', 'Gen.', 'Gov.', 'Rev.',
+        'Sgt.', 'Cpl.', 'Lt.', 'Co.', 'Inc.', 'Ltd.', 'Corp.', 'Dept.',
+        'Est.', 'al.', 'e.g.', 'i.e.', 'U.S.', 'U.K.', 'U.N.',
+    ]
+    replacements = {}
+    for ab in abbrevs:
+        token = ab.replace('.', '§DOT§')
+        pattern = r'(?<!\w)' + re.escape(ab)
+        if re.search(pattern, protected):
+            replacements[token] = ab
+            protected = re.sub(pattern, token, protected)
+
+    def protect_initial(m):
+        return m.group(0).replace('.', '§DOT§')
+    protected = re.sub(r'(?<!\w)([A-Z])\.\s*(?=[A-Z][\.\s]|[A-Z][a-z])', protect_initial, protected)
+
+    sentences = [s.strip() for s in re.split(
+        r'(?<=[.!?])\s+(?=[\u201c\u201d\u0022]?[A-Z])|(?<=[.!?][\u201c\u201d\u0022])\s+(?=[\u201c\u201d\u0022]?[A-Z])',
+        protected
+    ) if s.strip()]
+
+    restored = []
+    for s in sentences:
+        for token, original in replacements.items():
+            s = s.replace(token, original)
+        s = s.replace('§DOT§', '.')
+        s = s.replace('§QSEP§', ' ')
+        restored.append(s)
+    return restored
+
+
+# 순서형 5선지: order_correct 인덱스 → 복원(원문) 라벨 순서
+FIXED_ORDER = [["A", "C", "B"], ["B", "A", "C"], ["B", "C", "A"], ["C", "A", "B"], ["C", "B", "A"]]
 
 # ---- 토큰화 ----
 def tokenize(s: str) -> List[str]:
@@ -345,32 +381,80 @@ def _is_inflection_only(base: str, ans: str, base_pos: str = "") -> bool:
         return a.endswith("s") or a in ("men", "women", "children", "feet", "teeth", "mice", "people", "geese")
     return False
 
-def validate_word_forms(blanks: List[dict], bogi: List[str],
-                        blank_sentences: set, sentences: List[str] = None) -> List[str]:
+_TITLE_MIN_W, _TITLE_MAX_W = 10, 16
+
+def _in_passage(word: str, passage: str) -> bool:
+    """단어가 본문에 '글자 그대로' 있는가 (대소문자 무시, 단어 경계)."""
+    if not word:
+        return False
+    return re.search(rf"(?<![A-Za-z]){re.escape(word)}(?![A-Za-z])", passage, re.I) is not None
+
+
+def _shares_stem(base: str, ans: str, n: int = 4) -> bool:
+    b, a = base.lower(), ans.lower()
+    return len(b) >= n and len(a) >= n and b[:n] == a[:n]
+
+
+def validate_title_blank(item: dict, sentences: List[str]) -> List[str]:
+    """제목 빈칸 검증.
+
+    ★ 어휘 품사 변형의 규칙이 예전과 '정반대'다.
+      예전: 빈칸이 본문 안에 있어서 answer 가 본문에 있어야 했다.
+      지금: 빈칸이 제목(본문 밖)에 있으므로 answer 가 본문에 '없어야' 한다.
+            있으면 학생이 베껴 쓰게 되어 변형 판단이 사라진다.
+    """
     errs: List[str] = []
-    bset = {b.lower() for b in bogi}
+    passage = " ".join(sentences)
+    title = (item.get("title") or "").strip()
+    blanks = item.get("blanks") or []
+
+    if not title:
+        errs.append("[제목없음] title 이 비어 있다")
+        return errs
+    if len(blanks) != 1:
+        errs.append(f"[빈칸개수] 빈칸 {len(blanks)}개 → 정확히 1개여야 한다")
+    if title.count("{{C}}") != 1:
+        errs.append(f"[자리표시] 제목에 {{{{C}}}} 가 {title.count('{{C}}')}번 → 정확히 1번만 넣어라")
+
+    # 제목 문체
+    nw = len([w for w in re.sub(r"\{\{C\}\}", "X", title).split() if w.strip()])
+    if nw < _TITLE_MIN_W:
+        errs.append(f"[제목짧음] {nw}단어 → {_TITLE_MIN_W}~{_TITLE_MAX_W}단어로 늘려라")
+    elif nw > _TITLE_MAX_W:
+        errs.append(f"[제목김] {nw}단어 → {_TITLE_MIN_W}~{_TITLE_MAX_W}단어로 줄여라")
+    if title.rstrip().endswith("."):
+        errs.append("[제목마침표] 제목은 명사구다. 마침표를 찍지 마라")
+
     for bl in blanks:
-        base, ans = bl.get("base", "").lower(), bl.get("answer", "")
-        al = ans.lower()
-        if base not in bset:
-            errs.append(f"[보기없음] ({bl.get('label')}) 원형 '{base}' 보기에 없음")
-        if al == base:
-            errs.append(f"[무변형] ({bl.get('label')}) '{ans}' 형태 변형 안 됨")
-        elif _is_inflection_only(base, ans, bl.get("base_pos", "")):
-            errs.append(f"[단순굴절] ({bl.get('label')}) '{base}→{ans}'는 굴절일 뿐 품사 변형 아님 "
-                        f"(base_pos='{bl.get('base_pos','')}' — 원형이 동사면 base_pos에 '동사'라고 적어라)")
-        root = base[:max(3, len(base) - 2)] if base else ""
-        if root and not al.startswith(root):
-            errs.append(f"[어근불일치] ({bl.get('label')}) '{ans}'가 원형 '{base}'에서 안 나옴")
-        # ★ 정답이 실제 그 문장 원문에 존재해야 빈칸이 뚫린다(유령 빈칸 차단)
-        if sentences is not None:
-            si = bl.get("sent")
-            if not (isinstance(si, int) and 0 <= si < len(sentences)
-                    and re.search(rf"(?<![A-Za-z]){re.escape(ans)}(?![A-Za-z])", sentences[si])):
-                errs.append(f"[원문부재] ({bl.get('label')}) 정답 '{ans}'가 문장[{si}] 원문에 없음 → 빈칸 안 뚫림")
-        if bl.get("sent") not in blank_sentences:
-            errs.append(f"[위치] ({bl.get('label')}) 빈칸 문장에 없음")
+        lab = bl.get("label", "?")
+        base = (bl.get("base") or "").strip()
+        ans = (bl.get("answer") or "").strip()
+        if not base or not ans:
+            errs.append(f"[필드누락] ({lab}) base/answer 를 채워라")
+            continue
+        if len(ans.split()) != 1 or "-" in ans:
+            errs.append(f"[정답형식] ({lab}) '{ans}' → 하이픈 없는 한 단어여야 한다")
+        # ★ 핵심 두 줄
+        if not _in_passage(base, passage):
+            errs.append(f"[어근부재] ({lab}) 어근 '{base}' 가 본문에 없다 → 학생이 찾을 수 없다")
+        if _in_passage(ans, passage):
+            errs.append(f"[정답노출] ({lab}) 정답 '{ans}' 가 본문에 그대로 있다 → "
+                        f"베껴 쓰면 되므로 폐기. 본문에 없는 파생형을 골라라")
+        if ans.lower() == base.lower():
+            errs.append(f"[무변형] ({lab}) '{ans}' 가 어근과 같다")
+        elif not _shares_stem(base, ans):
+            errs.append(f"[어근불일치] ({lab}) '{ans}' 가 '{base}' 에서 나온 형태가 아니다")
+        # 제목에 답이 새는가
+        bare = re.sub(r"\{\{C\}\}", " ", title)
+        if _in_passage(ans, bare):
+            errs.append(f"[제목노출] ({lab}) 제목 안에 정답 '{ans}' 가 또 있다")
+        if _in_passage(base, bare):
+            errs.append(f"[제목노출] ({lab}) 제목 안에 어근 '{base}' 가 있다 → 답이 드러난다")
     return errs
+
+
+# (validate_word_forms 제거 — 어휘 품사 변형이 '제목 빈칸'으로 바뀌면서
+#  규칙이 정반대가 되었다. validate_title_blank 를 쓴다.)
 
 
 # =========================================================
@@ -418,6 +502,6 @@ def validate_set(s: dict, gp_index: Dict[int, dict]) -> Tuple[bool, List[str]]:
             errs += validate_grammar_errors(item["errors"], gp_index, blank_sents,
                                             single_passage=s.get("single_passage", True))
         elif t == "SE":
-            errs += validate_word_forms(item["blanks"], item["bogi"], set(roles.get("SE", [])))
+            errs += validate_title_blank(item, s.get("passage_sentences") or [])
 
     return (len(errs) == 0), errs

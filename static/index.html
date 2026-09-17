@@ -532,7 +532,7 @@ textarea:focus { border-color: #4A90D9; outline: none; }
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;font-size:11px;color:#666;">
           <span><span class="vr-cs vr-cs-ready">✅</span> 생성됨</span>
-          <span><span class="vr-cs vr-cs-half">검증</span> 검증 미통과 — 다시 뽑으세요</span>
+          <span><span class="vr-cs vr-cs-half">2/4</span> 일부 유형만 준비됨</span>
           <span><span class="vr-cs vr-cs-none">○</span> 미생성</span>
           <span id="ss-cs-note" style="margin-left:auto;color:#999;"></span>
         </div>
@@ -1525,9 +1525,9 @@ async function ssLoadCacheStatus(force){
       ssCacheStatus = data.status || {};
       ssCacheLoaded = true;
       const vals = Object.values(ssCacheStatus);
-      const ready = vals.filter(s=>s.ok && !s.unverified).length;
-      const bad   = vals.filter(s=>s.ok && s.unverified).length;
-      if(note) note.textContent = `생성됨 ${ready}개${bad?` · 검증 미통과 ${bad}개`:''}`;
+      const full = vals.filter(s=>(s.n||0) >= 4).length;
+      const part = vals.filter(s=>(s.n||0) > 0 && (s.n||0) < 4).length;
+      if(note) note.textContent = `4유형 완비 ${full}개${part?` · 일부만 ${part}개`:''}`;
     } else {
       // 실패를 '미생성'으로 보여주면 멀쩡한 캐시를 지우고 다시 뽑는 헛수고를 한다
       if(note) note.textContent = '⚠️ 확인 실패 — 표시 없음 (↻ 로 다시 시도)';
@@ -1544,8 +1544,10 @@ function ssCacheMark(book, unit, id){
   if(!ssCacheLoaded) return '';
   const s = ssCacheStatus[`${book}|${unit}|${id}`];
   if(!s || !s.ok) return '<span class="vr-cs vr-cs-none" title="미생성">○</span>';
-  if(s.unverified) return '<span class="vr-cs vr-cs-half" title="검증을 통과하지 못한 문항이 섞여 있습니다 — 캐시를 지우고 다시 뽑으세요">검증</span>';
-  return '<span class="vr-cs vr-cs-ready" title="생성됨">✅</span>';
+  // 유형별로 따로 캐시하므로 '네 유형 중 몇 개가 준비됐나'를 보여준다.
+  const n = s.n || 0, tip = (s.types||[]).join(', ');
+  if(n >= 4) return `<span class="vr-cs vr-cs-ready" title="4유형 모두 준비됨 — ${tip}">✅</span>`;
+  return `<span class="vr-cs vr-cs-half" title="${n}유형만 준비됨 — ${tip}">${n}/4</span>`;
 }
 
 async function ssClearPassageCache(){

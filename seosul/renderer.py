@@ -79,6 +79,8 @@ _EXTRA = """
 .wr-row{display:flex;align-items:flex-end;margin-bottom:11px;}
 .wr-row .wtag{width:34px;color:var(--primary);font-weight:bold;font-size:9.5pt;}
 .wr-row .wline{flex:1;border-bottom:1px solid #999;height:18px;}
+.title-box{border:1.5px solid var(--primary);border-radius:5px;padding:10px 14px;
+           font-size:10.5pt;font-weight:bold;line-height:1.9;text-align:center;margin:5px 0 7px;}
 .summary-box{border:1px solid var(--border);border-radius:5px;padding:8px 13px;line-height:1.95;margin:5px 0 7px;}
 .se-line{display:flex;gap:14px;flex-wrap:wrap;font-size:9.3pt;margin-top:5px;}
 .se-line .sb{display:inline-block;width:96px;border-bottom:1px solid #999;}
@@ -146,7 +148,7 @@ def _render_problem(s: dict, teacher: bool, school_name: str) -> str:
 
     ans_by_label = {}
     for it in s["items"]:
-        if it["type"] in ("SA", "SE", "SC"):
+        if it["type"] in ("SA", "SC"):
             for k, v in it.get("answers", {}).items():
                 ans_by_label[k] = v
             for bl in it.get("blanks", []) if isinstance(it.get("blanks"), list) else []:
@@ -197,10 +199,17 @@ def _render_problem(s: dict, teacher: bool, school_name: str) -> str:
                            for i in range(1, len(it["errors"]) + 1))
             body.append(head + rows + '</div>')
         elif it["type"] == "SE":
-            bogi = ' / '.join(shuffle_bogi(it["bogi"], str(it)[:200]))
-            slots = "".join(f'<span>({b["label"]}) <span class="sb"></span></span>' for b in it["blanks"])
-            body.append(head + f'<div class="bogi"><span class="bogi-label">보기</span> {bogi}</div>' +
-                        f'<div class="se-line">{slots}</div></div>')
+            # 제목 빈칸 — 보기 상자가 없다. 학생이 본문에서 찾아 형태를 바꿔 쓴다.
+            _t = it.get("title", "")
+            for b in it["blanks"]:
+                _t = _t.replace("{{%s}}" % b["label"],
+                                f'<span class="ibl" style="width:130px">&nbsp;</span>')
+            body.append(head +
+                        f'<div class="title-box">{_t}</div>'
+                        '<div class="cond">&lt;조건&gt; · 윗글에서 찾아 알맞은 형태로 바꿔 쓸 것'
+                        ' · 한 단어로 쓸 것</div>'
+                        '<div class="wr-row"><span class="wtag">답</span>'
+                        '<span class="wline"></span></div></div>')
     return "".join(body)
 
 
@@ -213,10 +222,10 @@ def _render_answer(s: dict) -> str:
     qno = 0
     for it in s["items"]:
         qno += 1
-        title_map = {"SA": "본문 빈칸 영작", "SC": "요약문 빈칸",
-                     "SD": "어법 틀린 곳 고치기", "SE": "어휘 품사 변형"}
+        title_map = {"SA": "본문 빈칸 영작", "SC": "요약문 빈칸 영작",
+                     "SD": "어법 틀린 곳 고치기", "SE": "제목 빈칸"}
         blk = [f'<div class="ans-block"><div class="ans-block-title">'
-               f'{qno}. {title_map.get(it["type"])} ({it["type"]})</div>']
+               f'{qno}. {title_map.get(it["type"])}</div>']
         if it["type"] in ("SA", "SC"):
             cells = "".join(f'<span class="lab">({k})</span><span class="av">{v}</span>'
                             for k, v in it["answers"].items())
@@ -228,11 +237,15 @@ def _render_answer(s: dict) -> str:
                 blk.append(f'<div class="sd-ans"><span class="sd-n">{chr(9311+i)}</span>'
                            f'<span class="sd-why">{_clean_why(e)}</span></div>')
         elif it["type"] == "SE":
-            cells = "".join(f'<span class="lab">({b["label"]})</span>'
+            cells = "".join(f'<span class="lab">답</span>'
                             f'<span class="av">{b["answer"]}</span>'
-                            f'<span class="nt">{b.get("note","")}</span>'
+                            f'<span class="nt">{b.get("note","")} · 본문 \'{b.get("base","")}\' 에서</span>'
                             for b in it["blanks"])
             blk.append(f'<div class="ans-line">{cells}</div>')
+            _full = it.get("title", "")
+            for b in it["blanks"]:
+                _full = _full.replace("{{%s}}" % b["label"], f'<b>{b["answer"]}</b>')
+            blk.append(f'<div class="grammar-note"><b>제목</b> {_full}</div>')
         if it.get("why"):
             blk.append(f'<div class="expl-box"><span class="expl-label">근거</span>{it["why"]}</div>')
         blk.append('</div>')

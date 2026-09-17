@@ -15,6 +15,15 @@ seosul/validator.py
 import re
 from typing import List, Dict, Tuple
 
+# 화면·산출물에 보이는 문구는 코드(SA/SC/SD/SE) 대신 문제 유형 이름으로 쓴다.
+# generator.py 가 이 표를 그대로 가져다 쓴다(순환 import 를 피하려고 여기 둔다).
+TYPE_NAME = {"SA": "본문 빈칸 영작", "SB": "대화문 빈칸", "SC": "요약문 빈칸 영작",
+             "SD": "어법 틀린 곳 고치기", "SE": "제목 빈칸"}
+
+def type_name(code: str) -> str:
+    return TYPE_NAME.get(code, code)
+
+
 # ---- 문장 분리 (지문 분할 규칙의 약어 예외 처리 재사용) ----
 def split_sentences(text: str) -> List[str]:
     """영어 지문 문장 분리 (원문 무손실).
@@ -465,7 +474,7 @@ def validate_role_overlap(roles: Dict[str, List[int]]) -> List[str]:
     for typ, idxs in roles.items():
         for i in idxs:
             if i in used:
-                errs.append(f"[역할겹침] 문장{i}: {used[i]} & {typ} 동시 점유")
+                errs.append(f"[역할겹침] 문장{i}: {type_name(used[i])} & {type_name(typ)} 동시 점유")
             used[i] = typ
     return errs
 
@@ -490,7 +499,8 @@ def validate_set(s: dict, gp_index: Dict[int, dict]) -> Tuple[bool, List[str]]:
             for i in range(len(avals)):
                 for j in range(len(avals)):
                     if i != j and avals[i] in avals[j]:
-                        errs.append(f"[빈칸겹침] SA 정답이 서로 포함관계: '{avals[i]}' ⊂ '{avals[j]}'")
+                        errs.append(f"[빈칸겹침] {type_name('SA')} 정답이 서로 포함관계: "
+                                   f"'{avals[i]}' ⊂ '{avals[j]}'")
             for lab, meta in item.get("blanks", {}).items():
                 if "tpl" in meta and "original" in meta:
                     errs += validate_reconstruction(meta["tpl"], lab,

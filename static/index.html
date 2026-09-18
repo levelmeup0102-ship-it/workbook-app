@@ -1630,6 +1630,9 @@ function ssUpdateBtns(){
   document.getElementById('ss-btn-generate').disabled = !(ssSelectedPassages.size && types.length);
 }
 
+const SS_TYPE_NAME = { SA:'본문 빈칸 영작', SB:'대화문 빈칸', SC:'요약문 빈칸 영작',
+                       SD:'어법 틀린 곳 고치기', SE:'제목 빈칸' };
+
 async function doSeosul(){
   const passages = [...ssSelectedPassages.values()];
   if(!passages.length){ toast('지문을 선택하세요'); return; }
@@ -1648,25 +1651,38 @@ async function doSeosul(){
   ptext.textContent = `생성 준비... (지문 ${passages.length}개 × 유형 ${types.length}개)`;
 
   try{
-    // ── 1단계: 지문을 하나씩 만들어 캐시를 채운다 ─────────────────────
-    //   한 요청에 다 넣으면 20분~1시간이 걸려 프록시가 끊는다(업스트림 에러).
-    //   2회독 변형문제가 /api/variation/item 으로 하나씩 부르는 것과 같은 방식.
-    let nMade = 0, nFail = 0;
+    // ── 1단계: 지문 하나 × 유형 하나씩 만들어 캐시를 채운다 ───────────
+    //   요청 하나가 LLM 을 많아야 3번 부르므로 1~3분에 끝난다.
+    //   지문 통째(유형 4개)로 부르면 LLM 12번 = 10분 넘겨 프록시가 끊었다(업스트림 에러).
+    //   ★ 순서 고정: 본문 빈칸 → 제목 → 어법 → 요약.
+    //     뒤 유형이 앞 유형의 문장을 피하도록 캐시를 읽기 때문에 섞으면 겹친다.
+    const ORDER = ['SA','SE','SD','SC'];
+    const seq = ORDER.filter(t => types.includes(t));
+    const total = passages.length * seq.length;
+    let step = 0, nFail = 0;
     const preWarn = [];
     for (let i = 0; i < passages.length; i++) {
       const p = passages[i];
-      ptext.textContent = `생성 중... (${i+1}/${passages.length}) ${p.id}`;
-      fill.style.width = `${Math.round((i / passages.length) * 90)}%`;
-      try{
-        const r = await fetch(API+'/api/seosul/item', {
-          method:'POST', headers:{...headers(),'Content-Type':'application/json'},
-          body: JSON.stringify({ book:p.book, unit:p.unit, id:p.id, types })
-        });
-        const d = await r.json().catch(()=>({}));
-        if(d.ok){ nMade++; if(d.missing && d.missing.length)
-          preWarn.push(`${p.book} ${p.id}: 빈칸으로 남김 → ${d.missing.join(', ')}`); }
-        else { nFail++; preWarn.push(`${p.book} ${p.id}: ${d.error||'생성 실패'}`); }
-      }catch(err){ nFail++; preWarn.push(`${p.book} ${p.id}: ${err.message||'통신 오류'}`); }
+      const done = [];
+      for (const t of seq) {
+        step++;
+        ptext.textContent = `생성 중... 지문 ${i+1}/${passages.length} · ${SS_TYPE_NAME[t]} (${step}/${total})`;
+        fill.style.width = `${Math.round((step / total) * 90)}%`;
+        try{
+          const r = await fetch(API+'/api/seosul/item', {
+            method:'POST', headers:{...headers(),'Content-Type':'application/json'},
+            body: JSON.stringify({ book:p.book, unit:p.unit, id:p.id, types, only:t })
+          });
+          const d = await r.json().catch(()=>({}));
+          if(d.ok && d.done){ done.push(t); }
+          else if(d.ok){ preWarn.push(`${p.book} ${p.id}: ${SS_TYPE_NAME[t]} 만들지 못함 — 빈칸으로 남김`); }
+          else { nFail++; preWarn.push(`${p.book} ${p.id}: ${SS_TYPE_NAME[t]} — ${d.error||'생성 실패'}`); }
+        }catch(err){ nFail++;
+          preWarn.push(`${p.book} ${p.id}: ${SS_TYPE_NAME[t]} — ${err.message||'통신 오류'}`); }
+      }
+      if(done.length < 2){
+        preWarn.push(`${p.book} ${p.id}: 만들어진 유형이 ${done.length}개뿐 — 이 지문은 시험지에서 빠집니다`);
+      }
     }
 
     // ── 2단계: 합본만 — 전부 캐시라 몇 초면 끝난다 ────────────────────

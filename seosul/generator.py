@@ -393,12 +393,23 @@ def _validate_sc(it: dict) -> List[str]:
 
 def generate_set(book: str, unit: str, pid: str, types: List[str],
                  gp_index: Dict[int, dict], stypes: Dict[str, dict],
-                 use_cache: bool = True, cache_only: bool = False) -> dict:
+                 use_cache: bool = True, cache_only: bool = False,
+                 only: Optional[str] = None) -> dict:
     """cache_only=True 면 LLM 을 부르지 않고 캐시에 있는 문항만 모은다.
 
     프런트가 지문을 하나씩 /api/seosul/item 으로 먼저 만들어 캐시를 채운 뒤,
     마지막에 /api/seosul 로 합본만 뽑을 때 쓴다. 합본 요청이 몇 초로 끝나
     프록시에 끊기지 않는다. 캐시에 없는 유형은 '빈칸 틀'로 남는다.
+
+    only='SA' 처럼 유형 하나를 지정하면 그 유형 하나만 새로 만들고,
+    나머지 유형은 캐시에 있는 것만 읽어 온다.
+    ★ 왜 이렇게 나누나
+      지문 하나를 통째로(유형 4개) 한 요청에 담으면 LLM 호출이 최대
+      4유형 × 재작성 3회 = 12번이라 10분을 넘긴다. 그 사이 프록시가
+      기다리다 포기해 '업스트림 에러'가 난다. 유형 하나면 길어야 3번이라
+      1~3분에 끝난다. 2회독 변형문제가 지문×유형 하나씩 부르는 것과 같다.
+      앞 유형이 만든 결과는 캐시에서 읽어 오므로 문장 겹침 회피는 그대로 산다
+      (그래서 프런트는 반드시 본문 빈칸 → 제목 → 어법 → 요약 순으로 부른다).
     """
     text = fetch_passage_text(book, unit, pid)
     if not text:
@@ -451,6 +462,10 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
         if cache_only:      # 합본 단계 — 여기서는 만들지 않고 빈칸으로 둔다
             warnings.append(f"{type_name(typ)} 캐시에 없음 → 빈칸으로 둠")
             return
+        if only and typ != only:
+            # 이번 요청이 맡은 유형이 아니다. 앞 유형이 아직 안 만들어졌을 뿐이니
+            # 조용히 넘긴다(그 유형 차례에 그 유형 요청이 만든다).
+            return
         try:
             it = _gen_with_repair(prompt_fn, validate_fn, *args)
             items.append(it)
@@ -502,6 +517,11 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
         _try("SE", P.prompt_SE,
              lambda it: V.validate_title_blank(it, sents),
              sents, [], stypes.get("SE", {}), sorted(used_sents), _avoid)
+        # 결론 요약형은 문장이다 — 빈칸이 문장 첫머리가 아니면 정답은 소문자.
+        # (제목형 대문자 습관이 넘어와 답지에 'Accessibility' 로 실린 적이 있다)
+        for _it in items:
+            if _it.get("type") == "SE":
+                V.normalize_se_case(_it)
 
     # 여기까지가 '빈칸이 뚫린 문장'. SD는 이 문장들을 피해야 한다.
     blank_sents = set(used_sents)
@@ -529,13 +549,48 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
             if it.get("type") == "SA":
                 _prior.append("- 본문 빈칸 영작: " + " / ".join((it.get("answers") or {}).values()))
             elif it.get("type") == "SE":
-                _prior.append("- 어휘 품사 변형: " + ", ".join(
+                _prior.append(f"- {type_name('SE')}: " + ", ".join(
                     str(b.get("answer", "")) for b in (it.get("blanks") or [])))
-        _try("SC", P.prompt_SC, _validate_sc,
-             sents, stypes.get("SC", {}), "\n".join(_prior))
+        # ★ 앞 문항의 정답 어근을 모아 둔다. 요약문 보기 상자에 '같은 어근의 다른 형태'가
+        #   들어가면 그게 앞 문항의 답을 알려 준다 — 실제 사고: 제목 빈칸 답이
+        #   accessibility 인데 요약문 보기에 accessible 이 그대로 들어갔다.
+        _leak = set()
+        for it0 in items:
+            if it0.get("type") == "SE":
+                for b0 in (it0.get("blanks") or []):
+                    for w0 in (b0.get("answer"), b0.get("base")):
+                        st = V.stem_of(str(w0 or ""))
+                        if len(st) >= 4:
+                            _leak.add(st)
+
+        def _validate_sc_nolelak(it):
+            e = _validate_sc(it)
+            for w in (it.get("bogi") or []):
+                if V.stem_of(str(w)) in _leak:
+                    e.append(f"[답노출] 보기의 '{w}' 가 {type_name('SE')} 정답과 같은 어근이다 "
+                             f"→ 그 단어를 쓰지 말고 다른 표현으로 요약문을 다시 써라")
+            return e
+
+        _try("SC", P.prompt_SC, _validate_sc_nolelak,
+             sents, stypes.get("SC", {}), "\n".join(_prior),
+             # 이미 만들어 둔 요약문이 이번 제목 빈칸 답을 흘리면 그것만 새로 만든다.
+             # (캐시 버전을 통째로 올리면 멀쩡한 요약문까지 다시 만들어 크레딧을 태운다)
+             conflicts=lambda it: any(V.stem_of(str(w)) in _leak
+                                      for w in (it.get("bogi") or [])))
 
     # ★ 살아남은 유형이 2개 미만이면 시험지로 못 쓴다(지문만 덩그러니 남음).
     #   2개 이상이면 내보내고, 빠진 자리는 렌더러가 '직접 채우는 빈칸 틀'로 남긴다.
+    if only is not None:
+        # 유형 하나만 맡은 요청 — 시험지를 만들지 않으니 여기서 끝낸다.
+        # (합치는 일은 마지막 /api/seosul 한 번이 캐시만 읽어서 한다)
+        _made1 = {it.get("type") for it in items}
+        return {"items": items, "_warnings": warnings,
+                "_requested": list(types),
+                "_made": sorted(_made1),
+                "_done": only in _made1,
+                "_missing": [t for t in types if t not in _made1],
+                "_cache_hits": hits, "_cache_misses": misses}
+
     if len(items) < 2:
         raise RuntimeError(f"살아남은 유형 {len(items)}개(2개 미만): " + "; ".join(warnings))
 

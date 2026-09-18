@@ -42,13 +42,24 @@ def fetch_passage_text(book: str, unit: str, pid: str) -> Optional[str]:
         return None
     return rows[0]["passage_text"].split("###해석###")[0].strip()
 
+# 지문을 하나씩 나눠 부르면 이 둘을 요청 수만큼 읽게 된다(어법 표만 76KB).
+# 거의 안 바뀌는 값이라 프로세스가 사는 동안 한 번만 읽는다.
+_TYPES_CACHE: Optional[Dict[str, dict]] = None
+_GP_CACHE: Optional[Dict[int, dict]] = None
+
 def fetch_seosul_types() -> Dict[str, dict]:
-    rows = _sb_get("seosul_types", {"select": "*", "active": "eq.true"})
-    return {r["code"]: r for r in rows}
+    global _TYPES_CACHE
+    if _TYPES_CACHE is None:
+        rows = _sb_get("seosul_types", {"select": "*", "active": "eq.true"})
+        _TYPES_CACHE = {r["code"]: r for r in rows}
+    return _TYPES_CACHE
 
 def fetch_grammar_points() -> Dict[int, dict]:
-    rows = _sb_get("grammar_points", {"select": "*", "active": "eq.true"})
-    return {r["id"]: r for r in rows}
+    global _GP_CACHE
+    if _GP_CACHE is None:
+        rows = _sb_get("grammar_points", {"select": "*", "active": "eq.true"})
+        _GP_CACHE = {r["id"]: r for r in rows}
+    return _GP_CACHE
 
 
 # ---------- 캐시 (seosul_cache) ----------
@@ -382,7 +393,13 @@ def _validate_sc(it: dict) -> List[str]:
 
 def generate_set(book: str, unit: str, pid: str, types: List[str],
                  gp_index: Dict[int, dict], stypes: Dict[str, dict],
-                 use_cache: bool = True) -> dict:
+                 use_cache: bool = True, cache_only: bool = False) -> dict:
+    """cache_only=True 면 LLM 을 부르지 않고 캐시에 있는 문항만 모은다.
+
+    프런트가 지문을 하나씩 /api/seosul/item 으로 먼저 만들어 캐시를 채운 뒤,
+    마지막에 /api/seosul 로 합본만 뽑을 때 쓴다. 합본 요청이 몇 초로 끝나
+    프록시에 끊기지 않는다. 캐시에 없는 유형은 '빈칸 틀'로 남는다.
+    """
     text = fetch_passage_text(book, unit, pid)
     if not text:
         raise RuntimeError(f"지문 없음: {book} {unit} {pid}")
@@ -431,6 +448,9 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
                     items.append(it); _mark_used(it); hits.append(typ)
                     return
         misses.append(typ)
+        if cache_only:      # 합본 단계 — 여기서는 만들지 않고 빈칸으로 둔다
+            warnings.append(f"{type_name(typ)} 캐시에 없음 → 빈칸으로 둠")
+            return
         try:
             it = _gen_with_repair(prompt_fn, validate_fn, *args)
             items.append(it)
@@ -518,6 +538,7 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
     #   2개 이상이면 내보내고, 빠진 자리는 렌더러가 '직접 채우는 빈칸 틀'로 남긴다.
     if len(items) < 2:
         raise RuntimeError(f"살아남은 유형 {len(items)}개(2개 미만): " + "; ".join(warnings))
+
 
     # ★ SD 금지유형/중복문장/빈칸문장 개별 제거(유형은 살리되 나쁜 오류만 버림)
     for it in items:

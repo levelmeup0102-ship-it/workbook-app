@@ -200,6 +200,21 @@ def prompt_SD(sentences, target_idx, allowed_gp: List[dict], used_sents=()) -> s
 ★ 재작성 문장은 원문과 '의미가 같아야' 하고, 원문 단어를 대부분 그대로 써야 한다
   (단어의 70% 이상 공유). 새 내용을 지어내지 마라. 구조만 바꾼다.
 
+★★ 고치는 방법이 '단 하나'여야 한다 — 어기면 채점이 갈린다
+  네가 만든 틀린 문장을, 네가 적은 right 말고 '다른 방법으로도' 바로잡을 수 있으면
+  그 오류는 버려라. 학생이 다른 방법으로 고쳐 오면 맞는데 답지에 없어 틀린 게 된다.
+  ✗ 나쁜 예 (실제 사고)
+      원문  : There are atoms in your body that have existed since the first moments of time
+      재작성: There are atoms in your body exist since the first moments of time
+      right : existing
+      → 'that have existed' 로 되돌려도 맞고, 'exist' 앞에 that 만 넣어도 맞는다.
+        고치는 길이 셋이라 답지 하나로 채점이 안 된다. 이런 건 만들지 마라.
+  ✔ 좋은 예
+      재작성: many demands pressed on a teacher's time   right: pressing
+      → 그 자리에 들어갈 형태가 하나뿐이다.
+  판단법: 재작성 문장을 다시 읽고 '내가 적은 것 말고 다른 손질로도 문장이 성립하나'를
+  스스로 물어라. 하나라도 떠오르면 그 문장은 쓰지 말고 다른 문장으로 옮겨라.
+
 ═══════════════════════════════════════════════════════════
 ★★★ 출제 축 - 이 비중으로 만들어라
 ═══════════════════════════════════════════════════════════

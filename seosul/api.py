@@ -48,6 +48,7 @@ class SeosulRequest(BaseModel):
     school_name: str = "레벨미업학원"
     answers_at_back: bool = False   # True면 모든 문제 먼저, 정답은 맨 뒤로 모음
     force: bool = False             # True면 캐시 무시하고 새로 생성
+    cache_only: bool = False        # True면 LLM 호출 없이 캐시만 모아 합본(끊김 방지)
 
 
 router = APIRouter(prefix="/api", tags=["seosul"])
@@ -82,6 +83,38 @@ def seosul_clear_cache(req: PassageListRequest, _=Depends(verify_token)):
         return {"ok": False, "deleted": 0, "error": str(e)}
 
 
+class SeosulItemRequest(BaseModel):
+    book: str
+    unit: str
+    id: str
+    types: List[str] = ["SA", "SC", "SD", "SE"]
+    force: bool = False
+
+
+@router.post("/seosul/item")
+def create_seosul_item(req: SeosulItemRequest, _=Depends(verify_token)):
+    """지문 '한 개'만 만들어 캐시에 넣는다. HTML 은 만들지 않는다.
+
+    ★ 왜 나눠 부르나
+      지문 전부를 한 요청에 넣으면 LLM 을 수십 번 불러 20분~1시간이 걸리고,
+      그 사이 Railway 프록시가 기다리다 포기해 '업스트림 에러'가 난다.
+      2회독 변형문제가 /api/variation/item 으로 하나씩 부르는 것과 같은 방식이다.
+      요청 하나가 짧아지므로 지문이 몇 개든 끊기지 않는다.
+    """
+    gp = fetch_grammar_points()
+    stypes = fetch_seosul_types()
+    try:
+        s = generate_set(req.book, req.unit, req.id, req.types, gp, stypes,
+                         use_cache=not req.force)
+        made = [type_name(it.get("type")) for it in s.get("items", [])]
+        return {"ok": True, "made": made,
+                "missing": [type_name(t) for t in s.get("_missing", [])],
+                "warnings": s.get("_warnings", [])}
+    except Exception as e:
+        traceback.print_exc()
+        return {"ok": False, "error": str(e)}
+
+
 @router.post("/seosul")
 def create_seosul(req: SeosulRequest, _=Depends(verify_token)):
     gp = fetch_grammar_points()
@@ -91,7 +124,7 @@ def create_seosul(req: SeosulRequest, _=Depends(verify_token)):
     for p in req.passages:
         try:
             s = generate_set(p.book, p.unit, p.id, req.types, gp, stypes,
-                             use_cache=not req.force)
+                             use_cache=not req.force, cache_only=req.cache_only)
             pr, an = render_fragments(s, teacher=False, school_name=req.school_name)
             probs.append(pr); anss.append(an); n_ok += 1
             # 빠진 유형은 시험지에 '직접 채우는 빈칸 틀'로 들어간다 — 어느 지문 어느 유형인지 알려준다.

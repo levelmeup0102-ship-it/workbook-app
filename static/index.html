@@ -1668,7 +1668,20 @@ async function doSeosul(){
         ❌ 생성 실패 항목:<br>${data.warnings.map(w=>'• '+w).join('<br>')}</div>`;
     }
     rlist.innerHTML=h;
-    try{ window.open(url,'_blank'); }catch(e){}
+    // ★ window.open 은 await 뒤라 '사용자 클릭 맥락'이 끊겨 크롬이 팝업으로 막는다.
+    //   막히면 창이 안 뜨고 아무 일도 안 일어난 것처럼 보이므로, 막혔는지 확인해서 안내한다.
+    let _w = null;
+    try{ _w = window.open(url,'_blank'); }catch(e){}
+    if(!_w || _w.closed || typeof _w.closed === 'undefined'){
+      rlist.insertAdjacentHTML('afterbegin',
+        `<div style="padding:9px;background:#fff7ed;border:1px solid #fdba74;border-radius:6px;
+                     font-size:12px;color:#9a3412;margin-bottom:8px;">
+           ⚠️ 브라우저가 새 창을 막았습니다. 아래 <b>열기</b> 또는 <b>다운로드</b>를 눌러 주세요.
+           <br>주소창 오른쪽 팝업 차단 아이콘에서 이 사이트를 허용하면 다음부터 자동으로 열립니다.
+         </div>`);
+    }
+    // 결과 카드가 화면 아래에 생겨 안 보이는 일이 잦다 — 그쪽으로 스크롤한다.
+    rsec.scrollIntoView({behavior:'smooth', block:'center'});
     toast('서술형 종합 생성 완료!');
   }catch(e){ ptext.textContent='❌ '+(e.message||'생성 실패'); toast('생성 실패: '+(e.message||'')); }
   finally{ ssLoadCacheStatus(true); setTimeout(()=>{ progress.classList.add('hidden'); fill.style.width='0%'; ssUpdateBtns(); },2000); }

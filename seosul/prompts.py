@@ -86,46 +86,46 @@ def prompt_SA(sentences, target_idx, spec) -> str:
 # =========================================================
 #  2) SE - 어휘 품사 변형
 # =========================================================
-def prompt_SE(sentences, target_idx, spec, used_sents=()) -> str:
-    """제목 빈칸 — 본문에서 단어를 찾아 어형을 바꿔 채우기.
+def prompt_SE(sentences, target_idx, spec, used_sents=(), avoid_text="") -> str:
+    """제목·결론 빈칸 — 본문에서 단어를 찾아 어형을 바꿔 채우기.
 
-    ★ 지문을 건드리지 않는다. 별도의 '제목'을 새로 쓰고 거기에 빈칸 하나를 판다.
-      학생은 본문을 뒤져 어근이 되는 단어를 찾고, 제목 자리에 맞게 품사를 바꿔 쓴다.
-
+    ★ 지문을 건드리지 않는다. 지문 밖에 '한 줄'을 새로 쓰고 거기에 빈칸 하나를 판다.
     ★★ 핵심 규칙 두 줄 (선생님 확정)
         어근  : 본문에 '있어야' 한다   → 학생이 찾을 수 있어야 하므로
         정답  : 본문에 '없어야' 한다   → 있으면 그냥 베껴 쓰게 되어 변형 판단이 사라진다
     """
+    av = (f"\n★ 아래 어구는 다른 문항의 정답이다. 네가 쓰는 문장에 그대로 넣지 마라(답이 새어 나간다).\n"
+          f"   {avoid_text}\n") if avoid_text else ""
     return f"""{_COMMON}
 
-[유형 SE] 이 지문에 어울리는 '제목'을 새로 쓰고, 그 제목에 빈칸 1개를 만든다.
-★ 지문 본문은 절대 건드리지 마라. 빈칸은 오직 제목 안에만 있다.
-
+[유형 SE] 이 지문을 압축한 '한 줄'을 새로 쓰고, 그 안에 빈칸 1개를 만든다.
+★ 지문 본문은 절대 건드리지 마라. 빈칸은 오직 네가 쓴 그 한 줄 안에만 있다.
+{av}
 ═══════════════════════════════════════════════════════════
-★★★ 제목은 고3 평가원 제목추론(24번) 선지 문체로 쓴다
+★★★ 프레임 - 지문에 맞는 쪽을 네가 골라라
 ═══════════════════════════════════════════════════════════
-- 문장이 아니라 '명사구'로 쓴다. 마침표를 찍지 마라.
-- Title Case (관사·전치사·접속사를 뺀 단어의 첫 글자는 대문자).
-- 콜론(:)으로 두 덩이로 끊는 형태를 기본으로 한다.
-  앞 덩이는 짧은 핵심 명사구, 뒤 덩이는 그것을 풀어 주는 구.
-- 전체 10~16단어. 너무 짧으면 빈칸 하나가 답을 다 드러낸다.
-- 비유·대조·역설을 써도 좋다(평가원이 즐겨 쓴다).
-- 물음표로 끝나는 형태(Why Do We ~?)도 허용한다.
+frame="title"   제목형
+  · 고3 평가원 제목추론(24번) 선지 문체. 명사구로 쓰고 마침표를 찍지 않는다.
+  · Title Case. 콜론(:)으로 두 덩이로 끊는 형태를 기본으로 한다.
+  · 10~16단어. 비유·대조·역설을 써도 좋고, 물음표로 끝나도 된다.
+  · 지문이 '하나의 주제'로 딱 떨어질 때 쓴다.
+  예: The Hidden Cost of {{{{C}}}}: How Farming Villages Became the Cradle of Epidemic Disease
 
-좋은 예:
-  The Hidden Cost of {{{{C}}}}: How Farming Villages Became the Cradle of Epidemic Disease
-  {{{{C}}}} of Memory: Why the Brain Rewrites What It Once Recorded
-  Beyond Mere Survival: The {{{{C}}}} That Turned Early Humans into City Builders
+frame="summary"  결론 요약형
+  · 지문의 '결론부 한두 문장'을 합쳐 다시 쓴 완결된 문장. 마침표로 끝낸다.
+  · 22~40단어. 주변 표현은 전부 바꾸되 빈칸 자리만 남긴다.
+  · 지문이 '원인 → 결과'처럼 흐름을 타서 한 줄 제목으로 누르기 애매할 때 쓴다.
+  예: The New Stone Age marked an important turning point in human history, as the
+      advancement of {{{{C}}}} increased population density, leading to the formation of
+      towns and cities and eventually to the rise of civilizations.
 
-✗ 나쁜 예
-  - Farming Is Bad for Health.        (문장 + 마침표)
-  - The Story of Agriculture          (너무 짧고 밋밋함)
-  - 지문 첫 문장을 그대로 옮긴 것
+★ 어느 쪽이든 지문의 '결론·주장'을 담아야 한다. 도입부 배경이나 예시를 옮기지 마라.
+★ 지문 문장을 그대로 베껴 오지 마라. 반드시 다시 써라.
 
 ═══════════════════════════════════════════════════════════
 ★★★ 빈칸 규칙 - 어기면 검증기가 통째로 폐기한다
 ═══════════════════════════════════════════════════════════
-1) 빈칸은 '정확히 1개'. 제목 안에 {{{{C}}}} 를 한 번만 넣어라.
+1) 빈칸은 '정확히 1개'. 문장 안에 {{{{C}}}} 를 한 번만 넣어라.
 2) base(어근)는 '본문에 글자 그대로 있는 단어'여야 한다. 학생이 본문에서 찾아야 하므로.
 3) ★ answer(정답)는 '본문에 없는 형태'여야 한다.
    본문에 있으면 학생이 그대로 베껴 쓰게 되어 이 문항이 성립하지 않는다.
@@ -135,14 +135,14 @@ def prompt_SE(sentences, target_idx, spec, used_sents=()) -> str:
 5) base 와 answer 는 품사가 달라야 한다(파생). 단순 복수·시제 변화는 금지.
    좋은 예: cultivating→Cultivation(동→명), domesticating→Domestication(동→명),
             settled→Settlement(동→명), diverse→Diversity(형→명), able→Ability(형→명)
-6) 제목 안에 answer 나 base 가 (빈칸 말고) 또 나오면 안 된다. 답이 노출된다.
+6) 네가 쓴 문장 안에 answer 나 base 가 (빈칸 말고) 또 나오면 안 된다. 답이 노출된다.
 
 지문:
 {_numbered(sentences)}
 
 출력 JSON:
-{{{{"type":"SE",
- "title":"<{{{{C}}}} 를 정확히 한 번 포함한 평가원체 제목>",
+{{{{"type":"SE","frame":"<title 또는 summary>",
+ "title":"<{{{{C}}}} 를 정확히 한 번 포함한 한 줄>",
  "blanks":[{{{{"label":"C","base":"<본문에 있는 단어 그대로>","base_pos":"<동사/명사/형용사/부사>",
              "answer":"<본문에 없는 파생형 한 단어>","note":"<품사 변화. 예: 동사 → 명사>"}}}}]}}}}"""
 

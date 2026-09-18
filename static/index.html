@@ -1645,12 +1645,38 @@ async function doSeosul(){
   const fill=document.getElementById('ss-progress-fill'), ptext=document.getElementById('ss-progress-text');
   const rsec=document.getElementById('ss-results-section'), rlist=document.getElementById('ss-results-list');
   btn.disabled=true; progress.classList.remove('hidden'); rsec.classList.add('hidden'); rlist.innerHTML='';
-  ptext.textContent = `생성 중... (지문 ${passages.length}개 × 유형 ${types.length}개)`;
+  ptext.textContent = `생성 준비... (지문 ${passages.length}개 × 유형 ${types.length}개)`;
 
   try{
+    // ── 1단계: 지문을 하나씩 만들어 캐시를 채운다 ─────────────────────
+    //   한 요청에 다 넣으면 20분~1시간이 걸려 프록시가 끊는다(업스트림 에러).
+    //   2회독 변형문제가 /api/variation/item 으로 하나씩 부르는 것과 같은 방식.
+    let nMade = 0, nFail = 0;
+    const preWarn = [];
+    for (let i = 0; i < passages.length; i++) {
+      const p = passages[i];
+      ptext.textContent = `생성 중... (${i+1}/${passages.length}) ${p.id}`;
+      fill.style.width = `${Math.round((i / passages.length) * 90)}%`;
+      try{
+        const r = await fetch(API+'/api/seosul/item', {
+          method:'POST', headers:{...headers(),'Content-Type':'application/json'},
+          body: JSON.stringify({ book:p.book, unit:p.unit, id:p.id, types })
+        });
+        const d = await r.json().catch(()=>({}));
+        if(d.ok){ nMade++; if(d.missing && d.missing.length)
+          preWarn.push(`${p.book} ${p.id}: 빈칸으로 남김 → ${d.missing.join(', ')}`); }
+        else { nFail++; preWarn.push(`${p.book} ${p.id}: ${d.error||'생성 실패'}`); }
+      }catch(err){ nFail++; preWarn.push(`${p.book} ${p.id}: ${err.message||'통신 오류'}`); }
+    }
+
+    // ── 2단계: 합본만 — 전부 캐시라 몇 초면 끝난다 ────────────────────
+    ptext.textContent = 'HTML 합치는 중...';
+    fill.style.width = '95%';
     const res = await fetch(API+'/api/seosul', {
       method:'POST', headers:{...headers(),'Content-Type':'application/json'},
-      body: JSON.stringify({ passages, types, school_name: schoolName, answers_at_back: document.getElementById('ss-answers-back').checked })
+      body: JSON.stringify({ passages, types, school_name: schoolName,
+        answers_at_back: document.getElementById('ss-answers-back').checked,
+        cache_only: true })
     });
     if(!res.ok) throw new Error(await res.text() || 'API 오류');
     const data = await res.json();
@@ -1663,6 +1689,10 @@ async function doSeosul(){
         <a href="${url}" target="_blank" class="btn btn-sm btn-primary"> 열기</a></span></div>
       <div style="font-size:11px;color:#666;padding:8px;background:#eff6ff;border-radius:6px;margin-top:8px;">
         💡 '열기' 후 Ctrl+P (Mac: Cmd+P)로 인쇄/PDF 저장</div>`;
+    if(preWarn.length){
+      h += `<div style="margin-top:10px;padding:8px;background:#fff7ed;border:1px solid #fdba74;border-radius:6px;font-size:11px;color:#9a3412;">
+        ⚠️ 생성 단계 기록:<br>${preWarn.map(w=>'• '+w).join('<br>')}</div>`;
+    }
     if(data.warnings && data.warnings.length){
       h += `<div style="margin-top:10px;padding:8px;background:#fee;border:1px solid #fca5a5;border-radius:6px;font-size:11px;color:#991b1b;">
         ❌ 생성 실패 항목:<br>${data.warnings.map(w=>'• '+w).join('<br>')}</div>`;

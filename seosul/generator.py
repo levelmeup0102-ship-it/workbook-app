@@ -482,7 +482,8 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
             warnings.append(f"{type_name(typ)} 생략(자동 검증 미통과): {e}")
 
     # ══════════════════════════════════════════════════════
-    #  생성 순서: 1) SA 본문빈칸 → 2) SE 어휘변형 → 3) SD 어법 → 4) SC 요약
+    #  생성 순서: 1) 본문 빈칸 → 2) 요약문 빈칸 → 3) 어법 → 4) 제목 빈칸
+#  ※ 시험지에 인쇄되는 번호와는 다르다(인쇄 순서는 renderer._TYPE_ORDER).
     #  앞 단계가 문장을 점유하면 뒤 단계는 그 문장을 피한다(겹침 폐기 원천 차단).
     # ══════════════════════════════════════════════════════
 
@@ -503,25 +504,18 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
         if _sa_used:
             roles["SA"] = _sa_used
 
-    # ---- 2) SE : 제목 빈칸 (본문 점유 없음) ----
-    #   ★ 지문을 건드리지 않는다. 별도 제목을 쓰고 거기에 빈칸 1개를 판다.
-    #     그래서 used_sents 에 아무것도 넣지 않고, 뒤 문항과 문장을 두고 다투지 않는다.
-    #     규칙이 예전과 정반대다 — 정답은 본문에 '없어야' 한다(있으면 베껴 쓰면 되므로).
-    if "SE" in types:
-        roles["SE"] = []          # 본문 문장을 하나도 점유하지 않는다
-        # 본문 빈칸이 먼저 끝나 있다. 그 정답 어구를 넘겨서 제목·요약문에
-        # 그대로 들어가지 않게 한다(들어가면 1번 답이 새어 나간다).
-        _avoid = " / ".join(
-            v for it0 in items if it0.get("type") == "SA"
-            for v in (it0.get("answers") or {}).values() if v)
-        _try("SE", P.prompt_SE,
-             lambda it: V.validate_title_blank(it, sents),
-             sents, [], stypes.get("SE", {}), sorted(used_sents), _avoid)
-        # 결론 요약형은 문장이다 — 빈칸이 문장 첫머리가 아니면 정답은 소문자.
-        # (제목형 대문자 습관이 넘어와 답지에 'Accessibility' 로 실린 적이 있다)
-        for _it in items:
-            if _it.get("type") == "SE":
-                V.normalize_se_case(_it)
+    # ---- 2) SC : 요약문 빈칸 영작 (본문 점유 없음) ----
+    #   ★ 제목 빈칸보다 '먼저' 만든다. 둘 다 지문을 한 문장으로 요약하는 일이라
+    #     나중에 만드는 쪽이 앞 문장을 피해야 겹치지 않는다. 요약문은 보기 상자의
+    #     단어 수까지 맞춰야 해서 제약을 더 얹기 어렵다 — 그래서 자유로운 쪽인
+    #     제목 빈칸을 뒤로 돌렸다. (실제 사고: 2번 문장이 4번 정답을 말로 풀어 줌)
+    if "SC" in types:
+        _prior = []
+        for it in items:
+            if it.get("type") == "SA":
+                _prior.append(f"- {type_name('SA')}: " + " / ".join((it.get("answers") or {}).values()))
+        _try("SC", P.prompt_SC, _validate_sc,
+             sents, stypes.get("SC", {}), "\n".join(_prior))
 
     # 여기까지가 '빈칸이 뚫린 문장'. SD는 이 문장들을 피해야 한다.
     blank_sents = set(used_sents)
@@ -542,41 +536,63 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
              conflicts=lambda it: any(e.get("sent") in blank_sents
                                       for e in (it.get("errors") or [])))
 
-    # ---- 4) SC : 요약문 빈칸 (본문 점유 없음, 맨 마지막) ----
-    if "SC" in types:
-        _prior = []
-        for it in items:
-            if it.get("type") == "SA":
-                _prior.append("- 본문 빈칸 영작: " + " / ".join((it.get("answers") or {}).values()))
-            elif it.get("type") == "SE":
-                _prior.append(f"- {type_name('SE')}: " + ", ".join(
-                    str(b.get("answer", "")) for b in (it.get("blanks") or [])))
-        # ★ 앞 문항의 정답 어근을 모아 둔다. 요약문 보기 상자에 '같은 어근의 다른 형태'가
-        #   들어가면 그게 앞 문항의 답을 알려 준다 — 실제 사고: 제목 빈칸 답이
-        #   accessibility 인데 요약문 보기에 accessible 이 그대로 들어갔다.
-        _leak = set()
+    # ---- 4) SE : 제목 빈칸 (본문 점유 없음, 맨 마지막) ----
+    #   ★ 지문을 건드리지 않는다. 별도 한 줄을 쓰고 거기에 빈칸 1개를 판다.
+    #     그래서 used_sents 에 아무것도 넣지 않고, 다른 문항과 문장을 두고 다투지 않는다.
+    #     규칙이 예전과 정반대다 — 정답은 본문에 '없어야' 한다(있으면 베껴 쓰면 되므로).
+    #   ★ 맨 마지막인 이유: 앞서 만든 본문 빈칸 정답과 요약문 문장을 다 받아서
+    #     그것들과 겹치지 않는 한 줄을 쓰게 하려는 것이다.
+    if "SE" in types:
+        roles["SE"] = []          # 본문 문장을 하나도 점유하지 않는다
+        _av = []
+        _sc_text, _sc_stems = "", set()
         for it0 in items:
-            if it0.get("type") == "SE":
-                for b0 in (it0.get("blanks") or []):
-                    for w0 in (b0.get("answer"), b0.get("base")):
-                        st = V.stem_of(str(w0 or ""))
-                        if len(st) >= 4:
-                            _leak.add(st)
+            if it0.get("type") == "SA":
+                for v in (it0.get("answers") or {}).values():
+                    if v:
+                        _av.append(f"[{type_name('SA')} 정답] {v}")
+            elif it0.get("type") == "SC":
+                _sc_text = str(it0.get("summary") or "")
+                for k0, v0 in (it0.get("answers") or {}).items():
+                    _av.append(f"[{type_name('SC')} 정답] {v0}")
+                    _sc_text = _sc_text.replace("{{%s}}" % k0, str(v0))
+                for w0 in (it0.get("bogi") or []):
+                    st0 = V.stem_of(str(w0))
+                    if len(st0) >= 4:
+                        _sc_stems.add(st0)
+                if _sc_text:
+                    _av.append(f"[{type_name('SC')} 요약문 — 이 문장과 내용이 겹치면 안 된다] {_sc_text}")
 
-        def _validate_sc_nolelak(it):
-            e = _validate_sc(it)
-            for w in (it.get("bogi") or []):
-                if V.stem_of(str(w)) in _leak:
-                    e.append(f"[답노출] 보기의 '{w}' 가 {type_name('SE')} 정답과 같은 어근이다 "
-                             f"→ 그 단어를 쓰지 말고 다른 표현으로 요약문을 다시 써라")
+        def _validate_se(it):
+            e = V.validate_title_blank(it, sents)
+            # (가) 정답·어근이 요약문 보기 상자에 있으면 답이 새어 나간다
+            for b in (it.get("blanks") or []):
+                for w in (b.get("answer"), b.get("base")):
+                    if V.stem_of(str(w or "")) in _sc_stems:
+                        e.append(f"[답노출] '{w}' 와 같은 어근이 {type_name('SC')} 보기 상자에 있다 "
+                                 f"→ 다른 단어로 빈칸을 잡아라")
+                        break
+            # (나) 요약문이 이미 지문을 한 문장으로 눌러 놨다.
+            #     여기서 또 결론 요약형을 쓰면 학생이 같은 일을 두 번 한다.
+            #     ★ 단어 겹침으로는 못 잡는다 — 둘 다 패러프레이즈라 일부러 다른
+            #       단어를 쓴다(실측: 겹치는 두 문장 22%, 안 겹치는 제목형 33%).
+            #       겹치는 건 단어가 아니라 '하는 일'이라서, 형태 자체를 막는다.
+            if _sc_text and (it.get("frame") or "title") != "title":
+                e.append(f"[요약중복] {type_name('SC')} 이 이미 지문을 한 문장으로 요약했다 "
+                         f"→ 결론 요약형을 쓰지 말고 제목형 명사구로 써라")
             return e
 
-        _try("SC", P.prompt_SC, _validate_sc_nolelak,
-             sents, stypes.get("SC", {}), "\n".join(_prior),
-             # 이미 만들어 둔 요약문이 이번 제목 빈칸 답을 흘리면 그것만 새로 만든다.
-             # (캐시 버전을 통째로 올리면 멀쩡한 요약문까지 다시 만들어 크레딧을 태운다)
-             conflicts=lambda it: any(V.stem_of(str(w)) in _leak
-                                      for w in (it.get("bogi") or [])))
+        _try("SE", P.prompt_SE, _validate_se,
+             sents, [], stypes.get("SE", {}), sorted(used_sents), "\n   ".join(_av),
+             bool(_sc_text),
+             # 예전에 만든 제목이 이번 요약문과 겹치면 그것만 새로 만든다.
+             # (캐시 버전을 통째로 올리면 멀쩡한 것까지 다시 만들어 크레딧을 태운다)
+             conflicts=lambda it: bool(_validate_se(it)))
+        # 결론 요약형은 문장이다 — 빈칸이 문장 첫머리가 아니면 정답은 소문자.
+        # (제목형 대문자 습관이 넘어와 답지에 'Accessibility' 로 실린 적이 있다)
+        for _it in items:
+            if _it.get("type") == "SE":
+                V.normalize_se_case(_it)
 
     # ★ 살아남은 유형이 2개 미만이면 시험지로 못 쓴다(지문만 덩그러니 남음).
     #   2개 이상이면 내보내고, 빠진 자리는 렌더러가 '직접 채우는 빈칸 틀'로 남긴다.

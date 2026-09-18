@@ -88,31 +88,41 @@ class SeosulItemRequest(BaseModel):
     unit: str
     id: str
     types: List[str] = ["SA", "SC", "SD", "SE"]
+    only: Optional[str] = None     # 이번 요청이 맡을 유형 하나 (없으면 지문 통째)
     force: bool = False
 
 
 @router.post("/seosul/item")
 def create_seosul_item(req: SeosulItemRequest, _=Depends(verify_token)):
-    """지문 '한 개'만 만들어 캐시에 넣는다. HTML 은 만들지 않는다.
+    """지문 하나 × 유형 하나만 만들어 캐시에 넣는다. HTML 은 만들지 않는다.
 
-    ★ 왜 나눠 부르나
-      지문 전부를 한 요청에 넣으면 LLM 을 수십 번 불러 20분~1시간이 걸리고,
-      그 사이 Railway 프록시가 기다리다 포기해 '업스트림 에러'가 난다.
-      2회독 변형문제가 /api/variation/item 으로 하나씩 부르는 것과 같은 방식이다.
-      요청 하나가 짧아지므로 지문이 몇 개든 끊기지 않는다.
+    ★ 왜 이렇게까지 잘게 나누나
+      지문 전부를 한 요청에 넣으면 20분~1시간이 걸려 프록시가 끊는다('업스트림 에러').
+      지문 하나로 줄여도 유형 4개 × 재작성 3회 = LLM 12번이라 10분을 넘겨 또 끊겼다.
+      유형 하나면 길어야 3번, 1~3분이면 끝난다.
+      2회독 변형문제가 /api/variation/item 을 '지문 하나 × 유형 하나'로 부르는 것과 같다.
+
+    ★ 순서를 지켜야 한다
+      본문 빈칸 → 제목 빈칸 → 어법 → 요약. 앞 유형의 결과를 캐시에서 읽어
+      같은 문장을 두 번 쓰지 않게 피하기 때문이다. 순서를 섞으면 겹친다.
     """
     gp = fetch_grammar_points()
     stypes = fetch_seosul_types()
     try:
         s = generate_set(req.book, req.unit, req.id, req.types, gp, stypes,
-                         use_cache=not req.force)
+                         use_cache=not req.force, only=req.only)
+        if req.only:
+            return {"ok": True, "type": type_name(req.only),
+                    "done": bool(s.get("_done")),
+                    "warnings": s.get("_warnings", [])}
         made = [type_name(it.get("type")) for it in s.get("items", [])]
         return {"ok": True, "made": made,
                 "missing": [type_name(t) for t in s.get("_missing", [])],
                 "warnings": s.get("_warnings", [])}
     except Exception as e:
         traceback.print_exc()
-        return {"ok": False, "error": str(e)}
+        return {"ok": False, "type": type_name(req.only) if req.only else None,
+                "error": str(e)}
 
 
 @router.post("/seosul")

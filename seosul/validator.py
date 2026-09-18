@@ -390,7 +390,8 @@ def _is_inflection_only(base: str, ans: str, base_pos: str = "") -> bool:
         return a.endswith("s") or a in ("men", "women", "children", "feet", "teeth", "mice", "people", "geese")
     return False
 
-_TITLE_MIN_W, _TITLE_MAX_W = 10, 16
+# 프레임별 길이 기준. 제목은 명사구라 짧고, 결론 요약형은 완결된 문장이라 길다.
+_FRAME_W = {"title": (10, 16), "summary": (22, 40)}
 
 def _in_passage(word: str, passage: str) -> bool:
     """단어가 본문에 '글자 그대로' 있는가 (대소문자 무시, 단어 경계)."""
@@ -423,16 +424,37 @@ def validate_title_blank(item: dict, sentences: List[str]) -> List[str]:
     if len(blanks) != 1:
         errs.append(f"[빈칸개수] 빈칸 {len(blanks)}개 → 정확히 1개여야 한다")
     if title.count("{{C}}") != 1:
-        errs.append(f"[자리표시] 제목에 {{{{C}}}} 가 {title.count('{{C}}')}번 → 정확히 1번만 넣어라")
+        errs.append(f"[자리표시] {{{{C}}}} 가 {title.count('{{C}}')}번 → 정확히 1번만 넣어라")
 
-    # 제목 문체
+    # 프레임(제목형 / 결론 요약형)마다 길이·마침표 기준이 다르다
+    frame = (item.get("frame") or "title").strip().lower()
+    if frame not in _FRAME_W:
+        frame = "title"
+    lo, hi = _FRAME_W[frame]
     nw = len([w for w in re.sub(r"\{\{C\}\}", "X", title).split() if w.strip()])
-    if nw < _TITLE_MIN_W:
-        errs.append(f"[제목짧음] {nw}단어 → {_TITLE_MIN_W}~{_TITLE_MAX_W}단어로 늘려라")
-    elif nw > _TITLE_MAX_W:
-        errs.append(f"[제목김] {nw}단어 → {_TITLE_MIN_W}~{_TITLE_MAX_W}단어로 줄여라")
-    if title.rstrip().endswith("."):
+    if nw < lo:
+        errs.append(f"[짧음] {nw}단어 → {frame} 프레임은 {lo}~{hi}단어")
+    elif nw > hi:
+        errs.append(f"[김] {nw}단어 → {frame} 프레임은 {lo}~{hi}단어")
+    if frame == "title" and title.rstrip().endswith("."):
         errs.append("[제목마침표] 제목은 명사구다. 마침표를 찍지 마라")
+    if frame == "summary" and not title.rstrip().endswith((".", "!", "?")):
+        errs.append("[문장미완] 결론 요약형은 완결된 문장이다. 마침표로 끝내라")
+
+    # 지문 문장을 그대로 베껴 오면 안 된다(다시 쓴 것이어야 함).
+    #   빈칸 자리만 비워 놓고 나머지를 통째로 옮기는 일이 잦아, 단어 겹침 비율로 본다.
+    #   한 문장과 85% 이상 겹치면 '옮겨 적은 것'으로 보고 폐기한다.
+    _n = lambda t: [w for w in re.sub(r"[^a-z]", " ", t.lower()).split() if len(w) > 2]
+    _bt = _n(re.sub(r"\{\{C\}\}", " ", title))
+    if _bt:
+        for _sent in sentences:
+            _st = set(_n(_sent))
+            if not _st:
+                continue
+            _ratio = sum(1 for w in _bt if w in _st) / len(_bt)
+            if _ratio >= 0.85:
+                errs.append(f"[원문복사] 지문 문장과 {_ratio:.0%} 겹친다 → 표현을 바꿔 다시 써라")
+                break
 
     for bl in blanks:
         lab = bl.get("label", "?")

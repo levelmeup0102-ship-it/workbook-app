@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 from .generator import (
     generate_set, fetch_grammar_points, fetch_seosul_types,
-    get_cache_status, delete_cache,
+    get_cache_status, delete_cache, type_name,
 )
 from .renderer import render_fragments, wrap_document, ANS_HDR
 
@@ -94,6 +94,10 @@ def create_seosul(req: SeosulRequest, _=Depends(verify_token)):
                              use_cache=not req.force)
             pr, an = render_fragments(s, teacher=False, school_name=req.school_name)
             probs.append(pr); anss.append(an); n_ok += 1
+            # 빠진 유형은 시험지에 '직접 채우는 빈칸 틀'로 들어간다 — 어느 지문 어느 유형인지 알려준다.
+            if s.get("_missing"):
+                names = ", ".join(type_name(t) for t in s["_missing"])
+                warnings.append(f"{p.book} {p.unit} {p.id}: 빈칸으로 남김 → {names} (직접 채워 주세요)")
             for w in s.get("_warnings", []):
                 warnings.append(f"{p.book} {p.unit} {p.id}: {w}")
         except Exception as e:

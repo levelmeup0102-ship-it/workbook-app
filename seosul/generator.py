@@ -171,15 +171,47 @@ def get_cache_status(passages: List[dict]) -> Dict[str, dict]:
     return out
 
 
+def _all_cache_keys() -> List[str]:
+    """캐시 키를 전부 읽어 온다(페이지 단위)."""
+    keys, offset = [], 0
+    while True:
+        rows = _sb_get("seosul_cache",
+                       {"select": "cache_key", "limit": str(_CACHE_PAGE),
+                        "offset": str(offset)})
+        keys += [r.get("cache_key") or "" for r in rows]
+        if len(rows) < _CACHE_PAGE:
+            break
+        offset += _CACHE_PAGE
+    return keys
+
+
+def _q(v: str) -> str:
+    """PostgREST in.(...) 안에 넣을 값 — 큰따옴표로 감싸고 내부 따옴표는 두 번."""
+    return '"' + v.replace('"', '""') + '"'
+
+
 def delete_cache(passages: List[dict]) -> int:
-    """선택한 지문의 서술형 캐시만 지운다. 1회독·2회독 캐시는 다른 테이블이라 무관."""
+    """선택한 지문의 서술형 캐시를 지운다(옛 형식 행까지 전부).
+
+    ★ 예전에는 cache_key=like."지문|*" 로 지웠는데 한 건도 안 지워졌다.
+      PostgREST 는 값을 큰따옴표로 감싸면 '리터럴'로 보아 * 를 와일드카드로
+      바꾸지 않는다. 그래서 패턴이 아무것도 안 맞고 조용히 0건이 됐다.
+      (실측: 삭제를 눌러도 09-13 에 만든 옛 행이 그대로 남아 있었다.)
+
+      키에 공백·| 가 섞여 있어 패턴 필터는 계속 위험하므로,
+      키를 먼저 읽어 와서 파이썬에서 고른 뒤 정확한 키로 지운다.
+    """
     if not SUPABASE_URL:
         return 0
+    prefixes = tuple(_key_prefix(p["book"], p["unit"], p["id"]) for p in passages)
+    if not prefixes:
+        return 0
+    targets = [k for k in _all_cache_keys() if k.startswith(prefixes)]
     total = 0
-    for p in passages:
-        pref = _key_prefix(p["book"], p["unit"], p["id"])
+    for i in range(0, len(targets), 50):          # URL 길이 때문에 나눠서
+        chunk = targets[i:i + 50]
         total += _sb_delete("seosul_cache",
-                            {"cache_key": f'like."{pref}*"'})
+                            {"cache_key": "in.(" + ",".join(_q(k) for k in chunk) + ")"})
     return total
 
 

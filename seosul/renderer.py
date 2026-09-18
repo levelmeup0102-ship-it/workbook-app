@@ -222,7 +222,10 @@ def _render_problem(s: dict, teacher: bool, school_name: str) -> str:
                 sentinel = f"\x00{k}\x00"
                 # {{A}} / (A) / (A)____ 를 모두 표식으로 — 모델이 라벨과 placeholder를 같이 쓴 경우 대비
                 summ = re.sub(r'\{\{\s*%s\s*\}\}' % re.escape(k), sentinel, summ)
-                summ = re.sub(r'\(\s*%s\s*\)\s*_*' % re.escape(k), sentinel, summ)
+                # ★ '(B) before' 처럼 라벨 뒤가 바로 단어면 그 공백을 먹으면 안 된다
+                #   ('(B)before passing' 으로 붙어 인쇄된 적이 있다).
+                #   빈칸선(____)이 딸린 경우에만 사이 공백을 함께 지운다.
+                summ = re.sub(r'\(\s*%s\s*\)(?:\s*_+)?' % re.escape(k), sentinel, summ)
                 # 연달아 붙은 표식(예: (A){{A}})은 하나의 빈칸으로 합침
                 summ = re.sub(r'(?:%s\s*)+' % re.escape(sentinel), sentinel, summ)
                 summ = summ.replace(sentinel, blank)

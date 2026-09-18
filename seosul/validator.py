@@ -405,6 +405,43 @@ def _shares_stem(base: str, ans: str, n: int = 4) -> bool:
     return len(b) >= n and len(a) >= n and b[:n] == a[:n]
 
 
+
+def stem_of(w: str) -> str:
+    """파생 접미사를 떼어 낸 대략의 어근. 'accessible'·'accessibility' 를 같은 것으로 본다.
+    정답이 다른 문항 보기에 '다른 형태로' 섞여 들어가는 걸 잡으려고 쓴다."""
+    w = re.sub(r"[^A-Za-z]", "", (w or "")).lower()
+    for suf in ("ibility", "ability", "iveness", "ization", "isation", "fulness",
+                "ousness", "ishness", "ation", "ition", "ement", "ingly", "ility",
+                "ically", "ously", "ments", "ences", "ances", "ally", "ment",
+                "ence", "ance", "ness", "tion", "sion", "ible", "able", "ing",
+                "ive", "ity", "ise", "ize", "ous", "ful", "est", "ers", "ed",
+                "es", "er", "ly", "al", "ic", "y", "s"):
+        if len(w) - len(suf) >= 4 and w.endswith(suf):
+            w = w[: -len(suf)]
+            break
+    return w
+
+
+def normalize_se_case(item: dict) -> None:
+    """결론 요약형은 '문장'이다. 빈칸이 문장 첫머리가 아니면 정답은 소문자여야 한다.
+    제목형(Title Case)의 대문자 습관이 그대로 넘어와 답지에 'Accessibility' 로
+    실린 적이 있다 — 학생은 소문자로 쓰므로 답이 어긋나 보인다."""
+    if (item.get("frame") or "title") != "summary":
+        return
+    title = item.get("title") or ""
+    for b in (item.get("blanks") or []):
+        ans = b.get("answer") or ""
+        if not ans or not ans[:1].isupper():
+            continue
+        ph = "{{%s}}" % b.get("label", "C")
+        i = title.find(ph)
+        head = title[:i].strip() if i > 0 else ""
+        # 문장 첫머리이거나 마침표 직후면 대문자가 맞다
+        if i <= 0 or head.endswith((".", "!", "?")):
+            continue
+        b["answer"] = ans[:1].lower() + ans[1:]
+
+
 def validate_title_blank(item: dict, sentences: List[str]) -> List[str]:
     """제목 빈칸 검증.
 

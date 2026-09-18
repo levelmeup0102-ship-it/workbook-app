@@ -406,6 +406,7 @@ def _shares_stem(base: str, ans: str, n: int = 4) -> bool:
 
 
 
+
 def stem_of(w: str) -> str:
     """파생 접미사를 떼어 낸 대략의 어근. 'accessible'·'accessibility' 를 같은 것으로 본다.
     정답이 다른 문항 보기에 '다른 형태로' 섞여 들어가는 걸 잡으려고 쓴다."""

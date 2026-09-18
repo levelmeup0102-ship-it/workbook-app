@@ -79,6 +79,8 @@ _EXTRA = """
 .wr-row{display:flex;align-items:flex-end;margin-bottom:11px;}
 .wr-row .wtag{width:34px;color:var(--primary);font-weight:bold;font-size:9.5pt;}
 .wr-row .wline{flex:1;border-bottom:1px solid #999;height:18px;}
+.miss-note{font-size:8pt;color:var(--accent);margin:3px 0 4px;}
+.miss-box{border:1px dashed var(--border);border-radius:4px;height:34mm;background:#fff;}
 .title-box{border:1.5px solid var(--primary);border-radius:5px;padding:10px 14px;
            font-size:10.5pt;font-weight:bold;line-height:1.9;text-align:center;margin:5px 0 7px;}
 .summary-box{border:1px solid var(--border);border-radius:5px;padding:8px 13px;line-height:1.95;margin:5px 0 7px;}
@@ -103,6 +105,38 @@ ANS_HDR = '<div class="ans-hdr"><span class="hdr-title">정답 및 해설</span>
 
 # 문항번호 색 (영작/요약=주황 write, 어법=남색 기본, 어휘=보라 core)
 _QNUM_CLS = {"SA": "write", "SC": "write", "SD": "", "SE": "core"}
+
+# 문항이 인쇄되는 고정 순서. 한 유형이 실패해도 나머지 번호가 밀리지 않도록
+# '요청한 유형' 전부를 이 순서로 돌면서, 없는 자리는 빈칸 틀을 넣는다.
+_TYPE_ORDER = ["SA", "SE", "SD", "SC"]
+
+_MISS_INSTR = {
+    "SA": "윗글의 빈칸에 들어갈 적절한 말을 &lt;보기&gt;의 단어를 사용하여 작성하시오.",
+    "SE": "윗글의 제목이다. 빈칸에 들어갈 말을 <b>윗글에서 찾아 알맞은 형태로 바꿔</b> 한 단어로 쓰시오.",
+    "SD": "윗글의 <b>빈칸을 제외한 부분</b>에서 어법상 틀린 곳을 찾아 바르게 고쳐 쓰시오. (밑줄 없음)",
+    "SC": "윗글의 내용을 아래와 같이 요약할 때 빈칸에 들어갈 말을 &lt;보기&gt;의 어구를 배열하여 완성하시오.",
+}
+
+
+def _ordered_slots(s: dict):
+    """(유형, 문항 또는 None) 을 고정 순서로 돌려준다.
+
+    요청했는데 생성이 안 된 유형은 None 으로 자리를 남긴다 — 그래야
+    번호가 밀리지 않고, 선생님이 그 칸을 손으로 채울 수 있다.
+    """
+    have = {it.get("type"): it for it in s.get("items", [])}
+    want = s.get("_requested") or list(have.keys())
+    return [(t, have.get(t)) for t in _TYPE_ORDER if t in want]
+
+
+def _render_missing(qno: int, typ: str) -> str:
+    """생성에 실패한 유형의 빈 자리. 인쇄해서 손으로 채울 수 있게 칸만 남긴다."""
+    from .validator import type_name
+    cls = _QNUM_CLS.get(typ, "")
+    return (f'<div class="qblock"><div class="qhead">'
+            f'<span class="q-num {cls}">{qno}</span> {_MISS_INSTR.get(typ, "")}</div>'
+            f'<div class="miss-note">※ 자동 생성 실패 — <b>{type_name(typ)}</b> 문항을 직접 채워 주세요</div>'
+            f'<div class="miss-box"></div></div>')
 
 
 def _blank_width(answer: str) -> int:
@@ -161,8 +195,11 @@ def _render_problem(s: dict, teacher: bool, school_name: str) -> str:
     body.append(_build_passage(s, ans_by_label, teacher))
 
     qno = 0
-    for it in s["items"]:
+    for _typ, it in _ordered_slots(s):
         qno += 1
+        if it is None:                      # 생성 실패 → 빈칸 틀만 남긴다
+            body.append(_render_missing(qno, _typ))
+            continue
         cls = _QNUM_CLS.get(it["type"], "")
         ins = it["instruction"]
         head = (f'<div class="qblock"><div class="qhead">'
@@ -204,8 +241,10 @@ def _render_problem(s: dict, teacher: bool, school_name: str) -> str:
             for b in it["blanks"]:
                 _t = _t.replace("{{%s}}" % b["label"],
                                 f'<span class="ibl" style="width:130px">&nbsp;</span>')
+            # 제목형은 가운데 굵게, 결론 요약형은 문장이라 요약문 박스와 같은 모양
+            _cls = "title-box" if (it.get("frame") or "title") == "title" else "summary-box"
             body.append(head +
-                        f'<div class="title-box">{_t}</div>'
+                        f'<div class="{_cls}">{_t}</div>'
                         '<div class="cond">&lt;조건&gt; · 윗글에서 찾아 알맞은 형태로 바꿔 쓸 것'
                         ' · 한 단어로 쓸 것</div>'
                         '<div class="wr-row"><span class="wtag">답</span>'
@@ -219,13 +258,17 @@ def _render_answer(s: dict) -> str:
     ref = s.get("passage_ref", {})
     ref_label = f'{ref.get("book","")} · {ref.get("unit","")} {ref.get("pid","")}'.strip(" ·")
     body = [f'<div class="ans-subhdr">{ref_label}</div>']
+    from .validator import type_name as _tn
     qno = 0
-    for it in s["items"]:
+    for _typ, it in _ordered_slots(s):
         qno += 1
-        title_map = {"SA": "본문 빈칸 영작", "SC": "요약문 빈칸 영작",
-                     "SD": "어법 틀린 곳 고치기", "SE": "제목 빈칸"}
+        if it is None:
+            body.append(f'<div class="ans-block"><div class="ans-block-title">'
+                        f'{qno}. {_tn(_typ)}</div>'
+                        f'<div class="grammar-note">자동 생성 실패 — 직접 채워 주세요</div></div>')
+            continue
         blk = [f'<div class="ans-block"><div class="ans-block-title">'
-               f'{qno}. {title_map.get(it["type"])}</div>']
+               f'{qno}. {_tn(it["type"])}</div>']
         if it["type"] in ("SA", "SC"):
             cells = "".join(f'<span class="lab">({k})</span><span class="av">{v}</span>'
                             for k, v in it["answers"].items())

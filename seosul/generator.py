@@ -442,9 +442,14 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
     #     규칙이 예전과 정반대다 — 정답은 본문에 '없어야' 한다(있으면 베껴 쓰면 되므로).
     if "SE" in types:
         roles["SE"] = []          # 본문 문장을 하나도 점유하지 않는다
+        # 본문 빈칸이 먼저 끝나 있다. 그 정답 어구를 넘겨서 제목·요약문에
+        # 그대로 들어가지 않게 한다(들어가면 1번 답이 새어 나간다).
+        _avoid = " / ".join(
+            v for it0 in items if it0.get("type") == "SA"
+            for v in (it0.get("answers") or {}).values() if v)
         _try("SE", P.prompt_SE,
              lambda it: V.validate_title_blank(it, sents),
-             sents, [], stypes.get("SE", {}), sorted(used_sents))
+             sents, [], stypes.get("SE", {}), sorted(used_sents), _avoid)
 
     # 여기까지가 '빈칸이 뚫린 문장'. SD는 이 문장들을 피해야 한다.
     blank_sents = set(used_sents)
@@ -477,8 +482,10 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
         _try("SC", P.prompt_SC, _validate_sc,
              sents, stypes.get("SC", {}), "\n".join(_prior))
 
-    if not items:
-        raise RuntimeError("모든 유형 생성 실패: " + "; ".join(warnings))
+    # ★ 살아남은 유형이 2개 미만이면 시험지로 못 쓴다(지문만 덩그러니 남음).
+    #   2개 이상이면 내보내고, 빠진 자리는 렌더러가 '직접 채우는 빈칸 틀'로 남긴다.
+    if len(items) < 2:
+        raise RuntimeError(f"살아남은 유형 {len(items)}개(2개 미만): " + "; ".join(warnings))
 
     # ★ SD 금지유형/중복문장/빈칸문장 개별 제거(유형은 살리되 나쁜 오류만 버림)
     for it in items:
@@ -526,7 +533,10 @@ def generate_set(book: str, unit: str, pid: str, types: List[str],
     if len(items) < _before_n2:
         warnings.append(f"{type_name('SD')} 문항 제거(살아남은 오류가 2곳 미만 → 1군데/0군데 출제 방지)")
 
-    s = {"passage_ref": {"book": book, "unit": unit, "pid": pid},
+    _made = {it.get("type") for it in items}
+    s = {"_requested": list(types),
+         "_missing": [t for t in types if t not in _made],
+         "passage_ref": {"book": book, "unit": unit, "pid": pid},
          "passage_sentences": passage_sentences, "roles": roles,
          "single_passage": True, "items": _attach_meta(items, stypes),
          "_warnings": warnings}
@@ -668,6 +678,8 @@ def _attach_meta(items, stypes) -> list:
             it["instruction"] = (f"윗글의 <b>빈칸을 제외한 부분</b>에서 어법상 틀린 곳 {n}군데를 "
                                  f"찾아 바르게 고쳐 쓰시오. (밑줄 없음)")
         elif t == "SE":
-            it["instruction"] = ("윗글의 제목이다. 빈칸에 들어갈 말을 <b>윗글에서 찾아 "
-                                 "알맞은 형태로 바꿔</b> 한 단어로 쓰시오.")
+            _head = ("윗글의 제목이다." if (it.get("frame") or "title") == "title"
+                     else "윗글의 내용을 한 문장으로 정리한 것이다.")
+            it["instruction"] = (f"{_head} 빈칸에 들어갈 말을 <b>윗글에서 찾아 "
+                                 f"알맞은 형태로 바꿔</b> 한 단어로 쓰시오.")
     return items
